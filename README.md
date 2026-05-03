@@ -1,6 +1,6 @@
 ## Zyoris – Autonomous Business Intelligence Platform (v3 Central Intelligence Layer)
 
-Zyoris is an enterprise-grade full-stack SaaS platform that ingests data from CRM, ERP, Accounting, Marketing, and Inventory systems into a central warehouse, runs analytics and forecasting, and surfaces strategic recommendations via role-based dashboards. hello
+Zyoris is an enterprise-grade full-stack SaaS platform that ingests data from CRM, ERP, Accounting, Marketing, and Inventory systems into a central warehouse, runs analytics and forecasting, and surfaces strategic recommendations via role-based dashboards.
 
 ### Stack
 
