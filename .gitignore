@@ -1,0 +1,11 @@
+node_modules/
+.next/
+dist/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
