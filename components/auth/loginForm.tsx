@@ -133,13 +133,14 @@ export default function LoginForm({ onSubmit, isLoading, error }: Props) {
                             <div className="flex-1 h-px bg-slate-200" />
                         </div>
 
-                        {/* Social buttons */}
-                        <div className="flex items-center justify-center gap-3 mb-6">
-                            <SocialBtn color="#1877F2" label="Facebook" icon={<FacebookIcon />} />
-                            <SocialBtn color="#EA4335" label="Google" icon={<GoogleIcon />} />
-                            <SocialBtn color="#E1306C" label="Instagram" icon={<InstagramIcon />} />
-                            <SocialBtn color="#1DA1F2" label="Twitter" icon={<TwitterIcon />} />
-                        </div>
+                        {/* 
+<div className="flex items-center justify-center gap-3 mb-6">
+    <SocialBtn color="#1877F2" label="Facebook" icon={<FacebookIcon />} />
+    <SocialBtn color="#EA4335" label="Google" icon={<GoogleIcon />} />
+    <SocialBtn color="#E1306C" label="Instagram" icon={<InstagramIcon />} />
+    <SocialBtn color="#1DA1F2" label="Twitter" icon={<TwitterIcon />} />
+</div>
+*/}
 
                         {/* Sign up */}
                         <p className="text-center text-[13px] text-slate-400">
@@ -241,6 +242,7 @@ function SocialBtn({
 }
 
 /* ── SVG Icons ── */
+/*
 function FacebookIcon() {
     return (
         <svg width="15" height="15" viewBox="0 0 24 24" fill="white">
@@ -273,4 +275,8 @@ function TwitterIcon() {
             <path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z" />
         </svg>
     );
+
+
 }
+
+*/

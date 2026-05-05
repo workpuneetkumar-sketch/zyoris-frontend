@@ -10,11 +10,7 @@ import React, {
   ReactNode,
 } from "react";
 
-export interface LoginResponse {
-  token: string;
-  user: User; // ✅ IMPORTANT
-}
-
+// 👤 User type
 type Role = "ADMIN" | "CEO" | "CFO" | "SALES_HEAD" | "OPERATIONS_HEAD";
 
 export interface User {
@@ -24,6 +20,7 @@ export interface User {
   role: Role;
 }
 
+// 📦 Auth context shape
 interface AuthContextValue {
   user: User | null;
   token: string | null;
@@ -33,10 +30,13 @@ interface AuthContextValue {
   error: string | null;
 }
 
+// 🧠 Context
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// 💾 Storage key
 const STORAGE_KEY = "zyoris-auth";
 
+// 🚀 Provider
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -55,8 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const parsed = JSON.parse(raw);
+
       setUser(parsed.user);
       setToken(parsed.token);
+
+      // optional: parsed.refreshToken (for future use)
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     } finally {
@@ -70,18 +73,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
-      const { token: jwt, user: u } = await loginApi(email, password);
+      const res = await loginApi(email, password);
 
-      setUser(u);
-      setToken(jwt);
+      setUser(res.user);
+      setToken(res.token);
 
+      //  store full auth data
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ user: u, token: jwt })
+        JSON.stringify({
+          user: res.user,
+          token: res.token,
+          refreshToken: res.refreshToken,
+        })
       );
     } catch (e: any) {
       setError(
         e?.response?.data?.error ||
+        e?.response?.data?.message ||
         e?.message ||
         "Unable to login"
       );
