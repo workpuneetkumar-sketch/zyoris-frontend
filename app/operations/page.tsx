@@ -1,7 +1,8 @@
 "use client";
 
-import { AppShell } from "../../../components/Shell";
-import { useAuthorizedClient, useAuth } from "../../../context/AuthContext";
+import { AppShell } from "../../components/Shell";
+import { useAuth } from "../../context/AuthContext";
+import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -22,7 +23,7 @@ interface OpsResponse {
 export default function OperationsDashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const client = useAuthorizedClient();
+
   const [ops, setOps] = useState<OpsResponse | null>(null);
 
   useEffect(() => {
@@ -38,14 +39,14 @@ export default function OperationsDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await client.get<OpsResponse>("/dashboard/operations");
+        const res = await api.get<OpsResponse>("/dashboard/operations");
         setOps(res.data);
       } catch {
         // ignore
       }
     }
     load();
-  }, [client]);
+  }, []);
 
   if (!user) return null;
 

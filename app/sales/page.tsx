@@ -1,7 +1,8 @@
 "use client";
 
-import { AppShell } from "../../../components/Shell";
-import { useAuthorizedClient, useAuth } from "../../../context/AuthContext";
+import { AppShell } from "../../components/Shell";
+import { useAuth } from "../../context/AuthContext";
+import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -17,7 +18,7 @@ interface ConversionScore {
 export default function SalesDashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const client = useAuthorizedClient();
+
   const [scores, setScores] = useState<ConversionScore[]>([]);
 
   useEffect(() => {
@@ -33,14 +34,14 @@ export default function SalesDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await client.get<ConversionScore[]>("/analytics/conversion/scores");
+        const res = await api.get<ConversionScore[]>("/analytics/conversion/scores");
         setScores(res.data);
       } catch {
         // ignore
       }
     }
     load();
-  }, [client]);
+  }, []);
 
   if (!user) return null;
 

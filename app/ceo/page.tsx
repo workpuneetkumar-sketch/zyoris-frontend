@@ -1,7 +1,8 @@
 "use client";
 
-import { AppShell } from "../../../components/Shell";
-import { useAuthorizedClient, useAuth } from "../../../context/AuthContext";
+import { AppShell } from "../../components/Shell";
+import { useAuth } from "../../context/AuthContext";
+import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -19,7 +20,7 @@ interface ForecastResponse {
 export default function CeoDashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const client = useAuthorizedClient();
+
   const [data, setData] = useState<ForecastResponse | null>(null);
 
   useEffect(() => {
@@ -35,14 +36,14 @@ export default function CeoDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await client.get<ForecastResponse>("/analytics/revenue/forecast");
+        const res = await api.get<ForecastResponse>("/analytics/revenue/forecast");
         setData(res.data);
       } catch {
         // ignore for now
       }
     }
     load();
-  }, [client]);
+  }, []);
 
   if (!user) return null;
 
