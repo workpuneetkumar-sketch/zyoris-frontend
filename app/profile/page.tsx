@@ -1,7 +1,8 @@
 "use client";
 
 import { AppShell } from "../../components/Shell";
-import { useAuthorizedClient, useAuth } from "../../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
+import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -17,7 +18,7 @@ interface Profile {
 export default function ProfilePage() {
   const { user } = useAuth();
   const router = useRouter();
-  const client = useAuthorizedClient();
+
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
@@ -27,14 +28,14 @@ export default function ProfilePage() {
     }
     async function load() {
       try {
-        const res = await client.get<Profile>("/auth/me");
+        const res = await api.get<Profile>("/auth/me");
         setProfile(res.data);
       } catch {
         // ignore for now
       }
     }
     load();
-  }, [user, client, router]);
+  }, [user, router]);
 
   if (!user) return null;
 

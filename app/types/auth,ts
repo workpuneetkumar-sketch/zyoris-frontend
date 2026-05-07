@@ -1,0 +1,32 @@
+// types/auth.ts
+
+export type Role =
+  | "ADMIN"
+  | "CEO"
+  | "CFO"
+  | "SALES_HEAD"
+  | "OPERATIONS_HEAD";
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  role: Role;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: User;
+}
+
+export interface RegisterPayload {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+  designation: string;
+  companyName: string;
+  companyAbout: string;
+  businessType: string;
+  organizationId?: string;
+}

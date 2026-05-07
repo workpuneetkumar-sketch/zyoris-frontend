@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, DragEvent, ChangeEvent } from "react";
-import { useAuthorizedClient } from "../context/AuthContext";
+import api from "@/lib/api";
 import type { UploadAnalysisData } from "./UploadAnalysisSection";
 
 type Status = "idle" | "uploading" | "success" | "error";
@@ -11,7 +11,7 @@ type UploadPanelProps = {
 };
 
 export function UploadPanel({ onAnalysis }: UploadPanelProps) {
-  const client = useAuthorizedClient();
+
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -27,7 +27,7 @@ export function UploadPanel({ onAnalysis }: UploadPanelProps) {
     try {
       const form = new FormData();
       form.append("file", selected);
-      const res = await client.post("/ingestion/upload", form, {
+      const res = await api.post("/ingestion/upload", form, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       setStatus("success");

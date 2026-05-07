@@ -1,7 +1,8 @@
 "use client";
 
-import { AppShell } from "../../../components/Shell";
-import { useAuthorizedClient, useAuth } from "../../../context/AuthContext";
+import { AppShell } from "../../components/Shell";
+import { useAuth } from "../../context/AuthContext";
+import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -27,7 +28,7 @@ interface Drivers {
 export default function CfoDashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
-  const client = useAuthorizedClient();
+
   const [drivers, setDrivers] = useState<Drivers | null>(null);
 
   useEffect(() => {
@@ -43,14 +44,14 @@ export default function CfoDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await client.get<Drivers>("/analytics/revenue/drivers");
+        const res = await api.get<Drivers>("/analytics/revenue/drivers");
         setDrivers(res.data);
       } catch {
         // ignore
       }
     }
     load();
-  }, [client]);
+  }, []);
 
   if (!user) return null;
 
