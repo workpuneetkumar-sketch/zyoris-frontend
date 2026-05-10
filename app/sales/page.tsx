@@ -16,12 +16,14 @@ interface ConversionScore {
 }
 
 export default function SalesDashboardPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   const [scores, setScores] = useState<ConversionScore[]>([]);
 
   useEffect(() => {
+    if (isLoading) return;
+
     if (!user) {
       router.replace("/login");
       return;
@@ -29,7 +31,7 @@ export default function SalesDashboardPage() {
     if (user.role !== "SALES_HEAD" && user.role !== "ADMIN") {
       router.replace("/dashboard");
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
   useEffect(() => {
     async function load() {

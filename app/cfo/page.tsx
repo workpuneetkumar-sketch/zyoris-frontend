@@ -26,12 +26,14 @@ interface Drivers {
 }
 
 export default function CfoDashboardPage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   const [drivers, setDrivers] = useState<Drivers | null>(null);
 
   useEffect(() => {
+    if (isLoading) return;
+
     if (!user) {
       router.replace("/login");
       return;
@@ -39,7 +41,7 @@ export default function CfoDashboardPage() {
     if (user.role !== "CFO" && user.role !== "ADMIN") {
       router.replace("/dashboard");
     }
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
   useEffect(() => {
     async function load() {

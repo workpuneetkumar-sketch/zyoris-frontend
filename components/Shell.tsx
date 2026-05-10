@@ -7,13 +7,13 @@ import { useAuth } from "../context/AuthContext";
 import classNames from "classnames";
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Overview", roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
+  { href: "/dashboard", label: "Oveview", roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
   { href: "/dashboard/ceo", label: "CEO", roles: ["ADMIN", "CEO"] },
   { href: "/dashboard/cfo", label: "CFO", roles: ["ADMIN", "CFO"] },
   { href: "/dashboard/sales", label: "Sales", roles: ["ADMIN", "SALES_HEAD"] },
   { href: "/dashboard/operations", label: "Operations", roles: ["ADMIN", "OPERATIONS_HEAD"] },
   { href: "/profile", label: "My profile", roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] }
-] ;
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
