@@ -1,14 +1,14 @@
 import api from "./api";
 import type { User } from "@/context/AuthContext";
 
-// ✅ Shared response
+// Shared response
 export interface AuthResponse {
     token: string;
     refreshToken: string;
     user: User;
 }
 
-// ✅ Register payload
+// Register payload
 export interface RegisterPayload {
     name: string;
     email: string;
@@ -21,7 +21,7 @@ export interface RegisterPayload {
     businessType?: string;
 }
 
-// ✅ Login API
+//  Login API
 export const loginApi = async (
     email: string,
     password: string

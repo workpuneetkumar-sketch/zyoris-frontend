@@ -39,7 +39,7 @@ interface Recommendation {
 }
 
 export default function Dashboard() {
-    const { user, isLoading } = useAuth();
+    const { user, token, isLoading } = useAuth();
     const router = useRouter();
 
     const [ceoData, setCeoData] = useState<CEOOverview | null>(null);
@@ -49,13 +49,17 @@ export default function Dashboard() {
     const [error, setError] = useState<string | null>(null);
     const hasFetched = useRef(false);
 
+    // ── FIX 1: Merged the two broken useEffects into one clean redirect guard ──
     useEffect(() => {
         if (isLoading) return;
-        if (!user) router.replace("/login");
-    }, [user, isLoading, router]);
+        if (!user || !token) router.replace("/login");
+    }, [user, token, isLoading, router]);
 
     useEffect(() => {
+        if (isLoading) return;
+        if (!token) return;
         if (hasFetched.current) return;
+
         hasFetched.current = true;
 
         async function load() {
@@ -79,8 +83,9 @@ export default function Dashboard() {
             }
         }
         load();
-    }, []);
+    }, [token, isLoading]);
 
+    // ── FIX 2: Single isLoading / user guard (removed the duplicate) ──
     if (isLoading) return null;
     if (!user) return null;
 
@@ -88,16 +93,11 @@ export default function Dashboard() {
         return (
             <div className="min-h-screen flex items-center justify-center bg-[#f5f7fb]">
                 <div className="flex flex-col items-center gap-4">
-
-                    {/* Spinner */}
                     <div className="w-10 h-10 border-[3px] border-blue-100 border-t-[#2f66f6] rounded-full animate-spin" />
-
-                    {/* Text */}
                     <div className="text-center">
                         <p className="text-[16px] font-semibold text-[#0f172a]">
                             Loading dashboard
                         </p>
-
                         <p className="text-sm text-[#64748b] mt-1">
                             Please wait a moment...
                         </p>
@@ -110,12 +110,13 @@ export default function Dashboard() {
     if (error) {
         return (
             <div className="flex items-center justify-center h-full">
-                <div className="bg-red-50 border border-red-100 rounded-xl px-6 py-4 text-red-500 text-sm">{error}</div>
+                <div className="bg-red-50 border border-red-100 rounded-xl px-6 py-4 text-red-500 text-sm">
+                    {error}
+                </div>
             </div>
         );
     }
 
-    // Safe values
     const revenue = ceoData?.kpis?.totalRevenue ?? 0;
     const marginPct = ceoData?.riskIndicators?.marginPct ?? 0;
     const demandTrend = ceoData?.riskIndicators?.demandTrend ?? "flat";
@@ -236,7 +237,8 @@ export default function Dashboard() {
                     </div>
                     <div>
                         <p className="text-3xl font-bold text-gray-900 tracking-tight">
-                            {demandTrend === "increasing" ? "↑" : demandTrend === "decreasing" ? "↓" : "→"} {demandTrend === "increasing" ? "Strong" : demandTrend === "decreasing" ? "Soft" : "Stable"}
+                            {demandTrend === "increasing" ? "↑" : demandTrend === "decreasing" ? "↓" : "→"}{" "}
+                            {demandTrend === "increasing" ? "Strong" : demandTrend === "decreasing" ? "Soft" : "Stable"}
                         </p>
                         <p className="text-xs text-gray-400 mt-1">Current market demand trend</p>
                     </div>

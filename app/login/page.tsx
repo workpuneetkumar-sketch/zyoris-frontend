@@ -11,7 +11,9 @@ export default function LoginPage() {
     const handleLogin = async (email: string, password: string) => {
         try {
             await login(email, password);
-            router.push("/dashboard");
+            setTimeout(() => {
+                router.replace("/dashboard");
+            }, 0);
         } catch {
             // error already handled in context
         }
