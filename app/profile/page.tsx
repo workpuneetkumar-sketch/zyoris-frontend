@@ -1,10 +1,10 @@
 "use client";
 
-import { AppShell } from "../../components/Shell";
 import { useAuth } from "../../context/AuthContext";
 import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import ProfileUI from "../../components/profile/ProfileUI";
 
 interface Profile {
   id: string;
@@ -16,12 +16,14 @@ interface Profile {
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const router = useRouter();
 
   const [profile, setProfile] = useState<Profile | null>(null);
 
+  // ✅ Auth guard with isLoading fix
   useEffect(() => {
+    if (isLoading) return;
     if (!user) {
       router.replace("/login");
       return;
@@ -35,51 +37,19 @@ export default function ProfilePage() {
       }
     }
     load();
-  }, [user, router]);
+  }, [user, isLoading, router]);
 
+  if (isLoading) return null;
   if (!user) return null;
 
   return (
-    <AppShell>
-      <div className="topbar">
-        <div>
-          <div className="topbar-title">My profile</div>
-          <div className="topbar-subtitle">Account, role, and workspace metadata.</div>
-        </div>
-      </div>
-
-      <div className="panel" style={{ marginBottom: "1rem" }}>
-        <div className="panel-title">Account details</div>
-        <table className="table">
-          <tbody>
-            <tr>
-              <th>Email</th>
-              <td>{profile?.email ?? user.email}</td>
-            </tr>
-            <tr>
-              <th>Name</th>
-              <td>{profile?.name ?? user.name}</td>
-            </tr>
-            <tr>
-              <th>Role</th>
-              <td>{profile?.role ?? user.role}</td>
-            </tr>
-            {profile && (
-              <>
-                <tr>
-                  <th>Created at</th>
-                  <td>{new Date(profile.createdAt).toLocaleString()}</td>
-                </tr>
-                <tr>
-                  <th>Last updated</th>
-                  <td>{new Date(profile.updatedAt).toLocaleString()}</td>
-                </tr>
-              </>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </AppShell>
+    <ProfileUI
+      profile={profile}
+      fallback={{
+        email: user.email,
+        name: user.name,
+        role: user.role,
+      }}
+    />
   );
 }
-
