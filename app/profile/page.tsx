@@ -16,14 +16,12 @@ interface Profile {
 }
 
 export default function ProfilePage() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [profile, setProfile] = useState<Profile | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
-
     if (!user) {
       router.replace("/login");
       return;
@@ -37,7 +35,7 @@ export default function ProfilePage() {
       }
     }
     load();
-  }, [user, isLoading, router]);
+  }, [user, router]);
 
   if (!user) return null;
 

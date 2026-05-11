@@ -21,14 +21,12 @@ interface OpsResponse {
 }
 
 export default function OperationsDashboardPage() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [ops, setOps] = useState<OpsResponse | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
-
     if (!user) {
       router.replace("/login");
       return;
@@ -36,7 +34,7 @@ export default function OperationsDashboardPage() {
     if (user.role !== "OPERATIONS_HEAD" && user.role !== "ADMIN") {
       router.replace("/dashboard");
     }
-  }, [user, isLoading, router]);
+  }, [user, router]);
 
   useEffect(() => {
     async function load() {

@@ -35,7 +35,7 @@ interface Recommendation {
 }
 
 export default function Dashboard() {
-    const { user, isLoading: authLoading } = useAuth();
+    const { user } = useAuth();
     const router = useRouter();
 
     const [ceoData, setCeoData] = useState<CEOOverview | null>(null);
@@ -51,8 +51,8 @@ export default function Dashboard() {
 
     // Auth guard
     useEffect(() => {
-        if (!authLoading && !user) router.replace("/login");
-    }, [user, authLoading, router]);
+        if (!user) router.replace("/login");
+    }, [user, router]);
 
     //  Fetch data
     useEffect(() => {

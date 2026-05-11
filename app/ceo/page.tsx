@@ -18,14 +18,12 @@ interface ForecastResponse {
 }
 
 export default function CeoDashboardPage() {
-  const { user, isLoading } = useAuth();
+  const { user } = useAuth();
   const router = useRouter();
 
   const [data, setData] = useState<ForecastResponse | null>(null);
 
   useEffect(() => {
-    if (isLoading) return;
-
     if (!user) {
       router.replace("/login");
       return;
@@ -33,7 +31,7 @@ export default function CeoDashboardPage() {
     if (user.role !== "CEO" && user.role !== "ADMIN") {
       router.replace("/dashboard");
     }
-  }, [user, isLoading, router]);
+  }, [user, router]);
 
   useEffect(() => {
     async function load() {
