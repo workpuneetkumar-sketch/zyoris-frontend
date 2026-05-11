@@ -1,7 +1,7 @@
 "use client";
 
 import { AppShell } from "../Shell";
-import { useAuth } from "../../context/AuthContext"; // ❌ removed useAuthorizedClient
+import { useAuth } from "../../context/AuthContext"; // 
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { UploadPanel } from "../UploadPanel";
@@ -35,7 +35,7 @@ interface Recommendation {
 }
 
 export default function Dashboard() {
-    const { user } = useAuth();
+    const { user, token, isLoading } = useAuth();
     const router = useRouter();
 
     const [ceoData, setCeoData] = useState<CEOOverview | null>(null);
@@ -51,19 +51,28 @@ export default function Dashboard() {
 
     // Auth guard
     useEffect(() => {
-        if (!user) router.replace("/login");
-    }, [user, router]);
+        if (isLoading) return;
+
+        if (!user || !token) {
+            router.replace("/login");
+        }
+    }, [user, token, isLoading, router]);
 
     //  Fetch data
     useEffect(() => {
+        if (isLoading) return;
+        if (!token) return;
+
         if (hasFetched.current) return;
+
         hasFetched.current = true;
+
 
         async function load() {
             try {
                 setLoading(true);
 
-                // ✅ using api instead of client
+                //  using api instead of client
                 const [ceoRes, recRes, analysisRes] = await Promise.all([
                     api.get("/dashboard/ceo"),
                     api.get("/recommendations"),
@@ -85,11 +94,15 @@ export default function Dashboard() {
         }
 
         load();
-    }, []);
+    }, [token, isLoading]);
+
+    if (isLoading) {
+        return <div className="p-6">Initializing session...</div>;
+    }
 
     if (!user) return null;
 
-    // ⏳ Loading state
+    // Loading state
     if (loading) {
         return <div className="p-6">Loading dashboard...</div>;
     }
@@ -99,7 +112,7 @@ export default function Dashboard() {
         return <div className="p-6 text-red-500">{error}</div>;
     }
 
-    // 📊 Safe values
+    //  Safe values
     const revenue = ceoData?.kpis?.totalRevenue ?? 0;
     const marginPct = ceoData?.riskIndicators?.marginPct ?? 0;
     const demandTrend = ceoData?.riskIndicators?.demandTrend ?? "flat";

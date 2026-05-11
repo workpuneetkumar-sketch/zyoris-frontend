@@ -43,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // 🔁 Restore session on refresh
+  // Restore session on refresh
   useEffect(() => {
     if (typeof window === "undefined") return;
 
