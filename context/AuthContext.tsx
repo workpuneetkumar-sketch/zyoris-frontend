@@ -50,11 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-<<<<<<< HEAD
-  // Restore session on refresh
-=======
   // Restore session
->>>>>>> parent of 34f118d (Revert "fixed the org flow")
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) {
