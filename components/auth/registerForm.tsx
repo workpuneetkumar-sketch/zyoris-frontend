@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, FormEvent } from "react";
+import Cookies from "js-cookie";
+import { registerApi } from "@/lib/auth.service";
+import { createOrganization } from "@/lib/organization.service";
+import { useRouter } from "next/navigation";
+import { useState, FormEvent, useEffect } from "react";
 
 const ROLES = [
-    { value: "ADMIN", label: "Admin" },
     { value: "CEO", label: "CEO" },
     { value: "CFO", label: "CFO" },
-    { value: "SALES_HEAD", label: "Sales Head" },
-    { value: "OPERATIONS_HEAD", label: "Operations Head" },
 ];
 
 const BUSINESS_TYPES = [
@@ -22,23 +23,38 @@ const BUSINESS_TYPES = [
 ];
 
 type Props = {
-    onSubmit: (data: {
+    onRegisterUser: (data: {
         name: string;
         email: string;
         password: string;
         role: string;
-        organizationId: string;
         designation: string;
-        companyName: string;
+    }) => Promise<{
+        token: string;
+        refreshToken: string;
+        user: {
+            id: string;
+            email: string;
+            name: string;
+            role: string;
+            organizationId: string | null;
+            organizationName: string | null;
+            organizationSlug: string | null;
+        };
+    }>;
+    onCreateOrg: (data: {
+        name: string;
+        userId: string;
         companyAbout: string;
         businessType: string;
     }) => Promise<void>;
+
     isLoading: boolean;
     error?: string | null;
     success?: boolean;
 };
 
-export default function RegisterForm({ onSubmit, isLoading, error, success }: Props) {
+export default function RegisterForm() {
     const [step, setStep] = useState<1 | 2>(1);
 
     // Step 1 fields
@@ -46,49 +62,156 @@ export default function RegisterForm({ onSubmit, isLoading, error, success }: Pr
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [role, setRole] = useState("ADMIN");
+    const [role, setRole] = useState("CEO");
     const [designation, setDesignation] = useState("");
     const [showPw, setShowPw] = useState(false);
     const [showConfirmPw, setShowConfirmPw] = useState(false);
 
     // Step 2 fields
-    const [organizationId, setOrganizationId] = useState("");
     const [companyName, setCompanyName] = useState("");
     const [companyAbout, setCompanyAbout] = useState("");
     const [businessType, setBusinessType] = useState("Technology");
 
+    // Captured from Step 1 API response
+    const [userId, setUserId] = useState("");
+
     const [localError, setLocalError] = useState<string | null>(null);
 
-    const handleStep1 = (e: FormEvent) => {
+    const router = useRouter();
+
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
+
+    // Restore onboarding state after refresh
+    useEffect(() => {
+        const savedStep = Cookies.get("registerStep");
+        const savedUserId = Cookies.get("userId");
+
+        if (savedStep === "2" && savedUserId) {
+            setStep(2);
+            setUserId(savedUserId);
+        }
+    }, []);
+
+    // ── Step 1: Register User
+    const handleStep1 = async (e: FormEvent) => {
         e.preventDefault();
         setLocalError(null);
+
         if (password.length < 8) {
             setLocalError("Password must be at least 8 characters.");
             return;
         }
+
         if (password !== confirmPassword) {
             setLocalError("Passwords do not match.");
             return;
         }
-        setStep(2);
+
+        try {
+            const res = await handleRegisterUser({
+                name,
+                email,
+                password,
+                role,
+                designation,
+            });
+
+            console.log("REGISTER RESPONSE:", res);
+
+            setUserId(res.user.id);
+
+            // Save onboarding state
+            Cookies.set("registerStep", "2", { expires: 1 });
+            Cookies.set("userId", res.user.id, { expires: 1 });
+            Cookies.set("token", res.token, { expires: 1 });
+
+            console.log("STEP BEFORE:", step);
+
+            setStep(2);
+
+            console.log("STEP AFTER");
+        } catch (err) {
+            console.error("Register failed:", err);
+        }
     };
 
+    // ── Step 2: Create Organization
     const handleStep2 = async (e: FormEvent) => {
         e.preventDefault();
         setLocalError(null);
-        await onSubmit({
-            name, email, password, role,
-            organizationId, designation,
-            companyName, companyAbout, businessType,
+
+        await onCreateOrg({
+            name: companyName,
+            userId,
+            companyAbout,
+            businessType,
         });
     };
+
+    async function handleRegisterUser(data: {
+        name: string;
+        email: string;
+        password: string;
+        role: string;
+        designation: string;
+    }) {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const res = await registerApi(data);
+            return res;
+        } catch (err: any) {
+            setError(
+                err?.response?.data?.error ??
+                err?.response?.data?.message ??
+                "Registration failed. Please try again."
+            );
+            throw err;
+        } finally {
+            setIsLoading(false);
+        }
+    }
+
+    async function onCreateOrg(data: {
+        name: string;
+        userId: string;
+        companyAbout: string;
+        businessType: string;
+    }) {
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            await createOrganization(data);
+
+            // Clear onboarding cookies
+            Cookies.remove("registerStep");
+            Cookies.remove("userId");
+
+            setSuccess(true);
+
+            setTimeout(() => router.replace("/login"), 1800);
+        } catch (err: any) {
+            setError(
+                err?.response?.data?.error ??
+                err?.response?.data?.message ??
+                "Failed to create organization. Please try again."
+            );
+        } finally {
+            setIsLoading(false);
+        }
+    }
 
     const displayError = localError || error;
 
     const inputClass =
         "w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-[13.5px] text-slate-800 placeholder-slate-300 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all bg-white";
 
-    const labelClass = "block text-[12.5px] font-semibold text-slate-600 mb-1.5";
+    const labelClass =
+        "block text-[12.5px] font-semibold text-slate-600 mb-1.5";
 
     return (
         <div className="min-h-screen flex flex-col bg-[#1a2f6e] relative">
@@ -127,10 +250,10 @@ export default function RegisterForm({ onSubmit, isLoading, error, success }: Pr
                             {[1, 2].map((s) => (
                                 <div key={s} className="flex items-center gap-2">
                                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${step === s
-                                            ? "bg-blue-700 text-white"
-                                            : step > s
-                                                ? "bg-emerald-500 text-white"
-                                                : "bg-slate-100 text-slate-400"
+                                        ? "bg-blue-700 text-white"
+                                        : step > s
+                                            ? "bg-emerald-500 text-white"
+                                            : "bg-slate-100 text-slate-400"
                                         }`}>
                                         {step > s ? (
                                             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
@@ -156,14 +279,14 @@ export default function RegisterForm({ onSubmit, isLoading, error, success }: Pr
                             </div>
                         )}
 
-                        {/* Error banner */}
+
                         {displayError && (
                             <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-500">
                                 {displayError}
                             </div>
                         )}
 
-                        {/* ── STEP 1 ── */}
+
                         {step === 1 && (
                             <form onSubmit={handleStep1} className="space-y-3.5">
                                 <div className="grid grid-cols-2 gap-3.5">
@@ -254,12 +377,19 @@ export default function RegisterForm({ onSubmit, isLoading, error, success }: Pr
                                     </div>
                                 </div>
 
-                                <button type="submit"
-                                    className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 rounded-lg text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors mt-1">
-                                    Continue
-                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                                    </svg>
+                                <button type="submit" disabled={isLoading}
+                                    className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors mt-1">
+                                    {isLoading ? (
+                                        <>
+                                            <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                            Registering…
+                                        </>
+                                    ) : (
+                                        <>
+                                            Register
+
+                                        </>
+                                    )}
                                 </button>
                             </form>
                         )}
@@ -267,25 +397,13 @@ export default function RegisterForm({ onSubmit, isLoading, error, success }: Pr
                         {/* ── STEP 2 ── */}
                         {step === 2 && (
                             <form onSubmit={handleStep2} className="space-y-3.5">
-                                <div className="grid grid-cols-2 gap-3.5">
-                                    {/* Company Name */}
-                                    <div>
-                                        <label className={labelClass}>Company name</label>
-                                        <input
-                                            type="text" required placeholder="Acme Corp"
-                                            value={companyName} onChange={(e) => setCompanyName(e.target.value)}
-                                            className={inputClass}
-                                        />
-                                    </div>
-                                    {/* Organization ID */}
-                                    <div>
-                                        <label className={labelClass}>Organization ID</label>
-                                        <input
-                                            type="text" placeholder="e.g. ORG-00123"
-                                            value={organizationId} onChange={(e) => setOrganizationId(e.target.value)}
-                                            className={inputClass}
-                                        />
-                                    </div>
+                                <div>
+                                    <label className={labelClass}>Company name</label>
+                                    <input
+                                        type="text" required placeholder="Acme Corp"
+                                        value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+                                        className={inputClass}
+                                    />
                                 </div>
 
                                 {/* Business Type */}
@@ -319,21 +437,14 @@ export default function RegisterForm({ onSubmit, isLoading, error, success }: Pr
                                 </div>
 
                                 <div className="flex gap-3 pt-1">
-                                    <button type="button" onClick={() => { setStep(1); setLocalError(null); }}
-                                        className="flex-1 py-2.5 border border-slate-200 hover:border-slate-300 rounded-lg text-slate-600 text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors">
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                                        </svg>
-                                        Back
-                                    </button>
                                     <button type="submit" disabled={isLoading || success}
-                                        className="flex-[2] py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors">
+                                        className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors">
                                         {isLoading ? (
                                             <>
                                                 <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                                                Creating account…
+                                                Creating organization…
                                             </>
-                                        ) : "Create account"}
+                                        ) : "Continue"}
                                     </button>
                                 </div>
                             </form>
