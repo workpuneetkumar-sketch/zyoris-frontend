@@ -21,79 +21,53 @@ const SECTIONS: { key: keyof DataSenseReportData; title: string }[] = [
   { key: "section7_executiveSummary", title: "📌 Executive Summary" },
 ];
 
-export function DataSenseReport({ report }: { report: DataSenseReportData }) {
+import { BrainCircuit, Target, Lightbulb, AlertCircle } from "lucide-react";
+
+export function DataSenseReport({ report }: { report: any }) {
+  const icons: any = {
+    executive_summary: <BrainCircuit className="text-blue-600" />,
+    key_findings: <Target className="text-indigo-600" />,
+    opportunities: <Lightbulb className="text-amber-500" />,
+    risks: <AlertCircle className="text-red-500" />,
+  };
+
   return (
-    <div
-      className="datasense-report"
-      style={{
-        marginTop: "2rem",
-        padding: "1.5rem",
-        background: "linear-gradient(145deg, rgba(30, 41, 59, 0.6) 0%, rgba(15, 23, 42, 0.8) 100%)",
-        borderRadius: "12px",
-        border: "1px solid rgba(71, 85, 105, 0.5)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          marginBottom: "1.5rem",
-          paddingBottom: "1rem",
-          borderBottom: "1px solid rgba(71, 85, 105, 0.5)",
-        }}
-      >
-        <span style={{ fontSize: "1.5rem" }}>🧠</span>
-        <div>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: "1.25rem",
-              fontWeight: 600,
-              color: "#f1f5f9",
-            }}
-          >
-            DataSense AI – Intelligent Performance Analyst
-          </h2>
-          <p
-            style={{
-              margin: "0.25rem 0 0",
-              fontSize: "0.8rem",
-              color: "#94a3b8",
-            }}
-          >
-            Senior business analyst report · Dataset type: {report.datasetType.replace("_", " ")}
-          </p>
+    <div className="mt-12 bg-slate-50 border border-slate-200 rounded-3xl overflow-hidden shadow-inner">
+      <div className="bg-white px-8 py-6 border-b border-slate-200 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+            <BrainCircuit size={24} className="text-white" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">Intelligence Report</h2>
+            <p className="text-xs text-slate-500 font-medium uppercase tracking-tighter">
+              DataSense AI · Senior Analyst Mode
+            </p>
+          </div>
+        </div>
+        <div className="hidden md:block">
+          <span className="text-xs bg-slate-100 text-slate-600 px-3 py-1.5 rounded-full font-semibold border border-slate-200">
+            Dataset: {report.datasetType.replace("_", " ")}
+          </span>
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-        {SECTIONS.map(({ key, title }) => {
-          const content = report[key];
-          if (typeof content !== "string" || !content) return null;
+      <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
+        {Object.entries(report).map(([key, content]: any) => {
+          if (typeof content !== "string" || key === "datasetType") return null;
+
           return (
-            <section key={key}>
-              <h3
-                style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.95rem",
-                  fontWeight: 600,
-                  color: "#e2e8f0",
-                }}
-              >
-                {title}
-              </h3>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: "0.9rem",
-                  lineHeight: 1.65,
-                  color: "#cbd5e1",
-                }}
-              >
-                {content}
+            <div key={key} className="bg-white/50 border border-white p-6 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+              <div className="flex items-center gap-3 mb-4">
+                {icons[key] || <Lightbulb size={20} className="text-blue-500" />}
+                <h3 className="text-sm font-bold text-slate-800 capitalize">
+                  {key.replace("_", " ")}
+                </h3>
+              </div>
+              <p className="text-sm text-slate-600 leading-relaxed italic">
+                "{content}"
               </p>
-            </section>
+            </div>
           );
         })}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { AppShell } from "../../components/Shell";
-import { useAuth } from "../../context/AuthContext";
+import { AppShell } from "@/components/Shell";
+import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";

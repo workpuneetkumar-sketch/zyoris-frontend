@@ -93,7 +93,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     };
 
     return (
-        <AppShell>
+        <div>
             <div className="mb-6">
                 <h1 className="text-xl font-bold text-gray-900">Settings</h1>
                 <p className="text-sm text-gray-400 mt-0.5">
@@ -113,8 +113,8 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
                                     key={item.label}
                                     onClick={() => setActiveTab(item.label)}
                                     className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-all text-left ${isActive
-                                            ? "bg-blue-50 text-blue-600"
-                                            : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
+                                        ? "bg-blue-50 text-blue-600"
+                                        : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
                                         }`}
                                 >
                                     <Icon size={16} className={isActive ? "text-blue-500" : "text-gray-400"} />
@@ -156,7 +156,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
                     )}
                 </div>
             </div>
-        </AppShell>
+        </div>
     );
 }
 

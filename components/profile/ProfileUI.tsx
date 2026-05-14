@@ -22,7 +22,7 @@ interface ProfileUIProps {
 
 export default function ProfileUI({ profile, fallback }: ProfileUIProps) {
     return (
-        <AppShell>
+        <div>
             <div className="topbar">
                 <div>
                     <div className="topbar-title">My profile</div>
@@ -63,6 +63,6 @@ export default function ProfileUI({ profile, fallback }: ProfileUIProps) {
                     </tbody>
                 </table>
             </div>
-        </AppShell>
+        </div>
     );
 }
