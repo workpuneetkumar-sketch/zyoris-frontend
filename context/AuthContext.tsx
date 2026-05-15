@@ -1,6 +1,6 @@
 "use client";
 
-import { loginApi, registerApi, AuthResponse ,logoutApi } from "@/lib/api/auth.Api";
+import { loginApi, registerApi, AuthResponse, logoutApi } from "@/lib/api/authApi";
 import React, {
   createContext,
   useCallback,
@@ -38,7 +38,7 @@ interface AuthContextValue {
     role: string;
     designation: string;
   }) => Promise<User>;
- logout: () => Promise<void>; 
+  logout: () => Promise<void>;
   isLoading: boolean;
   error: string | null;
 }
@@ -52,7 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-    const router = useRouter(); 
+  const router = useRouter();
 
   // Restore session
   useEffect(() => {
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(res.user);
       setToken(res.token);
-  
+
 
       localStorage.setItem(
         STORAGE_KEY,
@@ -138,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
- const logout = useCallback(async () => {
+  const logout = useCallback(async () => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const refreshToken = raw ? JSON.parse(raw).refreshToken : null;
