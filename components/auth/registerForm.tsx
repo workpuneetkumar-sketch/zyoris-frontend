@@ -1,7 +1,7 @@
 "use client";
 
 import Cookies from "js-cookie";
-import { registerApi } from "@/lib/api/auth.Api";
+import { registerApi } from "@/lib/api/authApi";
 import { createOrganization } from "@/lib/api/organizationsApi";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";

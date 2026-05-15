@@ -18,6 +18,7 @@ import {
   MessageSquare,
   Settings,
   ChevronRight,
+  Database,
 } from "lucide-react";
 
 const NAV_ITEMS: {
@@ -27,6 +28,7 @@ const NAV_ITEMS: {
   roles: string[];
 }[] = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
+    { href: "/ingestion", label: "Ingestion", icon: Database, roles: ["ADMIN", "CEO", "CFO"] },
     { href: "/analytics", label: "Analytics", icon: BarChart2, roles: ["ADMIN", "CEO", "CFO"] },
     { href: "/leads", label: "Leads", icon: Users, roles: ["ADMIN", "CEO", "SALES_HEAD"] },
     { href: "/deals", label: "Deals", icon: Briefcase, roles: ["ADMIN", "CEO", "SALES_HEAD", "CFO"] },
@@ -36,6 +38,7 @@ const NAV_ITEMS: {
     { href: "/team", label: "Team", icon: UsersRound, roles: ["ADMIN", "CEO"] },
     { href: "/messages", label: "Messages", icon: MessageSquare, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
     { href: "/settings", label: "Settings", icon: Settings, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
+
   ];
 
 export function AppShell({ children }: { children: ReactNode }) {
