@@ -12,7 +12,7 @@ import {
     CreditCard,
     Camera,
 } from "lucide-react";
-import api from "@/lib/api";
+import api from "@/lib/api/api";
 import { LucideIcon } from "lucide-react";
 
 export interface Profile {

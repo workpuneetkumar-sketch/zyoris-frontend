@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import api from "@/lib/api";
+import api from "@/lib/api/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SettingsUI, { Profile } from "@/components/settings/SettingsUI";

@@ -12,6 +12,7 @@ export interface User {
   email: string;
   name: string;
   role: Role;
+  avatarUrl?: string;
 }
 
 export interface LoginResponse {

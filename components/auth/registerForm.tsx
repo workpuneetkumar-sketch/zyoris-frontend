@@ -1,8 +1,8 @@
 "use client";
 
 import Cookies from "js-cookie";
-import { registerApi } from "@/lib/auth.service";
-import { createOrganization } from "@/lib/organization.service";
+import { registerApi } from "@/lib/api/auth.Api";
+import { createOrganization } from "@/lib/api/organizationsApi";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 
@@ -21,38 +21,6 @@ const BUSINESS_TYPES = [
     "Consulting",
     "Other",
 ];
-
-type Props = {
-    onRegisterUser: (data: {
-        name: string;
-        email: string;
-        password: string;
-        role: string;
-        designation: string;
-    }) => Promise<{
-        token: string;
-        refreshToken: string;
-        user: {
-            id: string;
-            email: string;
-            name: string;
-            role: string;
-            organizationId: string | null;
-            organizationName: string | null;
-            organizationSlug: string | null;
-        };
-    }>;
-    onCreateOrg: (data: {
-        name: string;
-        userId: string;
-        companyAbout: string;
-        businessType: string;
-    }) => Promise<void>;
-
-    isLoading: boolean;
-    error?: string | null;
-    success?: boolean;
-};
 
 export default function RegisterForm() {
     const [step, setStep] = useState<1 | 2>(1);
@@ -76,28 +44,43 @@ export default function RegisterForm() {
     const [userId, setUserId] = useState("");
 
     const [localError, setLocalError] = useState<string | null>(null);
-
-    const router = useRouter();
-
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
 
-    // Restore onboarding state after refresh
-    useEffect(() => {
-        const savedStep = Cookies.get("registerStep");
-        const savedUserId = Cookies.get("userId");
+    const router = useRouter();
 
-        if (savedStep === "2" && savedUserId) {
-            setStep(2);
-            setUserId(savedUserId);
+    // ── Restore mid-registration state after refresh
+    // Only resume Step 2 if BOTH the userId cookie AND a valid auth token exist.
+    // This prevents stale/abandoned cookies from skipping Step 1 for new users.
+    useEffect(() => {
+        const savedUserId = Cookies.get("userId");
+        const authRaw = localStorage.getItem("zyoris-auth");
+
+        if (savedUserId && authRaw) {
+            try {
+                const auth = JSON.parse(authRaw);
+                // Validate that the stored userId matches the auth token's user
+                if (auth?.token && auth?.user?.id === savedUserId) {
+                    setUserId(savedUserId);
+                    setStep(2);
+                    return;
+                }
+            } catch {
+                // Malformed auth — fall through to Step 1
+            }
         }
+
+        // Clear any stale/mismatched cookies so they don't affect future visits
+        Cookies.remove("userId");
+        setStep(1);
     }, []);
 
     // ── Step 1: Register User
     const handleStep1 = async (e: FormEvent) => {
         e.preventDefault();
         setLocalError(null);
+        setError(null);
 
         if (password.length < 8) {
             setLocalError("Password must be at least 8 characters.");
@@ -110,30 +93,38 @@ export default function RegisterForm() {
         }
 
         try {
-            const res = await handleRegisterUser({
-                name,
-                email,
-                password,
-                role,
-                designation,
-            });
+            setIsLoading(true);
 
-            console.log("REGISTER RESPONSE:", res);
+            const res = await registerApi({ name, email, password, role, designation });
+
+            if (!res?.user?.id) {
+                setError("Invalid response from server.");
+                return;
+            }
+
+            // Persist auth
+            localStorage.setItem(
+                "zyoris-auth",
+                JSON.stringify({
+                    user: res.user,
+                    token: res.token,
+                    refreshToken: res.refreshToken,
+                })
+            );
+
+            // Persist onboarding state — tied to a valid token now
+            Cookies.set("userId", res.user.id, { expires: 1, path: "/" });
 
             setUserId(res.user.id);
-
-            // Save onboarding state
-            Cookies.set("registerStep", "2", { expires: 1 });
-            Cookies.set("userId", res.user.id, { expires: 1 });
-            Cookies.set("token", res.token, { expires: 1 });
-
-            console.log("STEP BEFORE:", step);
-
             setStep(2);
-
-            console.log("STEP AFTER");
-        } catch (err) {
-            console.error("Register failed:", err);
+        } catch (err: any) {
+            setError(
+                err?.response?.data?.error ??
+                err?.response?.data?.message ??
+                "Registration failed."
+            );
+        } finally {
+            setIsLoading(false);
         }
     };
 
@@ -141,59 +132,27 @@ export default function RegisterForm() {
     const handleStep2 = async (e: FormEvent) => {
         e.preventDefault();
         setLocalError(null);
-
-        await onCreateOrg({
-            name: companyName,
-            userId,
-            companyAbout,
-            businessType,
-        });
-    };
-
-    async function handleRegisterUser(data: {
-        name: string;
-        email: string;
-        password: string;
-        role: string;
-        designation: string;
-    }) {
-        setIsLoading(true);
         setError(null);
 
-        try {
-            const res = await registerApi(data);
-            return res;
-        } catch (err: any) {
-            setError(
-                err?.response?.data?.error ??
-                err?.response?.data?.message ??
-                "Registration failed. Please try again."
-            );
-            throw err;
-        } finally {
-            setIsLoading(false);
-        }
-    }
-
-    async function onCreateOrg(data: {
-        name: string;
-        userId: string;
-        companyAbout: string;
-        businessType: string;
-    }) {
-        setIsLoading(true);
-        setError(null);
-
-        try {
-            await createOrganization(data);
-
-            // Clear onboarding cookies
-            Cookies.remove("registerStep");
+        if (!userId) {
+            setLocalError("Session expired. Please register again.");
+            // Clear stale state and restart
             Cookies.remove("userId");
+            localStorage.removeItem("zyoris-auth");
+            setStep(1);
+            return;
+        }
 
+        setIsLoading(true);
+
+        try {
+            await createOrganization({ name: companyName, userId, companyAbout, businessType });
+
+            Cookies.remove("userId");
             setSuccess(true);
 
-            setTimeout(() => router.replace("/login"), 1800);
+            // Registration complete → go to login; login itself will redirect to dashboard
+            setTimeout(() => router.replace("/login"), 1500);
         } catch (err: any) {
             setError(
                 err?.response?.data?.error ??
@@ -203,19 +162,17 @@ export default function RegisterForm() {
         } finally {
             setIsLoading(false);
         }
-    }
+    };
 
     const displayError = localError || error;
 
     const inputClass =
         "w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-[13.5px] text-slate-800 placeholder-slate-300 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all bg-white";
 
-    const labelClass =
-        "block text-[12.5px] font-semibold text-slate-600 mb-1.5";
+    const labelClass = "block text-[12.5px] font-semibold text-slate-600 mb-1.5";
 
     return (
         <div className="min-h-screen flex flex-col bg-[#1a2f6e] relative">
-
             {/* Background blobs */}
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-500/10" />
@@ -275,10 +232,9 @@ export default function RegisterForm() {
                                 <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                                 </svg>
-                                Account created! Redirecting to login…
+                                Organization created! Redirecting to login…
                             </div>
                         )}
-
 
                         {displayError && (
                             <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-500">
@@ -286,11 +242,10 @@ export default function RegisterForm() {
                             </div>
                         )}
 
-
+                        {/* ── STEP 1 ── */}
                         {step === 1 && (
                             <form onSubmit={handleStep1} className="space-y-3.5">
                                 <div className="grid grid-cols-2 gap-3.5">
-                                    {/* Full Name */}
                                     <div>
                                         <label className={labelClass}>Full name</label>
                                         <input
@@ -299,7 +254,6 @@ export default function RegisterForm() {
                                             className={inputClass}
                                         />
                                     </div>
-                                    {/* Email */}
                                     <div>
                                         <label className={labelClass}>Email address</label>
                                         <input
@@ -312,7 +266,6 @@ export default function RegisterForm() {
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3.5">
-                                    {/* Role */}
                                     <div>
                                         <label className={labelClass}>Role</label>
                                         <div className="relative">
@@ -331,7 +284,6 @@ export default function RegisterForm() {
                                             </div>
                                         </div>
                                     </div>
-                                    {/* Designation */}
                                     <div>
                                         <label className={labelClass}>Designation</label>
                                         <input
@@ -343,7 +295,6 @@ export default function RegisterForm() {
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-3.5">
-                                    {/* Password */}
                                     <div>
                                         <label className={labelClass}>Password</label>
                                         <div className="relative">
@@ -359,7 +310,6 @@ export default function RegisterForm() {
                                             </button>
                                         </div>
                                     </div>
-                                    {/* Confirm Password */}
                                     <div>
                                         <label className={labelClass}>Confirm password</label>
                                         <div className="relative">
@@ -384,12 +334,7 @@ export default function RegisterForm() {
                                             <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
                                             Registering…
                                         </>
-                                    ) : (
-                                        <>
-                                            Register
-
-                                        </>
-                                    )}
+                                    ) : "Register"}
                                 </button>
                             </form>
                         )}
@@ -406,7 +351,6 @@ export default function RegisterForm() {
                                     />
                                 </div>
 
-                                {/* Business Type */}
                                 <div>
                                     <label className={labelClass}>Business type</label>
                                     <div className="relative">
@@ -426,7 +370,6 @@ export default function RegisterForm() {
                                     </div>
                                 </div>
 
-                                {/* Company About */}
                                 <div>
                                     <label className={labelClass}>About the company</label>
                                     <textarea
@@ -450,7 +393,6 @@ export default function RegisterForm() {
                             </form>
                         )}
 
-                        {/* Sign in link */}
                         <p className="text-center text-[12.5px] text-slate-400 mt-5">
                             Already have an account?{" "}
                             <a href="/login" className="text-blue-600 font-semibold hover:underline">
@@ -461,12 +403,10 @@ export default function RegisterForm() {
 
                     {/* ── RIGHT: Brand Panel ── */}
                     <div className="hidden md:flex w-[320px] bg-[#1a2f6e] flex-col items-center justify-end pb-10 px-8 shrink-0 relative overflow-hidden">
-
                         <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-blue-500/10 pointer-events-none" />
                         <div className="absolute top-1/4 -left-10 w-32 h-32 rounded-full bg-blue-400/10 pointer-events-none" />
                         <div className="absolute bottom-4 right-4 w-40 h-40 rounded-full bg-[#0f1f55]/60 pointer-events-none" />
 
-                        {/* Top logo */}
                         <div className="relative z-10 self-start mt-10 mb-auto flex items-center gap-2">
                             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shrink-0">
                                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none">

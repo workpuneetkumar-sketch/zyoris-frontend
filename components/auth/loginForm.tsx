@@ -55,6 +55,14 @@ export default function LoginForm({ onSubmit, isLoading: propsLoading, error: pr
                 expires: rememberMe ? 7 : 1,
             });
 
+            localStorage.setItem(
+                "zyoris-auth",
+                JSON.stringify({
+                    user: res.user,
+                    token: res.token,
+                    refreshToken: res.refreshToken,
+                })
+            );
             // Redirect logic
             const role = res.user.role;
             if (

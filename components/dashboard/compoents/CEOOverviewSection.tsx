@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import api from "@/lib/api/api";
 import { DollarSign, BarChart2, Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 export function CEOOverviewSection({ token }: { token: string }) {
@@ -69,11 +69,10 @@ export function CEOOverviewSection({ token }: { token: string }) {
                         )}
                     </div>
                     <div className="mt-4 flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                            card.status === "Healthy" || card.status === "Growth" || card.status === "Strong"
-                            ? "bg-emerald-50 text-emerald-600" 
-                            : "bg-blue-50 text-blue-600"
-                        }`}>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Healthy" || card.status === "Growth" || card.status === "Strong"
+                                ? "bg-emerald-50 text-emerald-600"
+                                : "bg-blue-50 text-blue-600"
+                            }`}>
                             {card.status}
                         </span>
                     </div>
@@ -81,4 +80,4 @@ export function CEOOverviewSection({ token }: { token: string }) {
             ))}
         </div>
     );
-}
+}
