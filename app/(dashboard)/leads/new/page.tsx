@@ -1,0 +1,9 @@
+export default function NewLeadPage() {
+    return (
+        <div className="p-6">
+            <h1 className="text-2xl font-bold">
+                New Lead Page
+            </h1>
+        </div>
+    );
+}

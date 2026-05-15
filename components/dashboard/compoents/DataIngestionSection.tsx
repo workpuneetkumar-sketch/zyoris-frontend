@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import api from "@/lib/api/api";
 import { UploadPanel } from "@/components/UploadPanel";
 import { UploadAnalysisSection } from "@/components/UploadAnalysisSection";
 import { DataSenseReport } from "@/components/DataSenseReport";

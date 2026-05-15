@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import api from "@/lib/api";
+import api from "@/lib/api/api";
 import { DollarSign, BarChart2, ShieldCheck, PieChart, Wallet, ClipboardCheck } from "lucide-react";
 
 export interface CFODashboardData {
@@ -76,11 +76,10 @@ export function CFOOverviewSection({ token }: { token: string }) {
                             <p className="text-sm text-gray-400 font-medium">{card.subValue}</p>
                         </div>
                         <div className="mt-4 flex items-center gap-2">
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                card.status === "Positive" || card.status === "Cleared" || card.status === "On Track"
-                                ? "bg-emerald-50 text-emerald-600" 
-                                : "bg-amber-50 text-amber-600"
-                            }`}>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Positive" || card.status === "Cleared" || card.status === "On Track"
+                                    ? "bg-emerald-50 text-emerald-600"
+                                    : "bg-amber-50 text-amber-600"
+                                }`}>
                                 {card.status}
                             </span>
                         </div>
@@ -111,9 +110,8 @@ export function CFOOverviewSection({ token }: { token: string }) {
                                         <td className="px-5 py-4 text-sm text-gray-600 text-right font-mono">${Math.round(item.spend).toLocaleString()}</td>
                                         <td className="px-5 py-4 text-sm text-gray-600 text-right font-mono">${Math.round(item.attributedRevenue).toLocaleString()}</td>
                                         <td className="px-5 py-4 text-right">
-                                            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${
-                                                (item.roi || 0) >= 3 ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
-                                            }`}>
+                                            <span className={`text-xs font-bold px-2 py-0.5 rounded-lg ${(item.roi || 0) >= 3 ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-blue-600"
+                                                }`}>
                                                 {item.roi != null ? `${item.roi.toFixed(2)}x` : "N/A"}
                                             </span>
                                         </td>
