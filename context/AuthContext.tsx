@@ -1,6 +1,6 @@
 "use client";
 
-import { loginApi, registerApi, AuthResponse } from "@/lib/auth.service";
+import { loginApi, registerApi, AuthResponse ,logoutApi } from "@/lib/api/auth.Api";
 import React, {
   createContext,
   useCallback,
@@ -9,6 +9,8 @@ import React, {
   useState,
   ReactNode,
 } from "react";
+
+import { useRouter } from "next/navigation";
 
 type Role = "ADMIN" | "CEO" | "CFO" | "SALES_HEAD" | "OPERATIONS_HEAD";
 
@@ -19,6 +21,7 @@ export interface User {
   role: Role;
   organizationId?: string | null;
   organizationName?: string | null;
+  avatarUrl?: string;
 }
 
 interface AuthContextValue {
@@ -35,7 +38,7 @@ interface AuthContextValue {
     role: string;
     designation: string;
   }) => Promise<User>;
-  logout: () => void;
+ logout: () => Promise<void>; 
   isLoading: boolean;
   error: string | null;
 }
@@ -49,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+    const router = useRouter(); 
 
   // Restore session
   useEffect(() => {
@@ -79,12 +83,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setUser(res.user);
       setToken(res.token);
+  
 
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
           user: res.user,
           token: res.token,
+          refreshToken: res.refreshToken,
         })
       );
 
@@ -119,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         JSON.stringify({
           user: res.user,
           token: res.token,
+          refreshToken: res.refreshToken,
         })
       );
 
@@ -131,11 +138,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    setToken(null);
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+ const logout = useCallback(async () => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      const refreshToken = raw ? JSON.parse(raw).refreshToken : null;
+
+      if (refreshToken) {
+        await logoutApi(refreshToken); // POST /auth/logout { refreshToken }
+      }
+    } catch (err) {
+      console.error("Logout API failed:", err);
+    } finally {
+      setUser(null);
+      setToken(null);
+      localStorage.removeItem(STORAGE_KEY);
+      router.push("/login");
+    }
+  }, [router]);
+
 
   return (
     <AuthContext.Provider
@@ -151,3 +171,5 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+

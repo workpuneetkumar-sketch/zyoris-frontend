@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, DragEvent, ChangeEvent } from "react";
-import api from "@/lib/api";
+import api from "@/lib/api/api";
 import type { UploadAnalysisData } from "./UploadAnalysisSection";
 import { UploadCloud, FileSpreadsheet, CheckCircle2, AlertCircle, X } from "lucide-react";
 

@@ -1,8 +1,8 @@
 "use client";
 
-import { AppShell } from "../../components/Shell";
-import { useAuth } from "../../context/AuthContext";
-import api from "@/lib/api";
+import { AppShell } from "@/components/Shell";
+import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api/api";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -75,8 +75,8 @@ export default function OperationsDashboardPage() {
             {ops?.demandForecast === "increasing"
               ? "↑ Increasing"
               : ops?.demandForecast === "decreasing"
-              ? "↓ Decreasing"
-              : "→ Stable"}
+                ? "↓ Decreasing"
+                : "→ Stable"}
           </div>
           <div className="card-trend">
             Blend of bookings, revenue, and inventory signals.
