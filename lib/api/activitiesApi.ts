@@ -42,20 +42,20 @@ const MOCK_BREAKDOWN: ActivityTypeBreakdown[] = [
 ];
 
 const MOCK_OVERDUE: OverdueActivity[] = [
-    { id: 1, title: "Prepare proposal for Inspire Tech", company: "Inspire Tech", dueDate: "May 19, 2024", priority: "High" },
-    { id: 2, title: "Follow up call with Nimbus Solutions", company: "Nimbus Solutions", dueDate: "May 19, 2024", priority: "Medium" },
-    { id: 3, title: "Send documents to DataSoft Inc.", company: "DataSoft Inc.", dueDate: "May 20, 2024", priority: "Medium" },
+    { id: "1", title: "Prepare proposal for Inspire Tech", company: "Inspire Tech", dueDate: "May 19, 2024", priority: "High" },
+    { id: "2", title: "Follow up call with Nimbus Solutions", company: "Nimbus Solutions", dueDate: "May 19, 2024", priority: "Medium" },
+    { id: "3", title: "Send documents to DataSoft Inc.", company: "DataSoft Inc.", dueDate: "May 20, 2024", priority: "Medium" },
 ];
 
 const MOCK_ACTIVITIES: Activity[] = [
-    { id: 1, title: "Follow up with Acme Corporation", description: "Discuss proposal and next steps", relatedTo: "Acme Corporation", relatedToCompany: "Acme Corporation", type: "Task", owner: "Alex Morgan", ownerAvatar: "AM", dueDate: "May 22, 2024", dueTime: "10:00 AM", status: "Upcoming", priority: "High" },
-    { id: 2, title: "Call with Bright Solutions", description: "Product demo discussion", relatedTo: "Bright Solutions", relatedToCompany: "Bright Solutions", type: "Call", owner: "Jordan Lee", ownerAvatar: "JL", dueDate: "May 22, 2024", dueTime: "02:00 PM", status: "Upcoming", priority: "Medium" },
-    { id: 3, title: "Meeting with OMEGA Industries", description: "Quarterly review meeting", relatedTo: "OMEGA Industries", relatedToCompany: "OMEGA Industries", type: "Meeting", owner: "Taylor Smith", ownerAvatar: "TS", dueDate: "May 23, 2024", dueTime: "11:00 AM", status: "Upcoming", priority: "High" },
-    { id: 4, title: "Send proposal to Vertex Solutions", description: "Email proposal and pricing", relatedTo: "Vertex Solutions", relatedToCompany: "Vertex Solutions", type: "Email", owner: "Alex Morgan", ownerAvatar: "AM", dueDate: "May 23, 2024", dueTime: "04:00 PM", status: "Upcoming", priority: "Medium" },
-    { id: 5, title: "Demo completed with NextGen Systems", description: "Product demo successfully completed", relatedTo: "NextGen Systems", relatedToCompany: "NextGen Systems", type: "Meeting", owner: "Taylor Smith", ownerAvatar: "TS", dueDate: "May 20, 2024", dueTime: "03:00 PM", status: "Completed", priority: "Low" },
-    { id: 6, title: "Call with Summit Group", description: "Discuss requirements", relatedTo: "Summit Group", relatedToCompany: "Summit Group", type: "Call", owner: "Jordan Lee", ownerAvatar: "JL", dueDate: "May 19, 2024", dueTime: "10:30 AM", status: "Completed", priority: "Low" },
-    { id: 7, title: "Prepare report for Acme Corporation", description: "Monthly performance report", relatedTo: "Acme Corporation", relatedToCompany: "Acme Corporation", type: "Task", owner: "Alex Morgan", ownerAvatar: "AM", dueDate: "May 17, 2024", dueTime: "05:00 PM", status: "Completed", priority: "Medium" },
-    { id: 8, title: "Follow up meeting with CloudWave", description: "Contract discussion", relatedTo: "CloudWave", relatedToCompany: "CloudWave", type: "Meeting", owner: "Jordan Lee", ownerAvatar: "JL", dueDate: "May 16, 2024", dueTime: "11:30 AM", status: "Overdue", priority: "High" },
+    { id: "1", title: "Follow up with Acme Corporation", description: "Discuss proposal and next steps", relatedTo: "Acme Corporation", relatedToCompany: "Acme Corporation", type: "Task", owner: "Alex Morgan", ownerAvatar: "AM", dueDate: "May 22, 2024", dueTime: "10:00 AM", status: "Upcoming", priority: "High" },
+    { id: "2", title: "Call with Bright Solutions", description: "Product demo discussion", relatedTo: "Bright Solutions", relatedToCompany: "Bright Solutions", type: "Call", owner: "Jordan Lee", ownerAvatar: "JL", dueDate: "May 22, 2024", dueTime: "02:00 PM", status: "Upcoming", priority: "Medium" },
+    { id: "3", title: "Meeting with OMEGA Industries", description: "Quarterly review meeting", relatedTo: "OMEGA Industries", relatedToCompany: "OMEGA Industries", type: "Meeting", owner: "Taylor Smith", ownerAvatar: "TS", dueDate: "May 23, 2024", dueTime: "11:00 AM", status: "Upcoming", priority: "High" },
+    { id: "4", title: "Send proposal to Vertex Solutions", description: "Email proposal and pricing", relatedTo: "Vertex Solutions", relatedToCompany: "Vertex Solutions", type: "Email", owner: "Alex Morgan", ownerAvatar: "AM", dueDate: "May 23, 2024", dueTime: "04:00 PM", status: "Upcoming", priority: "Medium" },
+    { id: "5", title: "Demo completed with NextGen Systems", description: "Product demo successfully completed", relatedTo: "NextGen Systems", relatedToCompany: "NextGen Systems", type: "Meeting", owner: "Taylor Smith", ownerAvatar: "TS", dueDate: "May 20, 2024", dueTime: "03:00 PM", status: "Completed", priority: "Low" },
+    { id: "6", title: "Call with Summit Group", description: "Discuss requirements", relatedTo: "Summit Group", relatedToCompany: "Summit Group", type: "Call", owner: "Jordan Lee", ownerAvatar: "JL", dueDate: "May 19, 2024", dueTime: "10:30 AM", status: "Completed", priority: "Low" },
+    { id: "7", title: "Prepare report for Acme Corporation", description: "Monthly performance report", relatedTo: "Acme Corporation", relatedToCompany: "Acme Corporation", type: "Task", owner: "Alex Morgan", ownerAvatar: "AM", dueDate: "May 17, 2024", dueTime: "05:00 PM", status: "Completed", priority: "Medium" },
+    { id: "8", title: "Follow up meeting with CloudWave", description: "Contract discussion", relatedTo: "CloudWave", relatedToCompany: "CloudWave", type: "Meeting", owner: "Jordan Lee", ownerAvatar: "JL", dueDate: "May 16, 2024", dueTime: "11:30 AM", status: "Overdue", priority: "High" },
 ];
 
 // ── GET paginated activities ──────────────────────────────────────────────────
@@ -111,7 +111,7 @@ export async function createActivity(data: Partial<Activity>): Promise<Activity>
 }
 
 // ── PATCH update activity ─────────────────────────────────────────────────────
-export async function updateActivity(id: number, data: Partial<Activity>): Promise<void> {
+export async function updateActivity(id: string, data: Partial<Activity>): Promise<void> {
     const res = await fetch(`/activities/update-activity/${id}`, {
         method: "PATCH",
         headers: getAuthHeaders(),
@@ -121,7 +121,7 @@ export async function updateActivity(id: number, data: Partial<Activity>): Promi
 }
 
 // ── DELETE activity ───────────────────────────────────────────────────────────
-export async function deleteActivity(id: number): Promise<void> {
+export async function deleteActivity(id: string): Promise<void> {
     const res = await fetch(`/activities/delete-activity/${id}`, {
         method: "DELETE",
         headers: getAuthHeaders(),

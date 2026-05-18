@@ -40,8 +40,54 @@ export async function fetchLeads(
         params,
     });
 
+    return {
+        leads: res.data.data,
+        total: res.data.pagination.total,
+    };
+}
+
+// ── POST create a new lead ─────────────────────────────────
+
+export async function createLead(data: {
+    name: string;
+    email: string;
+    phone?: string;
+    company?: string;
+    city?: string;
+    source?: string;
+    status?: string;
+    assignedToId?: string | null;
+    tags?: string[];
+    note?: string;
+}): Promise<Lead> {
+    const res = await api.post("/leads/create-leads", {
+        ...data,
+        assignedToId: data.assignedToId?.trim() || null, // ← "" → null
+    });
     return res.data;
 }
+// ── PATCH update a lead ────────────────────────────────────
+
+export async function updateLead(
+    id: Lead["id"],
+    data: Partial<Lead>
+): Promise<Lead> {
+    const res = await api.patch(`/leads/update-lead/${id}`, data);
+    return res.data;
+}
+
+// ── POST assign a lead to a team member ───────────────────
+
+export async function assignLead(
+    leadId: Lead["id"],
+    assignedToId: string
+): Promise<Lead> {
+    const res = await api.post(`/leads/assign-lead/${leadId}`, {
+        assignedToId,
+    });
+    return res.data;
+}
+
 
 // ── PATCH soft-delete a lead ───────────────────────────────
 

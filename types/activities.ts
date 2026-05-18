@@ -5,7 +5,7 @@ export type ActivityStatus = "Upcoming" | "Completed" | "Overdue";
 export type ActivityPriority = "High" | "Medium" | "Low";
 
 export interface Activity {
-    id: number;
+    id: string;
     title: string;
     description: string;
     relatedTo: string;
@@ -31,7 +31,7 @@ export interface ActivityStats {
 }
 
 export interface OverdueActivity {
-    id: number;
+    id: string;
     title: string;
     company: string;
     dueDate: string;

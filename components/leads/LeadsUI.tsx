@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
     Search,
     Filter,
@@ -23,27 +25,21 @@ export interface LeadsTableProps {
     perPage: number;
     filters: LeadsFilters;
     loading: boolean;
-    openMenu: number | null;
+    openMenu: string | null;
     onPageChange: (page: number) => void;
     onFiltersChange: (filters: LeadsFilters) => void;
     onNewLead: () => void;
     onExport: () => void;
     onAction: (action: string, lead: Lead) => void;
-    setOpenMenu: (id: number | null) => void;
+    setOpenMenu: (id: string | null) => void;
 }
 
-// ── Helpers ────────────────────────────────────────────────────────────────
 const STATUS_STYLES: Record<LeadStatus, string> = {
     NEW: "bg-blue-50 text-blue-600 border border-blue-200",
     CONTACTED: "bg-amber-50 text-amber-600 border border-amber-200",
     QUALIFIED: "bg-green-50 text-green-600 border border-green-200",
     CLOSED: "bg-purple-50 text-purple-600 border border-purple-200",
 };
-function scoreColor(score: number) {
-    if (score >= 75) return "text-green-600 bg-green-50 border-green-200";
-    if (score >= 60) return "text-amber-600 bg-amber-50 border-amber-200";
-    return "text-red-500 bg-red-50 border-red-200";
-}
 
 function Avatar({ initials }: { initials: string }) {
     return (
@@ -81,7 +77,6 @@ function Select({
     );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────
 export function LeadsTable({
     leads,
     total,
@@ -98,7 +93,8 @@ export function LeadsTable({
     setOpenMenu,
 }: LeadsTableProps) {
     const totalPages = Math.max(1, Math.ceil(total / perPage));
-    const safeLeads = leads ?? []; // ✅ null safety
+    const safeLeads = leads ?? [];
+    const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
     return (
         <div className="min-h-full">
@@ -127,8 +123,8 @@ export function LeadsTable({
                 </div>
             </div>
 
-            {/* Table card */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Table card — overflow-hidden removed so dropdown isn't clipped */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
 
                 {/* Filters bar */}
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
@@ -164,11 +160,12 @@ export function LeadsTable({
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto  overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-gray-100">
-                                {["Lead Name", "Company", "Source", "Owner", "Status", "Score", "Created At", "Actions"].map((h) => (
+                                {/* ✅ Score column removed */}
+                                {["Lead Name", "Company", "Source", "Owner", "Status", "Created At", "Actions"].map((h) => (
                                     <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                         {h}
                                     </th>
@@ -179,63 +176,77 @@ export function LeadsTable({
                             {loading ? (
                                 Array.from({ length: perPage }).map((_, i) => (
                                     <tr key={i} className="border-b border-gray-50">
-                                        {Array.from({ length: 8 }).map((_, j) => (
+                                        {Array.from({ length: 7 }).map((_, j) => (
                                             <td key={j} className="px-5 py-4">
                                                 <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
                                             </td>
                                         ))}
                                     </tr>
                                 ))
-                            ) : safeLeads.length === 0 ? (  // ✅ fixed
+                            ) : safeLeads.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
+                                    <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
                                         No leads found.
                                     </td>
                                 </tr>
                             ) : (
-                                safeLeads.map((lead) => (  // ✅ fixed
+                                safeLeads.map((lead) => (
                                     <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                                         <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
                                         <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
                                         <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.source}</td>
+
+                                        {/* ✅ Owner — shows "NA" badge if unassigned */}
                                         <td className="px-5 py-3.5 whitespace-nowrap">
-                                            <div className="flex items-center gap-2">
-                                                <Avatar initials={lead.ownerAvatar} />
-                                                <span className="text-gray-700">{lead.owner}</span>
-                                            </div>
+                                            {lead.owner ? (
+                                                <div className="flex items-center gap-2">
+                                                    <Avatar
+                                                        initials={
+                                                            lead.ownerAvatar ||
+                                                            lead.owner
+                                                                .split(" ")
+                                                                .map((n) => n[0])
+                                                                .join("")
+                                                                .toUpperCase()
+                                                                .slice(0, 2)
+                                                        }
+                                                    />
+                                                    <span className="text-gray-700">{lead.owner}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
+                                                    NA
+                                                </span>
+                                            )}
                                         </td>
+
                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_STYLES[lead.status]}`}>
                                                 {lead.status}
                                             </span>
                                         </td>
-                                        <td className="px-5 py-3.5 whitespace-nowrap">
-                                            <span className={`inline-flex items-center justify-center w-9 h-6 rounded-md text-[12px] font-bold border ${scoreColor(lead.score)}`}>
-                                                {lead.score}
-                                            </span>
-                                        </td>
+
+
+
                                         <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
-                                        <td className="px-5 py-3.5 whitespace-nowrap relative">
+
+                                        {/*  Actions — overflow-visible so dropdown isn't clipped */}
+                                        <td className="px-5 py-3.5 whitespace-nowrap">
                                             <button
-                                                onClick={() => setOpenMenu(openMenu === lead.id ? null : lead.id)}
+                                                onClick={(e) => {
+                                                    if (openMenu === lead.id) {
+                                                        setOpenMenu(null);
+                                                        setMenuPos(null);
+                                                    } else {
+                                                        const rect = e.currentTarget.getBoundingClientRect();
+                                                        setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
+                                                        setOpenMenu(lead.id);
+                                                    }
+                                                }}
                                                 className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                                             >
                                                 <MoreVertical size={16} />
                                             </button>
-                                            {openMenu === lead.id && (
-                                                <div className="absolute right-4 top-10 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 w-36">
-                                                    {["View", "Edit", "Assign", "Delete"].map((action) => (
-                                                        <button
-                                                            key={action}
-                                                            onClick={() => { onAction(action, lead); setOpenMenu(null); }}
-                                                            className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors ${action === "Delete" ? "text-red-500" : "text-gray-700"
-                                                                }`}
-                                                        >
-                                                            {action}
-                                                        </button>
-                                                    ))}
-                                                </div>
-                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -291,7 +302,33 @@ export function LeadsTable({
             </div>
 
             {openMenu !== null && (
-                <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
+                <>
+                    <div
+                        className="fixed inset-0 z-[9998]"
+                        onClick={() => { setOpenMenu(null); setMenuPos(null); }}
+                    />
+                    {menuPos && (
+                        <div
+                            className="fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 w-36"
+                            style={{ top: menuPos.top, left: menuPos.left }}
+                        >
+                            {["View", "Edit", "Assign", "Delete"].map((action) => (
+                                <button
+                                    key={action}
+                                    onClick={() => {
+                                        const lead = safeLeads.find((l) => l.id === openMenu);
+                                        if (lead) onAction(action, lead);
+                                        setOpenMenu(null);
+                                        setMenuPos(null);
+                                    }}
+                                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors ${action === "Delete" ? "text-red-500" : "text-gray-700"}`}
+                                >
+                                    {action}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

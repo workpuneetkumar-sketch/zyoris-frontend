@@ -21,7 +21,7 @@ export function useLeads() {
     const [filters, setFilters] = useState<LeadsFilters>(DEFAULT_FILTERS);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [openMenu, setOpenMenu] = useState<number | null>(null);
+    const [openMenu, setOpenMenu] = useState<string | null>(null);
 
     // ── Data fetching ─────────────────────────────────────────────────────────
     const loadLeads = useCallback(async () => {
