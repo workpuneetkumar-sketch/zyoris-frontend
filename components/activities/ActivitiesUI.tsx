@@ -228,7 +228,7 @@ export interface ActivitiesTableProps {
     perPage: number;
     filters: ActivitiesFilters;
     loading: boolean;
-    openMenu: number | null;
+    openMenu: string | null;
     stats: ActivityStats | null;
     overdue: OverdueActivity[];
     breakdown: ActivityTypeBreakdown[];
@@ -238,7 +238,7 @@ export interface ActivitiesTableProps {
     onTabChange: (tab: ActivitiesFilters["tab"]) => void;
     onNewActivity: () => void;
     onAction: (action: string, activity: Activity) => void;
-    setOpenMenu: (id: number | null) => void;
+    setOpenMenu: (id: string | null) => void;
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────

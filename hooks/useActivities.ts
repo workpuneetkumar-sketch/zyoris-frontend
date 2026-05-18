@@ -26,7 +26,7 @@ export function useActivities() {
     const [filters, setFilters] = useState<ActivitiesFilters>(DEFAULT_FILTERS);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [openMenu, setOpenMenu] = useState<number | null>(null);
+    const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [stats, setStats] = useState<ActivityStats | null>(null);
     const [overdue, setOverdue] = useState<OverdueActivity[]>([]);
     const [breakdown, setBreakdown] = useState<ActivityTypeBreakdown[]>([]);

@@ -13,7 +13,7 @@ export type LeadSource =
     | "Cold Call";
 
 export interface Lead {
-    id: number;
+    id: string;
 
     name: string;
 
