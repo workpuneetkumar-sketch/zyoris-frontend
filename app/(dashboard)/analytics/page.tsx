@@ -9,13 +9,12 @@ import { useState } from "react";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
 import {
-    KpiRow,
+
     ForecastChart,
     DemandChart,
     SegmentList,
     DriversList,
-    ConversionTable,
-    RecommendationsGrid,
+
     SourceDonut,
     Card,
     CardHeader,
@@ -147,11 +146,7 @@ export default function AnalyticsPage() {
                     Key Metrics
                 </p>
 
-                {loading ? (
-                    <Spinner text="Loading metrics…" />
-                ) : (
-                    <KpiRow kpi={kpi} />
-                )}
+
 
                 {/* CHARTS */}
                 <div className="grid grid-cols-[1.2fr_1fr] gap-3.5 mb-4">
@@ -179,22 +174,8 @@ export default function AnalyticsPage() {
                     </Card>
                 </div>
 
-                {/* CONVERSION */}
-                <Card className="mb-4">
-                    <CardHeader title="Conversion Scores" />
-                    <ConversionTable data={conversion} />
-                </Card>
 
-                {/* RECOMMENDATIONS */}
-                <p className="text-[11px] font-semibold text-gray-400 uppercase mb-2">
-                    Recommendations
-                </p>
 
-                <EndpointBadge label="GET /recommendations" />
-
-                <div className="mt-3 mb-4">
-                    <RecommendationsGrid data={recommendations} />
-                </div>
 
                 {/* SOURCE */}
                 <Card>

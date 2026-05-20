@@ -157,7 +157,7 @@ export default function CeoDashboardPage() {
                 strokeDasharray="5 5"
               />
               {/* Vertical line separating history from forecast */}
-              <ReferenceLine x={data?.historical[data.historical.length - 1]?.date} stroke="#CBD5E1" strokeDasharray="3 3" />
+              <ReferenceLine x={data?.historical[data.historical?.length - 1]?.date} stroke="#CBD5E1" strokeDasharray="3 3" />
             </ComposedChart>
           </ResponsiveContainer>
         </div>

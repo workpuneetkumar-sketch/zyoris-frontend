@@ -12,7 +12,7 @@ import {
     Demand,
     Segment,
     Conversion,
-    Driver,
+    DriverResponse,
     Recommendation,
 } from "../lib/api/analyticsApi";
 
@@ -36,7 +36,7 @@ interface AnalyticsState {
     demand: Demand | null;
     segments: Segment[] | null;
     conversion: Conversion[] | null;
-    drivers: Driver[] | null;
+    drivers: DriverResponse | null;
     recommendations: Recommendation[] | null;
     kpi: KPI | null;
 }
@@ -48,17 +48,17 @@ interface AnalyticsState {
 /**
  * Derives the KPI values from raw API data
  */
+
+
 function deriveKPI(
     forecast: Forecast | null,
-    drivers: Driver[] | null,
+    drivers: DriverResponse | null,
     conversion: Conversion[] | null
 ): KPI | null {
     if (!forecast || !drivers || !conversion) return null;
+    if (!forecast.datapoints?.length || !conversion.length) return null;
 
-    const totalRevenue = drivers.reduce(
-        (sum, d) => sum + d.impact,
-        0
-    );
+    const totalRevenue = drivers.totals.totalRevenue;
 
     const avgScore = Math.round(
         (conversion.reduce((sum, c) => sum + c.score, 0) /
