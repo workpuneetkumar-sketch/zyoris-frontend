@@ -3,7 +3,7 @@ import type {
     Demand,
     Segment,
     Conversion,
-    Driver,
+    DriverResponse,
     Recommendation,
 } from "../lib/api/analyticsApi";
 
@@ -53,7 +53,7 @@ export interface SegmentListProps {
 }
 
 export interface DriversListProps {
-    data: Driver[] | null;
+    data: DriverResponse | null;
 }
 
 export interface ConversionTableProps {
@@ -65,5 +65,5 @@ export interface RecommendationsGridProps {
 }
 
 export interface SourceDonutProps {
-    data: Driver[] | null;
+    data: DriverResponse | null;
 }
