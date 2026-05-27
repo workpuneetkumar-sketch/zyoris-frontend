@@ -31,6 +31,18 @@ export interface Lead {
 
     createdAt: string;
 
+    email?: string;
+
+    phone?: string;
+
+    city?: string;
+
+    assignedToId?: string | null;
+
+    tags?: string[];
+
+    note?: string;
+
     [key: string]: unknown;
 }
 
