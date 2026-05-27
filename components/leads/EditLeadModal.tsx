@@ -30,7 +30,13 @@ export default function EditLeadModal({
         source: lead.source || "",
         status: lead.status || "",
         assignedToId: lead.assignedToId || "",
-        tags: lead.tags || [],
+        tags: Array.isArray(lead.tags)
+            ? lead.tags.map((tag: any) =>
+                typeof tag === "string"
+                    ? tag
+                    : tag.label
+            )
+            : [],
         note: lead.note || "",
     });
 

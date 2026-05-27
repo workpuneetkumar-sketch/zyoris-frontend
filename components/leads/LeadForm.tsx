@@ -279,12 +279,12 @@ export default function LeadForm({
 
                         <div className="flex flex-wrap gap-2 min-h-[42px] border border-gray-300 rounded-lg px-3 py-2">
 
-                            {form.tags.map((tag, index) => (
+                            {form.tags.map((tag: any, index) => (
                                 <span
-                                    key={index}
+                                    key={tag.id || index}
                                     className="flex items-center gap-1 bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full"
                                 >
-                                    {tag}
+                                    {typeof tag === "string" ? tag : tag.label}
 
                                     <button
                                         type="button"

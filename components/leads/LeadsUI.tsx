@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import EditLeadModal from "./EditLeadModal";
-import { updateLead, assignLead } from "@/lib/api/leadsApi";
+import ViewLeadModal from "./ViewLeadModal";
+import { updateLead, assignLead, fetchTeamMembers } from "@/lib/api/leadsApi";
 import { TeamMember } from "./AssignLeadModal";
 
 import {
@@ -30,6 +31,7 @@ export interface LeadsTableProps {
     loading: boolean;
     openMenu: string | null;
     onPageChange: (page: number) => void;
+    onRefreshLeads: () => Promise<void>;
     onFiltersChange: (filters: LeadsFilters) => void;
     onNewLead: () => void;
     onExport: () => void;
@@ -90,6 +92,7 @@ export function LeadsTable({
     openMenu,
     onPageChange,
     onFiltersChange,
+    onRefreshLeads,
     onNewLead,
     onExport,
     onAction,
@@ -100,6 +103,8 @@ export function LeadsTable({
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
     const [editingLead, setEditingLead] = useState<Lead | null>(null);
     const [isEditOpen, setIsEditOpen] = useState(false);
+    const [viewingLead, setViewingLead] = useState<Lead | null>(null);
+    const [isViewOpen, setIsViewOpen] = useState(false);
 
     // States for inline vertical assignment submenu
     const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
@@ -120,22 +125,19 @@ export function LeadsTable({
         if (isAssignSubmenuOpen && members.length === 0) {
             setMembersLoading(true);
             setMembersError(null);
-            fetch("/api/team/members")
-                .then((res) => {
-                    if (!res.ok) throw new Error("Failed to fetch team members");
-                    return res.json();
-                })
-                .then((data: TeamMember[]) => setMembers(data))
-                .catch((err) => setMembersError(err.message))
+            fetchTeamMembers()
+                .then((data) => setMembers(data.members || []))
+                .catch((err) => setMembersError(err?.response?.data?.message || err.message || "An error occurred"))
                 .finally(() => setMembersLoading(false));
         }
     }, [isAssignSubmenuOpen, members.length]);
 
-    const filteredMembers = members.filter(
-        (m) =>
-            m.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
-            m.role.toLowerCase().includes(assignSearch.toLowerCase())
-    );
+    const filteredMembers = Array.isArray(members)
+        ? members.filter(
+            (m) =>
+                m.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+                m.role.toLowerCase().includes(assignSearch.toLowerCase())
+        ) : [];
 
     return (
         <div className="min-h-full">
@@ -238,13 +240,13 @@ export function LeadsTable({
                                         <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.source}</td>
 
                                         {/* ✅ Owner — shows "NA" badge if unassigned */}
+
                                         <td className="px-5 py-3.5 whitespace-nowrap">
-                                            {lead.owner ? (
+                                            {lead.assignedTo ? (
                                                 <div className="flex items-center gap-2">
                                                     <Avatar
                                                         initials={
-                                                            lead.ownerAvatar ||
-                                                            lead.owner
+                                                            lead.assignedTo.name
                                                                 .split(" ")
                                                                 .map((n) => n[0])
                                                                 .join("")
@@ -252,7 +254,9 @@ export function LeadsTable({
                                                                 .slice(0, 2)
                                                         }
                                                     />
-                                                    <span className="text-gray-700">{lead.owner}</span>
+                                                    <span className="text-gray-700">
+                                                        {lead.assignedTo.name}
+                                                    </span>
                                                 </div>
                                             ) : (
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
@@ -355,9 +359,8 @@ export function LeadsTable({
                     />
                     {menuPos && (
                         <div
-                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${
-                                isAssignSubmenuOpen ? "w-56" : "w-36"
-                            }`}
+                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-36"
+                                }`}
                             style={{
                                 top: menuPos.top,
                                 left: isAssignSubmenuOpen ? menuPos.left - 80 : menuPos.left,
@@ -375,6 +378,11 @@ export function LeadsTable({
                                                     setIsEditOpen(true);
                                                     setOpenMenu(null);
                                                     setMenuPos(null);
+                                                } else if (action === "View") {
+                                                    setViewingLead(lead);
+                                                    setIsViewOpen(true);
+                                                    setOpenMenu(null);
+                                                    setMenuPos(null);
                                                 } else if (action === "Assign") {
                                                     setIsAssignSubmenuOpen(true);
                                                 } else {
@@ -384,9 +392,8 @@ export function LeadsTable({
                                                 }
                                             }
                                         }}
-                                        className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center justify-between ${
-                                            action === "Delete" ? "text-red-500" : "text-gray-700"
-                                        }`}
+                                        className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center justify-between ${action === "Delete" ? "text-red-500" : "text-gray-700"
+                                            }`}
                                     >
                                         <span>{action}</span>
                                         {action === "Assign" && (
@@ -441,15 +448,25 @@ export function LeadsTable({
                                             filteredMembers.map((member) => (
                                                 <button
                                                     key={member.id}
-                                                    onClick={async () => {
+                                                    onClick={async (e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        console.log("Clicked member:", member);
                                                         const lead = safeLeads.find((l) => l.id === openMenu);
+                                                        console.log("Found lead:", lead);
                                                         if (lead) {
                                                             try {
+                                                                console.log("Calling assignLead API...");
                                                                 await assignLead(lead.id, member.id);
-                                                                onFiltersChange({ ...filters }); // refresh leads
+
+
+                                                                console.log("assignLead API success, refreshing leads...");
+                                                                await onRefreshLeads();// refresh leads
                                                             } catch (err) {
                                                                 console.error("Failed to assign lead", err);
                                                             }
+                                                        } else {
+                                                            console.warn("No lead found for openMenu:", openMenu);
                                                         }
                                                         setOpenMenu(null);
                                                         setMenuPos(null);
@@ -506,6 +523,16 @@ export function LeadsTable({
                         } catch (error) {
                             console.error("Failed to update lead", error);
                         }
+                    }}
+                />
+            )}
+
+            {isViewOpen && viewingLead && (
+                <ViewLeadModal
+                    lead={viewingLead}
+                    onClose={() => {
+                        setIsViewOpen(false);
+                        setViewingLead(null);
                     }}
                 />
             )}
