@@ -2,6 +2,7 @@
 
 import api from "@/lib/api/api";
 
+
 import {
     Lead,
     LeadsFilters,
@@ -85,6 +86,8 @@ export async function assignLead(
     const res = await api.post(`/leads/assign-lead/${leadId}`, {
         assignedToId,
     });
+
+
     return res.data;
 }
 
@@ -125,4 +128,14 @@ export function triggerBlobDownload(
     a.click();
 
     URL.revokeObjectURL(url);
+}
+
+// ── GET team members for organization ────────────────────────
+
+export async function fetchTeamMembers(): Promise<any> {
+    const res = await api.get("/organizations/team-members");
+    console.log("TEAM MEMBERS API:", res.data);
+
+    return res.data;
+
 }

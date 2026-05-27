@@ -1,6 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import EditLeadModal from "./EditLeadModal";
+import ViewLeadModal from "./ViewLeadModal";
+import { updateLead, assignLead, fetchTeamMembers } from "@/lib/api/leadsApi";
+import { TeamMember } from "./AssignLeadModal";
 
 import {
     Search,
@@ -27,6 +31,7 @@ export interface LeadsTableProps {
     loading: boolean;
     openMenu: string | null;
     onPageChange: (page: number) => void;
+    onRefreshLeads: () => Promise<void>;
     onFiltersChange: (filters: LeadsFilters) => void;
     onNewLead: () => void;
     onExport: () => void;
@@ -87,6 +92,7 @@ export function LeadsTable({
     openMenu,
     onPageChange,
     onFiltersChange,
+    onRefreshLeads,
     onNewLead,
     onExport,
     onAction,
@@ -95,6 +101,43 @@ export function LeadsTable({
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const safeLeads = leads ?? [];
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const [editingLead, setEditingLead] = useState<Lead | null>(null);
+    const [isEditOpen, setIsEditOpen] = useState(false);
+    const [viewingLead, setViewingLead] = useState<Lead | null>(null);
+    const [isViewOpen, setIsViewOpen] = useState(false);
+
+    // States for inline vertical assignment submenu
+    const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
+    const [members, setMembers] = useState<TeamMember[]>([]);
+    const [membersLoading, setMembersLoading] = useState(false);
+    const [membersError, setMembersError] = useState<string | null>(null);
+    const [assignSearch, setAssignSearch] = useState("");
+
+    const getInitials = (name: string) => {
+        return name
+            .split(" ")
+            .map((p) => p[0]?.toUpperCase() ?? "")
+            .join("")
+            .slice(0, 2);
+    };
+
+    useEffect(() => {
+        if (isAssignSubmenuOpen && members.length === 0) {
+            setMembersLoading(true);
+            setMembersError(null);
+            fetchTeamMembers()
+                .then((data) => setMembers(data.members || []))
+                .catch((err) => setMembersError(err?.response?.data?.message || err.message || "An error occurred"))
+                .finally(() => setMembersLoading(false));
+        }
+    }, [isAssignSubmenuOpen, members.length]);
+
+    const filteredMembers = Array.isArray(members)
+        ? members.filter(
+            (m) =>
+                m.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
+                m.role.toLowerCase().includes(assignSearch.toLowerCase())
+        ) : [];
 
     return (
         <div className="min-h-full">
@@ -197,13 +240,13 @@ export function LeadsTable({
                                         <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.source}</td>
 
                                         {/* ✅ Owner — shows "NA" badge if unassigned */}
+
                                         <td className="px-5 py-3.5 whitespace-nowrap">
-                                            {lead.owner ? (
+                                            {lead.assignedTo ? (
                                                 <div className="flex items-center gap-2">
                                                     <Avatar
                                                         initials={
-                                                            lead.ownerAvatar ||
-                                                            lead.owner
+                                                            lead.assignedTo.name
                                                                 .split(" ")
                                                                 .map((n) => n[0])
                                                                 .join("")
@@ -211,7 +254,9 @@ export function LeadsTable({
                                                                 .slice(0, 2)
                                                         }
                                                     />
-                                                    <span className="text-gray-700">{lead.owner}</span>
+                                                    <span className="text-gray-700">
+                                                        {lead.assignedTo.name}
+                                                    </span>
                                                 </div>
                                             ) : (
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
@@ -305,30 +350,191 @@ export function LeadsTable({
                 <>
                     <div
                         className="fixed inset-0 z-[9998]"
-                        onClick={() => { setOpenMenu(null); setMenuPos(null); }}
+                        onClick={() => {
+                            setOpenMenu(null);
+                            setMenuPos(null);
+                            setIsAssignSubmenuOpen(false);
+                            setAssignSearch("");
+                        }}
                     />
                     {menuPos && (
                         <div
-                            className="fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 w-36"
-                            style={{ top: menuPos.top, left: menuPos.left }}
+                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-36"
+                                }`}
+                            style={{
+                                top: menuPos.top,
+                                left: isAssignSubmenuOpen ? menuPos.left - 80 : menuPos.left,
+                            }}
                         >
-                            {["View", "Edit", "Assign", "Delete"].map((action) => (
-                                <button
-                                    key={action}
-                                    onClick={() => {
-                                        const lead = safeLeads.find((l) => l.id === openMenu);
-                                        if (lead) onAction(action, lead);
-                                        setOpenMenu(null);
-                                        setMenuPos(null);
-                                    }}
-                                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors ${action === "Delete" ? "text-red-500" : "text-gray-700"}`}
-                                >
-                                    {action}
-                                </button>
-                            ))}
+                            {!isAssignSubmenuOpen ? (
+                                ["View", "Edit", "Assign", "Delete"].map((action) => (
+                                    <button
+                                        key={action}
+                                        onClick={() => {
+                                            const lead = safeLeads.find((l) => l.id === openMenu);
+                                            if (lead) {
+                                                if (action === "Edit") {
+                                                    setEditingLead(lead);
+                                                    setIsEditOpen(true);
+                                                    setOpenMenu(null);
+                                                    setMenuPos(null);
+                                                } else if (action === "View") {
+                                                    setViewingLead(lead);
+                                                    setIsViewOpen(true);
+                                                    setOpenMenu(null);
+                                                    setMenuPos(null);
+                                                } else if (action === "Assign") {
+                                                    setIsAssignSubmenuOpen(true);
+                                                } else {
+                                                    onAction(action, lead);
+                                                    setOpenMenu(null);
+                                                    setMenuPos(null);
+                                                }
+                                            }
+                                        }}
+                                        className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center justify-between ${action === "Delete" ? "text-red-500" : "text-gray-700"
+                                            }`}
+                                    >
+                                        <span>{action}</span>
+                                        {action === "Assign" && (
+                                            <ChevronRight size={13} className="text-gray-400" />
+                                        )}
+                                    </button>
+                                ))
+                            ) : (
+                                <div className="flex flex-col">
+                                    {/* Submenu Header */}
+                                    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
+                                        <button
+                                            onClick={() => {
+                                                setIsAssignSubmenuOpen(false);
+                                                setAssignSearch("");
+                                            }}
+                                            className="p-1 rounded hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors"
+                                        >
+                                            <ChevronLeft size={14} />
+                                        </button>
+                                        <span className="text-[13px] font-semibold text-gray-700">Assign Lead</span>
+                                    </div>
+
+                                    {/* Search Input */}
+                                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100">
+                                        <Search size={12} className="text-gray-400 shrink-0" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search members..."
+                                            value={assignSearch}
+                                            onChange={(e) => setAssignSearch(e.target.value)}
+                                            className="w-full text-[12px] outline-none text-gray-700 placeholder-gray-400 bg-transparent"
+                                            autoFocus
+                                        />
+                                    </div>
+
+                                    {/* Members List */}
+                                    <div className="max-h-[180px] overflow-y-auto py-1">
+                                        {membersLoading ? (
+                                            <div className="flex justify-center py-4">
+                                                <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                                            </div>
+                                        ) : membersError ? (
+                                            <div className="px-3 py-2 text-[11px] text-red-500 text-center">
+                                                {membersError}
+                                            </div>
+                                        ) : filteredMembers.length === 0 ? (
+                                            <div className="px-3 py-2 text-[11px] text-gray-400 text-center">
+                                                No members found
+                                            </div>
+                                        ) : (
+                                            filteredMembers.map((member) => (
+                                                <button
+                                                    key={member.id}
+                                                    onClick={async (e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        console.log("Clicked member:", member);
+                                                        const lead = safeLeads.find((l) => l.id === openMenu);
+                                                        console.log("Found lead:", lead);
+                                                        if (lead) {
+                                                            try {
+                                                                console.log("Calling assignLead API...");
+                                                                await assignLead(lead.id, member.id);
+
+
+                                                                console.log("assignLead API success, refreshing leads...");
+                                                                await onRefreshLeads();// refresh leads
+                                                            } catch (err) {
+                                                                console.error("Failed to assign lead", err);
+                                                            }
+                                                        } else {
+                                                            console.warn("No lead found for openMenu:", openMenu);
+                                                        }
+                                                        setOpenMenu(null);
+                                                        setMenuPos(null);
+                                                        setIsAssignSubmenuOpen(false);
+                                                        setAssignSearch("");
+                                                    }}
+                                                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
+                                                >
+                                                    <Avatar initials={getInitials(member.name)} />
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-[12.5px] font-medium text-gray-800 truncate">
+                                                            {member.name}
+                                                        </p>
+                                                        <p className="text-[10.5px] text-gray-400 truncate">
+                                                            {member.role}
+                                                        </p>
+                                                    </div>
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </>
+            )}
+
+            {isEditOpen && editingLead && (
+                <EditLeadModal
+                    lead={{
+                        leadId: editingLead.id,
+                        name: editingLead.name,
+                        email: editingLead.email || "",
+                        phone: editingLead.phone || "",
+                        company: editingLead.company || "",
+                        city: editingLead.city || "",
+                        source: editingLead.source || "",
+                        status: editingLead.status || "",
+                        assignedToId: editingLead.assignedToId || "",
+                        tags: editingLead.tags || [],
+                        note: editingLead.note || "",
+                    }}
+                    onClose={() => {
+                        setIsEditOpen(false);
+                        setEditingLead(null);
+                    }}
+                    onSave={async (updatedData) => {
+                        try {
+                            await updateLead(editingLead.id, updatedData as unknown as Partial<Lead>);
+                            setIsEditOpen(false);
+                            setEditingLead(null);
+                            onFiltersChange({ ...filters });
+                        } catch (error) {
+                            console.error("Failed to update lead", error);
+                        }
+                    }}
+                />
+            )}
+
+            {isViewOpen && viewingLead && (
+                <ViewLeadModal
+                    lead={viewingLead}
+                    onClose={() => {
+                        setIsViewOpen(false);
+                        setViewingLead(null);
+                    }}
+                />
             )}
         </div>
     );

@@ -12,27 +12,7 @@ export type LeadSource =
     | "LinkedIn"
     | "Cold Call";
 
-export interface Lead {
-    id: string;
 
-    name: string;
-
-    company: string;
-
-    source: LeadSource;
-
-    owner: string;
-
-    ownerAvatar: string;
-
-    status: LeadStatus;
-
-    score: number;
-
-    createdAt: string;
-
-    [key: string]: unknown;
-}
 
 export interface LeadsFilters {
     status: string;
@@ -54,3 +34,44 @@ export const DEFAULT_FILTERS: LeadsFilters = {
 };
 
 export const PER_PAGE = 8;
+
+
+export interface Lead {
+    id: string;
+
+    name: string;
+
+    company: string;
+
+    source: LeadSource;
+
+    owner: string;
+
+    ownerAvatar: string;
+
+    status: LeadStatus;
+
+    score: number;
+
+    createdAt: string;
+
+    email?: string;
+
+    phone?: string;
+
+    city?: string;
+
+    assignedToId?: string | null;
+
+    assignedTo?: {
+        id: string;
+        name: string;
+        email?: string;
+    };
+
+    tags?: string[];
+
+    note?: string;
+
+    [key: string]: unknown;
+}

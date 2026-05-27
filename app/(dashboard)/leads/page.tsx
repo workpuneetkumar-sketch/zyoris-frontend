@@ -48,6 +48,7 @@ export default function LeadsPage() {
             openMenu={openMenu}
             onPageChange={setPage}
             onFiltersChange={handleFiltersChange}
+            onRefreshLeads={retry}
             onNewLead={handleNewLead}
             onExport={handleExport}
             onAction={handleAction}
