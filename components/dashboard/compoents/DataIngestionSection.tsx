@@ -11,7 +11,7 @@ export function DataIngestionSection({ token }: { token: string }) {
         // Safe check for previous analysis
         api.get("/ingestion/last-analysis")
             .then((res) => setAnalysis(res.data))
-            .catch(() => console.log("New user state: No analysis found."));
+            .catch(() => setAnalysis(null));
     }, [token]);
 
     return (
