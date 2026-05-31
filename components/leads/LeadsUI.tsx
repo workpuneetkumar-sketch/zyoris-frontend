@@ -451,23 +451,25 @@ export function LeadsTable({
                                                     onClick={async (e) => {
                                                         e.preventDefault();
                                                         e.stopPropagation();
-                                                        console.log("Clicked member:", member);
                                                         const lead = safeLeads.find((l) => l.id === openMenu);
-                                                        console.log("Found lead:", lead);
-                                                        if (lead) {
+
+                                                        if (!lead) {
+                                                            console.warn("No lead found for openMenu:", openMenu);
+                                                        } else if (lead.assignedTo?.id === member.id) {
+                                                            setOpenMenu(null);
+                                                            setMenuPos(null);
+                                                            setIsAssignSubmenuOpen(false);
+                                                            setAssignSearch("");
+                                                            return;
+                                                        } else {
                                                             try {
-                                                                console.log("Calling assignLead API...");
                                                                 await assignLead(lead.id, member.id);
-
-
-                                                                console.log("assignLead API success, refreshing leads...");
-                                                                await onRefreshLeads();// refresh leads
+                                                                await onRefreshLeads();
                                                             } catch (err) {
                                                                 console.error("Failed to assign lead", err);
                                                             }
-                                                        } else {
-                                                            console.warn("No lead found for openMenu:", openMenu);
                                                         }
+
                                                         setOpenMenu(null);
                                                         setMenuPos(null);
                                                         setIsAssignSubmenuOpen(false);

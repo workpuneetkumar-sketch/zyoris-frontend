@@ -1,6 +1,5 @@
 "use client";
 
-import Cookies from "js-cookie";
 import { registerApi } from "@/lib/api/authApi";
 import { createOrganization } from "@/lib/api/organizationsApi";
 import { useRouter } from "next/navigation";
@@ -51,16 +50,15 @@ export default function RegisterForm() {
     const router = useRouter();
 
     // ── Restore mid-registration state after refresh
-    // Only resume Step 2 if BOTH the userId cookie AND a valid auth token exist.
-    // This prevents stale/abandoned cookies from skipping Step 1 for new users.
+    // Only resume Step 2 if BOTH the onboarded userId and a valid auth token exist.
+    // This prevents stale/abandoned state from skipping Step 1 for new users.
     useEffect(() => {
-        const savedUserId = Cookies.get("userId");
+        const savedUserId = localStorage.getItem("zyoris-register-userId");
         const authRaw = localStorage.getItem("zyoris-auth");
 
         if (savedUserId && authRaw) {
             try {
                 const auth = JSON.parse(authRaw);
-                // Validate that the stored userId matches the auth token's user
                 if (auth?.token && auth?.user?.id === savedUserId) {
                     setUserId(savedUserId);
                     setStep(2);
@@ -71,8 +69,7 @@ export default function RegisterForm() {
             }
         }
 
-        // Clear any stale/mismatched cookies so they don't affect future visits
-        Cookies.remove("userId");
+        localStorage.removeItem("zyoris-register-userId");
         setStep(1);
     }, []);
 
@@ -112,8 +109,7 @@ export default function RegisterForm() {
                 })
             );
 
-            // Persist onboarding state — tied to a valid token now
-            Cookies.set("userId", res.user.id, { expires: 1, path: "/" });
+            localStorage.setItem("zyoris-register-userId", res.user.id);
 
             setUserId(res.user.id);
             setStep(2);
@@ -137,7 +133,7 @@ export default function RegisterForm() {
         if (!userId) {
             setLocalError("Session expired. Please register again.");
             // Clear stale state and restart
-            Cookies.remove("userId");
+            localStorage.removeItem("zyoris-register-userId");
             localStorage.removeItem("zyoris-auth");
             setStep(1);
             return;
@@ -148,7 +144,7 @@ export default function RegisterForm() {
         try {
             await createOrganization({ name: companyName, userId, companyAbout, businessType });
 
-            Cookies.remove("userId");
+            localStorage.removeItem("zyoris-register-userId");
             setSuccess(true);
 
             // Registration complete → go to login; login itself will redirect to dashboard
