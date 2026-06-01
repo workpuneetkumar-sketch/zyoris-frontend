@@ -21,26 +21,215 @@ import {
   Database,
   Menu,
   X,
+  Mail,
+  Phone,
+  ListTodo,
+  Building2,
+  DollarSign,
+  Megaphone,
+  Folder,
+  BookOpen,
+  Zap,
+  TrendingUp,
+  Crown,
+  Cog,
 } from "lucide-react";
 
-const NAV_ITEMS: {
+type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
   roles: string[];
-}[] = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
-    { href: "/ingestion", label: "Ingestion", icon: Database, roles: ["ADMIN", "CEO", "CFO"] },
-    { href: "/analytics", label: "Analytics", icon: BarChart2, roles: ["ADMIN", "CEO", "CFO"] },
-    { href: "/leads", label: "Leads", icon: Users, roles: ["ADMIN", "CEO", "SALES_HEAD"] },
-    { href: "/deals", label: "Deals", icon: Briefcase, roles: ["ADMIN", "CEO", "SALES_HEAD", "CFO"] },
-    { href: "/activities", label: "Activities", icon: CheckSquare, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
-    { href: "/reports", label: "Reports", icon: FileText, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
-    { href: "/calendar", label: "Calendar", icon: Calendar, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
-    { href: "/team", label: "Team", icon: UsersRound, roles: ["ADMIN", "CEO"] },
-    { href: "/messages", label: "Messages", icon: MessageSquare, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
-    { href: "/settings", label: "Settings", icon: Settings, roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"] },
-  ];
+};
+
+type NavGroup = {
+  label: string;
+  items: NavItem[];
+};
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "CRM",
+    items: [
+      {
+        href: "/dashboard",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/leads",
+        label: "Leads",
+        icon: Users,
+        roles: ["ADMIN", "CEO", "SALES_HEAD"],
+      },
+      {
+        href: "/deals",
+        label: "Deals",
+        icon: Briefcase,
+        roles: ["ADMIN", "CEO", "SALES_HEAD", "CFO"],
+      },
+      {
+        href: "/contacts",
+        label: "Contacts",
+        icon: Users,
+        roles: ["ADMIN", "CEO", "SALES_HEAD"],
+      },
+      {
+        href: "/companies",
+        label: "Companies",
+        icon: Building2,
+        roles: ["ADMIN", "CEO", "SALES_HEAD"],
+      },
+      {
+        href: "/activities",
+        label: "Activities",
+        icon: CheckSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+    ],
+  },
+  {
+    label: "Comms",
+    items: [
+      {
+        href: "/email",
+        label: "Email",
+        icon: Mail,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/whatsapp",
+        label: "WhatsApp",
+        icon: MessageSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/calls",
+        label: "Calls",
+        icon: Phone,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/tasks",
+        label: "Tasks",
+        icon: ListTodo,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/calendar",
+        label: "Calendar",
+        icon: Calendar,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/messages",
+        label: "Messages",
+        icon: MessageSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+    ],
+  },
+  {
+    label: "Business",
+    items: [
+      {
+        href: "/hr",
+        label: "HR",
+        icon: UsersRound,
+        roles: ["ADMIN", "CEO"],
+      },
+      {
+        href: "/finance",
+        label: "Finance",
+        icon: DollarSign,
+        roles: ["ADMIN", "CEO", "CFO"],
+      },
+      {
+        href: "/marketing",
+        label: "Marketing",
+        icon: Megaphone,
+        roles: ["ADMIN", "CEO"],
+      },
+      {
+        href: "/projects",
+        label: "Projects",
+        icon: Folder,
+        roles: ["ADMIN", "CEO", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/documents",
+        label: "Documents",
+        icon: FileText,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/knowledge-base",
+        label: "Knowledge Base",
+        icon: BookOpen,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+    ],
+  },
+  {
+    label: "Platform",
+    items: [
+      {
+        href: "/analytics",
+        label: "Analytics",
+        icon: BarChart2,
+        roles: ["ADMIN", "CEO", "CFO"],
+      },
+      {
+        href: "/reports",
+        label: "Reports",
+        icon: FileText,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/automation",
+        label: "Automation",
+        icon: Zap,
+        roles: ["ADMIN", "CEO"],
+      },
+    ],
+  },
+  {
+    label: "Role Dashboards",
+    items: [
+      {
+        href: "/ceo",
+        label: "CEO",
+        icon: Crown,
+        roles: ["ADMIN", "CEO"],
+      },
+      {
+        href: "/cfo",
+        label: "CFO",
+        icon: DollarSign,
+        roles: ["ADMIN", "CFO"],
+      },
+      {
+        href: "/sales",
+        label: "Sales",
+        icon: TrendingUp,
+        roles: ["ADMIN", "SALES_HEAD"],
+      },
+      {
+        href: "/operations",
+        label: "Operations",
+        icon: Cog,
+        roles: ["ADMIN", "OPERATIONS_HEAD"],
+      },
+    ],
+  },
+];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -53,38 +242,51 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? user.name
       : user?.email?.split("@")[0] ?? "User";
 
-  const visibleNav = NAV_ITEMS.filter((item) =>
-    user ? item.roles.includes(user.role) : item.href === "/dashboard"
-  );
+  const visibleNavGroups = NAV_GROUPS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) =>
+      user ? item.roles.includes(user.role) : item.href === "/dashboard"
+    ),
+  }))
+    .filter((group) => group.items.length > 0);
 
   const NavLinks = () => (
     <>
-      {visibleNav.map((item) => {
-        const Icon = item.icon;
-        const isActive =
-          pathname === item.href ||
-          (item.href !== "/dashboard" && pathname?.startsWith(item.href));
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={() => setDrawerOpen(false)}
-            className={classNames(
-              "flex items-center gap-3 px-3 py-[9px] rounded-lg text-[13.5px] font-medium transition-all duration-150 select-none",
-              isActive
-                ? "bg-blue-600 text-white"
-                : "text-[#1a237e] hover:bg-blue-50"
-            )}
-          >
-            <Icon
-              size={17}
-              strokeWidth={isActive ? 2 : 1.75}
-              className={isActive ? "text-white" : "text-[#1a237e]"}
-            />
-            <span>{item.label}</span>
-          </Link>
-        );
-      })}
+      {visibleNavGroups.map((group) => (
+        <div key={group.label} className="space-y-2">
+          <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+            {group.label}
+          </p>
+          <div className="space-y-1">
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/dashboard" && pathname?.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setDrawerOpen(false)}
+                  className={classNames(
+                    "flex items-center gap-3 px-3 py-[9px] rounded-lg text-[13.5px] font-medium transition-all duration-150 select-none",
+                    isActive
+                      ? "bg-blue-600 text-white"
+                      : "text-[#1a237e] hover:bg-blue-50"
+                  )}
+                >
+                  <Icon
+                    size={17}
+                    strokeWidth={isActive ? 2 : 1.75}
+                    className={isActive ? "text-white" : "text-[#1a237e]"}
+                  />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      ))}
     </>
   );
 
