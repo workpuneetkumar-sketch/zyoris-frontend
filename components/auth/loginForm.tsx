@@ -4,22 +4,14 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
-import Cookies from "js-cookie";
 
-type Props = {
-    onSubmit?: (email: string, password: string) => Promise<void>;
-    isLoading?: boolean;
-    error?: string | null;
-};
-
-export default function LoginForm({ onSubmit, isLoading: propsLoading, error: propsError }: Props) {
+export default function LoginForm() {
     const router = useRouter();
     const { login } = useAuth();
 
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [showPw, setShowPw] = useState(false);
-    const [rememberMe, setRememberMe] = useState(false);
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -36,41 +28,12 @@ export default function LoginForm({ onSubmit, isLoading: propsLoading, error: pr
                 password
             ) as any;
 
-            console.log("LOGIN RESPONSE:", res);
-
-            // Save auth cookies
-            Cookies.set("token", res.token, {
-                expires: rememberMe ? 7 : 1,
-            });
-
-            Cookies.set("refreshToken", res.refreshToken, {
-                expires: rememberMe ? 7 : 1,
-            });
-
-            Cookies.set("userId", res.user.id, {
-                expires: rememberMe ? 7 : 1,
-            });
-
-            Cookies.set("role", res.user.role, {
-                expires: rememberMe ? 7 : 1,
-            });
-
-            localStorage.setItem(
-                "zyoris-auth",
-                JSON.stringify({
-                    user: res.user,
-                    token: res.token,
-                    refreshToken: res.refreshToken,
-                })
-            );
-            // Redirect logic
             const role = res.user.role;
             if (
                 !res.user.organizationId &&
                 (role === "CEO" || role === "CFO")
             ) {
-                Cookies.set("registerStep", "2", { expires: 1 });
-
+                localStorage.setItem("zyoris-register-userId", res.user.id);
                 router.push("/register");
             }
             else if (!res.user.organizationId) {
@@ -175,18 +138,6 @@ export default function LoginForm({ onSubmit, isLoading: propsLoading, error: pr
                             </div>
 
                             {/* Remember me */}
-                            <label className="flex items-center gap-2 cursor-pointer select-none">
-                                <input
-                                    type="checkbox"
-                                    checked={rememberMe}
-                                    onChange={(e) => setRememberMe(e.target.checked)}
-                                    className="w-3.5 h-3.5 accent-blue-600 rounded"
-                                />
-
-                                <span className="text-[13px] text-slate-500">
-                                    Remember me
-                                </span>
-                            </label>
 
                             {/* Submit */}
                             <button

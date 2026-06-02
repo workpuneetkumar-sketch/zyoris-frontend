@@ -134,8 +134,5 @@ export function triggerBlobDownload(
 
 export async function fetchTeamMembers(): Promise<any> {
     const res = await api.get("/organizations/team-members");
-    console.log("TEAM MEMBERS API:", res.data);
-
     return res.data;
-
 }
