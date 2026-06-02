@@ -110,16 +110,6 @@ export function AssignLead({
 
     const [saving, setSaving] = useState(false);
 
-    useEffect(() => {
-        setAssignee(currentAssignee ?? null);
-    }, [currentAssignee]);
-
-    useEffect(() => {
-        if (propMembers) {
-            setMembers(propMembers);
-        }
-    }, [propMembers]);
-
     const containerRef =
         useRef<HTMLDivElement>(null);
 
@@ -221,30 +211,52 @@ export function AssignLead({
     async function handleAssign(
         member: TeamMember | null
     ) {
-        if (member?.id && currentAssignee?.id === member.id) {
-            setOpen(false);
-            setSearch("");
-            return;
-        }
 
         setSaving(true);
-        setError(null);
 
         try {
+
+            // optimistic UI
             setAssignee(member);
+
             setOpen(false);
+
             setSearch("");
 
+            // assign lead
             if (member?.id) {
-                await assignLead(leadId, member.id);
+
+                console.log(
+                    "Assigning lead:",
+                    leadId,
+                    "to:",
+                    member.id
+                );
+
+                await assignLead(
+                    leadId,
+                    member.id
+                );
             }
 
-            onAssign?.(leadId, member);
+            onAssign?.(
+                leadId,
+                member
+            );
+
         } catch (err) {
-            console.error("AssignLead failed:", err);
+
+            console.error(err);
+
+            // rollback
             setAssignee(currentAssignee);
-            setError("Failed to assign lead");
+
+            setError(
+                "Failed to assign lead"
+            );
+
         } finally {
+
             setSaving(false);
         }
     }
