@@ -16,6 +16,7 @@ import {
   BarChart2,
 } from "lucide-react";
 import { Deal, DealsFilters, DEAL_STAGES } from "@/types/deals";
+import { STAGE_CONFIG } from "@/lib/dealConfig";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,7 @@ interface DealsUIProps {
   winRate: number;
   conversionRate: number;
   onFiltersChange: (filters: DealsFilters) => void;
+  onStageChange?: (dealId: string, newStage: string) => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -46,46 +48,6 @@ function formatCurrency(amount: number): string {
 function formatAmount(amount: number): string {
   return `$${amount.toLocaleString()}`;
 }
-
-// ── Stage config ───────────────────────────────────────────────────────────
-
-const STAGE_CONFIG: Record<
-  string,
-  {
-    label: string;
-    color: string;       // border-top / header text colour class
-    borderColor: string; // Tailwind border-t class
-    icon?: React.ReactNode;
-  }
-> = {
-  Qualification: {
-    label: "Qualification",
-    color: "text-blue-500",
-    borderColor: "border-t-blue-500",
-  },
-  Proposal: {
-    label: "Proposal",
-    color: "text-purple-500",
-    borderColor: "border-t-purple-500",
-  },
-  Negotiation: {
-    label: "Negotiation",
-    color: "text-blue-500",
-    borderColor: "border-t-blue-400",
-  },
-  "Closed Won": {
-    label: "Closed Won",
-    color: "text-green-500",
-    borderColor: "border-t-green-500",
-    icon: <CheckCircle2 size={15} className="text-green-500" />,
-  },
-  "Closed Lost": {
-    label: "Closed Lost",
-    color: "text-red-500",
-    borderColor: "border-t-red-500",
-    icon: <XCircle size={15} className="text-red-400" />,
-  },
-};
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
@@ -133,17 +95,33 @@ function SkeletonCard() {
   );
 }
 
-function DealCard({ deal }: { deal: Deal }) {
+function DealCard({ 
+  deal, 
+  onStageChange,
+}: { 
+  deal: Deal;
+  onStageChange: (dealId: string, newStage: string) => void;
+}) {
   const cfg = STAGE_CONFIG[deal.stage];
-  const isWon = deal.stage.toLowerCase().includes("closed won");
-  const isLost = deal.stage.toLowerCase().includes("closed lost");
+  const isWon = deal.stage === "WON";
+  const isLost = deal.stage === "LOST";
+
+  const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    e.stopPropagation();
+    const newStage = e.target.value;
+    if (newStage !== deal.stage) {
+      onStageChange(deal.dealId, newStage);
+    }
+  };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md transition-shadow cursor-pointer group">
+    <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md transition-shadow group">
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors">
-          {deal.name}
-        </p>
+        <div className="flex-1">
+          <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors cursor-pointer">
+            {deal.name}
+          </p>
+        </div>
         {isWon && <CheckCircle2 size={15} className="text-green-500 shrink-0 mt-0.5" />}
         {isLost && <XCircle size={15} className="text-red-400 shrink-0 mt-0.5" />}
       </div>
@@ -151,6 +129,21 @@ function DealCard({ deal }: { deal: Deal }) {
       <p className={`text-[15px] font-bold mb-1.5 ${cfg?.color ?? "text-blue-500"}`}>
         {formatAmount(deal.amount)}
       </p>
+
+      {/* Stage selector */}
+      <div className="mb-2.5">
+        <select
+          value={deal.stage}
+          onChange={handleStageChange}
+          className="appearance-none w-full h-8 pl-2.5 pr-7 rounded-md border border-gray-200 bg-white text-[12px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        >
+          {["NEW", "QUALIFIED", "PROPOSAL", "NEGOTIATION", "WON", "LOST"].map((stage) => (
+            <option key={stage} value={stage}>
+              {STAGE_CONFIG[stage]?.label || stage}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {/* Conversion probability as subtle indicator */}
       <div className="flex items-center justify-between">
@@ -178,10 +171,12 @@ function KanbanColumn({
   stage,
   deals,
   loading,
+  onStageChange,
 }: {
   stage: string;
   deals: Deal[];
   loading: boolean;
+  onStageChange: (dealId: string, newStage: string) => void;
 }) {
   const cfg = STAGE_CONFIG[stage] ?? {
     label: stage,
@@ -228,7 +223,13 @@ function KanbanColumn({
             <p className="text-[12px]">No deals</p>
           </div>
         ) : (
-          deals.map((deal) => <DealCard key={deal.dealId} deal={deal} />)
+          deals.map((deal) => (
+            <DealCard 
+              key={deal.dealId} 
+              deal={deal}
+              onStageChange={onStageChange}
+            />
+          ))
         )}
       </div>
 
@@ -255,7 +256,10 @@ export function DealsUI({
   winRate,
   conversionRate,
   onFiltersChange,
+  onStageChange,
 }: DealsUIProps) {
+  // Default handler if not provided
+  const handleStageChange = onStageChange || (() => {});
   // Collect all stages present in data + the canonical ones
   const allStages = useMemo(() => {
     const fromData = Array.from(dealsByStage.keys());
@@ -389,6 +393,7 @@ export function DealsUI({
             stage={stage}
             deals={dealsByStage.get(stage) ?? []}
             loading={loading}
+            onStageChange={handleStageChange}
           />
         ))}
       </div>

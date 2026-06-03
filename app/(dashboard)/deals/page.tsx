@@ -16,6 +16,7 @@ export default function DealsPage() {
     winRate,
     conversionRate,
     handleFiltersChange,
+    updateDealStage,
     retry,
   } = useDeals();
 
@@ -44,6 +45,7 @@ export default function DealsPage() {
       winRate={winRate}
       conversionRate={conversionRate}
       onFiltersChange={handleFiltersChange}
+      onStageChange={updateDealStage}
     />
   );
 }

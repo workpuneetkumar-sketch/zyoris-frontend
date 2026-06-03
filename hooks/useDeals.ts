@@ -2,14 +2,15 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { Deal, DealsFilters, DEFAULT_DEALS_FILTERS } from "@/types/deals";
-import { fetchDeals } from "@/lib/api/dealsApi";
+import { Deal, DealsFilters, DEFAULT_DEALS_FILTERS, DealStage } from "@/types/deals";
+import { fetchDeals, updateDealStage as updateDealStageAPI } from "@/lib/api/dealsApi";
 
 export function useDeals() {
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<DealsFilters>(DEFAULT_DEALS_FILTERS);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const loadDeals = useCallback(async () => {
@@ -70,10 +71,10 @@ export function useDeals() {
 
   const winRate = useMemo(() => {
     const closed = filteredDeals.filter((d) =>
-      d.stage.toLowerCase().includes("closed")
+      ["WON", "LOST"].includes(d.stage.toUpperCase())
     );
     const won = filteredDeals.filter((d) =>
-      d.stage.toLowerCase().includes("closed won")
+      d.stage.toUpperCase() === "WON"
     );
     return closed.length === 0
       ? 0
@@ -100,6 +101,46 @@ export function useDeals() {
     return map;
   }, [filteredDeals]);
 
+  // ── Update deal stage with optimistic updates ──────────────────────────────
+  const updateDealStage = useCallback(
+    async (dealId: string, newStage: DealStage | string): Promise<boolean> => {
+      setUpdateError(null);
+      
+      // Find the deal to rollback if needed
+      const originalDeal = deals.find(d => d.dealId === dealId);
+      if (!originalDeal) {
+        setUpdateError("Deal not found");
+        return false;
+      }
+
+      // Optimistically update UI
+      setDeals(prevDeals =>
+        prevDeals.map(d =>
+          d.dealId === dealId ? { ...d, stage: newStage } : d
+        )
+      );
+
+      try {
+        // Call API
+        await updateDealStageAPI(dealId, newStage);
+        return true;
+      } catch (err) {
+        // Rollback on failure
+        setDeals(prevDeals =>
+          prevDeals.map(d =>
+            d.dealId === dealId ? originalDeal : d
+          )
+        );
+        
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to update deal stage";
+        setUpdateError(errorMessage);
+        return false;
+      }
+    },
+    [deals]
+  );
+
   // ── Handlers ──────────────────────────────────────────────────────────────
   function handleFiltersChange(next: DealsFilters) {
     setFilters(next);
@@ -111,6 +152,7 @@ export function useDeals() {
     dealsByStage,
     loading,
     error,
+    updateError,
     filters,
     // KPIs
     totalPipeline,
@@ -119,6 +161,7 @@ export function useDeals() {
     conversionRate,
     // handlers
     handleFiltersChange,
+    updateDealStage,
     retry: loadDeals,
   };
 }
