@@ -4,12 +4,54 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Lead, LeadsFilters, DEFAULT_FILTERS } from "../types/leads";
-import {
-    fetchLeads,
-    deleteLead,
-    exportLeadsBlob,
-    triggerBlobDownload,
-} from "../lib/api/leadsApi";
+import { fetchLeads, deleteLead } from "../lib/api/leadsApi";
+
+function quoteCsv(value: unknown) {
+    const text = value == null ? "" : String(value);
+    return `"${text.replace(/"/g, '""')}"`;
+}
+
+function buildLeadsCsv(leads: Lead[]) {
+    const headers = [
+        "ID",
+        "Name",
+        "Company",
+        "Email",
+        "Phone",
+        "City",
+        "Source",
+        "Status",
+        "Owner",
+        "Assigned To",
+        "Score",
+        "Created At",
+        "Tags",
+        "Note",
+    ];
+
+    const rows = leads.map((lead) =>
+        [
+            lead.id,
+            lead.name,
+            lead.company,
+            lead.email ?? "",
+            lead.phone ?? "",
+            lead.city ?? "",
+            lead.source,
+            lead.status,
+            lead.owner,
+            lead.assignedTo?.name ?? "",
+            lead.score,
+            lead.createdAt,
+            Array.isArray(lead.tags) ? lead.tags.join("; ") : "",
+            lead.note ?? "",
+        ]
+            .map(quoteCsv)
+            .join(",")
+    );
+
+    return [headers.map(quoteCsv).join(","), ...rows].join("\n");
+}
 
 export function useLeads() {
     const router = useRouter();
@@ -54,8 +96,16 @@ export function useLeads() {
 
     async function handleExport() {
         try {
-            const blob = await exportLeadsBlob();
-            triggerBlobDownload(blob, "leads.csv");
+            const csv = buildLeadsCsv(leads);
+            const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+
+            link.href = url;
+            link.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+            link.click();
+
+            URL.revokeObjectURL(url);
         } catch (err) {
             console.error("Export error:", err);
         }
