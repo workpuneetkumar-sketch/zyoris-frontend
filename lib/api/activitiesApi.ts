@@ -80,27 +80,49 @@ export async function fetchActivities(
             limit: String(PER_PAGE),
         };
 
-        if (filters.tab !== "All Activities") params.type = filters.tab;
-        if (filters.search) params.search = filters.search;
-        if (filters.dateFrom) params.dateFrom = filters.dateFrom;
-        if (filters.dateTo) params.dateTo = filters.dateTo;
+        if (filters.tab !== "All Activities") {
+            params.type = filters.tab;
+        }
 
-        const res = await api.get<ActivitiesResponse>("/activities/get-activities", { params });
+        if (filters.search) {
+            params.search = filters.search;
+        }
+
+        if (filters.dateFrom) {
+            params.dateFrom = filters.dateFrom;
+        }
+
+        if (filters.dateTo) {
+            params.dateTo = filters.dateTo;
+        }
+
+        const res = await api.get<ActivitiesResponse>(
+            "/activities/get-activities",
+            { params }
+        );
+
         return res.data;
-    } catch {
-        // Backend does not have activities routes yet — serve mock data
-        const filtered = applyMockFilters(filters);
-        const start = (page - 1) * PER_PAGE;
+    } catch (error) {
+        console.error("Activities API unavailable:", error);
+
         return {
-            activities: filtered.slice(start, start + PER_PAGE),
-            total: filtered.length,
-            stats: MOCK_STATS,
-            overdue: MOCK_OVERDUE,
-            breakdown: MOCK_BREAKDOWN,
+            activities: [],
+            total: 0,
+            stats: {
+                all: 0,
+                allChange: 0,
+                upcoming: 0,
+                upcomingChange: 0,
+                completed: 0,
+                completedChange: 0,
+                overdue: 0,
+                overdueChange: 0,
+            },
+            overdue: [],
+            breakdown: [],
         };
     }
 }
-
 // ── POST create activity ──────────────────────────────────────────────────────
 
 export async function createActivity(data: Partial<Activity>): Promise<Activity> {
