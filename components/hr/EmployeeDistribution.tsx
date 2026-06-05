@@ -60,7 +60,7 @@ export default function EmployeeDistribution() {
           ))}
         </div>
       </div>
-      <Link href="hr/employee" >
+      <Link href="hr/employees" >
       <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center cursor-pointer group">
         <span className="text-sm font-medium text-blue-600 group-hover:text-blue-700 transition-colors">
           View Department Report
