@@ -166,7 +166,6 @@ function DonutChart({ breakdown }: { breakdown: ActivityTypeBreakdown[] }) {
 
 function MiniCalendar({ month, year }: { month: string; year: string }) {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    // Static May 2024 calendar grid
     const grid = [
         [28, 29, 30, 1, 2, 3, 4],
         [5, 6, 7, 8, 9, 10, 11],
@@ -266,34 +265,42 @@ export function ActivitiesTable({
     return (
         <div className="min-h-full space-y-5">
 
-            {/* Header */}
-            <div className="flex items-start justify-between">
+            {/* ── Header ──────────────────────────────────────────────────── */}
+            {/* RESPONSIVE: flex-col on mobile, flex-row on sm+ with wrapping */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">Activities</h1>
                     <p className="text-sm text-gray-400 mt-0.5">Track and manage all your tasks, calls, meetings, and activities.</p>
                 </div>
-                <div className="flex items-center gap-2.5">
-                    <button className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                {/* RESPONSIVE: buttons wrap on small screens */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* RESPONSIVE: hide the long date-range label on xs, show on sm+ */}
+                    <button className="hidden sm:flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                         <Calendar size={14} />
                         {dateRange.from} – {dateRange.to}
                         <ChevronRight size={12} className="rotate-90 text-gray-400" />
                     </button>
+                    {/* RESPONSIVE: show icon-only date button on xs */}
+                    <button className="sm:hidden flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Calendar size={14} />
+                    </button>
                     <button className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
                         <Filter size={13} />
-                        Filter
+                        <span className="hidden sm:inline">Filter</span>
                     </button>
                     <button
                         onClick={onNewActivity}
                         className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
                     >
                         <Plus size={15} />
-                        Add Activity
+                        <span className="hidden sm:inline">Add Activity</span>
                     </button>
                 </div>
             </div>
 
-            {/* Stats cards */}
-            <div className="grid grid-cols-4 gap-4">
+            {/* ── Stats cards ─────────────────────────────────────────────── */}
+            {/* RESPONSIVE: 2-col on mobile, 4-col on sm+ */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <StatCard
                     icon={<LayoutList size={18} className="text-blue-600" />}
                     label="All Activities"
@@ -324,19 +331,21 @@ export function ActivitiesTable({
                 />
             </div>
 
-            {/* Main content grid */}
-            <div className="grid grid-cols-[1fr_300px] gap-5 items-start">
+            {/* ── Main content grid ────────────────────────────────────────── */}
+            {/* RESPONSIVE: single column on mobile, fixed sidebar on lg+ */}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
 
                 {/* Left — Table */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
-                    {/* Tabs */}
-                    <div className="flex items-center gap-1 px-5 pt-4 border-b border-gray-100">
+                    {/* Tabs + Search */}
+                    {/* RESPONSIVE: allow tabs row to scroll horizontally on small screens */}
+                    <div className="flex items-center gap-1 px-5 pt-4 border-b border-gray-100 overflow-x-auto">
                         {TABS.map((tab) => (
                             <button
                                 key={tab}
                                 onClick={() => onTabChange(tab)}
-                                className={`flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-t-lg transition-colors whitespace-nowrap
+                                className={`flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-t-lg transition-colors whitespace-nowrap shrink-0
                                     ${filters.tab === tab
                                         ? "text-blue-600 border-b-2 border-blue-600 -mb-px"
                                         : "text-gray-500 hover:text-gray-700"
@@ -346,20 +355,20 @@ export function ActivitiesTable({
                                 {tab}
                             </button>
                         ))}
-                        {/* Search */}
-                        <div className="relative ml-auto mb-2">
+                        {/* Search — pinned to the right, shrinks on small screens */}
+                        <div className="relative ml-auto mb-2 shrink-0">
                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 type="text"
                                 placeholder="Search activities..."
                                 value={filters.search}
                                 onChange={(e) => onFiltersChange({ search: e.target.value })}
-                                className="h-8 pl-8 pr-4 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                                className="h-8 pl-8 pr-4 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-32 sm:w-48"
                             />
                         </div>
                     </div>
 
-                    {/* Table */}
+                    {/* Table — always scrollable horizontally */}
                     <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                             <thead>
@@ -463,7 +472,8 @@ export function ActivitiesTable({
                     </div>
 
                     {/* Pagination */}
-                    <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
+                    {/* RESPONSIVE: wrap on very small screens */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-4 border-t border-gray-100">
                         <p className="text-[13px] text-gray-400">
                             {loading
                                 ? "Loading..."
@@ -480,12 +490,11 @@ export function ActivitiesTable({
                             {Array.from({ length: totalPages }, (_, i) => i + 1)
                                 .filter((p) => p <= 5 || p === totalPages)
                                 .map((p, idx, arr) => (
-                                    <>
+                                    <span key={p} className="contents">
                                         {idx > 0 && arr[idx - 1] !== p - 1 && (
-                                            <span key={`e-${p}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">…</span>
+                                            <span className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">…</span>
                                         )}
                                         <button
-                                            key={p}
                                             onClick={() => onPageChange(p)}
                                             disabled={loading}
                                             className={`w-8 h-8 flex items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${page === p
@@ -495,7 +504,7 @@ export function ActivitiesTable({
                                         >
                                             {p}
                                         </button>
-                                    </>
+                                    </span>
                                 ))}
                             <button
                                 onClick={() => onPageChange(Math.min(totalPages, page + 1))}
@@ -515,15 +524,16 @@ export function ActivitiesTable({
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
                         <h3 className="text-[13px] font-semibold text-gray-700 mb-4">Activity Calendar</h3>
                         <MiniCalendar month="May" year="2024" />
-                        <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                        {/* RESPONSIVE: wrap legend items if sidebar is narrow */}
+                        <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-100">
                             <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span className="w-2 h-2 rounded-full bg-blue-400" /> 32 Upcoming
+                                <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" /> 32 Upcoming
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span className="w-2 h-2 rounded-full bg-green-400" /> 78 Completed
+                                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" /> 78 Completed
                             </div>
                             <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span className="w-2 h-2 rounded-full bg-red-400" /> 18 Overdue
+                                <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" /> 18 Overdue
                             </div>
                         </div>
                     </div>

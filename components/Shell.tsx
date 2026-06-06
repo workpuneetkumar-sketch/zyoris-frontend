@@ -18,7 +18,6 @@ import {
   MessageSquare,
   Settings,
   ChevronRight,
-  Database,
   Menu,
   X,
   Mail,
@@ -34,6 +33,7 @@ import {
   Crown,
   Cog,
 } from "lucide-react";
+import { NotificationBell } from "./NotificationBell";
 
 type NavItem = {
   href: string;
@@ -333,17 +333,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </button>
 
-          {/* Right: arrow → triggers logout */}
-          <button
-            onClick={logout}
-            className="p-1 rounded-lg hover:bg-red-50 transition-colors group shrink-0"
-            title="Logout"
-          >
-            <ChevronRight
-              size={15}
-              className="text-gray-400 group-hover:text-red-500 transition-colors"
-            />
-          </button>
+          {/* Notification bell + logout */}
+          <div className="flex items-center gap-1 shrink-0">
+            <NotificationBell />
+            <button
+              onClick={logout}
+              className="p-1 rounded-lg hover:bg-red-50 transition-colors group"
+              title="Logout"
+            >
+              <ChevronRight
+                size={15}
+                className="text-gray-400 group-hover:text-red-500 transition-colors"
+              />
+            </button>
+          </div>
         </div>
       </div>
     ) : null;
@@ -437,6 +440,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Menu size={20} className="text-[#1a237e]" />
           </button>
           <LogoMark small />
+          <div className="ml-auto">
+            <NotificationBell />
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-6">{children}</main>

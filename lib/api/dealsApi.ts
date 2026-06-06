@@ -1,74 +1,123 @@
 // lib/api/dealsApi.ts
-// Wraps the deals-related backend endpoints.
+// All network calls for the Deals module.
 //
-// Endpoints confirmed against deployed Swagger at https://zyoris.onrender.com/docs
-// Section: Deals  — /api/deals/*
-// Section: Analytics — /analytics/conversion/scores  (still used for deal list)
+// Swagger (https://zyoris.onrender.com/docs.json) — Section: Deals
+//   POST  /api/deals/create          — create a deal
+//   GET   /api/deals/get-deals       — list all deals
+//   GET   /api/deals/get-deal/{id}   — single deal
+//   PATCH /api/deals/update-deal/{id} — update a deal
 
 import api from "@/lib/api/api";
 import { Deal, DealStage } from "@/types/deals";
 
+// ── Backend response shape ─────────────────────────────────────────────────
+
 interface BackendDeal {
-  id: string;
-  organizationId?: string;
-  externalId: string | null;
-  sourceSystem: string;
-  name: string;
-  stage: string;
-  amount: number;
-  currency: string;
-  closeDate?: string | null;
-  owner?: string | null;
-  createdAt: string;
-  updatedAt: string;
+    id: string;
+    organizationId?: string;
+    name: string;
+    stage: string;
+    amount: number;
+    currency?: string;
+    assignedToId?: string | null;
+    contactId?: string | null;
+    companyId?: string | null;
+    closeDate?: string | null;
+    owner?: string | null;
+    externalId?: string | null;
+    sourceSystem?: string;
+    createdAt: string;
+    updatedAt: string;
+    // conversionProbability may come from analytics enrichment
+    conversionProbability?: number;
+    companyName?: string;
+    [key: string]: unknown;
 }
 
-/**
- * Fetch all deals for the authenticated user's organisation.
- * Swagger: GET /analytics/conversion/scores
- */
+// ── Map BackendDeal → frontend Deal ───────────────────────────────────────
+
+function mapDeal(raw: BackendDeal): Deal {
+    return {
+        dealId: raw.id,
+        externalId: raw.externalId ?? null,
+        name: raw.name,
+        stage: raw.stage,
+        amount: raw.amount ?? 0,
+        conversionProbability: typeof raw.conversionProbability === "number"
+            ? raw.conversionProbability
+            : 0.5,
+        owner: raw.owner ?? undefined,
+        companyName: raw.companyName ?? undefined,
+        closeDate: raw.closeDate ?? null,
+        createdAt: raw.createdAt,
+        updatedAt: raw.updatedAt,
+    };
+}
+
+// ── Normalise list response ────────────────────────────────────────────────
+// GET /api/deals/get-deals may return:
+//   - Deal[]                          (plain array)
+//   - { data: Deal[], pagination: {} }
+//   - { deals: Deal[], total: N }
+
+function normaliseList(raw: unknown): BackendDeal[] {
+    if (Array.isArray(raw)) return raw as BackendDeal[];
+    const r = raw as Record<string, unknown>;
+    if (Array.isArray(r.data))  return r.data  as BackendDeal[];
+    if (Array.isArray(r.deals)) return r.deals as BackendDeal[];
+    return [];
+}
+
+// ── GET all deals ─────────────────────────────────────────────────────────
+// Swagger: GET /api/deals/get-deals
+
 export async function fetchDeals(): Promise<Deal[]> {
-  const res = await api.get<Deal[]>("/analytics/conversion/scores");
-  return res.data;
+    const res = await api.get("/api/deals/get-deals");
+    return normaliseList(res.data).map(mapDeal);
 }
 
-/**
- * Map backend deal shape to frontend Deal interface.
- */
-function mapBackendDeal(backendDeal: BackendDeal): Deal {
-  return {
-    dealId: backendDeal.id,
-    externalId: backendDeal.externalId,
-    name: backendDeal.name,
-    stage: backendDeal.stage,
-    amount: backendDeal.amount,
-    conversionProbability: 0.5,
-    owner: backendDeal.owner || undefined,
-    closeDate: backendDeal.closeDate,
-    createdAt: backendDeal.createdAt,
-    updatedAt: backendDeal.updatedAt,
-  };
-}
+// ── GET single deal ───────────────────────────────────────────────────────
+// Swagger: GET /api/deals/get-deal/{id}
 
-/**
- * Fetch a single deal by ID.
- * Swagger: GET /api/deals/get-deal/{id}
- */
 export async function fetchDealById(dealId: string): Promise<Deal> {
-  const res = await api.get<BackendDeal>(`/api/deals/get-deal/${dealId}`);
-  return mapBackendDeal(res.data);
+    const res = await api.get<BackendDeal>(`/api/deals/get-deal/${dealId}`);
+    return mapDeal(res.data);
 }
 
-/**
- * Update a deal (stage, etc.).
- * Swagger: PATCH /api/deals/update-deal/{id}
- */
+// ── POST create deal ──────────────────────────────────────────────────────
+// Swagger: POST /api/deals/create
+// Required fields: name, amount, stage
+
+export interface CreateDealPayload {
+    name: string;
+    amount: number;
+    stage: DealStage | string;
+    assignedToId?: string | null;
+    contactId?: string | null;
+    companyId?: string | null;
+}
+
+export async function createDeal(data: CreateDealPayload): Promise<Deal> {
+    const payload: Record<string, unknown> = {
+        name: data.name,
+        amount: data.amount,
+        stage: data.stage,
+    };
+    if (data.assignedToId?.trim()) payload.assignedToId = data.assignedToId.trim();
+    if (data.contactId?.trim())    payload.contactId    = data.contactId.trim();
+    if (data.companyId?.trim())    payload.companyId    = data.companyId.trim();
+
+    const res = await api.post<BackendDeal>("/api/deals/create", payload);
+    return mapDeal(res.data);
+}
+
+// ── PATCH update deal ─────────────────────────────────────────────────────
+// Swagger: PATCH /api/deals/update-deal/{id}
+
 export async function updateDealStage(
-  dealId: string,
-  stage: DealStage | string
+    dealId: string,
+    stage: DealStage | string
 ): Promise<Deal> {
-  const res = await api.patch<BackendDeal>(`/api/deals/update-deal/${dealId}`, {
-    stage,
-  });
-  return mapBackendDeal(res.data);
+    const res = await api.patch<BackendDeal>(`/api/deals/update-deal/${dealId}`, { stage });
+    return mapDeal(res.data);
 }

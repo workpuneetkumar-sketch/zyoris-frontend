@@ -69,9 +69,7 @@ export default function EmployeeDetailPage() {
       setIsLoading(true);
       setError(null);
       
-      console.log('Fetching employee with ID:', employeeId);
       const employeeData = await getEmployeeById(employeeId);
-      console.log('Employee data received:', employeeData);
       
       // Ensure we have all required fields
       if (employeeData) {
@@ -88,9 +86,6 @@ export default function EmployeeDetailPage() {
           fetchAttendance({ employeeId }),
           fetchLeaves({ employeeId })
         ]);
-        
-        console.log('Attendance data:', attendanceData);
-        console.log('Leave data:', leaveData);
         
         setAttendanceHistory(attendanceData || []);
         setLeaveHistory(leaveData || []);
@@ -158,9 +153,7 @@ export default function EmployeeDetailPage() {
         status: editForm.status
       };
       
-      console.log('Saving employee update:', updateData);
       const updatedEmployee = await updateEmployee(employeeId, updateData);
-      console.log('Updated employee:', updatedEmployee);
       
       setEmployee(updatedEmployee);
       setSaveSuccess(true);
@@ -171,12 +164,10 @@ export default function EmployeeDetailPage() {
         setSaveSuccess(false);
         try {
           const freshData = await getEmployeeById(employeeId);
-          console.log('Fresh data:', freshData);
           if (freshData) {
             setEmployee({
               ...freshData,
               name: freshData.name || 'Unknown',
-              email: freshData.email || 'No email',
               role: freshData.role || 'No role assigned'
             });
           }
@@ -344,9 +335,6 @@ export default function EmployeeDetailPage() {
       </div>
     );
   }
-
-  // ─── Debug Info ───
-  console.log('Rendering employee:', employee);
 
   // ─── Main Render ───
   return (

@@ -109,8 +109,6 @@ export async function getEmployees(): Promise<Employee[]> {
   try {
     const res = await api.get("/hr/employees/get-employees");
     
-    console.log('Full employees response:', res);
-    
     // Handle various response structures
     let data = res.data?.data || res.data;
     
@@ -136,9 +134,6 @@ export async function getEmployeeById(id: string): Promise<Employee> {
   try {
     const res = await api.get(`/hr/employees/get-employee/${id}`);
     
-    console.log('Full API response:', res);
-    console.log('Response data:', res.data);
-    
     // Handle various response structures
     let data = res.data?.data || res.data?.employee || res.data;
     
@@ -152,8 +147,6 @@ export async function getEmployeeById(id: string): Promise<Employee> {
     }
     
     const result = normalizeEmployeeData(data);
-    
-    console.log('Processed employee:', result);
     return result;
   } catch (error: any) {
     console.error('Error fetching employee:', error);
@@ -182,11 +175,7 @@ export async function createEmployee(data: CreateEmployeeData): Promise<Employee
       status: data.status
     };
     
-    console.log('Creating employee with payload:', payload);
-    
     const res = await api.post("/hr/employees/create", payload);
-    
-    console.log('Create response:', res);
     
     let result = res.data?.data || res.data;
     if (result?.employee) {
@@ -219,11 +208,7 @@ export async function updateEmployee(id: string, data: UpdateEmployeeData): Prom
     if (data.joinDate !== undefined) payload.joinDate = data.joinDate;
     if (data.status !== undefined) payload.status = data.status;
     
-    console.log('Updating employee:', { id, payload });
-    
     const res = await api.patch(`/hr/employees/update-employee/${id}`, payload);
-    
-    console.log('Update response:', res);
     
     let result = res.data?.data || res.data?.employee || res.data;
     

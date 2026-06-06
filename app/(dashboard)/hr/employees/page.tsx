@@ -74,7 +74,6 @@ export default function EmployeesPage() {
       setIsLoading(true);
       setError(null);
       const data = await getEmployees();
-      console.log('Fetched employees:', data);
       setEmployees(data);
     } catch (err: any) {
       console.error('Error fetching employees:', err);
@@ -134,7 +133,6 @@ export default function EmployeesPage() {
       setCreateError(null);
       
       const createdEmployee = await createEmployee(formData);
-      console.log('Created employee:', createdEmployee);
       
       setCreateSuccess(true);
       
@@ -179,9 +177,7 @@ export default function EmployeesPage() {
       setIsUpdating(true);
       setEditError(null);
       
-      console.log('Updating employee with data:', editFormData);
       const updatedEmployee = await updateEmployee(editingEmployee.id, editFormData);
-      console.log('Updated employee:', updatedEmployee);
       
       setEditSuccess(true);
       
