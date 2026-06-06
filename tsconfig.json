@@ -36,7 +36,7 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts"
-  ],
+, "components/hr/HrHeaderDropdown.jsx"  ],
   "exclude": [
     "node_modules"
   ]
