@@ -13,19 +13,19 @@ export default function QuickActions() {
 
   return (
     <div className="w-full">
-      <h2 className="text-sm font-semibold text-slate-800 mb-4 px-1">Quick Actions</h2>
-      <div className="flex items-center gap-3 overflow-x-auto pb-2 no-scrollbar">
+      <h2 className="text-xs sm:text-sm font-semibold text-slate-800 mb-3 sm:mb-4 px-1">Quick Actions</h2>
+      <div className="flex items-center gap-2 sm:gap-3 overflow-x-auto pb-2 no-scrollbar">
         {actions.map((action, index) => {
           const Icon = action.icon;
           return (
             <button 
               key={index}
-              className="flex items-center gap-2.5 px-4 py-2.5 bg-white border border-slate-100 rounded-xl hover:shadow-sm hover:border-slate-200 transition-all shrink-0"
+              className="flex items-center gap-2 sm:gap-2.5 px-3 sm:px-4 py-2 sm:py-2.5 bg-white border border-slate-100 rounded-xl hover:shadow-sm hover:border-slate-200 transition-all shrink-0"
             >
-              <div className={`p-1.5 rounded-lg ${action.bg} ${action.border} border`}>
-                <Icon className={`w-4 h-4 ${action.color}`} />
+              <div className={`p-1 sm:p-1.5 rounded-lg ${action.bg} ${action.border} border`}>
+                <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${action.color}`} />
               </div>
-              <span className="text-[13px] font-semibold text-slate-700">{action.label}</span>
+              <span className="text-[11px] sm:text-[13px] font-semibold text-slate-700 whitespace-nowrap">{action.label}</span>
             </button>
           );
         })}

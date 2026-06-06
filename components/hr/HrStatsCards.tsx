@@ -27,14 +27,12 @@ export default function HrStatsCards() {
         setLoading(true);
         setError(null);
 
-        // Fetch data in parallel
         const [todaySummary, employees, approvedLeaves] = await Promise.all([
           fetchTodaySummary(),
           getEmployees(),
           fetchLeaves({ status: 'APPROVED' }),
         ]);
 
-        // Calculate present today - try multiple property names
         let presentToday = 0;
         if (todaySummary) {
           presentToday = 
@@ -44,16 +42,13 @@ export default function HrStatsCards() {
             0;
         }
 
-        // Calculate total employees
         const totalEmployees = employees.length;
 
-        // Calculate employees on approved leave today
         const today = new Date().toISOString().split('T')[0];
         const onLeaveToday = approvedLeaves.filter((leave) => {
           return leave.startDate <= today && leave.endDate >= today;
         }).length;
 
-        // Calculate new hires in last 30 days
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
         
@@ -74,7 +69,6 @@ export default function HrStatsCards() {
         console.error('Failed to fetch HR stats:', error);
         setError('Failed to load statistics');
         
-        // Set default values on error
         setStats({
           totalEmployees: 0,
           presentToday: 0,
@@ -133,33 +127,33 @@ export default function HrStatsCards() {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
+    <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
       {statsConfig.map((stat, index) => {
         const Icon = stat.icon;
         
         return (
           <div 
             key={index} 
-            className="bg-white rounded-xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm hover:shadow-md transition-all duration-200"
+            className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition-all duration-200"
           >
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${stat.iconBg}`}>
-              <Icon className={`w-6 h-6 ${stat.iconColor}`} />
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${stat.iconBg}`}>
+              <Icon className={`w-5 h-5 sm:w-6 sm:h-6 ${stat.iconColor}`} />
             </div>
 
-            <div className="flex flex-col min-w-0">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-1">
+            <div className="flex flex-col min-w-0 flex-1">
+              <span className="text-[10px] xs:text-xs font-medium text-gray-500 uppercase tracking-wider mb-1 truncate">
                 {stat.title}
               </span>
-              <span className="text-2xl font-bold text-gray-900">
+              <span className="text-xl sm:text-2xl font-bold text-gray-900">
                 {loading ? (
-                  <span className="inline-block w-16 h-6 bg-gray-200 rounded animate-pulse"></span>
+                  <span className="inline-block w-12 sm:w-16 h-5 sm:h-6 bg-gray-200 rounded animate-pulse"></span>
                 ) : (
                   stat.value
                 )}
               </span>
-              <span className={`text-[11px] font-medium mt-1 ${stat.subtitleColor}`}>
+              <span className={`text-[10px] xs:text-[11px] font-medium mt-1 truncate ${stat.subtitleColor}`}>
                 {loading ? (
-                  <span className="inline-block w-20 h-3 bg-gray-200 rounded animate-pulse"></span>
+                  <span className="inline-block w-16 sm:w-20 h-3 bg-gray-200 rounded animate-pulse"></span>
                 ) : (
                   stat.subtitle
                 )}
