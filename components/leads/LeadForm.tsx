@@ -120,7 +120,7 @@ export default function LeadForm({
                             value={form.name}
                             onChange={handleChange}
                             placeholder="John Smith"
-                            className={`w-full h-10 rounded-lg border px-3 text-sm outline-none
+                            className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none
                             ${errors.name
                                     ? "border-red-400"
                                     : "border-gray-300 focus:border-blue-500"
@@ -145,7 +145,7 @@ export default function LeadForm({
                             value={form.email}
                             onChange={handleChange}
                             placeholder="user@example.com"
-                            className={`w-full h-10 rounded-lg border px-3 text-sm outline-none
+                            className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none
                             ${errors.email
                                     ? "border-red-400"
                                     : "border-gray-300 focus:border-blue-500"
@@ -170,7 +170,7 @@ export default function LeadForm({
                             value={form.phone}
                             onChange={handleChange}
                             placeholder="+91 99999 99999"
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         />
                     </div>
 
@@ -185,7 +185,7 @@ export default function LeadForm({
                             value={form.company}
                             onChange={handleChange}
                             placeholder="Acme Corp"
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         />
                     </div>
 
@@ -200,7 +200,7 @@ export default function LeadForm({
                             value={form.city}
                             onChange={handleChange}
                             placeholder="Mumbai"
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         />
                     </div>
 
@@ -213,7 +213,7 @@ export default function LeadForm({
                             name="source"
                             value={form.source}
                             onChange={handleChange}
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         >
                             <option value="">Select Source</option>
 
@@ -245,7 +245,7 @@ export default function LeadForm({
                             name="status"
                             value={form.status}
                             onChange={handleChange}
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         >
                             <option value="">Select Status</option>
 
@@ -268,7 +268,7 @@ export default function LeadForm({
                             value={form.assignedToId}
                             onChange={handleChange}
                             placeholder="User ID"
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         />
                     </div>
 
@@ -306,7 +306,7 @@ export default function LeadForm({
                                         ? "Press Enter to add tags"
                                         : ""
                                 }
-                                className="flex-1 min-w-[120px] outline-none text-sm"
+                                className="flex-1 min-w-[120px] outline-none text-sm text-gray-900"
                             />
                         </div>
                     </div>
@@ -326,7 +326,7 @@ export default function LeadForm({
                     onChange={handleChange}
                     placeholder="Additional notes..."
                     rows={5}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none resize-none focus:border-blue-500"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none resize-none focus:border-blue-500"
                 />
             </div>
 
