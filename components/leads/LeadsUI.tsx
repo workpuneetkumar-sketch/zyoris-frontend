@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
+import UploadLeadsModal from "./UploadLeadsModal";
 import { updateLead, assignLead, fetchTeamMembers } from "@/lib/api/leadsApi";
 import { TeamMember } from "./AssignLeadModal";
 
@@ -14,6 +15,7 @@ import {
     MoreVertical,
     ChevronLeft,
     ChevronRight,
+    Upload,
 } from "lucide-react";
 
 import {
@@ -105,6 +107,7 @@ export function LeadsTable({
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [viewingLead, setViewingLead] = useState<Lead | null>(null);
     const [isViewOpen, setIsViewOpen] = useState(false);
+    const [isUploadOpen, setIsUploadOpen] = useState(false);
 
     // States for inline vertical assignment submenu
     const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
@@ -149,6 +152,13 @@ export function LeadsTable({
                     <p className="text-sm text-gray-400 mt-0.5">Manage and track all incoming leads.</p>
                 </div>
                 <div className="flex items-center gap-2.5">
+                    <button
+                        onClick={() => setIsUploadOpen(true)}
+                        className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                        <Upload size={14} />
+                        Upload
+                    </button>
                     <button
                         onClick={onExport}
                         className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
@@ -535,6 +545,15 @@ export function LeadsTable({
                     onClose={() => {
                         setIsViewOpen(false);
                         setViewingLead(null);
+                    }}
+                />
+            )}
+
+            {isUploadOpen && (
+                <UploadLeadsModal
+                    onClose={() => setIsUploadOpen(false)}
+                    onSuccess={async () => {
+                        await onRefreshLeads();
                     }}
                 />
             )}
