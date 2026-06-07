@@ -129,7 +129,7 @@ export async function createTask(data: CreateTaskPayload): Promise<Task> {
     const isoDate = toISODateTime(data.dueDate);
     if (isoDate) payload.dueDate = isoDate;
 
-    const res = await api.post<Task>("/tasks/create", payload);
+const res = await api.post<Task>("/tasks/create", payload);
     return res.data;
 }
 

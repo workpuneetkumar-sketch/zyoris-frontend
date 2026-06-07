@@ -170,8 +170,8 @@ export async function createEmployee(data: CreateEmployeeData): Promise<Employee
       email: data.email.trim(),
       department: data.department,
       role: data.role.trim(),
-      salary: data.salary,
-      joinDate: data.joinDate,
+      salary: data.salary ?? null,
+      joinDate: data.joinDate, // Send YYYY-MM-DD directly
       status: data.status
     };
     
