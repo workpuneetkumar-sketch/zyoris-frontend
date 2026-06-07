@@ -32,14 +32,14 @@ import {
 const DEPARTMENTS = ['Engineering', 'HR', 'Sales', 'Marketing', 'Design', 'Finance', 'Operations'];
 
 const INITIAL_FORM_DATA: CreateEmployeeData = {
-  userId: '',
   name: '',
   email: '',
+  password: '',
+  roleId: '',
+  designation: '',
   department: 'Engineering',
-  role: '',
-  salary: undefined,
+  salary: 0,
   joinDate: new Date().toISOString().split('T')[0],
-  status: 'ACTIVE'
 };
 
 export default function EmployeesPage() {
@@ -111,10 +111,6 @@ export default function EmployeesPage() {
   // ─── Create Employee Handler ───
   const handleCreateEmployee = async () => {
     // Validation
-    if (!formData.userId.trim()) {
-      setCreateError('User ID is required');
-      return;
-    }
     if (!formData.name.trim()) {
       setCreateError('Name is required');
       return;
@@ -123,8 +119,16 @@ export default function EmployeesPage() {
       setCreateError('Email is required');
       return;
     }
-    if (!formData.role.trim()) {
-      setCreateError('Role is required');
+    if (!formData.password) {
+      setCreateError('Password is required');
+      return;
+    }
+    if (!formData.roleId) {
+      setCreateError('Role ID is required');
+      return;
+    }
+    if (!formData.designation.trim()) {
+      setCreateError('Designation is required');
       return;
     }
 
@@ -563,19 +567,6 @@ export default function EmployeesPage() {
               )}
 
               <div className="space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    User ID <span className="text-red-500">*</span>
-                  </label>
-                  <input 
-                    type="text" 
-                    value={formData.userId}
-                    onChange={(e) => setFormData(prev => ({ ...prev, userId: e.target.value }))}
-                    className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
-                    placeholder="Enter user ID"
-                  />
-                </div>
-                
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -603,6 +594,19 @@ export default function EmployeesPage() {
                   </div>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Password <span className="text-red-500">*</span>
+                  </label>
+                  <input 
+                    type="password" 
+                    value={formData.password}
+                    onChange={(e) => setFormData(prev => ({ ...prev, password: e.target.value }))}
+                    className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                    placeholder="Enter password"
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Department</label>
@@ -618,25 +622,40 @@ export default function EmployeesPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Role <span className="text-red-500">*</span>
+                      Role ID <span className="text-red-500">*</span>
                     </label>
                     <input 
                       type="text" 
-                      value={formData.role}
-                      onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value }))}
+                      value={formData.roleId}
+                      onChange={(e) => setFormData(prev => ({ ...prev, roleId: e.target.value }))}
                       className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
-                      placeholder="e.g. Senior Developer"
+                      placeholder="Enter role ID"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Designation <span className="text-red-500">*</span>
+                    </label>
+                    <input 
+                      type="text" 
+                      value={formData.designation}
+                      onChange={(e) => setFormData(prev => ({ ...prev, designation: e.target.value }))}
+                      className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                      placeholder="e.g. Senior Software Engineer"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Salary</label>
                     <input 
                       type="number" 
                       value={formData.salary || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
+                      onChange={(e) => setFormData(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : 0 }))}
                       className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
                       placeholder="50000"
                     />
@@ -649,17 +668,6 @@ export default function EmployeesPage() {
                       onChange={(e) => setFormData(prev => ({ ...prev, joinDate: e.target.value }))}
                       className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-                    <select 
-                      value={formData.status}
-                      onChange={(e) => setFormData(prev => ({ ...prev, status: e.target.value as 'ACTIVE' | 'INACTIVE' }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white transition-all"
-                    >
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                    </select>
                   </div>
                 </div>
               </div>
