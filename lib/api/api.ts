@@ -5,7 +5,7 @@ import axios, {
 
 const BASE_URL =
     process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "http://localhost:4000";
+    "https://zyoris.onrender.com";
 
 const api = axios.create({
     baseURL: BASE_URL,
@@ -25,11 +25,15 @@ api.interceptors.request.use(
             const raw = localStorage.getItem("zyoris-auth");
 
             if (raw) {
-                const parsed = JSON.parse(raw);
+                try {
+                    const parsed = JSON.parse(raw);
 
-                if (parsed?.token) {
-                    config.headers.Authorization =
-                        `Bearer ${parsed.token}`;
+                    if (parsed?.token) {
+                        config.headers.Authorization =
+                            `Bearer ${parsed.token}`;
+                    }
+                } catch (e) {
+                    console.error("Failed to parse zyoris-auth from localStorage", e);
                 }
             }
         }
