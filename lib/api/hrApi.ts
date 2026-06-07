@@ -75,29 +75,55 @@ export interface UpdateEmployeeData {
 // ── Helper function to normalize employee data ────────────
 
 function normalizeEmployeeData(data: any): Employee {
-  // Extract user data if nested
-  const userData = data.user || data.User || {};
+  if (!data) return {} as Employee;
+
+  // 1. Identify where the true employee ID is
+  // The user says: employee.id is correct, employee.user.id is wrong.
+  // Sometimes data itself is the user object that has an employee property.
   
-  // Map roleId to role if needed
-  const role = data.role || userData.role || userData.roleId || userData.designation || 'No role';
+  let employeeId = data.id;
+  let userData = data.user || data.User || {};
+  
+  // If data has an 'employee' property, that's likely the true employee data
+  if (data.employee && typeof data.employee === 'object') {
+    employeeId = data.employee.id || employeeId;
+    // If we shifted to data.employee, then the original data might be the user data
+    if (!data.user && !data.User) {
+      userData = data;
+    }
+  }
+
+  // 2. Map fields carefully
+  const role = data.role || userData.role || userData.roleId || userData.designation || data.designation || 'No role';
   const name = data.name || userData.name || 'Unknown';
   const email = data.email || userData.email || 'No email';
+  const department = data.department || 'Not assigned';
+  const salary = data.salary !== undefined ? data.salary : (data.employee?.salary);
+  const status = data.status || data.employee?.status || 'ACTIVE';
   
-  return {
-    id: data.id || '',
+  const result: Employee = {
+    id: employeeId || '',
     organizationId: data.organizationId || userData.organizationId || '',
-    userId: data.userId || userData.id || '',
+    userId: userData.id || data.userId || '',
     name: name,
     email: email,
-    department: data.department || 'Not assigned',
+    department: department,
     role: role,
-    salary: data.salary,
-    joinDate: data.joinDate || new Date().toISOString(),
-    status: data.status || 'ACTIVE',
-    avatar: data.avatar,
-    createdAt: data.createdAt || new Date().toISOString(),
-    updatedAt: data.updatedAt || new Date().toISOString()
+    salary: salary,
+    joinDate: data.joinDate || data.employee?.joinDate || new Date().toISOString(),
+    status: status,
+    avatar: data.avatar || userData.avatar,
+    createdAt: data.createdAt || data.employee?.createdAt || new Date().toISOString(),
+    updatedAt: data.updatedAt || data.employee?.updatedAt || new Date().toISOString()
   };
+
+  console.log('[DEBUG] normalizeEmployeeData result:', { 
+    id: result.id, 
+    userId: result.userId, 
+    name: result.name 
+  });
+
+  return result;
 }
 
 // ── Employee Endpoints ───────────────────────────────────
@@ -106,8 +132,10 @@ function normalizeEmployeeData(data: any): Employee {
  * Fetch all employees
  */
 export async function getEmployees(): Promise<Employee[]> {
+  console.log('[API] getEmployees request');
   try {
     const res = await api.get("/hr/employees/get-employees");
+    console.log('[API] getEmployees response status:', res.status);
     
     // Handle various response structures
     let data = res.data?.data || res.data;
@@ -131,8 +159,10 @@ export async function getEmployees(): Promise<Employee[]> {
  * Fetch a single employee by ID
  */
 export async function getEmployeeById(id: string): Promise<Employee> {
+  console.log('[API] getEmployeeById request:', id);
   try {
     const res = await api.get(`/hr/employees/get-employee/${id}`);
+    console.log('[API] getEmployeeById response status:', res.status);
     
     // Handle various response structures
     let data = res.data?.data || res.data?.employee || res.data;
@@ -199,22 +229,24 @@ export async function createEmployee(data: CreateEmployeeData): Promise<Employee
  * Update an existing employee
  */
 export async function updateEmployee(id: string, data: UpdateEmployeeData): Promise<Employee> {
+  console.log('[DEBUG] updateEmployee - employee.id:', id);
+  console.log('[DEBUG] updateEmployee - raw data:', data);
+
   try {
- const payload: Record<string, any> = {};
+    const payload: Record<string, any> = {};
     
-    if (data.name !== undefined) payload.name = data.name.trim();
-    if (data.email !== undefined) payload.email = data.email.trim();
+    // STRICT: Only allow department, salary, joinDate as per contract
     if (data.department !== undefined) payload.department = data.department;
-    if (data.role !== undefined) payload.role = data.role.trim();
-    if (data.salary !== undefined) payload.salary = data.salary;
+    if (data.salary !== undefined) payload.salary = Number(data.salary);
     if (data.joinDate !== undefined) payload.joinDate = data.joinDate;
-    if (data.status !== undefined) payload.status = data.status;
     
+    console.log('[DEBUG] updateEmployee - final payload:', payload);
+
     const res = await api.patch(`/hr/employees/update-employee/${id}`, payload);
+    console.log('[DEBUG] updateEmployee - response status:', res.status);
     
     let result = res.data?.data || res.data?.employee || res.data;
     
-    // If result is wrapped
     if (result?.employee) {
       result = result.employee;
     }
@@ -225,18 +257,28 @@ export async function updateEmployee(id: string, data: UpdateEmployeeData): Prom
     
     return normalizeEmployeeData(result);
   } catch (error: any) {
-    console.error('Error updating employee:', error);
-    
-    // More detailed error handling
-    if (error.response) {
-      console.error('Response status:', error.response.status);
-      console.error('Response data:', error.response.data);
-    }
+    console.error('[DEBUG] updateEmployee - error status:', error.response?.status);
+    console.error('[DEBUG] updateEmployee - error message:', error.response?.data?.message || error.message);
     
     if (error.response?.data?.message) {
       throw new Error(error.response.data.message);
     }
     throw new Error('Failed to update employee');
+  }
+}
+
+/**
+ * Delete an employee
+ */
+export async function deleteEmployee(id: string): Promise<void> {
+  console.log('[DEBUG] deleteEmployee - employee.id:', id);
+  try {
+    const res = await api.delete(`/hr/employees/delete-employee/${id}`);
+    console.log('[DEBUG] deleteEmployee - response status:', res.status);
+  } catch (error: any) {
+    console.error('[DEBUG] deleteEmployee - error status:', error.response?.status);
+    console.error('[DEBUG] deleteEmployee - error message:', error.response?.data?.message || error.message);
+    throw new Error(error.response?.data?.message || 'Failed to delete employee');
   }
 }
 

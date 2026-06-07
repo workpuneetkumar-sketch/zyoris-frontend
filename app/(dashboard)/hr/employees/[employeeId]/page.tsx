@@ -56,16 +56,19 @@ export default function EmployeeDetailPage() {
   // ─── Data Fetching ───
   const fetchEmployeeData = async () => {
     if (!employeeId) {
+      console.warn('[DEBUG] No employee ID provided in params');
       setError('No employee ID provided');
       setIsLoading(false);
       return;
     }
 
+    console.log('[DEBUG] fetchEmployeeData request:', employeeId);
     try {
       setIsLoading(true);
       setError(null);
       
       const employeeData = await getEmployeeById(employeeId);
+      console.log('[DEBUG] fetchEmployeeData success:', employeeData);
       
       if (employeeData) {
         setEmployee({
@@ -132,17 +135,19 @@ export default function EmployeeDetailPage() {
       setSaveError(null);
       setSaveSuccess(false);
 
+      // STRICT: Only allow department, salary, joinDate
       const updateData: UpdateEmployeeData = {
-        name: editForm.name,
-        email: editForm.email,
         department: editForm.department,
-        role: editForm.role,
-        salary: editForm.salary,
-        joinDate: editForm.joinDate,
-        status: editForm.status
+        salary: editForm.salary !== undefined ? Number(editForm.salary) : undefined,
+        joinDate: editForm.joinDate
       };
       
+      console.log('[DEBUG] handleSaveEdit - employee.id:', employeeId);
+      console.log('[DEBUG] handleSaveEdit - payload:', updateData);
+      
       const updatedEmployee = await updateEmployee(employeeId, updateData);
+      console.log('[DEBUG] handleSaveEdit success:', updatedEmployee);
+      
       setEmployee(updatedEmployee);
       setSaveSuccess(true);
       
@@ -152,7 +157,7 @@ export default function EmployeeDetailPage() {
       }, 1500);
       
     } catch (err: any) {
-      console.error('Error updating employee:', err);
+      console.error('[DEBUG] handleSaveEdit error:', err);
       setSaveError(err.message || 'Failed to update employee.');
     } finally {
       setIsSaving(false);
@@ -538,21 +543,21 @@ export default function EmployeeDetailPage() {
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Full Name</label>
+                    <label className="block text-sm font-semibold text-slate-400 mb-2">Full Name (Read-only)</label>
                     <input 
                       type="text" 
                       value={editForm.name || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm" 
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Email Address</label>
+                    <label className="block text-sm font-semibold text-slate-400 mb-2">Email Address (Read-only)</label>
                     <input 
                       type="email" 
                       value={editForm.email || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full px-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm" 
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
                     />
                   </div>
                 </div>
@@ -571,12 +576,12 @@ export default function EmployeeDetailPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Role</label>
+                    <label className="block text-sm font-semibold text-slate-400 mb-2">Role (Read-only)</label>
                     <input 
                       type="text" 
                       value={editForm.role || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, role: e.target.value }))}
-                      className="w-full px-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm" 
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
                     />
                   </div>
                 </div>
@@ -592,7 +597,7 @@ export default function EmployeeDetailPage() {
                         type="number" 
                         value={editForm.salary || ''}
                         onChange={(e) => setEditForm(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
-                        className="w-full pl-10 pr-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm" 
+                        className="w-full pl-10 pr-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
                       />
                     </div>
                   </div>
@@ -602,7 +607,7 @@ export default function EmployeeDetailPage() {
                       type="date" 
                       value={editForm.joinDate || ''}
                       onChange={(e) => setEditForm(prev => ({ ...prev, joinDate: e.target.value }))}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-gray-900 text-sm" 
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
                     />
                   </div>
                 </div>

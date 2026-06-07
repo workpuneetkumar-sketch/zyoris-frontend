@@ -163,7 +163,7 @@ export default function HRAttendancePage() {
     if (!userId || employees.length === 0) return null;
     return (
       employees.find(
-        (emp) => emp.userId === userId || emp.id === userId
+        (emp) => emp.userId === userId
       ) || null
     );
   }, [employees, userId]);

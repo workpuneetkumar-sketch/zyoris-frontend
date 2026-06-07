@@ -18,12 +18,14 @@ import {
   Calendar,
   ChevronDown,
   Mail,
-  Building2
+  Building2,
+  Trash2
 } from 'lucide-react';
 import { 
   getEmployees, 
   createEmployee, 
   updateEmployee, 
+  deleteEmployee,
   type Employee, 
   type CreateEmployeeData,
   type UpdateEmployeeData 
@@ -158,6 +160,7 @@ export default function EmployeesPage() {
 
   // ─── Edit Employee Handlers ───
   const handleEditClick = (employee: Employee) => {
+    console.log('[DEBUG] handleEditClick selected employee:', { id: employee.id, name: employee.name });
     setEditingEmployee(employee);
     setEditFormData({
       name: employee.name,
@@ -181,24 +184,50 @@ export default function EmployeesPage() {
       setIsUpdating(true);
       setEditError(null);
       
-      const updatedEmployee = await updateEmployee(editingEmployee.id, editFormData);
+      // Clean up the data before sending - ONLY allow department, salary, joinDate
+      const cleanData: UpdateEmployeeData = {};
+      if (editFormData.department) cleanData.department = editFormData.department;
+      if (editFormData.salary !== undefined) cleanData.salary = Number(editFormData.salary);
+      if (editFormData.joinDate) cleanData.joinDate = editFormData.joinDate;
+
+      console.log('[DEBUG] handleUpdateEmployee - employee.id:', editingEmployee.id);
+      console.log('[DEBUG] handleUpdateEmployee - payload:', cleanData);
+      
+      const updatedEmployee = await updateEmployee(editingEmployee.id, cleanData);
+      console.log('[DEBUG] handleUpdateEmployee success:', updatedEmployee);
       
       setEditSuccess(true);
       
-      setTimeout(() => {
+      // Close modal and refresh list
+      setTimeout(async () => {
         setIsEditModalOpen(false);
         setEditSuccess(false);
         setEditingEmployee(null);
-      }, 1500);
-      
-      await fetchEmployees();
+        await fetchEmployees(); // Refresh the list
+      }, 1000);
       
     } catch (err: any) {
-      console.error('Error updating employee:', err);
+      console.error('[DEBUG] handleUpdateEmployee error:', err);
       setEditError(err.message || 'Failed to update employee.');
     } finally {
       setIsUpdating(false);
     }
+  };
+
+  // ─── Delete Employee Handler ───
+  const handleDeleteEmployee = async (id: string) => {
+    if (!window.confirm('Are you sure you want to delete this employee? This action cannot be undone.')) return;
+    
+    console.log('[DEBUG] handleDeleteEmployee - employee.id:', id);
+    try {
+      await deleteEmployee(id);
+      console.log('[DEBUG] handleDeleteEmployee success');
+      await fetchEmployees(); // Refresh the list
+    } catch (err: any) {
+      console.error('[DEBUG] handleDeleteEmployee error:', err);
+      alert(err.message || 'Failed to delete employee.');
+    }
+    setOpenActionMenu(null);
   };
 
   // ─── Utilities ───
@@ -480,7 +509,7 @@ export default function EmployeesPage() {
                         <div className="flex items-center justify-end gap-1">
                           <Link 
                             href={`/hr/employees/${employee.id}`}
-                            className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                            className="px-3 py-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors md:opacity-0 md:group-hover:opacity-100"
                           >
                             View Profile
                           </Link>
@@ -496,21 +525,35 @@ export default function EmployeesPage() {
                             </button>
                             
                             {openActionMenu === employee.id && (
-                              <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">
+                              <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-30 animate-in fade-in slide-in-from-top-1">
                                 <button
-                                  onClick={() => handleEditClick(employee)}
-                                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditClick(employee);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
                                 >
-                                  <Pencil className="w-3.5 h-3.5" />
+                                  <Pencil className="w-4 h-4" />
                                   Edit Details
                                 </button>
                                 <Link
                                   href={`/hr/employees/${employee.id}`}
-                                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
                                 >
-                                  <Users className="w-3.5 h-3.5" />
+                                  <Users className="w-4 h-4" />
                                   View Profile
                                 </Link>
+                                <div className="h-px bg-gray-100 my-1"></div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteEmployee(employee.id);
+                                  }}
+                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                  Delete Employee
+                                </button>
                               </div>
                             )}
                           </div>
@@ -750,25 +793,25 @@ export default function EmployeesPage() {
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Full Name <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Full Name (Read-only)
                     </label>
                     <input 
                       type="text" 
                       value={editFormData.name || ''}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, name: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                      disabled
+                      className="w-full px-4 py-2.5 border border-gray-100 bg-gray-50 text-gray-500 rounded-xl text-sm cursor-not-allowed" 
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Email (Read-only)
                     </label>
                     <input 
                       type="email" 
                       value={editFormData.email || ''}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, email: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                      disabled
+                      className="w-full px-4 py-2.5 border border-gray-100 bg-gray-50 text-gray-500 rounded-xl text-sm cursor-not-allowed" 
                     />
                   </div>
                 </div>
@@ -779,7 +822,7 @@ export default function EmployeesPage() {
                     <select 
                       value={editFormData.department || ''}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, department: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white transition-all"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white transition-all text-gray-900"
                     >
                       {DEPARTMENTS.map(dept => (
                         <option key={dept} value={dept}>{dept}</option>
@@ -787,14 +830,14 @@ export default function EmployeesPage() {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Role <span className="text-red-500">*</span>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">
+                      Role (Read-only)
                     </label>
                     <input 
                       type="text" 
                       value={editFormData.role || ''}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, role: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                      disabled
+                      className="w-full px-4 py-2.5 border border-gray-100 bg-gray-50 text-gray-500 rounded-xl text-sm cursor-not-allowed" 
                     />
                   </div>
                 </div>
@@ -806,7 +849,7 @@ export default function EmployeesPage() {
                       type="number" 
                       value={editFormData.salary || ''}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900" 
                     />
                   </div>
                   <div>
@@ -815,15 +858,15 @@ export default function EmployeesPage() {
                       type="date" 
                       value={editFormData.joinDate || ''}
                       onChange={(e) => setEditFormData(prev => ({ ...prev, joinDate: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all"
+                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all text-gray-900"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-2">Status (Read-only)</label>
                     <select 
                       value={editFormData.status || 'ACTIVE'}
-                      onChange={(e) => setEditFormData(prev => ({ ...prev, status: e.target.value as 'ACTIVE' | 'INACTIVE' }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white transition-all"
+                      disabled
+                      className="w-full px-4 py-2.5 border border-gray-100 bg-gray-50 text-gray-500 rounded-xl text-sm cursor-not-allowed"
                     >
                       <option value="ACTIVE">Active</option>
                       <option value="INACTIVE">Inactive</option>
