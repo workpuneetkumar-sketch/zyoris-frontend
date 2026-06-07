@@ -3,32 +3,32 @@ import { ChevronDown, ChevronRight, TrendingUp } from 'lucide-react';
 
 export default function PayrollOverview() {
   return (
-    <div className="bg-white border border-slate-100 rounded-xl p-6 flex flex-col h-full shadow-sm">
+    <div className="bg-white border border-slate-100 rounded-xl p-4 sm:p-6 flex flex-col h-full shadow-sm">
       {/* Header */}
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-base font-semibold text-slate-800">Payroll Overview</h2>
-        <button className="flex items-center gap-1.5 px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+      <div className="flex justify-between items-center mb-3 sm:mb-4">
+        <h2 className="text-sm sm:text-base font-semibold text-slate-800">Payroll Overview</h2>
+        <button className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 border border-slate-200 rounded-lg text-[11px] sm:text-xs font-medium text-slate-600 hover:bg-slate-50 transition-colors">
           May 2024
-          <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-400" />
         </button>
       </div>
 
       {/* Stats */}
-      <div className="mb-6">
-        <p className="text-xs text-slate-500 mb-1">Total Payroll Cost</p>
-        <div className="flex items-baseline gap-3">
-          <span className="text-2xl font-bold text-slate-800">$125,860</span>
-          <span className="flex items-center text-xs font-medium text-emerald-500">
-            <TrendingUp className="w-3 h-3 mr-1" />
+      <div className="mb-4 sm:mb-6">
+        <p className="text-[10px] sm:text-xs text-slate-500 mb-1">Total Payroll Cost</p>
+        <div className="flex items-baseline gap-2 sm:gap-3 flex-wrap">
+          <span className="text-xl sm:text-2xl font-bold text-slate-800">$125,860</span>
+          <span className="flex items-center text-[10px] sm:text-xs font-medium text-emerald-500">
+            <TrendingUp className="w-2.5 h-2.5 sm:w-3 sm:h-3 mr-1" />
             12.5% vs Apr 2024
           </span>
         </div>
       </div>
 
       {/* SVG Chart */}
-      <div className="flex-1 w-full relative min-h-[140px]">
+      <div className="flex-1 w-full relative min-h-[120px] sm:min-h-[140px]">
         {/* Y-Axis Labels */}
-        <div className="absolute left-0 top-0 bottom-6 flex flex-col justify-between text-[10px] text-slate-400">
+        <div className="absolute left-0 top-0 bottom-6 flex flex-col justify-between text-[8px] sm:text-[10px] text-slate-400">
           <span>$150K</span>
           <span>$100K</span>
           <span>$50K</span>
@@ -36,7 +36,7 @@ export default function PayrollOverview() {
         </div>
         
         {/* Graph Area */}
-        <div className="absolute left-10 right-0 top-2 bottom-6">
+        <div className="absolute left-8 sm:left-10 right-0 top-2 bottom-6">
           {/* Horizontal Grid Lines */}
           <div className="absolute inset-0 flex flex-col justify-between">
             <div className="w-full h-px bg-slate-50"></div>
@@ -77,7 +77,7 @@ export default function PayrollOverview() {
         </div>
 
         {/* X-Axis Labels */}
-        <div className="absolute left-10 right-0 bottom-0 flex justify-between text-[10px] text-slate-400">
+        <div className="absolute left-8 sm:left-10 right-0 bottom-0 flex justify-between text-[8px] sm:text-[10px] text-slate-400">
           <span>Dec</span>
           <span>Jan</span>
           <span>Feb</span>
@@ -88,11 +88,11 @@ export default function PayrollOverview() {
       </div>
 
       {/* Footer Action */}
-      <div className="mt-4 pt-4 border-t border-slate-100 flex justify-between items-center cursor-pointer group">
-        <span className="text-sm font-medium text-blue-600 group-hover:text-blue-700 transition-colors">
+      <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100 flex justify-between items-center cursor-pointer group">
+        <span className="text-xs sm:text-sm font-medium text-blue-600 group-hover:text-blue-700 transition-colors">
           View Payroll Summary
         </span>
-        <ChevronRight className="w-4 h-4 text-blue-600 group-hover:text-blue-700 group-hover:translate-x-1 transition-all" />
+        <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 group-hover:text-blue-700 group-hover:translate-x-1 transition-all" />
       </div>
     </div>
   );
