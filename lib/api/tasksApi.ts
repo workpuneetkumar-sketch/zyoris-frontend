@@ -30,6 +30,9 @@ export interface Task {
     } | null;
     createdById?: string;
     organizationId?: string;
+    leadId?: string | null;
+    dealId?: string | null;
+    projectId?: string | null;
     createdAt: string;
     updatedAt?: string;
     [key: string]: unknown;
@@ -47,6 +50,9 @@ export interface CreateTaskPayload {
     dueDate?: string | null;
     assignedToId?: string | null;
     status?: TaskStatus;
+    leadId?: string | null;
+    dealId?: string | null;
+    projectId?: string | null;
 }
 
 export interface UpdateTaskPayload {
@@ -56,6 +62,9 @@ export interface UpdateTaskPayload {
     dueDate?: string | null;
     assignedToId?: string | null;
     status?: TaskStatus;
+    leadId?: string | null;
+    dealId?: string | null;
+    projectId?: string | null;
 }
 
 // ── Helper: normalise date string → ISO 8601 datetime ─────────────────────────
@@ -120,16 +129,19 @@ export async function createTask(data: CreateTaskPayload): Promise<Task> {
     const payload: Record<string, unknown> = {
         title: data.title,
         status: data.status ?? "TODO",
-        priority: data.priority ?? "MEDIUM",
+        priority: data.priority ?? "LOW",
     };
 
     if (data.description) payload.description = data.description;
-    if (data.assignedToId?.trim()) payload.assignedToId = data.assignedToId.trim();
+    if (data.assignedToId) payload.assignedToId = data.assignedToId;
+    if (data.leadId) payload.leadId = data.leadId;
+    if (data.dealId) payload.dealId = data.dealId;
+    if (data.projectId) payload.projectId = data.projectId;
 
     const isoDate = toISODateTime(data.dueDate);
     if (isoDate) payload.dueDate = isoDate;
 
-const res = await api.post<Task>("/tasks/create", payload);
+    const res = await api.post<Task>("/tasks/create", payload);
     return res.data;
 }
 
@@ -139,18 +151,19 @@ const res = await api.post<Task>("/tasks/create", payload);
 export async function updateTask(id: string, data: UpdateTaskPayload): Promise<Task> {
     const payload: Record<string, unknown> = {};
 
-    if (data.title !== undefined)       payload.title       = data.title;
-    if (data.description !== undefined) payload.description = data.description;
-    if (data.priority !== undefined)    payload.priority    = data.priority;
-    if (data.status !== undefined)      payload.status      = data.status;
+    if (data.title)       payload.title       = data.title;
+    if (data.description) payload.description = data.description;
+    if (data.priority)    payload.priority    = data.priority;
+    if (data.status)      payload.status      = data.status;
+    if (data.leadId)      payload.leadId      = data.leadId;
+    if (data.dealId)      payload.dealId      = data.dealId;
+    if (data.projectId)   payload.projectId   = data.projectId;
 
-    // assignedToId: send null explicitly to unassign
-    if ("assignedToId" in data) {
-        payload.assignedToId = (data.assignedToId as string)?.trim() || null;
+    if (data.assignedToId !== undefined) {
+        payload.assignedToId = data.assignedToId || null;
     }
 
-    // dueDate: convert to ISO datetime if provided
-    if ("dueDate" in data) {
+    if (data.dueDate !== undefined) {
         payload.dueDate = toISODateTime(data.dueDate);
     }
 
