@@ -52,14 +52,14 @@ export interface HRStats {
 }
 
 export interface CreateEmployeeData {
-  userId: string;
   name: string;
   email: string;
+  password: string;
+  roleId: string;
+  designation: string;
   department: string;
-  role: string;
   salary?: number;
   joinDate: string;
-  status: 'ACTIVE' | 'INACTIVE';
 }
 
 export interface UpdateEmployeeData {
@@ -165,30 +165,33 @@ export async function getEmployeeById(id: string): Promise<Employee> {
 export async function createEmployee(data: CreateEmployeeData): Promise<Employee> {
   try {
     const payload = {
-      userId: data.userId.trim(),
       name: data.name.trim(),
       email: data.email.trim(),
+      password: data.password,
+      roleId: data.roleId,
+      designation: data.designation.trim(),
       department: data.department,
-      role: data.role.trim(),
-      salary: data.salary ?? null,
-      joinDate: data.joinDate, // Send YYYY-MM-DD directly
-      status: data.status
+      salary: data.salary ?? 0,
+      joinDate: data.joinDate,
     };
-    
+
     const res = await api.post("/hr/employees/create", payload);
-    
+
     let result = res.data?.data || res.data;
+
     if (result?.employee) {
       result = result.employee;
     }
+
     return normalizeEmployeeData(result);
   } catch (error: any) {
-    console.error('Error creating employee:', error);
-    
+    console.error("Error creating employee:", error);
+
     if (error.response?.data?.message) {
       throw new Error(error.response.data.message);
     }
-    throw new Error('Failed to create employee');
+
+    throw new Error("Failed to create employee");
   }
 }
 
@@ -197,8 +200,7 @@ export async function createEmployee(data: CreateEmployeeData): Promise<Employee
  */
 export async function updateEmployee(id: string, data: UpdateEmployeeData): Promise<Employee> {
   try {
-    // Build update payload only with provided fields
-    const payload: Record<string, any> = {};
+ const payload: Record<string, any> = {};
     
     if (data.name !== undefined) payload.name = data.name.trim();
     if (data.email !== undefined) payload.email = data.email.trim();
