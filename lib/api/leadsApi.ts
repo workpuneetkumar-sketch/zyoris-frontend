@@ -136,3 +136,28 @@ export async function fetchTeamMembers(): Promise<any> {
     const res = await api.get("/organizations/team-members");
     return res.data;
 }
+
+// ── POST convert lead to deal ──────────────────────────────
+// Endpoint: POST /leads/:id/convert-to-deal
+// Response shape: { deal: { id, dealId, name, stage, ... } } or flat deal object
+
+export interface ConvertToDealResponse {
+    deal?: {
+        id: string;
+        dealId?: string;
+        [key: string]: unknown;
+    };
+    // Some backends return the deal at the root level
+    id?: string;
+    dealId?: string;
+    [key: string]: unknown;
+}
+
+export async function convertLeadToDeal(
+    leadId: Lead["id"]
+): Promise<ConvertToDealResponse> {
+    const res = await api.post<ConvertToDealResponse>(
+        `/leads/${leadId}/convert-to-deal`
+    );
+    return res.data;
+}
