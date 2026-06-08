@@ -143,21 +143,27 @@ export async function fetchTeamMembers(): Promise<any> {
 
 export interface ConvertToDealResponse {
     deal?: {
-        id: string;
+        id?: string;
         dealId?: string;
-        [key: string]: unknown;
+        [key: string]: any;
     };
-    // Some backends return the deal at the root level
     id?: string;
     dealId?: string;
-    [key: string]: unknown;
+    [key: string]: any;
 }
 
 export async function convertLeadToDeal(
-    leadId: Lead["id"]
+    leadId: string
 ): Promise<ConvertToDealResponse> {
-    const res = await api.post<ConvertToDealResponse>(
-        `/leads/${leadId}/convert-to-deal`
-    );
-    return res.data;
+    console.log(`[API] convertLeadToDeal - leadId: ${leadId}`);
+    try {
+        const res = await api.post<ConvertToDealResponse>(
+            `/leads/${leadId}/convert-to-deal`
+        );
+        console.log(`[API] convertLeadToDeal - success status: ${res.status}`);
+        return res.data;
+    } catch (error: any) {
+        console.error(`[API] convertLeadToDeal - error:`, error.response?.data || error.message);
+        throw error;
+    }
 }

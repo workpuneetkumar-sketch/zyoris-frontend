@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Lead, LeadsFilters, DEFAULT_FILTERS } from "../types/leads";
-import { fetchLeads, deleteLead } from "../lib/api/leadsApi";
+import { fetchLeads, deleteLead, convertLeadToDeal } from "../lib/api/leadsApi";
 
 function quoteCsv(value: unknown) {
     const text = value == null ? "" : String(value);
@@ -64,6 +64,7 @@ export function useLeads() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [convertingId, setConvertingId] = useState<string | null>(null);
 
     // ── Data fetching ─────────────────────────────────────────────────────────
     const loadLeads = useCallback(async () => {
@@ -122,6 +123,36 @@ export function useLeads() {
             case "Assign":
                 router.push(`/leads/${lead.id}/assign`);
                 break;
+            case "Convert": {
+                if (lead.status === "CLOSED") {
+                    alert("This lead is already closed/converted.");
+                    return;
+                }
+                if (convertingId) return;
+
+                const confirmed = window.confirm(`Convert lead "${lead.name}" to a deal?`);
+                if (!confirmed) return;
+
+                setConvertingId(lead.id);
+                try {
+                    const res = await convertLeadToDeal(lead.id);
+                    const dealId =
+                        (res.deal?.dealId ?? res.deal?.id) ??
+                        (res.dealId ?? res.id);
+
+                    if (dealId) {
+                        router.push(`/deals/${dealId}`);
+                    } else {
+                        router.push("/deals");
+                    }
+                } catch (err: any) {
+                    console.error("Conversion error:", err);
+                    alert(err?.response?.data?.message || err.message || "Failed to convert lead.");
+                } finally {
+                    setConvertingId(null);
+                }
+                break;
+            }
             case "Delete": {
                 if (!window.confirm(`Delete lead "${lead.name}"?`)) return;
                 try {
@@ -144,6 +175,7 @@ export function useLeads() {
         loading,
         error,
         openMenu,
+        convertingId,
         // setters
         setPage,
         setOpenMenu,

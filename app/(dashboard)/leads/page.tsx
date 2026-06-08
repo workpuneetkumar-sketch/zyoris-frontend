@@ -14,6 +14,7 @@ export default function LeadsPage() {
         loading,
         error,
         openMenu,
+        convertingId,
         setPage,
         setOpenMenu,
         handleFiltersChange,
@@ -46,6 +47,7 @@ export default function LeadsPage() {
             filters={filters}
             loading={loading}
             openMenu={openMenu}
+            convertingId={convertingId}
             onPageChange={setPage}
             onFiltersChange={handleFiltersChange}
             onRefreshLeads={retry}

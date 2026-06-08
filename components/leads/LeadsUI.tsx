@@ -32,6 +32,7 @@ export interface LeadsTableProps {
     filters: LeadsFilters;
     loading: boolean;
     openMenu: string | null;
+    convertingId?: string | null;
     onPageChange: (page: number) => void;
     onRefreshLeads: () => Promise<void>;
     onFiltersChange: (filters: LeadsFilters) => void;
@@ -92,6 +93,7 @@ export function LeadsTable({
     filters,
     loading,
     openMenu,
+    convertingId,
     onPageChange,
     onFiltersChange,
     onRefreshLeads,
@@ -287,21 +289,27 @@ export function LeadsTable({
 
                                         {/*  Actions — overflow-visible so dropdown isn't clipped */}
                                         <td className="px-5 py-3.5 whitespace-nowrap">
-                                            <button
-                                                onClick={(e) => {
-                                                    if (openMenu === lead.id) {
-                                                        setOpenMenu(null);
-                                                        setMenuPos(null);
-                                                    } else {
-                                                        const rect = e.currentTarget.getBoundingClientRect();
-                                                        setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
-                                                        setOpenMenu(lead.id);
-                                                    }
-                                                }}
-                                                className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                            >
-                                                <MoreVertical size={16} />
-                                            </button>
+                                            {convertingId === lead.id ? (
+                                                <div className="w-8 h-8 flex items-center justify-center">
+                                                    <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => {
+                                                        if (openMenu === lead.id) {
+                                                            setOpenMenu(null);
+                                                            setMenuPos(null);
+                                                        } else {
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
+                                                            setOpenMenu(lead.id);
+                                                        }
+                                                    }}
+                                                    className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -369,7 +377,7 @@ export function LeadsTable({
                     />
                     {menuPos && (
                         <div
-                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-36"
+                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-44"
                                 }`}
                             style={{
                                 top: menuPos.top,
@@ -377,7 +385,7 @@ export function LeadsTable({
                             }}
                         >
                             {!isAssignSubmenuOpen ? (
-                                ["View", "Edit", "Assign", "Delete"].map((action) => (
+                                ["View", "Edit", "Convert to Deal", "Assign", "Delete"].map((action) => (
                                     <button
                                         key={action}
                                         onClick={() => {
@@ -395,6 +403,10 @@ export function LeadsTable({
                                                     setMenuPos(null);
                                                 } else if (action === "Assign") {
                                                     setIsAssignSubmenuOpen(true);
+                                                } else if (action === "Convert to Deal") {
+                                                    onAction("Convert", lead);
+                                                    setOpenMenu(null);
+                                                    setMenuPos(null);
                                                 } else {
                                                     onAction(action, lead);
                                                     setOpenMenu(null);

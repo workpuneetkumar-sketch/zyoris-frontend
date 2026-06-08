@@ -74,7 +74,11 @@ export default function LeadDetailPage() {
 
     // ── Convert to deal ───────────────────────────────────────────────────────
     const handleConvert = async () => {
-        if (!leadId || converting) return;
+        if (!leadId || converting || lead?.status === "CLOSED") return;
+        
+        const confirmed = window.confirm(`Convert lead "${lead?.name}" to a deal?`);
+        if (!confirmed) return;
+
         setConverting(true);
         setConvertError(null);
         try {
@@ -152,15 +156,23 @@ export default function LeadDetailPage() {
                 <div className="flex flex-col items-end gap-1.5">
                     <button
                         onClick={handleConvert}
-                        disabled={converting}
-                        className="flex items-center gap-2 h-9 px-5 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 disabled:opacity-70 transition-colors shadow-sm shadow-blue-200"
+                        disabled={converting || lead.status === "CLOSED"}
+                        className={`flex items-center gap-2 h-9 px-5 rounded-lg text-white text-[13px] font-semibold transition-colors shadow-sm ${
+                            lead.status === "CLOSED" 
+                                ? "bg-gray-400 cursor-not-allowed" 
+                                : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 disabled:opacity-70"
+                        }`}
                     >
                         {converting ? (
                             <Loader2 size={14} className="animate-spin" />
                         ) : (
                             <Briefcase size={14} />
                         )}
-                        {converting ? "Converting..." : "Convert to Deal"}
+                        {converting 
+                            ? "Converting..." 
+                            : lead.status === "CLOSED" 
+                                ? "Converted to Deal" 
+                                : "Convert to Deal"}
                     </button>
                     {convertError && (
                         <p className="text-xs text-red-500 text-right max-w-[260px]">
