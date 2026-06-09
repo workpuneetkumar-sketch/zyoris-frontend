@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, notFound } from 'next/navigation';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -272,6 +272,10 @@ export default function EmployeeDetailPage() {
   }
 
   if (error || !employee) {
+    if (!isLoading && !employee && !error) {
+      notFound();
+      return null;
+    }
     return (
       <div className="min-h-screen bg-slate-50/50 p-8">
         <div className="max-w-md mx-auto bg-white rounded-2xl border border-slate-200 p-8 text-center">

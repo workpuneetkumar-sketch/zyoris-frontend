@@ -61,6 +61,8 @@ export interface Lead {
 
     city?: string;
 
+    estimatedValue?: number;
+
     assignedToId?: string | null;
 
     assignedTo?: {

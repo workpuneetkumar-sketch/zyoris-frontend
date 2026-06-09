@@ -57,6 +57,7 @@ export async function createLead(data: {
     city?: string;
     source?: string;
     status?: string;
+    estimatedValue?: number;
     assignedToId?: string | null;
     tags?: string[];
     note?: string;
@@ -153,12 +154,14 @@ export interface ConvertToDealResponse {
 }
 
 export async function convertLeadToDeal(
-    leadId: string
+    leadId: string,
+    data?: { amount?: number }
 ): Promise<ConvertToDealResponse> {
-    console.log(`[API] convertLeadToDeal - leadId: ${leadId}`);
+    console.log(`[API] convertLeadToDeal - leadId: ${leadId}`, data);
     try {
         const res = await api.post<ConvertToDealResponse>(
-            `/leads/${leadId}/convert-to-deal`
+            `/leads/${leadId}/convert-to-deal`,
+            data
         );
         console.log(`[API] convertLeadToDeal - success status: ${res.status}`);
         return res.data;

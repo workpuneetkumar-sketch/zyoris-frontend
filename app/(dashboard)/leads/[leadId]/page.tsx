@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, notFound } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
     ArrowLeft,
@@ -82,7 +82,13 @@ export default function LeadDetailPage() {
         setConverting(true);
         setConvertError(null);
         try {
-            const res = await convertLeadToDeal(leadId);
+            // Mapping: lead.estimatedValue -> deal.amount
+            // Ensure 0 is passed correctly and not treated as falsy
+            const amount = (lead?.estimatedValue !== undefined && lead?.estimatedValue !== null) 
+                ? Number(lead.estimatedValue) 
+                : undefined;
+
+            const res = await convertLeadToDeal(leadId, { amount });
             // Normalise response — backend may return { deal: { id } } or { id } at root
             const dealId =
                 (res.deal?.dealId ?? res.deal?.id) ??
@@ -128,6 +134,11 @@ export default function LeadDetailPage() {
                 </button>
             </div>
         );
+    }
+
+    if (!lead && !loading && !error) {
+        notFound();
+        return null;
     }
 
     if (!lead) return null;
