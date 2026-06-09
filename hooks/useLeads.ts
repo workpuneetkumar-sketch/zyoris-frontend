@@ -135,7 +135,13 @@ export function useLeads() {
 
                 setConvertingId(lead.id);
                 try {
-                    const res = await convertLeadToDeal(lead.id);
+                    // Mapping: lead.estimatedValue -> deal.amount
+                    // Ensure 0 is passed correctly and not treated as falsy
+                    const amount = (lead.estimatedValue !== undefined && lead.estimatedValue !== null) 
+                        ? Number(lead.estimatedValue) 
+                        : undefined;
+
+                    const res = await convertLeadToDeal(lead.id, { amount });
                     const dealId =
                         (res.deal?.dealId ?? res.deal?.id) ??
                         (res.dealId ?? res.id);

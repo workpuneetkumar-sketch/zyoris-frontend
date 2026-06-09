@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, notFound } from "next/navigation";
 import { useEffect, useState } from "react";
 import { fetchDealById } from "@/lib/api/dealsApi";
 import { Deal } from "@/types/deals";
@@ -67,23 +67,7 @@ export default function DealDetailPage() {
   }
 
   if (!deal) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-5 p-6 text-center">
-        <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-blue-500">
-          <ArrowLeft size={32} />
-        </div>
-        <div className="space-y-1">
-          <h2 className="text-xl font-bold text-gray-900">Deal Not Found</h2>
-          <p className="text-gray-500 max-w-xs mx-auto">The deal you're looking for doesn't exist or has been removed.</p>
-        </div>
-        <button
-          onClick={() => router.back()}
-          className="px-5 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 transition-all shadow-lg shadow-gray-200"
-        >
-          Go Back
-        </button>
-      </div>
-    );
+    notFound();
   }
 
   return (

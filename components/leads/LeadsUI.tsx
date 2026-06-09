@@ -530,6 +530,7 @@ export function LeadsTable({
                         city: editingLead.city || "",
                         source: editingLead.source || "",
                         status: editingLead.status || "",
+                        estimatedValue: editingLead.estimatedValue?.toString() || "",
                         assignedToId: editingLead.assignedToId || "",
                         tags: editingLead.tags || [],
                         note: editingLead.note || "",
@@ -540,7 +541,13 @@ export function LeadsTable({
                     }}
                     onSave={async (updatedData) => {
                         try {
-                            await updateLead(editingLead.id, updatedData as unknown as Partial<Lead>);
+                            const payload = {
+                                ...updatedData,
+                                estimatedValue: (updatedData.estimatedValue !== "" && updatedData.estimatedValue !== undefined && updatedData.estimatedValue !== null) 
+                                    ? Number(updatedData.estimatedValue) 
+                                    : undefined,
+                            };
+                            await updateLead(editingLead.id, payload as unknown as Partial<Lead>);
                             setIsEditOpen(false);
                             setEditingLead(null);
                             onFiltersChange({ ...filters });

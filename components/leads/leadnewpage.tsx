@@ -21,6 +21,7 @@ export default function NewLeadPage() {
         city: "",
         source: "",
         status: "",
+        estimatedValue: "",
         assignedToId: "",
         tags: [],
         note: "",
@@ -57,6 +58,9 @@ export default function NewLeadPage() {
 
             await createLead({
                 ...form,
+                estimatedValue: (form.estimatedValue !== "" && form.estimatedValue !== undefined && form.estimatedValue !== null) 
+                    ? Number(form.estimatedValue) 
+                    : undefined,
                 assignedToId:
                     form.assignedToId.trim() || null,
             });
