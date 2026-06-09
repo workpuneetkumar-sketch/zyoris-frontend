@@ -46,6 +46,21 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "zyoris-auth";
+// Cookie name must match the one read by middleware.ts
+const TOKEN_COOKIE = "zyoris-token";
+
+// ── Cookie helpers (client-side only) ────────────────────────────────────────
+
+function setTokenCookie(token: string) {
+  // Max-age: 7 days — aligns with typical JWT expiry; SameSite=Strict for CSRF protection.
+  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
+}
+
+function clearTokenCookie() {
+  document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -66,6 +81,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const parsed = JSON.parse(raw);
       setUser(parsed.user);
       setToken(parsed.token);
+      // Re-sync the cookie in case it was cleared (e.g. browser restart)
+      if (parsed.token) {
+        setTokenCookie(parsed.token);
+      }
     } catch {
       localStorage.removeItem(STORAGE_KEY);
     } finally {
@@ -84,7 +103,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(res.user);
       setToken(res.token);
 
-
       localStorage.setItem(
         STORAGE_KEY,
         JSON.stringify({
@@ -94,7 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
       );
 
-      return res; // Return the response
+      // Set cookie so middleware can verify authentication on navigation
+      setTokenCookie(res.token);
+
+      return res;
     } catch (e: any) {
       setError(e?.response?.data?.message || "Login failed");
       throw e;
@@ -103,7 +124,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // REGISTER  IMPORTANT
+  // REGISTER
   const register = useCallback(async (data: {
     name: string;
     email: string;
@@ -129,6 +150,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         })
       );
 
+      setTokenCookie(res.token);
+
       return res.user;
     } catch (e: any) {
       setError(e?.response?.data?.message || "Register failed");
@@ -144,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const refreshToken = raw ? JSON.parse(raw).refreshToken : null;
 
       if (refreshToken) {
-        await logoutApi(refreshToken); // POST /auth/logout { refreshToken }
+        await logoutApi(refreshToken);
       }
     } catch (err) {
       console.error("Logout API failed:", err);
@@ -152,6 +175,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       setToken(null);
       localStorage.removeItem(STORAGE_KEY);
+      clearTokenCookie();
       router.push("/login");
     }
   }, [router]);
@@ -171,5 +195,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-
-

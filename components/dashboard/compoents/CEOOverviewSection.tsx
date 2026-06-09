@@ -4,35 +4,52 @@ import { DollarSign, BarChart2, Activity, TrendingUp, TrendingDown, Minus } from
 
 export function CEOOverviewSection({ token }: { token: string }) {
     const [data, setData] = useState<any>(null);
+    const [forecast, setForecast] = useState<any>(null);
+    const [trends, setTrends] = useState<any>(null);
+    const [drivers, setDrivers] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         if (!token) return;
-        api.get("/dashboard/ceo")
-            .then((res) => setData(res.data))
-            .catch(() => console.error("CEO API Error"))
-            .finally(() => setLoading(false));
+        
+        setLoading(true);
+        Promise.all([
+            api.get("/dashboard/ceo"),
+            api.get("/analytics/revenue/forecast"),
+            api.get("/analytics/demand/trends"),
+            api.get("/analytics/revenue/drivers")
+        ]).then(([ceoRes, forecastRes, trendsRes, driversRes]) => {
+            setData(ceoRes.data);
+            setForecast(forecastRes.data);
+            setTrends(trendsRes.data);
+            setDrivers(driversRes.data);
+        }).catch((err) => {
+            console.error("CEO Dashboard APIs Error:", err);
+        }).finally(() => {
+            setLoading(false);
+        });
     }, [token]);
 
     if (loading) return <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-32 animate-pulse bg-gray-50 rounded-2xl" />;
     if (!data) return null;
 
-    const { kpis, riskIndicators, revenueForecast } = data;
+    const { kpis, riskIndicators } = data;
+    const revenueForecast = forecast || data.revenueForecast;
 
     const getTrendIcon = (trend: string) => {
-        if (trend === "upward") return <TrendingUp size={14} className="text-emerald-500" />;
-        if (trend === "downward") return <TrendingDown size={14} className="text-red-500" />;
+        if (trend === "upward" || trend === "increasing") return <TrendingUp size={14} className="text-emerald-500" />;
+        if (trend === "downward" || trend === "decreasing") return <TrendingDown size={14} className="text-red-500" />;
         return <Minus size={14} className="text-blue-400" />;
     };
 
     const cards = [
         {
-            title: "Revenue Run-Rate",
-            value: `$${Math.round((kpis?.totalRevenue || 0) / 1000)}k`,
+            title: "Revenue Forecast",
+            value: `$${Math.round((revenueForecast?.projectedRevenue || kpis?.totalRevenue || 0) / 1000)}k`,
             icon: DollarSign,
             color: "blue",
-            trend: revenueForecast?.stats?.trend || "flat",
-            status: revenueForecast?.stats?.trend === "upward" ? "Growth" : "Stable"
+            trend: revenueForecast?.stats?.trend || revenueForecast?.trend || "flat",
+            status: (revenueForecast?.stats?.trend === "upward" || revenueForecast?.trend === "upward") ? "Growth" : "Stable"
         },
         {
             title: "Gross Margin",
@@ -42,13 +59,26 @@ export function CEOOverviewSection({ token }: { token: string }) {
             status: (riskIndicators?.marginPct || 0) >= 0.3 ? "Healthy" : "Below Target"
         },
         {
-            title: "Demand Signal",
-            value: (riskIndicators?.demandTrend || "flat").charAt(0).toUpperCase() + (riskIndicators?.demandTrend || "flat").slice(1),
+            title: "Demand Trends",
+            value: (trends?.overallTrend || riskIndicators?.demandTrend || "flat").charAt(0).toUpperCase() + (trends?.overallTrend || riskIndicators?.demandTrend || "flat").slice(1),
             icon: Activity,
             color: "emerald",
-            status: riskIndicators?.demandTrend === "increasing" ? "Strong" : "Neutral"
+            trend: trends?.overallTrend || riskIndicators?.demandTrend || "flat",
+            status: (trends?.overallTrend === "increasing" || riskIndicators?.demandTrend === "increasing") ? "Strong" : "Neutral"
         }
     ];
+
+    // Optional: add a fourth card for drivers if space permits or just keep 3 for layout consistency
+    if (drivers?.topDriver) {
+        cards.push({
+            title: "Growth Driver",
+            value: drivers.topDriver,
+            icon: TrendingUp,
+            color: "amber",
+            trend: "upward",
+            status: "Primary"
+        });
+    }
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

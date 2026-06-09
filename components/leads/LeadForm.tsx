@@ -27,6 +27,7 @@ export interface LeadFormValues {
     city: string;
     source: string;
     status: string;
+    estimatedValue: string;
     assignedToId: string;
     tags: string[];
     note: string;
@@ -255,6 +256,21 @@ export default function LeadForm({
                                 </option>
                             ))}
                         </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Estimated Value (INR)
+                        </label>
+
+                        <input
+                            type="number"
+                            name="estimatedValue"
+                            value={form.estimatedValue}
+                            onChange={handleChange}
+                            placeholder="50000"
+                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
+                        />
                     </div>
 
                     <div>

@@ -121,3 +121,34 @@ export async function updateDealStage(
     const res = await api.patch<BackendDeal>(`/api/deals/update-deal/${dealId}`, { stage });
     return mapDeal(res.data);
 }
+
+// ── PATCH update deal (General) ───────────────────────────────────────────
+// Swagger: PATCH /api/deals/update-deal/{id}
+
+export interface UpdateDealPayload {
+    name?: string;
+    amount?: number;
+    stage?: string;
+    assignedToId?: string | null;
+    contactId?: string | null;
+    companyId?: string | null;
+    closeDate?: string | null;
+}
+
+export async function updateDeal(
+    dealId: string,
+    data: UpdateDealPayload
+): Promise<Deal> {
+    const payload: Record<string, unknown> = {};
+    
+    if (data.name !== undefined) payload.name = data.name;
+    if (data.amount !== undefined) payload.amount = data.amount;
+    if (data.stage !== undefined) payload.stage = data.stage;
+    if (data.assignedToId !== undefined) payload.assignedToId = data.assignedToId;
+    if (data.contactId !== undefined) payload.contactId = data.contactId;
+    if (data.companyId !== undefined) payload.companyId = data.companyId;
+    if (data.closeDate !== undefined) payload.closeDate = data.closeDate;
+
+    const res = await api.patch<BackendDeal>(`/api/deals/update-deal/${dealId}`, payload);
+    return mapDeal(res.data);
+}

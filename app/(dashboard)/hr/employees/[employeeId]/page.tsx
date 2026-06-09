@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, notFound } from 'next/navigation';
 import { 
   ArrowLeft, 
   Calendar, 
@@ -57,16 +57,19 @@ export default function EmployeeDetailPage() {
   // Data Fetching
   const fetchEmployeeData = async () => {
     if (!employeeId) {
+      console.warn('[DEBUG] No employee ID provided in params');
       setError('No employee ID provided');
       setIsLoading(false);
       return;
     }
 
+    console.log('[DEBUG] fetchEmployeeData request:', employeeId);
     try {
       setIsLoading(true);
       setError(null);
       
       const employeeData = await getEmployeeById(employeeId);
+      console.log('[DEBUG] fetchEmployeeData success:', employeeData);
       
       if (employeeData) {
         setEmployee({
@@ -133,17 +136,19 @@ export default function EmployeeDetailPage() {
       setSaveError(null);
       setSaveSuccess(false);
 
+      // STRICT: Only allow department, salary, joinDate
       const updateData: UpdateEmployeeData = {
-        name: editForm.name,
-        email: editForm.email,
         department: editForm.department,
-        role: editForm.role,
-        salary: editForm.salary,
-        joinDate: editForm.joinDate,
-        status: editForm.status
+        salary: editForm.salary !== undefined ? Number(editForm.salary) : undefined,
+        joinDate: editForm.joinDate
       };
       
+      console.log('[DEBUG] handleSaveEdit - employee.id:', employeeId);
+      console.log('[DEBUG] handleSaveEdit - payload:', updateData);
+      
       const updatedEmployee = await updateEmployee(employeeId, updateData);
+      console.log('[DEBUG] handleSaveEdit success:', updatedEmployee);
+      
       setEmployee(updatedEmployee);
       setSaveSuccess(true);
       
@@ -153,7 +158,7 @@ export default function EmployeeDetailPage() {
       }, 1500);
       
     } catch (err: any) {
-      console.error('Error updating employee:', err);
+      console.error('[DEBUG] handleSaveEdit error:', err);
       setSaveError(err.message || 'Failed to update employee.');
     } finally {
       setIsSaving(false);
@@ -268,6 +273,10 @@ export default function EmployeeDetailPage() {
   }
 
   if (error || !employee) {
+    if (!isLoading && !employee && !error) {
+      notFound();
+      return null;
+    }
     return (
       <div className="min-h-screen bg-gray-50 p-4">
         <div className="max-w-md mx-auto bg-white rounded-2xl border border-gray-200 p-8 text-center shadow-sm">
@@ -545,19 +554,40 @@ export default function EmployeeDetailPage() {
               </button>
             </div>
 
-            <div className="overflow-y-auto flex-1">
-              <div className="p-6 sm:p-8">
-                {saveSuccess && (
-                  <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                    <p className="text-sm font-bold text-emerald-800">Employee updated successfully!</p>
-                  </div>
-                )}
+            <div className="p-8">
+              {saveSuccess && (
+                <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  <p className="text-sm font-bold text-emerald-800">Employee updated successfully!</p>
+                </div>
+              )}
 
-                {saveError && (
-                  <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm font-medium text-red-800">{saveError}</p>
+              {saveError && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-sm font-medium text-red-800">{saveError}</p>
+                </div>
+              )}
+
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 gap-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-400 mb-2">Full Name (Read-only)</label>
+                    <input 
+                      type="text" 
+                      value={editForm.name || ''}
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-400 mb-2">Email Address (Read-only)</label>
+                    <input 
+                      type="email" 
+                      value={editForm.email || ''}
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
+                    />
                   </div>
                 )}
 
@@ -584,30 +614,14 @@ export default function EmployeeDetailPage() {
                       />
                     </div>
                   </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
-                      <select 
-                        value={editForm.department || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, department: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                      >
-                        {DEPARTMENTS.map(dept => (
-                          <option key={dept} value={dept}>{dept}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Role</label>
-                      <input 
-                        type="text" 
-                        value={editForm.role || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, role: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
-                        placeholder="Enter role"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-400 mb-2">Role (Read-only)</label>
+                    <input 
+                      type="text" 
+                      value={editForm.role || ''}
+                      disabled
+                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
@@ -629,25 +643,22 @@ export default function EmployeeDetailPage() {
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">Join Date</label>
                       <input 
-                        type="date" 
-                        value={editForm.joinDate || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, joinDate: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
+                        type="number" 
+                        value={editForm.salary || ''}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
+                        className="w-full pl-10 pr-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
-                    <select 
-                      value={editForm.status || 'ACTIVE'}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value as any }))}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl text-gray-900 text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
-                    >
-                      <option value="ACTIVE">Active</option>
-                      <option value="INACTIVE">Inactive</option>
-                      <option value="ON_LEAVE">On Leave</option>
-                    </select>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Join Date</label>
+                    <input 
+                      type="date" 
+                      value={editForm.joinDate || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, joinDate: e.target.value }))}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
+                    />
                   </div>
                 </div>
               </div>
