@@ -4,6 +4,7 @@
 import { ActivitiesTable } from "@/components/activities/ActivitiesUI";
 import { useActivities } from "@/hooks/useActivities";
 import { PER_PAGE } from "@/types/activities";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 
 export default function ActivitiesPage() {
     const {
@@ -14,16 +15,19 @@ export default function ActivitiesPage() {
         loading,
         error,
         openMenu,
+        confirmDelete,
         stats,
         overdue,
         breakdown,
         dateRange,
         setPage,
         setOpenMenu,
+        setConfirmDelete,
         handleFiltersChange,
         handleTabChange,
         handleNewActivity,
         handleAction,
+        executeDelete,
         retry,
     } = useActivities();
 
@@ -42,24 +46,36 @@ export default function ActivitiesPage() {
     }
 
     return (
-        <ActivitiesTable
-            activities={activities}
-            total={total}
-            page={page}
-            perPage={PER_PAGE}
-            filters={filters}
-            loading={loading}
-            openMenu={openMenu}
-            stats={stats}
-            overdue={overdue}
-            breakdown={breakdown}
-            dateRange={dateRange}
-            onPageChange={setPage}
-            onFiltersChange={handleFiltersChange}
-            onTabChange={handleTabChange}
-            onNewActivity={handleNewActivity}
-            onAction={handleAction}
-            setOpenMenu={setOpenMenu}
-        />
+        <>
+            <ActivitiesTable
+                activities={activities}
+                total={total}
+                page={page}
+                perPage={PER_PAGE}
+                filters={filters}
+                loading={loading}
+                openMenu={openMenu}
+                stats={stats}
+                overdue={overdue}
+                breakdown={breakdown}
+                dateRange={dateRange}
+                onPageChange={setPage}
+                onFiltersChange={handleFiltersChange}
+                onTabChange={handleTabChange}
+                onNewActivity={handleNewActivity}
+                onAction={handleAction}
+                setOpenMenu={setOpenMenu}
+            />
+
+            <ConfirmationModal
+                isOpen={confirmDelete !== null}
+                title="Delete Activity"
+                message={`Are you sure you want to delete activity "${confirmDelete?.title}"?`}
+                variant="danger"
+                confirmText="Delete"
+                onConfirm={executeDelete}
+                onCancel={() => setConfirmDelete(null)}
+            />
+        </>
     );
 }

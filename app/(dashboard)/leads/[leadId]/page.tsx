@@ -17,6 +17,8 @@ import {
 import { Lead } from "@/types/leads";
 import {convertLeadToDeal } from "@/lib/api/leadsApi";
 import api from "@/lib/api/api";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
+import { toast } from "react-toastify";
 
 // ── Fetch a single lead by ID ─────────────────────────────────────────────────
 // The backend has GET /leads/get-lead/:leadId per Swagger.
@@ -58,6 +60,7 @@ export default function LeadDetailPage() {
     // Convert-to-deal state
     const [converting, setConverting] = useState(false);
     const [convertError, setConvertError] = useState<string | null>(null);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
     // ── Load lead ─────────────────────────────────────────────────────────────
     useEffect(() => {
@@ -73,12 +76,13 @@ export default function LeadDetailPage() {
     }, [leadId]);
 
     // ── Convert to deal ───────────────────────────────────────────────────────
-    const handleConvert = async () => {
+    const handleConvert = () => {
         if (!leadId || converting || lead?.status === "CLOSED") return;
-        
-        const confirmed = window.confirm(`Convert lead "${lead?.name}" to a deal?`);
-        if (!confirmed) return;
+        setIsConfirmModalOpen(true);
+    };
 
+    const executeConvert = async () => {
+        setIsConfirmModalOpen(false);
         setConverting(true);
         setConvertError(null);
         try {
@@ -94,6 +98,7 @@ export default function LeadDetailPage() {
                 (res.deal?.dealId ?? res.deal?.id) ??
                 (res.dealId ?? res.id);
             if (dealId) {
+                toast.success("Lead converted to deal successfully");
                 router.push(`/deals/${dealId}`);
             } else {
                 // Fallback: go to deals list if no ID returned
@@ -105,6 +110,7 @@ export default function LeadDetailPage() {
                 err?.response?.data?.message ??
                 (err instanceof Error ? err.message : "Failed to convert lead.");
             setConvertError(msg);
+            toast.error(msg);
         } finally {
             setConverting(false);
         }
@@ -305,6 +311,15 @@ export default function LeadDetailPage() {
                     </div>
                 </div>
             )}
+
+            <ConfirmationModal
+                isOpen={isConfirmModalOpen}
+                title="Convert Lead"
+                message={`Convert lead "${lead.name}" to a deal?`}
+                confirmText="Convert"
+                onConfirm={executeConvert}
+                onCancel={() => setIsConfirmModalOpen(false)}
+            />
         </div>
     );
 }

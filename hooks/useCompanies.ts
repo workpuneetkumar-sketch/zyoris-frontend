@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "react-toastify";
 import {
     Company,
     CompaniesFilters,
@@ -20,6 +21,7 @@ export function useCompanies() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
     // Detail panel state
     const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
@@ -82,13 +84,21 @@ export function useCompanies() {
     }
 
     async function handleDelete(id: string, name: string) {
-        if (!window.confirm(`Delete company "${name}"?`)) return;
+        setConfirmDelete({ id, name });
+    }
+
+    async function executeDelete() {
+        if (!confirmDelete) return;
+        const { id, name } = confirmDelete;
+        setConfirmDelete(null);
         try {
             await deleteCompany(id);
             if (selectedCompany?.id === id) setSelectedCompany(null);
             loadCompanies();
-        } catch (err) {
+            toast.success(`Company "${name}" deleted successfully`);
+        } catch (err: any) {
             console.error("Delete company error:", err);
+            toast.error(err.message || "Failed to delete company.");
         }
     }
 
@@ -101,15 +111,18 @@ export function useCompanies() {
         loading,
         error,
         openMenu,
+        confirmDelete,
         selectedCompany,
         companyContacts,
         contactsLoading,
         contactsError,
         setPage,
         setOpenMenu,
+        setConfirmDelete,
         handleFiltersChange,
         handleSelectCompany,
         handleDelete,
+        executeDelete,
         retry: loadCompanies,
         reload: loadCompanies,
     };
