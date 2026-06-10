@@ -53,6 +53,85 @@ interface TeamMember {
   role: string;
 }
 
+function makeDateMonthsAgo(months: number): string {
+  const d = new Date();
+  d.setMonth(d.getMonth() - months);
+  return d.toISOString().split("T")[0];
+}
+
+function isForecastPointsEmpty(points: ForecastPoint[] | undefined): boolean {
+  return !points?.length || points.every((p) => !p.value);
+}
+
+function isCEODataEmpty(data: CeoDashboardData | null | undefined): boolean {
+  if (!data) return true;
+  const hist = data.revenueForecast?.historical ?? [];
+  const fore = data.revenueForecast?.forecast ?? [];
+  const forecastEmpty = isForecastPointsEmpty(hist) && isForecastPointsEmpty(fore);
+  const marginEmpty = !data.riskIndicators?.marginPct;
+  const kpiEmpty =
+    !data.kpis?.totalRevenue &&
+    (data.kpis?.marketingRoi == null || data.kpis.marketingRoi === 0);
+  return forecastEmpty && marginEmpty && kpiEmpty;
+}
+
+const CEO_MOCK_DATA: CeoDashboardData = {
+  revenueForecast: {
+    historical: [6, 5, 4, 3, 2, 1].map((m) => ({
+      date: makeDateMonthsAgo(m),
+      value: 180000 + (6 - m) * 22000,
+    })),
+    forecast: [1, 2, 3].map((m) => ({
+      date: makeDateMonthsAgo(-m),
+      value: 310000 + m * 18000,
+    })),
+    stats: { trend: "upward", slope: 18450.75, intercept: 172000 },
+  },
+  riskIndicators: { demandTrend: "increasing", marginPct: 0.38 },
+  kpis: { totalRevenue: 2840000, margin: 1079200, marketingRoi: 3.24 },
+};
+
+const CEO_MOCK_RECOMMENDATIONS: Recommendation[] = [
+  {
+    id: "mock-1",
+    title: "Expand enterprise segment",
+    description: "Pipeline velocity in enterprise accounts is 2.3x higher than SMB. Reallocate 15% of sales capacity.",
+    confidence: 0.91,
+    impact: "+$420K projected ARR",
+    priority: "high",
+  },
+  {
+    id: "mock-2",
+    title: "Optimize marketing spend mix",
+    description: "Paid search ROI outperforms display by 1.8x. Shift 20% of Q3 budget to high-intent channels.",
+    confidence: 0.87,
+    impact: "+0.6x blended ROI",
+    priority: "med",
+  },
+  {
+    id: "mock-3",
+    title: "Reduce inventory carrying costs",
+    description: "Slow-moving SKUs tie up $180K in working capital. Consider bundle promotions for top 5 laggards.",
+    confidence: 0.82,
+    impact: "-12% carrying cost",
+    priority: "low",
+  },
+];
+
+const CEO_MOCK_TEAM: TeamMember[] = [
+  { id: "mock-t1", name: "Sarah Chen", email: "sarah.chen@zyoris.com", role: "CFO" },
+  { id: "mock-t2", name: "Marcus Rivera", email: "marcus.rivera@zyoris.com", role: "SALES_HEAD" },
+  { id: "mock-t3", name: "Priya Patel", email: "priya.patel@zyoris.com", role: "OPERATIONS_HEAD" },
+];
+
+function DemoDataBadge() {
+  return (
+    <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-md">
+      Demo Data
+    </span>
+  );
+}
+
 export default function CeoDashboardPage() {
   const { user, token } = useAuth();
   const router = useRouter();
@@ -113,13 +192,20 @@ export default function CeoDashboardPage() {
     loadData();
   }, [token]);
 
+  const usingDemoData = isCEODataEmpty(dashboardData);
+  const finalDashboard = usingDemoData ? CEO_MOCK_DATA : dashboardData!;
+  const finalRecommendations =
+    usingDemoData && recommendations.length === 0 ? CEO_MOCK_RECOMMENDATIONS : recommendations;
+  const finalTeamMembers =
+    usingDemoData && teamMembers.length === 0 ? CEO_MOCK_TEAM : teamMembers;
+
   // Combine historical and forecast for the chart
   const chartData = useMemo(() => {
-    if (!dashboardData?.revenueForecast) return [];
-    const hist = (dashboardData.revenueForecast.historical || []).map(p => ({ ...p, type: 'historical' as const }));
-    const fore = (dashboardData.revenueForecast.forecast || []).map(p => ({ ...p, type: 'forecast' as const }));
+    if (!finalDashboard?.revenueForecast) return [];
+    const hist = (finalDashboard.revenueForecast.historical || []).map(p => ({ ...p, type: 'historical' as const }));
+    const fore = (finalDashboard.revenueForecast.forecast || []).map(p => ({ ...p, type: 'forecast' as const }));
     return [...hist, ...fore];
-  }, [dashboardData]);
+  }, [finalDashboard]);
 
   if (!user) return null;
 
@@ -157,9 +243,9 @@ export default function CeoDashboardPage() {
     );
   }
 
-  const kpis = dashboardData?.kpis;
-  const risk = dashboardData?.riskIndicators;
-  const stats = dashboardData?.revenueForecast?.stats;
+  const kpis = finalDashboard?.kpis;
+  const risk = finalDashboard?.riskIndicators;
+  const stats = finalDashboard?.revenueForecast?.stats;
   const isUpward = stats?.trend === "upward" || stats?.trend === "increasing";
 
   return (
@@ -167,7 +253,10 @@ export default function CeoDashboardPage() {
       {/* ── Top Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CEO Strategic Console</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">CEO Strategic Console</h1>
+            {usingDemoData && <DemoDataBadge />}
+          </div>
           <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
             <Zap size={14} className="text-amber-500 fill-amber-500" />
             Executive view: Core financials, prediction forecast, organization health, and strategic recommendations.
@@ -269,9 +358,9 @@ export default function CeoDashboardPage() {
                   dot={false}
                   activeDot={{ r: 6 }}
                 />
-                {dashboardData?.revenueForecast?.historical && dashboardData.revenueForecast.historical.length > 0 && (
+                {finalDashboard?.revenueForecast?.historical && finalDashboard.revenueForecast.historical.length > 0 && (
                   <ReferenceLine
-                    x={dashboardData.revenueForecast.historical[dashboardData.revenueForecast.historical.length - 1]?.date}
+                    x={finalDashboard.revenueForecast.historical[finalDashboard.revenueForecast.historical.length - 1]?.date}
                     stroke="#94a3b8"
                     strokeDasharray="4 4"
                     label={{ value: 'Forecast Start', fill: '#64748b', fontSize: 10, position: 'top' }}
@@ -304,8 +393,8 @@ export default function CeoDashboardPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-gray-50 mt-2 pr-1">
-            {recommendations.length > 0 ? (
-              recommendations.map((rec, idx) => (
+            {finalRecommendations.length > 0 ? (
+              finalRecommendations.map((rec, idx) => (
                 <div key={rec.id || idx} className="py-4 hover:bg-slate-50/50 px-2 rounded-2xl transition-colors group">
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-1">
@@ -348,13 +437,13 @@ export default function CeoDashboardPage() {
               </div>
             </div>
             <div className="px-2.5 py-1 bg-violet-50 text-violet-700 text-[10px] font-bold rounded-lg border border-violet-100">
-              {teamMembers.length} Members
+              {finalTeamMembers.length} Members
             </div>
           </div>
           <div className="flex-1 overflow-y-auto mt-2 pr-1">
-            {teamMembers.length > 0 ? (
+            {finalTeamMembers.length > 0 ? (
               <div className="divide-y divide-gray-50">
-                {teamMembers.map((member) => (
+                {finalTeamMembers.map((member) => (
                   <div key={member.id} className="py-3.5 flex items-center justify-between group hover:bg-slate-50/50 px-2 rounded-2xl transition-all">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full bg-violet-100 text-violet-700 flex items-center justify-center font-bold text-sm border border-violet-200 uppercase">

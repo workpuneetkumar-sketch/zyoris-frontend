@@ -36,6 +36,53 @@ interface SalesDashboardResponse {
   conversionScores: ConversionScore[];
 }
 
+function isSalesDataEmpty(data: SalesDashboardResponse | null | undefined): boolean {
+  if (!data) return true;
+  const scores = data.conversionScores ?? [];
+  const scoresEmpty = scores.length === 0;
+  const qualityEmpty = !data.pipelineQualityScore;
+  return scoresEmpty && qualityEmpty;
+}
+
+const SALES_MOCK_DATA: SalesDashboardResponse = {
+  pipelineQualityScore: 0.74,
+  conversionScores: [
+    { dealId: "mock-d1", externalId: "OPP-2401", name: "Acme Corp Enterprise", stage: "NEGOTIATION", amount: 185000, conversionProbability: 0.82 },
+    { dealId: "mock-d2", externalId: "OPP-2402", name: "NovaTech Platform", stage: "PROPOSAL", amount: 92000, conversionProbability: 0.61 },
+    { dealId: "mock-d3", externalId: "OPP-2403", name: "Greenfield Logistics", stage: "QUALIFIED", amount: 64000, conversionProbability: 0.48 },
+    { dealId: "mock-d4", externalId: "OPP-2404", name: "Summit Health", stage: "WON", amount: 210000, conversionProbability: 0.95 },
+    { dealId: "mock-d5", externalId: "OPP-2405", name: "Pioneer Retail", stage: "DISCOVERY", amount: 38000, conversionProbability: 0.22 },
+    { dealId: "mock-d6", externalId: "OPP-2406", name: "Atlas Manufacturing", stage: "LOST", amount: 55000, conversionProbability: 0.08 },
+  ],
+};
+
+const SALES_MOCK_LEADS: Lead[] = [
+  { id: "mock-l1", status: "NEW" },
+  { id: "mock-l2", status: "NEW" },
+  { id: "mock-l3", status: "CONTACTED" },
+  { id: "mock-l4", status: "CONTACTED" },
+  { id: "mock-l5", status: "QUALIFIED" },
+  { id: "mock-l6", status: "QUALIFIED" },
+  { id: "mock-l7", status: "CLOSED" },
+];
+
+const SALES_MOCK_DEALS: Deal[] = [
+  { dealId: "mock-d1", stage: "NEGOTIATION" },
+  { dealId: "mock-d2", stage: "PROPOSAL" },
+  { dealId: "mock-d3", stage: "PROPOSAL" },
+  { dealId: "mock-d4", stage: "WON" },
+  { dealId: "mock-d5", stage: "DISCOVERY" },
+  { dealId: "mock-d6", stage: "LOST" },
+];
+
+function DemoDataBadge() {
+  return (
+    <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-md">
+      Demo Data
+    </span>
+  );
+}
+
 export default function SalesDashboardPage() {
   const { user, token } = useAuth();
   const router = useRouter();
@@ -97,15 +144,20 @@ export default function SalesDashboardPage() {
     loadData();
   }, [token]);
 
+  const usingDemoData = isSalesDataEmpty(salesData);
+  const finalSalesData = usingDemoData ? SALES_MOCK_DATA : salesData;
+  const finalLeads = usingDemoData && leads.length === 0 ? SALES_MOCK_LEADS : leads;
+  const finalDeals = usingDemoData && deals.length === 0 ? SALES_MOCK_DEALS : deals;
+
   // Compute Pipeline Statistics
   const pipelineStats = useMemo(() => {
-    const totalLeads = leads.length;
-    const qualifiedLeads = leads.filter(l => l.status === "QUALIFIED").length;
-    const convertedLeads = leads.filter(l => l.status === "CLOSED").length;
+    const totalLeads = finalLeads.length;
+    const qualifiedLeads = finalLeads.filter(l => l.status === "QUALIFIED").length;
+    const convertedLeads = finalLeads.filter(l => l.status === "CLOSED").length;
     
     // Active vs Closed deals
-    const activeDeals = deals.filter(d => d.stage !== "WON" && d.stage !== "LOST").length;
-    const closedDeals = deals.filter(d => d.stage === "WON" || d.stage === "LOST").length;
+    const activeDeals = finalDeals.filter(d => d.stage !== "WON" && d.stage !== "LOST").length;
+    const closedDeals = finalDeals.filter(d => d.stage === "WON" || d.stage === "LOST").length;
 
     return {
       totalLeads,
@@ -114,15 +166,15 @@ export default function SalesDashboardPage() {
       activeDeals,
       closedDeals
     };
-  }, [leads, deals]);
+  }, [finalLeads, finalDeals]);
 
   // Compute Funnel Stage counts
   const funnelStages = useMemo(() => {
-    const newLeads = leads.filter(l => l.status === "NEW").length;
-    const contactedLeads = leads.filter(l => l.status === "CONTACTED").length;
-    const qualifiedLeads = leads.filter(l => l.status === "QUALIFIED").length;
-    const proposalDeals = deals.filter(d => d.stage === "PROPOSAL" || d.stage === "NEGOTIATION").length;
-    const convertedDeals = deals.filter(d => d.stage === "WON").length;
+    const newLeads = finalLeads.filter(l => l.status === "NEW").length;
+    const contactedLeads = finalLeads.filter(l => l.status === "CONTACTED").length;
+    const qualifiedLeads = finalLeads.filter(l => l.status === "QUALIFIED").length;
+    const proposalDeals = finalDeals.filter(d => d.stage === "PROPOSAL" || d.stage === "NEGOTIATION").length;
+    const convertedDeals = finalDeals.filter(d => d.stage === "WON").length;
 
     const maxVal = Math.max(newLeads, contactedLeads, qualifiedLeads, proposalDeals, convertedDeals, 1);
 
@@ -133,7 +185,7 @@ export default function SalesDashboardPage() {
       { name: "Proposals (Negotiation)", count: proposalDeals, percent: Math.round((proposalDeals / maxVal) * 100), color: "bg-pink-600" },
       { name: "Converted Deals (Won)", count: convertedDeals, percent: Math.round((convertedDeals / maxVal) * 100), color: "bg-emerald-600" },
     ];
-  }, [leads, deals]);
+  }, [finalLeads, finalDeals]);
 
   if (!user) return null;
 
@@ -151,7 +203,7 @@ export default function SalesDashboardPage() {
     );
   }
 
-  if (error || !salesData) {
+  if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
         <AlertCircle size={48} className="text-red-500 mb-4" />
@@ -167,8 +219,8 @@ export default function SalesDashboardPage() {
     );
   }
 
-  const scores = salesData.conversionScores || [];
-  const avgScore = salesData.pipelineQualityScore || 
+  const scores = finalSalesData?.conversionScores || [];
+  const avgScore = finalSalesData?.pipelineQualityScore ||
     (scores.length === 0 ? 0 : scores.reduce((s, d) => s + d.conversionProbability, 0) / scores.length);
 
   return (
@@ -176,7 +228,10 @@ export default function SalesDashboardPage() {
       {/* ── Top Header ── */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Sales Pipeline Dashboard</h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Sales Pipeline Dashboard</h1>
+            {usingDemoData && <DemoDataBadge />}
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             Analyze conversion rates, deal quality indexes, and lead pipeline volume.
           </p>

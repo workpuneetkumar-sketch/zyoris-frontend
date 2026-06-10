@@ -29,6 +29,38 @@ interface OpsResponse {
   inventoryRiskAlerts: InventoryRisk[];
 }
 
+function isOperationsDataEmpty(data: OpsResponse | null | undefined): boolean {
+  if (!data) return true;
+  const alertsEmpty = !data.inventoryRiskAlerts?.length;
+  const forecastEmpty = !data.demandForecast;
+  return alertsEmpty && forecastEmpty;
+}
+
+const OPERATIONS_MOCK_DATA: OpsResponse = {
+  demandForecast: "increasing",
+  inventoryRiskAlerts: [
+    { sku: "SKU-1042", name: "Industrial Valve Assembly", quantity: 42, safetyStock: 80, coverageRatio: 0.53, risk: "HIGH" },
+    { sku: "SKU-2087", name: "Precision Bearing Kit", quantity: 156, safetyStock: 120, coverageRatio: 1.30, risk: "LOW" },
+    { sku: "SKU-3156", name: "Hydraulic Pump Module", quantity: 28, safetyStock: 50, coverageRatio: 0.56, risk: "HIGH" },
+    { sku: "SKU-4021", name: "Control Panel Enclosure", quantity: 67, safetyStock: 60, coverageRatio: 1.12, risk: "MEDIUM" },
+    { sku: "SKU-5093", name: "Servo Motor 2.4kW", quantity: 19, safetyStock: 35, coverageRatio: 0.54, risk: "HIGH" },
+  ],
+};
+
+const OPERATIONS_MOCK_SUGGESTIONS = [
+  "Reallocate 20% production capacity from SKU-2087 to SKU-1042 to reduce stockout risk.",
+  "Trigger expedited PO for hydraulic pump modules — lead time exceeds coverage window.",
+  "Bundle slow-moving enclosures with high-velocity valve assemblies to accelerate turnover.",
+];
+
+function DemoDataBadge() {
+  return (
+    <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-md">
+      Demo Data
+    </span>
+  );
+}
+
 function riskBadgeClasses(risk: InventoryRisk["risk"]) {
   switch (risk) {
     case "HIGH":
@@ -70,6 +102,7 @@ export default function OperationsDashboardPage() {
   const router = useRouter();
 
   const [ops, setOps] = useState<OpsResponse | null>(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -88,6 +121,8 @@ export default function OperationsDashboardPage() {
         setOps(res.data);
       } catch {
         // ignore
+      } finally {
+        setDataLoaded(true);
       }
     }
     load();
@@ -95,7 +130,11 @@ export default function OperationsDashboardPage() {
 
   if (!user) return null;
 
-  const alerts = ops?.inventoryRiskAlerts ?? [];
+  const usingDemoData = dataLoaded && isOperationsDataEmpty(ops);
+  const finalOps = usingDemoData
+    ? OPERATIONS_MOCK_DATA
+    : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [] });
+  const alerts = finalOps.inventoryRiskAlerts ?? [];
   const highRiskCount = alerts.filter((a) => a.risk === "HIGH").length;
 
   return (
@@ -103,9 +142,12 @@ export default function OperationsDashboardPage() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-            Operations · Demand &amp; Inventory
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+              Operations · Demand &amp; Inventory
+            </h1>
+            {usingDemoData && <DemoDataBadge />}
+          </div>
           <p className="text-sm text-gray-500 mt-1">
             Align production, inventory, and demand using unified telemetry.
           </p>
@@ -130,7 +172,7 @@ export default function OperationsDashboardPage() {
             </div>
           </div>
           <div className="text-2xl md:text-3xl font-extrabold tracking-tight">
-            <DemandForecastDisplay forecast={ops?.demandForecast} />
+            <DemandForecastDisplay forecast={finalOps.demandForecast} />
           </div>
           <p className="text-xs text-gray-400 mt-2 font-medium">
             Blend of bookings, revenue, and inventory signals.
@@ -176,6 +218,16 @@ export default function OperationsDashboardPage() {
           <p className="text-xs text-gray-400 mt-2 font-medium">
             Reallocate capacity from slow movers into high-velocity SKUs.
           </p>
+          {usingDemoData && (
+            <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+              {OPERATIONS_MOCK_SUGGESTIONS.map((suggestion) => (
+                <li key={suggestion} className="text-xs text-gray-500 leading-relaxed flex gap-2">
+                  <span className="text-violet-500 shrink-0">•</span>
+                  <span>{suggestion}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
 
