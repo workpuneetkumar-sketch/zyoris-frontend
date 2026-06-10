@@ -27,13 +27,14 @@ interface InventoryRisk {
 interface OpsResponse {
   demandForecast: string;
   inventoryRiskAlerts: InventoryRisk[];
+  optimizationSuggestions?: string[];
 }
 
 function isOperationsDataEmpty(data: OpsResponse | null | undefined): boolean {
   if (!data) return true;
-  const alertsEmpty = !data.inventoryRiskAlerts?.length;
-  const forecastEmpty = !data.demandForecast;
-  return alertsEmpty && forecastEmpty;
+  const hasAlerts = (data.inventoryRiskAlerts?.length ?? 0) > 0;
+  const hasSuggestions = (data.optimizationSuggestions?.length ?? 0) > 0;
+  return !hasAlerts && !hasSuggestions;
 }
 
 const OPERATIONS_MOCK_DATA: OpsResponse = {
@@ -45,13 +46,12 @@ const OPERATIONS_MOCK_DATA: OpsResponse = {
     { sku: "SKU-4021", name: "Control Panel Enclosure", quantity: 67, safetyStock: 60, coverageRatio: 1.12, risk: "MEDIUM" },
     { sku: "SKU-5093", name: "Servo Motor 2.4kW", quantity: 19, safetyStock: 35, coverageRatio: 0.54, risk: "HIGH" },
   ],
+  optimizationSuggestions: [
+    "Reallocate 20% production capacity from SKU-2087 to SKU-1042 to reduce stockout risk.",
+    "Trigger expedited PO for hydraulic pump modules — lead time exceeds coverage window.",
+    "Bundle slow-moving enclosures with high-velocity valve assemblies to accelerate turnover.",
+  ],
 };
-
-const OPERATIONS_MOCK_SUGGESTIONS = [
-  "Reallocate 20% production capacity from SKU-2087 to SKU-1042 to reduce stockout risk.",
-  "Trigger expedited PO for hydraulic pump modules — lead time exceeds coverage window.",
-  "Bundle slow-moving enclosures with high-velocity valve assemblies to accelerate turnover.",
-];
 
 function DemoDataBadge() {
   return (
@@ -133,8 +133,9 @@ export default function OperationsDashboardPage() {
   const usingDemoData = dataLoaded && isOperationsDataEmpty(ops);
   const finalOps = usingDemoData
     ? OPERATIONS_MOCK_DATA
-    : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [] });
+    : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [], optimizationSuggestions: [] });
   const alerts = finalOps.inventoryRiskAlerts ?? [];
+  const suggestions = finalOps.optimizationSuggestions ?? [];
   const highRiskCount = alerts.filter((a) => a.risk === "HIGH").length;
 
   return (
@@ -218,9 +219,9 @@ export default function OperationsDashboardPage() {
           <p className="text-xs text-gray-400 mt-2 font-medium">
             Reallocate capacity from slow movers into high-velocity SKUs.
           </p>
-          {usingDemoData && (
+          {suggestions.length > 0 && (
             <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
-              {OPERATIONS_MOCK_SUGGESTIONS.map((suggestion) => (
+              {suggestions.map((suggestion) => (
                 <li key={suggestion} className="text-xs text-gray-500 leading-relaxed flex gap-2">
                   <span className="text-violet-500 shrink-0">•</span>
                   <span>{suggestion}</span>
