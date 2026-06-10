@@ -37,6 +37,14 @@ import {
 
 const DEPARTMENTS = ['Engineering', 'HR', 'Sales', 'Marketing', 'Design', 'Finance', 'Operations'];
 
+// Fix: Use Omit to remove the conflicting status property, then add it back with correct type
+interface EditFormData extends Omit<UpdateEmployeeData, 'status'> {
+  name?: string;
+  email?: string;
+  role?: string;
+  status?: "ACTIVE" | "INACTIVE" | "ON_LEAVE";
+}
+
 export default function EmployeeDetailPage() {
   const params = useParams();
   const employeeId = params.employeeId as string;
@@ -52,7 +60,7 @@ export default function EmployeeDetailPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
-  const [editForm, setEditForm] = useState<UpdateEmployeeData>({});
+  const [editForm, setEditForm] = useState<EditFormData>({});
 
   // Data Fetching
   const fetchEmployeeData = async () => {
@@ -120,7 +128,7 @@ export default function EmployeeDetailPage() {
         role: employee.role || '',
         salary: employee.salary,
         joinDate: employee.joinDate?.split('T')[0] || new Date().toISOString().split('T')[0],
-        status: employee.status || 'ACTIVE'
+        status: (employee.status as "ACTIVE" | "INACTIVE" | "ON_LEAVE") || 'ACTIVE'
       });
       setSaveError(null);
       setSaveSuccess(false);
@@ -554,7 +562,7 @@ export default function EmployeeDetailPage() {
               </button>
             </div>
 
-            <div className="p-8">
+            <div className="p-6 sm:p-8 overflow-y-auto">
               {saveSuccess && (
                 <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -570,96 +578,90 @@ export default function EmployeeDetailPage() {
               )}
 
               <div className="space-y-5">
-                <div className="grid grid-cols-2 gap-5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
                   <div>
-                    <label className="block text-sm font-semibold text-slate-400 mb-2">Full Name (Read-only)</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
                     <input 
                       type="text" 
                       value={editForm.name || ''}
-                      disabled
-                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
+                      onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
+                      placeholder="Enter full name"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-semibold text-slate-400 mb-2">Email Address (Read-only)</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
                     <input 
                       type="email" 
                       value={editForm.email || ''}
-                      disabled
-                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
+                      onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
+                      className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
+                      placeholder="Enter email address"
                     />
                   </div>
-                )}
+                </div>
 
-                <div className="space-y-5">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Full Name</label>
-                      <input 
-                        type="text" 
-                        value={editForm.name || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
-                        placeholder="Enter full name"
-                      />
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Department</label>
+                  <select
+                    value={editForm.department || 'Engineering'}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, department: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                  >
+                    {DEPARTMENTS.map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Role</label>
+                  <input 
+                    type="text" 
+                    value={editForm.role || ''}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, role: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
+                    placeholder="Enter role"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Salary</label>
+                  <div className="relative">
+                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                      <IndianRupee className="h-4 w-4 text-gray-400" />
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
-                      <input 
-                        type="email" 
-                        value={editForm.email || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                        className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
-                        placeholder="Enter email address"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-400 mb-2">Role (Read-only)</label>
                     <input 
-                      type="text" 
-                      value={editForm.role || ''}
-                      disabled
-                      className="w-full px-4 py-3 border border-slate-100 bg-slate-50 text-slate-500 rounded-xl text-sm cursor-not-allowed" 
+                      type="number" 
+                      value={editForm.salary || ''}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
+                      placeholder="Enter salary"
                     />
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Salary</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                          <IndianRupee className="h-4 w-4 text-gray-400" />
-                        </div>
-                        <input 
-                          type="number" 
-                          value={editForm.salary || ''}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
-                          className="w-full pl-10 pr-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
-                          placeholder="Enter salary"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Join Date</label>
-                      <input 
-                        type="number" 
-                        value={editForm.salary || ''}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, salary: e.target.value ? Number(e.target.value) : undefined }))}
-                        className="w-full pl-10 pr-4 py-3 border border-slate-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
-                      />
-                    </div>
-                  </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Join Date</label>
+                  <input 
+                    type="date" 
+                    value={editForm.joinDate || ''}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, joinDate: e.target.value }))}
+                    className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all" 
+                  />
+                </div>
 
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-2">Join Date</label>
-                    <input 
-                      type="date" 
-                      value={editForm.joinDate || ''}
-                      onChange={(e) => setEditForm(prev => ({ ...prev, joinDate: e.target.value }))}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
-                    />
-                  </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">Status</label>
+                  <select
+                    value={editForm.status || 'ACTIVE'}
+                    onChange={(e) => setEditForm(prev => ({ ...prev, status: e.target.value as "ACTIVE" | "INACTIVE" | "ON_LEAVE" }))}
+                    className="w-full px-4 py-3 border border-gray-200 text-gray-900 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all"
+                  >
+                    <option value="ACTIVE">Active</option>
+                    <option value="INACTIVE">Inactive</option>
+                    <option value="ON_LEAVE">On Leave</option>
+                  </select>
                 </div>
               </div>
             </div>
