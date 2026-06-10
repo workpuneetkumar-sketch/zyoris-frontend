@@ -38,7 +38,10 @@ export interface LeaveRequest {
   type: "SICK" | "CASUAL" | "EARNED";
   reason: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
+  approvedBy?: string | null;
+  approvedAt?: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
 export interface HRStats {
@@ -139,15 +142,11 @@ export async function getEmployees(): Promise<Employee[]> {
     
     // Handle various response structures
     let data = res.data?.data || res.data;
-    
-    if (Array.isArray(data)) {
-      return data.map(normalizeEmployeeData);
-    }
-    
-    if (data?.employees && Array.isArray(data.employees)) {
+
+    if (Array.isArray(data)) return data.map(normalizeEmployeeData);
+    if (data?.employees && Array.isArray(data.employees))
       return data.employees.map(normalizeEmployeeData);
-    }
-    
+
     return [];
   } catch (error: any) {
     console.error('Error fetching employees:', error);
@@ -166,25 +165,12 @@ export async function getEmployeeById(id: string): Promise<Employee> {
     
     // Handle various response structures
     let data = res.data?.data || res.data?.employee || res.data;
-    
-    // If employee is wrapped in another object
-    if (data?.employee) {
-      data = data.employee;
-    }
-    
-    if (!data || typeof data !== 'object') {
-      throw new Error('Invalid employee data received');
-    }
-    
-    const result = normalizeEmployeeData(data);
-    return result;
+    if (data?.employee) data = data.employee;
+    if (!data || typeof data !== 'object') throw new Error('Invalid employee data received');
+    return normalizeEmployeeData(data);
   } catch (error: any) {
     console.error('Error fetching employee:', error);
-    
-    if (error.response?.status === 404) {
-      throw new Error('Employee not found');
-    }
-    
+    if (error.response?.status === 404) throw new Error('Employee not found');
     throw new Error(error.response?.data?.message || 'Failed to fetch employee');
   }
 }
@@ -204,24 +190,13 @@ export async function createEmployee(data: CreateEmployeeData): Promise<Employee
       salary: data.salary ?? 0,
       joinDate: data.joinDate,
     };
-
     const res = await api.post("/hr/employees/create", payload);
-
     let result = res.data?.data || res.data;
-
-    if (result?.employee) {
-      result = result.employee;
-    }
-
+    if (result?.employee) result = result.employee;
     return normalizeEmployeeData(result);
   } catch (error: any) {
     console.error("Error creating employee:", error);
-
-    if (error.response?.data?.message) {
-      throw new Error(error.response.data.message);
-    }
-
-    throw new Error("Failed to create employee");
+    throw new Error(error.response?.data?.message || "Failed to create employee");
   }
 }
 
@@ -298,7 +273,6 @@ export async function checkIn(data: {
       attendanceDate: data.attendanceDate || new Date().toISOString().split("T")[0],
       checkIn: data.checkIn || new Date().toISOString(),
     };
-    
     const res = await api.post("/hr/attendance/check-in", payload);
     return res.data?.data || res.data;
   } catch (error: any) {
@@ -321,7 +295,6 @@ export async function checkOut(data: {
       attendanceDate: data.attendanceDate || new Date().toISOString().split("T")[0],
       checkOut: data.checkOut || new Date().toISOString(),
     };
-    
     const res = await api.post("/hr/attendance/check-out", payload);
     return res.data?.data || res.data;
   } catch (error: any) {
@@ -340,13 +313,11 @@ export async function fetchAttendance(filters?: {
 }): Promise<Attendance[]> {
   try {
     const params: Record<string, string> = {};
-    
     if (filters?.employeeId) params.employeeId = filters.employeeId;
     if (filters?.startDate) params.startDate = filters.startDate;
     if (filters?.endDate) params.endDate = filters.endDate;
-    
+
     const res = await api.get("/hr/attendance/get-attendance", { params });
-    
     const data = res.data?.data || res.data;
     return Array.isArray(data) ? data : [];
   } catch (error: any) {
@@ -361,7 +332,6 @@ export async function fetchAttendance(filters?: {
 export async function fetchTodaySummary(): Promise<HRStats> {
   try {
     const res = await api.get("/hr/attendance/today-summary");
-    
     const data = res.data?.data || res.data;
     return data || {
       totalEmployees: 0,
@@ -369,18 +339,11 @@ export async function fetchTodaySummary(): Promise<HRStats> {
       checkedOut: 0,
       onTime: 0,
       late: 0,
-      absent: 0
+      absent: 0,
     };
   } catch (error: any) {
     console.error('Error fetching today summary:', error);
-    return {
-      totalEmployees: 0,
-      checkedIn: 0,
-      checkedOut: 0,
-      onTime: 0,
-      late: 0,
-      absent: 0
-    };
+    return { totalEmployees: 0, checkedIn: 0, checkedOut: 0, onTime: 0, late: 0, absent: 0 };
   }
 }
 
@@ -416,14 +379,12 @@ export async function fetchLeaves(filters?: {
 }): Promise<LeaveRequest[]> {
   try {
     const params: Record<string, string> = {};
-    
     if (filters?.employeeId) params.employeeId = filters.employeeId;
     if (filters?.status) params.status = filters.status;
     if (filters?.startDate) params.startDate = filters.startDate;
     if (filters?.endDate) params.endDate = filters.endDate;
-    
+
     const res = await api.get("/hr/leaves/get-leaves", { params });
-    
     const data = res.data?.data || res.data;
     return Array.isArray(data) ? data : [];
   } catch (error: any) {
@@ -433,22 +394,50 @@ export async function fetchLeaves(filters?: {
 }
 
 /**
- * Approve or reject a leave request
+ * Get a single leave request by ID
+ */
+export async function getLeaveById(id: string): Promise<LeaveRequest> {
+  try {
+    const res = await api.get(`/hr/leaves/get-leave/${id}`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error('Error fetching leave:', error);
+    throw new Error(error.response?.data?.message || 'Failed to fetch leave');
+  }
+}
+
+/**
+ * Approve a leave request
+ */
+export async function approveLeave(id: string): Promise<LeaveRequest> {
+  try {
+    const res = await api.patch(`/hr/leaves/approve/${id}`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error('Error approving leave:', error);
+    throw new Error(error.response?.data?.message || 'Failed to approve leave');
+  }
+}
+
+/**
+ * Reject a leave request
+ */
+export async function rejectLeave(id: string): Promise<LeaveRequest> {
+  try {
+    const res = await api.patch(`/hr/leaves/reject/${id}`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error('Error rejecting leave:', error);
+    throw new Error(error.response?.data?.message || 'Failed to reject leave');
+  }
+}
+
+/**
+ * @deprecated Use approveLeave / rejectLeave directly instead
  */
 export async function updateLeaveStatus(
   id: string,
   status: "APPROVED" | "REJECTED"
 ): Promise<LeaveRequest> {
-  try {
-    const res = await api.patch(`/hr/leaves/approve/${id}`, { status });
-    return res.data?.data || res.data;
-  } catch (error: any) {
-    console.error('Error updating leave status:', error);
-    throw new Error(error.response?.data?.message || 'Failed to update leave status');
-  }
+  return status === "APPROVED" ? approveLeave(id) : rejectLeave(id);
 }
-
-// ── Convenience Functions ─────────────────────────────────
-
-export const approveLeave = (id: string) => updateLeaveStatus(id, "APPROVED");
-export const rejectLeave = (id: string) => updateLeaveStatus(id, "REJECTED");

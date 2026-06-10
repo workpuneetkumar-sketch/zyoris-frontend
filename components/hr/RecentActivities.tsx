@@ -11,29 +11,29 @@ export default function RecentActivities() {
   ];
 
   return (
-    <div className="bg-white border border-slate-100 rounded-xl p-6 flex flex-col h-full shadow-sm">
-      <h2 className="text-base font-semibold text-slate-800 mb-6">Recent Activities</h2>
+    <div className="bg-white border border-slate-100 rounded-xl p-4 sm:p-6 flex flex-col h-full shadow-sm">
+      <h2 className="text-sm sm:text-base font-semibold text-slate-800 mb-4 sm:mb-6">Recent Activities</h2>
       
-      <div className="flex-1 flex flex-col gap-5 overflow-y-auto">
+      <div className="flex-1 flex flex-col gap-4 sm:gap-5 overflow-y-auto max-h-[300px] sm:max-h-none">
         {activities.map((activity, index) => (
-          <div key={index} className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <img src={activity.img} alt={activity.name} className="w-8 h-8 rounded-full bg-slate-100 object-cover" />
-              <div className="flex flex-col">
-                <span className="text-sm font-medium text-slate-800">{activity.name}</span>
-                <span className="text-xs text-slate-500">{activity.desc}</span>
+          <div key={index} className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+              <img src={activity.img} alt={activity.name} className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-slate-100 object-cover shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs sm:text-sm font-medium text-slate-800 truncate">{activity.name}</span>
+                <span className="text-[10px] sm:text-xs text-slate-500 truncate">{activity.desc}</span>
               </div>
             </div>
-            <span className="text-[11px] text-slate-400 mt-0.5">{activity.time}</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 whitespace-nowrap shrink-0">{activity.time}</span>
           </div>
         ))}
       </div>
 
-      <div className="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center cursor-pointer group">
-        <span className="text-sm font-medium text-blue-600 group-hover:text-blue-700 transition-colors">
+      <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-100 flex justify-between items-center cursor-pointer group">
+        <span className="text-xs sm:text-sm font-medium text-blue-600 group-hover:text-blue-700 transition-colors">
           View All Activities
         </span>
-        <ChevronRight className="w-4 h-4 text-blue-600 group-hover:text-blue-700 group-hover:translate-x-1 transition-all" />
+        <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 group-hover:text-blue-700 group-hover:translate-x-1 transition-all" />
       </div>
     </div>
   );

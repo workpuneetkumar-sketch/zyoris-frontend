@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
+
 export default function EmployeeDistribution() {
   const distributionData = [
     { label: 'Engineering', count: 96, percentage: 37.5, hex: '#3b82f6', colorClass: 'bg-blue-500' },
