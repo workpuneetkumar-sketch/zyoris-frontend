@@ -9,6 +9,7 @@ interface ConfirmationModalProps {
   confirmText?: string;
   cancelText?: string;
   variant?: "default" | "danger";
+  countdownSeconds?: number | null;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -20,6 +21,7 @@ export function ConfirmationModal({
   confirmText = "Confirm",
   cancelText = "Cancel",
   variant = "default",
+  countdownSeconds = null,
   onConfirm,
   onCancel,
 }: ConfirmationModalProps) {
@@ -47,6 +49,11 @@ export function ConfirmationModal({
         {/* Body */}
         <div className="p-6">
           <p className="text-sm text-gray-600">{message}</p>
+          {countdownSeconds != null && (
+            <p className="text-xs text-gray-400 mt-3 font-medium">
+              Automatic logout in {countdownSeconds}s
+            </p>
+          )}
         </div>
 
         {/* Footer */}
