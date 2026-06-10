@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { toast } from "react-toastify";
 import {
     Contact,
     ContactsFilters,
@@ -18,6 +19,7 @@ export function useContacts() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<{ id: string; name: string } | null>(null);
 
     // ── Fetch ─────────────────────────────────────────────────────────────────
     const loadContacts = useCallback(async () => {
@@ -45,12 +47,20 @@ export function useContacts() {
     }
 
     async function handleDelete(id: string, name: string) {
-        if (!window.confirm(`Delete contact "${name}"?`)) return;
+        setConfirmDelete({ id, name });
+    }
+
+    async function executeDelete() {
+        if (!confirmDelete) return;
+        const { id, name } = confirmDelete;
+        setConfirmDelete(null);
         try {
             await deleteContact(id);
             loadContacts();
-        } catch (err) {
+            toast.success(`Contact "${name}" deleted successfully`);
+        } catch (err: any) {
             console.error("Delete contact error:", err);
+            toast.error(err.message || "Failed to delete contact.");
         }
     }
 
@@ -63,10 +73,13 @@ export function useContacts() {
         loading,
         error,
         openMenu,
+        confirmDelete,
         setPage,
         setOpenMenu,
+        setConfirmDelete,
         handleFiltersChange,
         handleDelete,
+        executeDelete,
         retry: loadContacts,
         reload: loadContacts,
     };

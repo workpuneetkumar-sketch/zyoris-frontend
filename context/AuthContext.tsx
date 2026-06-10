@@ -9,6 +9,8 @@ import React, {
   useState,
   ReactNode,
 } from "react";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 import { useRouter } from "next/navigation";
 
@@ -186,6 +188,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{ user, token, login, register, logout, isLoading, error }}
     >
       {children}
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
     </AuthContext.Provider>
   );
 }

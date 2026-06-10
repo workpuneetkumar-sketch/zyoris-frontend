@@ -2,6 +2,7 @@
 
 import { ContactsUI } from "@/components/contacts/ContactsUI";
 import { useContacts } from "@/hooks/useContacts";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 
 export default function ContactsPage() {
     const {
@@ -13,10 +14,13 @@ export default function ContactsPage() {
         loading,
         error,
         openMenu,
+        confirmDelete,
         setPage,
         setOpenMenu,
+        setConfirmDelete,
         handleFiltersChange,
         handleDelete,
+        executeDelete,
         retry,
         reload,
     } = useContacts();
@@ -36,19 +40,31 @@ export default function ContactsPage() {
     }
 
     return (
-        <ContactsUI
-            contacts={contacts}
-            total={total}
-            page={page}
-            perPage={perPage}
-            filters={filters}
-            loading={loading}
-            openMenu={openMenu}
-            onPageChange={setPage}
-            onFiltersChange={handleFiltersChange}
-            onDelete={handleDelete}
-            onReload={reload}
-            setOpenMenu={setOpenMenu}
-        />
+        <>
+            <ContactsUI
+                contacts={contacts}
+                total={total}
+                page={page}
+                perPage={perPage}
+                filters={filters}
+                loading={loading}
+                openMenu={openMenu}
+                onPageChange={setPage}
+                onFiltersChange={handleFiltersChange}
+                onDelete={handleDelete}
+                onReload={reload}
+                setOpenMenu={setOpenMenu}
+            />
+
+            <ConfirmationModal
+                isOpen={confirmDelete !== null}
+                title="Delete Contact"
+                message={`Are you sure you want to delete contact "${confirmDelete?.name}"?`}
+                variant="danger"
+                confirmText="Delete"
+                onConfirm={executeDelete}
+                onCancel={() => setConfirmDelete(null)}
+            />
+        </>
     );
 }

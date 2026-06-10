@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { toast } from 'react-toastify';
 import { 
   Search, 
   Plus, 
@@ -21,6 +22,7 @@ import {
   Building2,
   Trash2
 } from 'lucide-react';
+import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
 import { 
   getEmployees, 
   createEmployee, 
@@ -66,6 +68,19 @@ export default function EmployeesPage() {
   const [editSuccess, setEditSuccess] = useState(false);
   const [editFormData, setEditFormData] = useState<UpdateEmployeeData>({});
   
+  // Confirmation Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
   // UI State
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('All Departments');
@@ -215,18 +230,25 @@ export default function EmployeesPage() {
   };
 
   // ─── Delete Employee Handler ───
-  const handleDeleteEmployee = async (id: string) => {
-    if (!window.confirm('Are you sure you want to delete this employee? This action cannot be undone.')) return;
-    
-    console.log('[DEBUG] handleDeleteEmployee - employee.id:', id);
-    try {
-      await deleteEmployee(id);
-      console.log('[DEBUG] handleDeleteEmployee success');
-      await fetchEmployees(); // Refresh the list
-    } catch (err: any) {
-      console.error('[DEBUG] handleDeleteEmployee error:', err);
-      alert(err.message || 'Failed to delete employee.');
-    }
+  const handleDeleteEmployee = async (id: string, name: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Employee",
+      message: `Are you sure you want to delete ${name}? This action cannot be undone.`,
+      onConfirm: async () => {
+        console.log('[DEBUG] handleDeleteEmployee - employee.id:', id);
+        try {
+          await deleteEmployee(id);
+          console.log('[DEBUG] handleDeleteEmployee success');
+          await fetchEmployees(); // Refresh the list
+          toast.success("Employee deleted successfully");
+        } catch (err: any) {
+          console.error('[DEBUG] handleDeleteEmployee error:', err);
+          toast.error(err.message || 'Failed to delete employee.');
+        }
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
     setOpenActionMenu(null);
   };
 
@@ -547,7 +569,7 @@ export default function EmployeesPage() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    handleDeleteEmployee(employee.id);
+                                    handleDeleteEmployee(employee.id, employee.name);
                                   }}
                                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
                                 >
@@ -908,6 +930,17 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      {/* ─── Confirmation Modal ─── */}
+      <ConfirmationModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        variant="danger"
+        confirmText="Delete"
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
