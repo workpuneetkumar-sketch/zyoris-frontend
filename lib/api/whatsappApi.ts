@@ -20,16 +20,27 @@ export interface WhatsAppConversation {
 }
 
 export interface SendWhatsAppPayload {
-    conversationId: string;
-    text: string;
+    to: string;
+    message: string;
+    conversationId?: string;
 }
 
 export async function fetchConversations(): Promise<WhatsAppConversation[]> {
-    const res = await api.get("/whatsapp/conversations");
+    const res = await api.get("/whatsapp/conversations", { baseURL: "" });
     return res.data;
 }
 
 export async function sendWhatsAppMessage(data: SendWhatsAppPayload): Promise<WhatsAppMessage> {
-    const res = await api.post("/whatsapp/send", data);
+    const res = await api.post("/whatsapp/send", data, { baseURL: "" });
+    return res.data;
+}
+
+export async function fetchConversationMessages(conversationId: string): Promise<WhatsAppMessage[]> {
+    const res = await api.get(`/whatsapp/conversations/${conversationId}/messages`, { baseURL: "" });
+    return res.data;
+}
+
+export async function triggerWhatsAppWebhook(payload: any): Promise<any> {
+    const res = await api.post("/whatsapp/webhook", payload, { baseURL: "" });
     return res.data;
 }
