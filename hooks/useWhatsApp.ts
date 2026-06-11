@@ -37,6 +37,13 @@ export function useWhatsApp() {
 
     useEffect(() => {
         loadConversations();
+
+        // Poll for new messages every 5 seconds
+        const interval = setInterval(() => {
+            loadConversations();
+        }, 5000);
+
+        return () => clearInterval(interval);
     }, [loadConversations]);
 
     const handleSendMessage = async (text: string) => {

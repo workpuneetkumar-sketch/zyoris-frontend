@@ -14,6 +14,9 @@ export interface WhatsAppConversation {
     unreadCount: number;
     messages: WhatsAppMessage[];
     updatedAt: string;
+    leadId?: string;
+    leadName?: string;
+    leadStatus?: string;
 }
 
 export interface SendWhatsAppPayload {
