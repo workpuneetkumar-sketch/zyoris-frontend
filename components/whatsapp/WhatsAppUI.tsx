@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Send, User, AlertTriangle, MessageCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Send, User, AlertTriangle, MessageCircle, Plus } from "lucide-react";
 import { WhatsAppConversation } from "@/lib/api/whatsappApi";
 
 interface WhatsAppUIProps {
@@ -38,6 +39,7 @@ export function WhatsAppUI({
 }: WhatsAppUIProps) {
     const [messageInput, setMessageInput] = useState("");
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const router = useRouter();
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -120,14 +122,35 @@ export function WhatsAppUI({
                     {selectedConversation ? (
                         <>
                             {/* Chat Header */}
-                            <div className="px-6 py-4 border-b border-gray-100 bg-white flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
-                                    <User size={20} />
+                            <div className="px-6 py-4 border-b border-gray-100 bg-white flex items-center justify-between gap-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                                        <User size={20} />
+                                    </div>
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="font-semibold text-gray-900 text-sm">{selectedConversation.contactName}</h3>
+                                            {selectedConversation.leadStatus && (
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                                    {selectedConversation.leadStatus}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-gray-400">
+                                            {selectedConversation.contactPhone}
+                                            {selectedConversation.leadName && ` • Lead: ${selectedConversation.leadName}`}
+                                        </p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="font-semibold text-gray-900 text-sm">{selectedConversation.contactName}</h3>
-                                    <p className="text-xs text-gray-400">{selectedConversation.contactPhone}</p>
-                                </div>
+                                {!selectedConversation.leadId && (
+                                    <button 
+                                        onClick={() => router.push(`/leads/new?phone=${encodeURIComponent(selectedConversation.contactPhone)}&name=${encodeURIComponent(selectedConversation.contactName)}`)}
+                                        className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                                    >
+                                        <Plus size={14} />
+                                        Create Lead
+                                    </button>
+                                )}
                             </div>
 
                             {/* Messages Area */}

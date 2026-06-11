@@ -5,6 +5,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         id: "mock_1",
         contactName: "Acme Corp (Sarah)",
         contactPhone: "+1 (555) 019-2834",
+        leadId: "lead_1",
+        leadName: "Acme Corp Opportunity",
+        leadStatus: "QUALIFIED",
         unreadCount: 3,
         updatedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
         messages: [
@@ -32,6 +35,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         id: "mock_3",
         contactName: "Michael Chang",
         contactPhone: "+1 (415) 555-0198",
+        leadId: "lead_3",
+        leadName: "Michael Chang Renewal",
+        leadStatus: "NEW",
         unreadCount: 1,
         updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
         messages: [

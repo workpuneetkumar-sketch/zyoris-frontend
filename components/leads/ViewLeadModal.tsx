@@ -1,6 +1,7 @@
 "use client";
 
 import { Lead } from "@/types/leads";
+import { getLeadTemperature } from "@/utils/leadTemperature";
 import { Mail, Phone, MapPin, Building2, Calendar, Tag, User, Briefcase, FileText } from "lucide-react";
 
 interface ViewLeadModalProps {
@@ -15,9 +16,14 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
 
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div>
-                        <h2 className="text-xl font-semibold text-gray-900">{lead.name}</h2>
-                        <p className="text-sm text-gray-500 mt-1">{lead.company || "No Company"}</p>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-xl font-semibold text-gray-900">{lead.name}</h2>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${getLeadTemperature(lead.score).style}`}>
+                                {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
+                            </span>
+                        </div>
+                        <p className="text-sm text-gray-500">{lead.company || "No Company"}</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -30,19 +36,37 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                 {/* Body */}
                 <div className="p-6 overflow-y-auto bg-gray-50/50 space-y-6 flex-1">
 
-                    {/* Status & Source */}
-                    <div className="flex gap-4">
-                        <div className="flex-1 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                    {/* Lead Score Card */}
+                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Lead Score</p>
+                        <div className="flex items-center gap-3 mb-3">
+                            <span className="text-2xl font-bold text-gray-900">{lead.score ?? 0}</span>
+                            <span className="text-sm text-gray-500">/100</span>
+                        </div>
+                        <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-500 ${getLeadTemperature(lead.score).progressColor}`}
+                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
+                            />
+                        </div>
+                        <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).conversionReadiness}
+                        </p>
+                    </div>
+
+                    {/* Status, Source & Created */}
+                    <div className="flex gap-4 flex-wrap">
+                        <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
                                 {lead.status || "NEW"}
                             </span>
                         </div>
-                        <div className="flex-1 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Source</p>
                             <span className="text-sm font-medium text-gray-700">{lead.source || "Unknown"}</span>
                         </div>
-                        <div className="flex-1 bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                        <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Created At</p>
                             <span className="text-sm font-medium text-gray-700">{lead.createdAt || "Unknown"}</span>
                         </div>

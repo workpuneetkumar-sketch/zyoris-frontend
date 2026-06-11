@@ -23,6 +23,7 @@ import {
     LeadsFilters,
     LeadStatus,
 } from "@/types/leads";
+import { getLeadTemperature } from "@/utils/leadTemperature";
 
 export interface LeadsTableProps {
     leads: Lead[];
@@ -218,74 +219,89 @@ export function LeadsTable({
                 <div className="overflow-x-auto  overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="border-b border-gray-100">
-                                {/* ✅ Score column removed */}
-                                {["Lead Name", "Company", "Source", "Owner", "Status", "Created At", "Actions"].map((h) => (
-                                    <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                                        {h}
-                                    </th>
+                    <tr className="border-b border-gray-100">
+                        {["Lead Name", "Company", "Temperature", "Score", "Owner", "Status", "Created At", "Actions"].map((h) => (
+                            <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                                {h}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {loading ? (
+                        Array.from({ length: perPage }).map((_, i) => (
+                            <tr key={i} className="border-b border-gray-50">
+                                {Array.from({ length: 8 }).map((_, j) => (
+                                    <td key={j} className="px-5 py-4">
+                                        <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
+                                    </td>
                                 ))}
                             </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                Array.from({ length: perPage }).map((_, i) => (
-                                    <tr key={i} className="border-b border-gray-50">
-                                        {Array.from({ length: 7 }).map((_, j) => (
-                                            <td key={j} className="px-5 py-4">
-                                                <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))
-                            ) : safeLeads.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
-                                        No leads found.
-                                    </td>
-                                </tr>
-                            ) : (
-                                safeLeads.map((lead) => (
-                                    <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                                        <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
-                                        <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
-                                        <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.source}</td>
+                        ))
+                    ) : safeLeads.length === 0 ? (
+                        <tr>
+                            <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
+                                No leads found.
+                            </td>
+                        </tr>
+                    ) : (
+                        safeLeads.map((lead) => {
+                            const tempInfo = getLeadTemperature(lead.score);
+                            return (
+                            <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
+                                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${tempInfo.style}`}>
+                                        {tempInfo.emoji} {tempInfo.label}
+                                    </span>
+                                </td>
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                            <div 
+                                                className={`h-full rounded-full ${tempInfo.progressColor}`}
+                                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
+                                            />
+                                        </div>
+                                        <span className="text-[12px] text-gray-600 font-medium">{lead.score ?? 0}/100</span>
+                                    </div>
+                                </td>
+                                {/* ✅ Owner — shows "NA" badge if unassigned */}
 
-                                        {/* ✅ Owner — shows "NA" badge if unassigned */}
-
-                                        <td className="px-5 py-3.5 whitespace-nowrap">
-                                            {lead.assignedTo ? (
-                                                <div className="flex items-center gap-2">
-                                                    <Avatar
-                                                        initials={
-                                                            lead.assignedTo.name
-                                                                .split(" ")
-                                                                .map((n) => n[0])
-                                                                .join("")
-                                                                .toUpperCase()
-                                                                .slice(0, 2)
-                                                        }
-                                                    />
-                                                    <span className="text-gray-700">
-                                                        {lead.assignedTo.name}
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
-                                                    NA
-                                                </span>
-                                            )}
-                                        </td>
-
-                                        <td className="px-5 py-3.5 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_STYLES[lead.status]}`}>
-                                                {lead.status}
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    {lead.assignedTo ? (
+                                        <div className="flex items-center gap-2">
+                                            <Avatar
+                                                initials={
+                                                    lead.assignedTo.name
+                                                        .split(" ")
+                                                        .map((n) => n[0])
+                                                        .join("")
+                                                        .toUpperCase()
+                                                        .slice(0, 2)
+                                                }
+                                            />
+                                            <span className="text-gray-700">
+                                                {lead.assignedTo.name}
                                             </span>
-                                        </td>
+                                        </div>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
+                                            NA
+                                        </span>
+                                    )}
+                                </td>
+
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_STYLES[lead.status]}`}>
+                                        {lead.status}
+                                    </span>
+                                </td>
 
 
 
-                                        <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
+                                <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
 
                                         {/*  Actions — overflow-visible so dropdown isn't clipped */}
                                         <td className="px-5 py-3.5 whitespace-nowrap">
@@ -312,8 +328,9 @@ export function LeadsTable({
                                             )}
                                         </td>
                                     </tr>
-                                ))
-                            )}
+                            );
+                        })
+                    )}
                         </tbody>
                     </table>
                 </div>

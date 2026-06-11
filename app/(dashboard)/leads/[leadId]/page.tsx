@@ -15,6 +15,7 @@ import {
     AlertCircle,
 } from "lucide-react";
 import { Lead } from "@/types/leads";
+import { getLeadTemperature } from "@/utils/leadTemperature";
 import {convertLeadToDeal } from "@/lib/api/leadsApi";
 import api from "@/lib/api/api";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -163,9 +164,14 @@ export default function LeadDetailPage() {
                     >
                         <ArrowLeft size={16} className="text-gray-600" />
                     </button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
-                        <p className="text-sm text-gray-400 mt-0.5">{lead.company || "No Company"}</p>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${getLeadTemperature(lead.score).style}`}>
+                                {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
+                            </span>
+                        </div>
+                        <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
                     </div>
                 </div>
 
@@ -196,6 +202,33 @@ export default function LeadDetailPage() {
                             {convertError}
                         </p>
                     )}
+                </div>
+            </div>
+
+            {/* Lead Score Card */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+                <div className="flex items-start justify-between flex-wrap gap-4">
+                    <div>
+                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Lead Score</p>
+                        <div className="flex items-center gap-3 mb-2">
+                            <span className="text-3xl font-bold text-gray-900">{lead.score ?? 0}</span>
+                            <span className="text-sm text-gray-500">/100</span>
+                        </div>
+                        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
+                            <div 
+                                className={`h-full rounded-full transition-all duration-500 ${getLeadTemperature(lead.score).progressColor}`}
+                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
+                            />
+                        </div>
+                        <p className="text-sm text-gray-600 flex items-center gap-1.5">
+                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).conversionReadiness}
+                        </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getLeadTemperature(lead.score).style}`}>
+                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
+                        </span>
+                    </div>
                 </div>
             </div>
 
