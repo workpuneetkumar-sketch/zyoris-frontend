@@ -2,7 +2,8 @@
 
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api/api";
-import { useEffect, useState } from "react";
+import { fetchTasks, Task } from "@/lib/api/tasksApi";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   TrendingUp,
@@ -13,6 +14,9 @@ import {
   Cog,
   Shield,
   Boxes,
+  ListTodo,
+  ClipboardList,
+  Sparkles,
 } from "lucide-react";
 
 interface InventoryRisk {
@@ -21,7 +25,7 @@ interface InventoryRisk {
   quantity: number;
   safetyStock: number;
   coverageRatio: number;
-  risk: "LOW" | "MEDIUM" | "HIGH";
+  risk?: "LOW" | "MEDIUM" | "HIGH";
 }
 
 interface OpsResponse {
@@ -97,11 +101,53 @@ function DemandForecastDisplay({ forecast }: { forecast?: string }) {
   );
 }
 
+function OverviewStatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: "red" | "amber" | "emerald" | "blue" | "slate";
+}) {
+  const accentClasses = {
+    red: "text-red-600",
+    amber: "text-amber-600",
+    emerald: "text-emerald-600",
+    blue: "text-blue-600",
+    slate: "text-gray-900",
+  };
+
+  return (
+    <div className="bg-gray-50/80 border border-gray-100 rounded-2xl p-4 md:p-5">
+      <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">{label}</p>
+      <p className={`text-2xl md:text-3xl font-extrabold tracking-tight ${accent ? accentClasses[accent] : "text-gray-900"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function aggregateTaskStats(tasks: Task[]) {
+  const pending = tasks.filter((t) => t.status === "TODO").length;
+  const inProgress = tasks.filter((t) => t.status === "IN_PROGRESS").length;
+  const completed = tasks.filter((t) => t.status === "DONE").length;
+
+  return {
+    total: tasks.length,
+    pending,
+    inProgress,
+    completed,
+  };
+}
+
 export default function OperationsDashboardPage() {
   const { user } = useAuth();
   const router = useRouter();
 
   const [ops, setOps] = useState<OpsResponse | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [demandTrendLabel, setDemandTrendLabel] = useState<string | null>(null);
   const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
@@ -117,8 +163,19 @@ export default function OperationsDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await api.get<OpsResponse>("/dashboard/operations");
-        setOps(res.data);
+        const [opsRes, tasksRes, trendsRes] = await Promise.all([
+          api.get<OpsResponse>("/dashboard/operations"),
+          fetchTasks().catch(() => ({ tasks: [], total: 0 })),
+          api.get("/analytics/demand/trends").catch(() => ({ data: null })),
+        ]);
+
+        setOps(opsRes.data);
+        setTasks(tasksRes.tasks ?? []);
+
+        const trend = trendsRes.data?.overallTrend;
+        if (typeof trend === "string" && trend.trim()) {
+          setDemandTrendLabel(trend);
+        }
       } catch {
         // ignore
       } finally {
@@ -128,19 +185,31 @@ export default function OperationsDashboardPage() {
     load();
   }, []);
 
-  if (!user) return null;
-
   const usingDemoData = dataLoaded && isOperationsDataEmpty(ops);
   const finalOps = usingDemoData
     ? OPERATIONS_MOCK_DATA
     : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [], optimizationSuggestions: [] });
+
   const alerts = finalOps.inventoryRiskAlerts ?? [];
   const suggestions = finalOps.optimizationSuggestions ?? [];
-  const highRiskCount = alerts.filter((a) => a.risk === "HIGH").length;
+  const hasRiskLevels = alerts.some((a) => a.risk);
+
+  const inventoryOverview = useMemo(() => {
+    return {
+      total: alerts.length,
+      high: alerts.filter((a) => a.risk === "HIGH").length,
+      medium: alerts.filter((a) => a.risk === "MEDIUM").length,
+      low: alerts.filter((a) => a.risk === "LOW").length,
+    };
+  }, [alerts]);
+
+  const taskStats = useMemo(() => aggregateTaskStats(tasks), [tasks]);
+
+  if (!user) return null;
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto p-1">
-      {/* Header */}
+      {/* 1. Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 flex-wrap">
@@ -161,7 +230,7 @@ export default function OperationsDashboardPage() {
         </div>
       </div>
 
-      {/* Summary cards */}
+      {/* 2. Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
         <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm hover:shadow-md transition-all group">
           <div className="flex justify-between items-start mb-4">
@@ -177,6 +246,11 @@ export default function OperationsDashboardPage() {
           </div>
           <p className="text-xs text-gray-400 mt-2 font-medium">
             Blend of bookings, revenue, and inventory signals.
+            {demandTrendLabel && (
+              <span className="block mt-1 text-gray-500">
+                Analytics trend: {demandTrendLabel.charAt(0).toUpperCase() + demandTrendLabel.slice(1)}
+              </span>
+            )}
           </p>
         </div>
 
@@ -191,11 +265,11 @@ export default function OperationsDashboardPage() {
           </div>
           <div className="flex items-baseline gap-2">
             <h4 className="text-3xl font-extrabold text-red-600 tracking-tight">
-              {alerts.length}
+              {inventoryOverview.total}
             </h4>
-            {highRiskCount > 0 && (
+            {inventoryOverview.high > 0 && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-red-50 text-red-600 border-red-100">
-                {highRiskCount} high risk
+                {inventoryOverview.high} high risk
               </span>
             )}
           </div>
@@ -219,20 +293,74 @@ export default function OperationsDashboardPage() {
           <p className="text-xs text-gray-400 mt-2 font-medium">
             Reallocate capacity from slow movers into high-velocity SKUs.
           </p>
-          {suggestions.length > 0 && (
-            <ul className="mt-4 space-y-2 border-t border-gray-100 pt-4">
-              {suggestions.map((suggestion) => (
-                <li key={suggestion} className="text-xs text-gray-500 leading-relaxed flex gap-2">
-                  <span className="text-violet-500 shrink-0">•</span>
-                  <span>{suggestion}</span>
-                </li>
-              ))}
-            </ul>
+        </div>
+      </div>
+
+      {/* 3. Inventory Overview */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Package size={18} className="text-blue-600 shrink-0" />
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Inventory Overview</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Alert breakdown from inventory risk telemetry.</p>
+          </div>
+        </div>
+        <div className={`grid grid-cols-2 ${hasRiskLevels ? "md:grid-cols-4" : "md:grid-cols-1"} gap-3 md:gap-4`}>
+          <OverviewStatCard label="Total Alerts" value={inventoryOverview.total} accent="red" />
+          {hasRiskLevels && (
+            <>
+              <OverviewStatCard label="High Risk" value={inventoryOverview.high} accent="red" />
+              <OverviewStatCard label="Medium Risk" value={inventoryOverview.medium} accent="amber" />
+              <OverviewStatCard label="Low Risk" value={inventoryOverview.low} accent="emerald" />
+            </>
           )}
         </div>
       </div>
 
-      {/* Inventory risk table */}
+      {/* 4. Tasks Overview */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <ListTodo size={18} className="text-violet-600 shrink-0" />
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Tasks Overview</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Client-side aggregation from active task records.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <OverviewStatCard label="Total Tasks" value={taskStats.total} accent="slate" />
+          <OverviewStatCard label="Pending Tasks" value={taskStats.pending} accent="amber" />
+          <OverviewStatCard label="In Progress Tasks" value={taskStats.inProgress} accent="blue" />
+          <OverviewStatCard label="Completed Tasks" value={taskStats.completed} accent="emerald" />
+        </div>
+      </div>
+
+      {/* 5. Recommendations */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Sparkles size={18} className="text-violet-600 shrink-0" />
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Optimization Recommendations</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Actionable suggestions to improve inventory and capacity mix.</p>
+          </div>
+        </div>
+        {suggestions.length > 0 ? (
+          <ul className="space-y-3">
+            {suggestions.map((suggestion) => (
+              <li key={suggestion} className="text-sm text-gray-600 leading-relaxed flex gap-3 bg-gray-50/80 border border-gray-100 rounded-2xl px-4 py-3">
+                <ClipboardList size={16} className="text-violet-500 shrink-0 mt-0.5" />
+                <span>{suggestion}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="py-10 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            <Sparkles className="mx-auto text-gray-300 mb-2" size={28} />
+            <p className="text-sm">No optimization recommendations available.</p>
+          </div>
+        )}
+      </div>
+
+      {/* 6. Inventory Table */}
       <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <div className="flex items-center gap-2">
@@ -293,11 +421,15 @@ export default function OperationsDashboardPage() {
                       {a.coverageRatio.toFixed(2)}x
                     </td>
                     <td className="px-4 md:px-5 py-4 text-right">
-                      <span
-                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${riskBadgeClasses(a.risk)}`}
-                      >
-                        {a.risk}
-                      </span>
+                      {a.risk ? (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${riskBadgeClasses(a.risk)}`}
+                        >
+                          {a.risk}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}
