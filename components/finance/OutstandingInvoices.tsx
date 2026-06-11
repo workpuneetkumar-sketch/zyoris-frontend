@@ -1,6 +1,6 @@
 // components/finance/OutstandingInvoices.tsx
 import React from 'react';
-import { UpcomingPayment } from '@/lib/api/financeApi';
+import { UpcomingPayment } from '@/lib/api/finance/financeApi';
 
 interface OutstandingInvoicesProps {
   payments: UpcomingPayment[];

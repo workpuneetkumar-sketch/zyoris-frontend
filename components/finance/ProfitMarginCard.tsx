@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { ExpenseBreakdownPoint } from '@/lib/api/financeApi';
+import { ExpenseBreakdownPoint } from '@/lib/api/finance/financeApi';
 
 interface ProfitMarginCardProps {
   data: ExpenseBreakdownPoint[];

@@ -1,9 +1,9 @@
-// components/finance/RevenueExpenseChart.tsx
+// / components/finance/RevenueExpenseChart.tsx
 'use client';
 
 import React from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { ChartDataPoint } from '@/lib/api/financeApi';
+import { ChartDataPoint } from '@/lib/api/finance/financeApi';
 
 interface RevenueExpenseChartProps {
   data: ChartDataPoint[];
