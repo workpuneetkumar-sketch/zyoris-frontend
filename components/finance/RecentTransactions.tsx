@@ -1,4 +1,4 @@
-// components/finance/RecentTransactions.tsx
+// / components/finance/RecentTransactions.tsx
 'use client';
 
 import React from 'react';

@@ -1,6 +1,6 @@
-// components/finance/FinanceStatsCards.tsx
+// / components/finance/FinanceStatsCards.tsx
 import React from 'react';
-import { StatCardData } from '@/lib/api/financeApi';
+import { StatCardData } from '@/lib/api/finance/financeApi';
 
 interface FinanceStatsCardsProps {
   stats: StatCardData[];

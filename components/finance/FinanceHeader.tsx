@@ -12,7 +12,7 @@ import {
 
 // 2. Internal Imports
 import { useAuth } from '@/context/AuthContext';
-import { fetchFinanceDashboardData } from '@/lib/api/financeApi';
+import { fetchFinanceDashboardData } from '@/lib/api/finance/financeApi';
 
 // 3. Interfaces
 interface Profile {

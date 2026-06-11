@@ -1,5 +1,5 @@
 // app/finance/page.tsx
-import { fetchFinanceDashboardData } from '@/lib/api/financeApi';
+import { fetchFinanceDashboardData } from '@/lib/api/finance/financeApi';
 import FinanceHeader from '@/components/finance/FinanceHeader';
 import { FinanceStatsCards } from '@/components/finance/FinanceStatsCards';
 import { RevenueExpenseChart } from '@/components/finance/RevenueExpenseChart';
