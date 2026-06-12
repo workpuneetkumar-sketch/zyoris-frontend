@@ -1,4 +1,3 @@
-// / components/finance/RevenueExpenseChart.tsx
 'use client';
 
 import React from 'react';
@@ -25,46 +24,46 @@ export const RevenueExpenseChart: React.FC<RevenueExpenseChartProps> = ({ data }
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-            <XAxis 
-              dataKey="month" 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fill: '#9ca3af', fontSize: 12 }} 
+            <XAxis
+              dataKey="month"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fill: '#9ca3af', fontSize: 12 }}
             />
-            <YAxis 
-              axisLine={false} 
-              tickLine={false} 
+            <YAxis
+              axisLine={false}
+              tickLine={false}
               tick={{ fill: '#9ca3af', fontSize: 12 }}
               tickFormatter={(value) => `${value} Cr`}
             />
-            <Tooltip 
+            <Tooltip
               contentStyle={{ backgroundColor: '#ffffff', borderRadius: '12px', border: '1px solid #f3f4f6' }}
               formatter={(value) => [`₹${value} Cr`]}
             />
-            <Legend 
-              verticalAlign="top" 
-              height={36} 
+            <Legend
+              verticalAlign="top"
+              height={36}
               iconType="circle"
               iconSize={8}
               wrapperStyle={{ fontSize: '13px', paddingBottom: '10px' }}
             />
-            <Line 
-              name="Revenue (₹ Cr)" 
-              type="monotone" 
-              dataKey="revenue" 
-              stroke="#2563eb" 
-              strokeWidth={3} 
-              dot={{ r: 4, strokeWidth: 2 }} 
-              activeDot={{ r: 6 }} 
+            <Line
+              name="Revenue (₹ Cr)"
+              type="monotone"
+              dataKey="revenue"
+              stroke="#2563eb"
+              strokeWidth={3}
+              dot={{ r: 4, strokeWidth: 2 }}
+              activeDot={{ r: 6 }}
             />
-            <Line 
-              name="Expenses (₹ Cr)" 
-              type="monotone" 
-              dataKey="expenses" 
-              stroke="#ef4444" 
-              strokeWidth={3} 
-              dot={{ r: 4, strokeWidth: 2 }} 
-              activeDot={{ r: 6 }} 
+            <Line
+              name="Expenses (₹ Cr)"
+              type="monotone"
+              dataKey="expenses"
+              stroke="#ef4444"
+              strokeWidth={3}
+              dot={{ r: 4, strokeWidth: 2 }}
+              activeDot={{ r: 6 }}
             />
           </LineChart>
         </ResponsiveContainer>

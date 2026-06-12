@@ -183,7 +183,7 @@ export function CreateInvoiceModal({
 
           <div>
             <h3 className="text-md font-semibold text-gray-900 mb-3 flex items-center gap-2">
-              <Users size={16} className="text-gray-500" />
+              <Users size={16} className="text-gray-700" />
               Client Information
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -221,7 +221,7 @@ export function CreateInvoiceModal({
           <div>
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-md font-semibold text-gray-900 flex items-center gap-2">
-                <FileText size={16} className="text-gray-500" />
+                <FileText size={16} className="text-gray-700" />
                 Invoice Items
               </h3>
               <button 
@@ -388,46 +388,46 @@ export function InvoiceDetailModal({
 
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Bill To</p>
+              <p className="text-xs text-gray-700 mb-1">Bill To</p>
               <p className="font-medium text-gray-900">{invoice.clientName}</p>
               {invoice.clientEmail && <p className="text-sm text-gray-600">{invoice.clientEmail}</p>}
               {invoice.clientAddress && <p className="text-sm text-gray-600">{invoice.clientAddress}</p>}
             </div>
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Invoice Details</p>
-              <p className="text-sm">Due: {formatDateLong(invoice.dueDate)}</p>
-              <p className="text-sm">Created: {formatDateLong(invoice.createdAt)}</p>
+              <p className="text-xs text-gray-700 mb-1">Invoice Details</p>
+              <p className="text-sm text-gray-800">Due: {formatDateLong(invoice.dueDate)}</p>
+              <p className="text-sm text-gray-800">Created: {formatDateLong(invoice.createdAt)}</p>
             </div>
           </div>
 
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="text-left p-3 text-xs font-medium text-gray-500">Description</th>
-                <th className="text-right p-3 text-xs font-medium text-gray-500">Qty</th>
-                <th className="text-right p-3 text-xs font-medium text-gray-500">Price</th>
-                <th className="text-right p-3 text-xs font-medium text-gray-500">Amount</th>
+                <th className="text-left p-3 text-xs font-medium text-gray-700">Description</th>
+                <th className="text-right p-3 text-xs font-medium text-gray-700">Qty</th>
+                <th className="text-right p-3 text-xs font-medium text-gray-700">Price</th>
+                <th className="text-right p-3 text-xs font-medium text-gray-700">Amount</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {invoice.items.map((item, idx) => (
                 <tr key={idx}>
-                  <td className="p-3 text-sm">{item.description}</td>
-                  <td className="p-3 text-sm text-right">{item.quantity}</td>
-                  <td className="p-3 text-sm text-right">{formatCurrency(item.price)}</td>
-                  <td className="p-3 text-sm font-medium text-right">{formatCurrency(item.quantity * item.price)}</td>
+                  <td className="p-3 text-sm text-gray-800">{item.description}</td>
+                  <td className="p-3 text-sm text-gray-800 text-right">{item.quantity}</td>
+                  <td className="p-3 text-sm text-gray-800 text-right">{formatCurrency(item.price)}</td>
+                  <td className="p-3 text-sm text-gray-800 font-medium text-right">{formatCurrency(item.quantity * item.price)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="bg-gray-50">
               <tr>
-                <td colSpan={3} className="p-3 text-right font-semibold">Total</td>
+                <td colSpan={3} className="p-3 text-right font-semibold text-gray-800">Total</td>
                 <td className="p-3 text-right font-bold text-blue-600">{formatCurrency(invoice.totalAmount)}</td>
               </tr>
             </tfoot>
           </table>
 
-          {invoice.notes && <div className="p-4 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">Notes</p><p className="text-sm text-gray-700">{invoice.notes}</p></div>}
+          {invoice.notes && <div className="p-4 bg-gray-50 rounded-lg"><p className="text-xs text-gray-700 mb-1">Notes</p><p className="text-sm text-gray-700">{invoice.notes}</p></div>}
         </div>
       </div>
     </div>

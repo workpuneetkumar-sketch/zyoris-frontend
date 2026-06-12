@@ -175,7 +175,6 @@ interface InvoiceTableProps {
   searchQuery: string;
   statusFilter: StatusFilter;
   currentPage: number;
-  isDemoMode: boolean;
   onSearchChange: (value: string) => void;
   onStatusFilterChange: (value: StatusFilter) => void;
   onPageChange: (page: number) => void;
@@ -186,7 +185,6 @@ interface InvoiceTableProps {
   onStatusUpdate: (id: string, status: "SENT" | "PAID") => Promise<void>;
   onCreateClick: () => void;
   onExportExcel: () => void;
-  onToggleDataSource: () => void;
 }
 
 export function InvoiceTable({

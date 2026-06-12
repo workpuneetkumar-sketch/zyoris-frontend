@@ -6,8 +6,6 @@ import React, { useEffect, useState, useCallback } from "react";
 import {
   Plus,
   FileSpreadsheet,
-  Database,
-  Cloud,
   CheckCircle2,
   XCircle,
   AlertCircle,
@@ -16,7 +14,6 @@ import {
 import {
   getInvoices,
   updateInvoice,
-  setUseDemoData,
   Invoice,
 } from "@/lib/api/finance/invoicesApi";
 import { CreateInvoiceModal, InvoiceDetailModal } from "@/components/finance/invoices/InvoiceModals";
@@ -77,7 +74,6 @@ export default function InvoicesPage() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
-  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
@@ -102,14 +98,6 @@ export default function InvoicesPage() {
   useEffect(() => {
     loadInvoices();
   }, [loadInvoices]);
-
-  const toggleDataSource = () => {
-    const newMode = !isDemoMode;
-    setIsDemoMode(newMode);
-    setUseDemoData(newMode);
-    setToast({ type: "info", message: newMode ? "Switched to Demo Data mode" : "Switched to API Data mode" });
-    setTimeout(() => loadInvoices(), 100);
-  };
 
   const handleCreateSuccess = (newInvoice: Invoice) => { 
     setInvoices(prev => [newInvoice, ...prev]); 
@@ -190,15 +178,6 @@ export default function InvoicesPage() {
             <p className="text-sm text-gray-500 mt-0.5">Manage and track all your invoices</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={toggleDataSource}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                isDemoMode ? "bg-amber-100 text-amber-700 border border-amber-200" : "bg-blue-100 text-blue-700 border border-blue-200"
-              }`}
-            >
-              {isDemoMode ? <Database size={16} /> : <Cloud size={16} />}
-              {isDemoMode ? "Demo Data" : "Live API"}
-            </button>
             <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-white transition-all">
               <FileSpreadsheet size={16} className="text-green-600" /> Export
             </button>
@@ -219,7 +198,6 @@ export default function InvoicesPage() {
           searchQuery={searchQuery}
           statusFilter={statusFilter}
           currentPage={currentPage}
-          isDemoMode={isDemoMode}
           onSearchChange={setSearchQuery}
           onStatusFilterChange={setStatusFilter}
           onPageChange={setCurrentPage}
@@ -230,7 +208,6 @@ export default function InvoicesPage() {
           onStatusUpdate={handleStatusUpdate}
           onCreateClick={() => setShowCreateModal(true)}
           onExportExcel={handleExportExcel}
-          onToggleDataSource={toggleDataSource}
         />
       </div>
 

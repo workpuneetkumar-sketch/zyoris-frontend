@@ -176,6 +176,7 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
       trendUp: true,
       gradient: "from-blue-500 to-blue-600",
       bgGradient: "from-blue-50 to-blue-100",
+      iconColor: "text-blue-600",          // ✅ fixed
       count: `${expenses.length} requests`,
     },
     {
@@ -186,6 +187,7 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
       trendUp: null,
       gradient: "from-amber-500 to-amber-600",
       bgGradient: "from-amber-50 to-amber-100",
+      iconColor: "text-amber-600",         // ✅ fixed
       count: `${pendingCount} requests`,
       highlight: pendingCount > 0,
     },
@@ -197,6 +199,7 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
       trendUp: true,
       gradient: "from-emerald-500 to-emerald-600",
       bgGradient: "from-emerald-50 to-emerald-100",
+      iconColor: "text-emerald-600",       // ✅ fixed
       count: `${expenses.filter((e) => e.status === "APPROVED").length} requests`,
     },
     {
@@ -207,6 +210,7 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
       trendUp: false,
       gradient: "from-sky-500 to-sky-600",
       bgGradient: "from-sky-50 to-sky-100",
+      iconColor: "text-sky-600",           // ✅ fixed
       count: `${expenses.filter((e) => e.status === "REIMBURSED").length} requests`,
     },
   ];
@@ -224,7 +228,8 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
             <div className="p-5">
               <div className="flex items-start justify-between mb-3">
                 <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${stat.bgGradient} flex items-center justify-center shadow-sm`}>
-                  <Icon size={22} className={`bg-gradient-to-r ${stat.gradient} bg-clip-text text-transparent`} />
+                  {/* ✅ Using solid colour instead of text-transparent gradient */}
+                  <Icon size={22} className={stat.iconColor} />
                 </div>
                 {stat.trendUp !== null && (
                   <span
@@ -344,7 +349,7 @@ export function ExpenseRow({
           >
             <Edit2 size={16} className="text-gray-500" />
           </button>
-          
+
           {/* Delete Button */}
           <button
             onClick={() => onDelete(expense.id)}
