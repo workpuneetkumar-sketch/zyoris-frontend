@@ -1,7 +1,42 @@
-export default function Page() {
-  return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">Coming Soon</h1>
-    </div>
-  );
+"use client";
+
+import { CallsUI } from "@/components/calls/CallsUI";
+import { useCalls } from "@/hooks/useCalls";
+
+export default function CallsPage() {
+    const {
+        calls,
+        total,
+        page,
+        loading,
+        error,
+        setPage,
+        handleCreateCall,
+        retry,
+    } = useCalls();
+
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center h-64 gap-3">
+                <p className="text-red-500 text-sm">{error}</p>
+                <button
+                    onClick={retry}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <CallsUI
+            calls={calls}
+            total={total}
+            page={page}
+            loading={loading}
+            onPageChange={setPage}
+            onLogCall={handleCreateCall}
+        />
+    );
 }
