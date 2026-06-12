@@ -2,9 +2,9 @@
 
 export type LeadStatus =
     | "NEW"
-    | "CONTACTED"
-    | "QUALIFIED"
-    | "CLOSED";
+    | "WARM"
+    | "HOT"
+    | "DEAD";
 
 export type LeadSource =
     | "Website"

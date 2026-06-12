@@ -14,9 +14,9 @@ export const SOURCE_OPTIONS = [
 
 export const STATUS_OPTIONS = [
     "NEW",
-    "CONTACTED",
-    "QUALIFIED",
-    "CLOSED",
+    "WARM",
+    "HOT",
+    "DEAD",
 ] as const;
 
 export interface LeadFormValues {

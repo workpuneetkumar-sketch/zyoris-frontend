@@ -129,8 +129,8 @@ export function useLeads() {
                 router.push(`/leads/${lead.id}/assign`);
                 break;
             case "Convert": {
-                if (lead.status === "CLOSED") {
-                    toast.warning("This lead is already closed/converted.");
+                if (lead.status === "DEAD") {
+                    toast.warning("This lead is dead and cannot be converted.");
                     return;
                 }
                 if (convertingId) return;
