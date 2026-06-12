@@ -1,30 +1,8 @@
 "use client";
 
-import { Lead, LeadStatus } from "@/types/leads";
+import { Lead } from "@/types/leads";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
 import { Mail, Phone, MapPin, Building2, Tag, User, FileText } from "lucide-react";
-
-const STATUS_INFO: Record<LeadStatus, { label: string; emoji: string; style: string }> = {
-    NEW: {
-        label: "New Lead",
-        emoji: "🆕",
-        style: "bg-blue-50 text-blue-700 border border-blue-200"
-    },
-    WARM: {
-        label: "Warm Lead",
-        emoji: "🌤️",
-        style: "bg-amber-50 text-amber-700 border border-amber-200"
-    },
-    HOT: {
-        label: "Hot Lead",
-        emoji: "🔥",
-        style: "bg-red-50 text-red-700 border border-red-200"
-    },
-    DEAD: {
-        label: "Dead Lead",
-        emoji: "🧊",
-        style: "bg-gray-50 text-gray-600 border border-gray-200"
-    }
-};
 
 interface ViewLeadModalProps {
     lead: Lead;
@@ -32,6 +10,8 @@ interface ViewLeadModalProps {
 }
 
 export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
+    const statusInfo = getLeadStatusInfo(lead.status);
+    
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
             <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -41,8 +21,8 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                             <h2 className="text-xl font-semibold text-gray-900">{lead.name}</h2>
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_INFO[lead.status].style}`}>
-                                {STATUS_INFO[lead.status].emoji} {STATUS_INFO[lead.status].label}
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                                {statusInfo.emoji} {statusInfo.label}
                             </span>
                         </div>
                         <p className="text-sm text-gray-500">{lead.company || "No Company"}</p>
@@ -62,8 +42,8 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                     <div className="flex gap-4 flex-wrap">
                         <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_INFO[lead.status].style}`}>
-                                {STATUS_INFO[lead.status].emoji} {STATUS_INFO[lead.status].label}
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${statusInfo.style}`}>
+                                {statusInfo.emoji} {statusInfo.label}
                             </span>
                         </div>
                         <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
@@ -76,7 +56,7 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                         </div>
                     </div>
 
-                    {/* Contact Details */}
+                    {/* Contact Information */}
                     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
                             <h3 className="text-sm font-semibold text-gray-700">Contact Information</h3>
@@ -136,7 +116,7 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                     </div>
 
                     {/* Additional Details (Tags, Notes) */}
-                    {(lead.tags && lead.tags.length > 0) || lead.note ? (
+                    {((lead.tags && lead.tags.length > 0) || lead.note) && (
                         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                             <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
                                 <h3 className="text-sm font-semibold text-gray-700">Additional Details</h3>
@@ -148,7 +128,7 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                                             <Tag className="w-3.5 h-3.5" /> Tags
                                         </p>
                                         <div className="flex flex-wrap gap-2">
-                                            {lead.tags.map((tag: any, idx) => (
+                                            {lead.tags.map((tag: any, idx: number) => (
                                                 <span
                                                     key={tag.id || idx}
                                                     className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-medium border border-gray-200"
@@ -171,7 +151,7 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                                 )}
                             </div>
                         </div>
-                    ) : null}
+                    )}
 
                 </div>
 

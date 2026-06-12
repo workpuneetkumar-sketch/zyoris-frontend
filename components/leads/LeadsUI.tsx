@@ -21,8 +21,8 @@ import {
 import {
     Lead,
     LeadsFilters,
-    LeadStatus,
 } from "@/types/leads";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
 
 export interface LeadsTableProps {
     leads: Lead[];
@@ -41,30 +41,6 @@ export interface LeadsTableProps {
     onAction: (action: string, lead: Lead) => void;
     setOpenMenu: (id: string | null) => void;
 }
-
-const STATUS_INFO: Record<LeadStatus, { label: string; emoji: string; style: string }> = {
-    NEW: {
-        label: "New Lead",
-        emoji: "🆕",
-        style: "bg-blue-50 text-blue-700 border border-blue-200"
-    },
-    WARM: {
-        label: "Warm Lead",
-        emoji: "🌤️",
-        style: "bg-amber-50 text-amber-700 border border-amber-200"
-    },
-    HOT: {
-        label: "Hot Lead",
-        emoji: "🔥",
-        style: "bg-red-50 text-red-700 border border-red-200"
-    },
-    DEAD: {
-        label: "Dead Lead",
-        emoji: "🧊",
-        style: "bg-gray-50 text-gray-600 border border-gray-200"
-    }
-};
-
 function Avatar({ initials }: { initials: string }) {
     return (
         <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[11px] font-bold flex items-center justify-center shrink-0">
@@ -111,8 +87,8 @@ export function LeadsTable({
     openMenu,
     convertingId,
     onPageChange,
-    onFiltersChange,
     onRefreshLeads,
+    onFiltersChange,
     onNewLead,
     onExport,
     onAction,
@@ -231,7 +207,7 @@ export function LeadsTable({
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto  overflow-y-visible rounded-b-2xl">
+                <div className="overflow-x-auto overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
                     <tr className="border-b border-gray-100">
@@ -261,6 +237,7 @@ export function LeadsTable({
                         </tr>
                     ) : (
                         safeLeads.map((lead) => {
+                            const statusInfo = getLeadStatusInfo(lead.status);
                             return (
                             <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                                 <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
@@ -292,12 +269,10 @@ export function LeadsTable({
                                 </td>
 
                                 <td className="px-5 py-3.5 whitespace-nowrap">
-                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_INFO[lead.status].style}`}>
-                                        {STATUS_INFO[lead.status].emoji} {STATUS_INFO[lead.status].label}
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${statusInfo.style}`}>
+                                        {statusInfo.emoji} {statusInfo.label}
                                     </span>
                                 </td>
-
-
 
                                 <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
 

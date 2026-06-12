@@ -14,7 +14,8 @@ import {
     Loader2,
     AlertCircle,
 } from "lucide-react";
-import { Lead, LeadStatus } from "@/types/leads";
+import { Lead } from "@/types/leads";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
 import {convertLeadToDeal } from "@/lib/api/leadsApi";
 import api from "@/lib/api/api";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -27,41 +28,6 @@ async function fetchLeadById(leadId: string): Promise<Lead> {
     const res = await api.get<Lead>(`/leads/get-lead/${leadId}`);
     return res.data;
 }
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-const STATUS_INFO: Record<LeadStatus, { label: string; emoji: string; style: string }> = {
-    NEW: {
-        label: "New Lead",
-        emoji: "🆕",
-        style: "bg-blue-50 text-blue-700 border border-blue-200"
-    },
-    WARM: {
-        label: "Warm Lead",
-        emoji: "🌤️",
-        style: "bg-amber-50 text-amber-700 border border-amber-200"
-    },
-    HOT: {
-        label: "Hot Lead",
-        emoji: "🔥",
-        style: "bg-red-50 text-red-700 border border-red-200"
-    },
-    DEAD: {
-        label: "Dead Lead",
-        emoji: "🧊",
-        style: "bg-gray-50 text-gray-600 border border-gray-200"
-    }
-};
-
-function StatusBadge({ status }: { status: string }) {
-    const info = STATUS_INFO[status as LeadStatus] || { label: status, emoji: "", style: "bg-gray-100 text-gray-500 border border-gray-200" };
-    return (
-        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${info.style}`}>
-            {info.emoji} {info.label}
-        </span>
-    );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LeadDetailPage() {
@@ -109,7 +75,7 @@ export default function LeadDetailPage() {
                 : undefined;
 
             const res = await convertLeadToDeal(leadId, { amount });
-            // Normalise response — backend may return { deal: { id } } or { id } at root
+            // Normalize response — backend may return { deal: { id } } or { id } at root
             const dealId =
                 (res.deal?.dealId ?? res.deal?.id) ??
                 (res.dealId ?? res.id);
@@ -132,7 +98,7 @@ export default function LeadDetailPage() {
         }
     };
 
-    // ── Loading ───────────────────────────────────────────────────────────────
+    // ── Loading ────────────────────────────────────────────────────────────────
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh] gap-3">
@@ -165,6 +131,8 @@ export default function LeadDetailPage() {
 
     if (!lead) return null;
 
+    const statusInfo = getLeadStatusInfo(lead.status);
+
     // ── Detail view ───────────────────────────────────────────────────────────
     return (
         <div className="space-y-5">
@@ -172,21 +140,23 @@ export default function LeadDetailPage() {
             {/* Page header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => router.back()}
-                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors shrink-0"
-                            title="Go back"
-                        >
-                            <ArrowLeft size={16} className="text-gray-600" />
-                        </button>
-                        <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                                <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
-                                <StatusBadge status={lead.status} />
-                            </div>
-                            <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
+                    <button
+                        onClick={() => router.back()}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors shrink-0"
+                        title="Go back"
+                    >
+                        <ArrowLeft size={16} className="text-gray-600" />
+                    </button>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                                {statusInfo.emoji} {statusInfo.label}
+                            </span>
                         </div>
+                        <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
                     </div>
+                </div>
 
                 {/* Convert to Deal — primary CTA */}
                 <div className="flex flex-col items-end gap-1.5">
@@ -222,7 +192,9 @@ export default function LeadDetailPage() {
             <div className="flex gap-4 flex-wrap">
                 <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Status</p>
-                    <StatusBadge status={lead.status} />
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                        {statusInfo.emoji} {statusInfo.label}
+                    </span>
                 </div>
                 <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Source</p>
@@ -257,7 +229,7 @@ export default function LeadDetailPage() {
                     <div className="flex items-start gap-3">
                         <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
                         <div>
-                            <p className="text-xs text-gray-400 mb-0.5">City</p>
+                            <p className="text-xs text-gray-400 mb-0.5">Location</p>
                             <p className="text-sm text-gray-800">{lead.city || "—"}</p>
                         </div>
                     </div>
@@ -271,7 +243,7 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-            {/* Assignment */}
+            {/* Ownership & Assignment */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
                     <h3 className="text-sm font-semibold text-gray-700">Assignment</h3>
@@ -279,7 +251,7 @@ export default function LeadDetailPage() {
                 <div className="p-5 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
                         {lead.assignedTo?.name
-                            ? lead.assignedTo.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+                            ? lead.assignedTo.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
                             : "NA"}
                     </div>
                     <div>
