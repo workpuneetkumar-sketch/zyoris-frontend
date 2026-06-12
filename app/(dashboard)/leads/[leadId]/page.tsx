@@ -14,8 +14,7 @@ import {
     Loader2,
     AlertCircle,
 } from "lucide-react";
-import { Lead } from "@/types/leads";
-import { getLeadTemperature } from "@/utils/leadTemperature";
+import { Lead, LeadStatus } from "@/types/leads";
 import {convertLeadToDeal } from "@/lib/api/leadsApi";
 import api from "@/lib/api/api";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -31,18 +30,34 @@ async function fetchLeadById(leadId: string): Promise<Lead> {
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-const STATUS_STYLES: Record<string, string> = {
-    NEW:       "bg-blue-50 text-blue-600 border border-blue-200",
-    CONTACTED: "bg-amber-50 text-amber-600 border border-amber-200",
-    QUALIFIED: "bg-green-50 text-green-600 border border-green-200",
-    CLOSED:    "bg-purple-50 text-purple-600 border border-purple-200",
+const STATUS_INFO: Record<LeadStatus, { label: string; emoji: string; style: string }> = {
+    NEW: {
+        label: "New Lead",
+        emoji: "🆕",
+        style: "bg-blue-50 text-blue-700 border border-blue-200"
+    },
+    WARM: {
+        label: "Warm Lead",
+        emoji: "🌤️",
+        style: "bg-amber-50 text-amber-700 border border-amber-200"
+    },
+    HOT: {
+        label: "Hot Lead",
+        emoji: "🔥",
+        style: "bg-red-50 text-red-700 border border-red-200"
+    },
+    DEAD: {
+        label: "Dead Lead",
+        emoji: "🧊",
+        style: "bg-gray-50 text-gray-600 border border-gray-200"
+    }
 };
 
 function StatusBadge({ status }: { status: string }) {
-    const cls = STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500 border border-gray-200";
+    const info = STATUS_INFO[status as LeadStatus] || { label: status, emoji: "", style: "bg-gray-100 text-gray-500 border border-gray-200" };
     return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-            {status || "NEW"}
+        <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${info.style}`}>
+            {info.emoji} {info.label}
         </span>
     );
 }
@@ -78,7 +93,7 @@ export default function LeadDetailPage() {
 
     // ── Convert to deal ───────────────────────────────────────────────────────
     const handleConvert = () => {
-        if (!leadId || converting || lead?.status === "CLOSED") return;
+        if (!leadId || converting || lead?.status === "DEAD") return;
         setIsConfirmModalOpen(true);
     };
 
@@ -157,31 +172,29 @@ export default function LeadDetailPage() {
             {/* Page header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => router.back()}
-                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors shrink-0"
-                        title="Go back"
-                    >
-                        <ArrowLeft size={16} className="text-gray-600" />
-                    </button>
-                    <div className="flex flex-col gap-1">
-                        <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${getLeadTemperature(lead.score).style}`}>
-                                {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
-                            </span>
+                        <button
+                            onClick={() => router.back()}
+                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors shrink-0"
+                            title="Go back"
+                        >
+                            <ArrowLeft size={16} className="text-gray-600" />
+                        </button>
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
+                                <StatusBadge status={lead.status} />
+                            </div>
+                            <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
                         </div>
-                        <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
                     </div>
-                </div>
 
                 {/* Convert to Deal — primary CTA */}
                 <div className="flex flex-col items-end gap-1.5">
                     <button
                         onClick={handleConvert}
-                        disabled={converting || lead.status === "CLOSED"}
+                        disabled={converting || lead.status === "DEAD"}
                         className={`flex items-center gap-2 h-9 px-5 rounded-lg text-white text-[13px] font-semibold transition-colors shadow-sm ${
-                            lead.status === "CLOSED" 
+                            lead.status === "DEAD" 
                                 ? "bg-gray-400 cursor-not-allowed" 
                                 : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 disabled:opacity-70"
                         }`}
@@ -193,8 +206,8 @@ export default function LeadDetailPage() {
                         )}
                         {converting 
                             ? "Converting..." 
-                            : lead.status === "CLOSED" 
-                                ? "Converted to Deal" 
+                            : lead.status === "DEAD" 
+                                ? "Cannot Convert Dead Lead" 
                                 : "Convert to Deal"}
                     </button>
                     {convertError && (
@@ -202,33 +215,6 @@ export default function LeadDetailPage() {
                             {convertError}
                         </p>
                     )}
-                </div>
-            </div>
-
-            {/* Lead Score Card */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <div className="flex items-start justify-between flex-wrap gap-4">
-                    <div>
-                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Lead Score</p>
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="text-3xl font-bold text-gray-900">{lead.score ?? 0}</span>
-                            <span className="text-sm text-gray-500">/100</span>
-                        </div>
-                        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
-                            <div 
-                                className={`h-full rounded-full transition-all duration-500 ${getLeadTemperature(lead.score).progressColor}`}
-                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
-                            />
-                        </div>
-                        <p className="text-sm text-gray-600 flex items-center gap-1.5">
-                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).conversionReadiness}
-                        </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getLeadTemperature(lead.score).style}`}>
-                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
-                        </span>
-                    </div>
                 </div>
             </div>
 

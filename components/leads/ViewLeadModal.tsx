@@ -1,8 +1,30 @@
 "use client";
 
-import { Lead } from "@/types/leads";
-import { getLeadTemperature } from "@/utils/leadTemperature";
-import { Mail, Phone, MapPin, Building2, Calendar, Tag, User, Briefcase, FileText } from "lucide-react";
+import { Lead, LeadStatus } from "@/types/leads";
+import { Mail, Phone, MapPin, Building2, Tag, User, FileText } from "lucide-react";
+
+const STATUS_INFO: Record<LeadStatus, { label: string; emoji: string; style: string }> = {
+    NEW: {
+        label: "New Lead",
+        emoji: "🆕",
+        style: "bg-blue-50 text-blue-700 border border-blue-200"
+    },
+    WARM: {
+        label: "Warm Lead",
+        emoji: "🌤️",
+        style: "bg-amber-50 text-amber-700 border border-amber-200"
+    },
+    HOT: {
+        label: "Hot Lead",
+        emoji: "🔥",
+        style: "bg-red-50 text-red-700 border border-red-200"
+    },
+    DEAD: {
+        label: "Dead Lead",
+        emoji: "🧊",
+        style: "bg-gray-50 text-gray-600 border border-gray-200"
+    }
+};
 
 interface ViewLeadModalProps {
     lead: Lead;
@@ -19,8 +41,8 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                             <h2 className="text-xl font-semibold text-gray-900">{lead.name}</h2>
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${getLeadTemperature(lead.score).style}`}>
-                                {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_INFO[lead.status].style}`}>
+                                {STATUS_INFO[lead.status].emoji} {STATUS_INFO[lead.status].label}
                             </span>
                         </div>
                         <p className="text-sm text-gray-500">{lead.company || "No Company"}</p>
@@ -36,30 +58,12 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                 {/* Body */}
                 <div className="p-6 overflow-y-auto bg-gray-50/50 space-y-6 flex-1">
 
-                    {/* Lead Score Card */}
-                    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-3">Lead Score</p>
-                        <div className="flex items-center gap-3 mb-3">
-                            <span className="text-2xl font-bold text-gray-900">{lead.score ?? 0}</span>
-                            <span className="text-sm text-gray-500">/100</span>
-                        </div>
-                        <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden mb-3">
-                            <div 
-                                className={`h-full rounded-full transition-all duration-500 ${getLeadTemperature(lead.score).progressColor}`}
-                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
-                            />
-                        </div>
-                        <p className="text-sm text-gray-600 flex items-center gap-1.5">
-                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).conversionReadiness}
-                        </p>
-                    </div>
-
                     {/* Status, Source & Created */}
                     <div className="flex gap-4 flex-wrap">
                         <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Status</p>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                                {lead.status || "NEW"}
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${STATUS_INFO[lead.status].style}`}>
+                                {STATUS_INFO[lead.status].emoji} {STATUS_INFO[lead.status].label}
                             </span>
                         </div>
                         <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
