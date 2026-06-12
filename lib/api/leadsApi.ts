@@ -62,11 +62,19 @@ export async function createLead(data: {
     tags?: string[];
     note?: string;
 }): Promise<Lead> {
-    const res = await api.post("/leads/create-leads", {
-        ...data,
-        assignedToId: data.assignedToId?.trim() || null, // ← "" → null
-    });
-    return res.data;
+    console.log('[API createLead] Request payload:', data);
+    try {
+        const res = await api.post("/leads/create-leads", {
+            ...data,
+            assignedToId: data.assignedToId?.trim() || null, // ← "" → null
+        });
+        console.log('[API createLead] API response status:', res.status);
+        console.log('[API createLead] API response data:', res.data);
+        return res.data;
+    } catch (error: any) {
+        console.error('[API createLead] API error:', error.response?.data || error.message);
+        throw error;
+    }
 }
 // ── PATCH update a lead ────────────────────────────────────
 
