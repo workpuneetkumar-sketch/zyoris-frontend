@@ -4,22 +4,20 @@ import { useState } from "react";
 import { Plus, X, ChevronLeft, ChevronRight, Phone } from "lucide-react";
 import { Call } from "@/lib/api/callsApi";
 
-const OUTCOME_OPTIONS = ["Interested", "Not Interested", "No Answer", "Left Voicemail", "Follow Up Required"];
+const OUTCOME_OPTIONS = ["CONNECTED", "NO_ANSWER", "LEFT_VOICEMAIL", "BUSY", "FAILED"];
 
 interface CallFormData {
-    contactName: string;
+    contactId: string;
     duration: string;
     outcome: string;
     notes: string;
-    loggedBy: string;
 }
 
 const EMPTY_FORM: CallFormData = {
-    contactName: "",
+    contactId: "",
     duration: "",
     outcome: "",
     notes: "",
-    loggedBy: "Admin", // default value or could be dynamic
 };
 
 interface CallModalProps {
@@ -40,8 +38,8 @@ function CallModal({ onClose, onSave }: CallModalProps) {
 
     const handleSubmit = async () => {
         const newErrors: Partial<CallFormData> = {};
-        if (!form.contactName.trim()) newErrors.contactName = "Contact is required";
-        if (!form.duration.trim()) newErrors.duration = "Duration is required";
+        if (!form.contactId.trim()) newErrors.contactId = "Contact ID is required";
+        if (!form.duration.trim() || isNaN(Number(form.duration))) newErrors.duration = "Valid duration (number) is required";
         if (!form.outcome.trim()) newErrors.outcome = "Outcome is required";
         
         if (Object.keys(newErrors).length > 0) {
@@ -51,7 +49,12 @@ function CallModal({ onClose, onSave }: CallModalProps) {
         
         try {
             setLoading(true);
-            await onSave(form);
+            await onSave({
+                contactId: form.contactId,
+                duration: Number(form.duration),
+                outcome: form.outcome,
+                notes: form.notes
+            } as Partial<Call>);
             onClose();
         } catch (err) {
             console.error("Save call error:", err);
@@ -80,24 +83,25 @@ function CallModal({ onClose, onSave }: CallModalProps) {
                     <div className="bg-white border border-gray-200 rounded-2xl p-5">
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Contact Name *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Contact ID *</label>
                                 <input
-                                    name="contactName"
-                                    value={form.contactName}
+                                    name="contactId"
+                                    value={form.contactId}
                                     onChange={handleChange}
-                                    placeholder="Select or enter contact"
-                                    className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.contactName ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
+                                    placeholder="Enter contact ID"
+                                    className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.contactId ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
                                 />
-                                {errors.contactName && <p className="text-xs text-red-500 mt-1">{errors.contactName}</p>}
+                                {errors.contactId && <p className="text-xs text-red-500 mt-1">{errors.contactId}</p>}
                             </div>
                             
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Duration *</label>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Duration (minutes) *</label>
                                 <input
                                     name="duration"
+                                    type="number"
                                     value={form.duration}
                                     onChange={handleChange}
-                                    placeholder="e.g., 15 mins"
+                                    placeholder="e.g., 15"
                                     className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.duration ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
                                 />
                                 {errors.duration && <p className="text-xs text-red-500 mt-1">{errors.duration}</p>}
@@ -230,13 +234,15 @@ export function CallsUI({
                                                 <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                                                     <Phone size={14} />
                                                 </div>
-                                                <span className="font-medium text-gray-800">{call.contactName}</span>
+                                                <span className="font-medium text-gray-800">{call.contactName || call.contactId || "Unknown"}</span>
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
-                                            {new Date(call.date).toLocaleDateString()} {new Date(call.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            {call.date ? (
+                                                <>{new Date(call.date).toLocaleDateString()} {new Date(call.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</>
+                                            ) : "—"}
                                         </td>
-                                        <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{call.duration}</td>
+                                        <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{call.duration} mins</td>
                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium bg-gray-100 text-gray-600 border border-gray-200">
                                                 {call.outcome}
@@ -246,7 +252,7 @@ export function CallsUI({
                                             {call.notes || "—"}
                                         </td>
                                         <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">
-                                            {call.loggedBy}
+                                            {call.loggedBy || "—"}
                                         </td>
                                     </tr>
                                 ))
