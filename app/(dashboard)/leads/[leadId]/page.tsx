@@ -14,8 +14,8 @@ import {
     Loader2,
     AlertCircle,
 } from "lucide-react";
-import { Lead } from "@/types/leads";
-import { getLeadTemperature } from "@/utils/leadTemperature";
+import { Lead, LeadStatus } from "@/types/leads";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
 import {convertLeadToDeal } from "@/lib/api/leadsApi";
 import api from "@/lib/api/api";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -27,24 +27,6 @@ import { toast } from "react-toastify";
 async function fetchLeadById(leadId: string): Promise<Lead> {
     const res = await api.get<Lead>(`/leads/get-lead/${leadId}`);
     return res.data;
-}
-
-// ── Status badge ──────────────────────────────────────────────────────────────
-
-const STATUS_STYLES: Record<string, string> = {
-    NEW:       "bg-blue-50 text-blue-600 border border-blue-200",
-    CONTACTED: "bg-amber-50 text-amber-600 border border-amber-200",
-    QUALIFIED: "bg-green-50 text-green-600 border border-green-200",
-    CLOSED:    "bg-purple-50 text-purple-600 border border-purple-200",
-};
-
-function StatusBadge({ status }: { status: string }) {
-    const cls = STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500 border border-gray-200";
-    return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-            {status || "NEW"}
-        </span>
-    );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -78,7 +60,7 @@ export default function LeadDetailPage() {
 
     // ── Convert to deal ───────────────────────────────────────────────────────
     const handleConvert = () => {
-        if (!leadId || converting || lead?.status === "CLOSED") return;
+        if (!leadId || converting || lead?.status === "DEAD") return;
         setIsConfirmModalOpen(true);
     };
 
@@ -94,7 +76,7 @@ export default function LeadDetailPage() {
                 : undefined;
 
             const res = await convertLeadToDeal(leadId, { amount });
-            // Normalise response — backend may return { deal: { id } } or { id } at root
+            // Normalize response — backend may return { deal: { id } } or { id } at root
             const dealId =
                 (res.deal?.dealId ?? res.deal?.id) ??
                 (res.dealId ?? res.id);
@@ -117,7 +99,7 @@ export default function LeadDetailPage() {
         }
     };
 
-    // ── Loading ───────────────────────────────────────────────────────────────
+    // ── Loading ────────────────────────────────────────────────────────────────
     if (loading) {
         return (
             <div className="flex items-center justify-center min-h-[60vh] gap-3">
@@ -150,6 +132,8 @@ export default function LeadDetailPage() {
 
     if (!lead) return null;
 
+    const statusInfo = getLeadStatusInfo(lead.status);
+
     // ── Detail view ───────────────────────────────────────────────────────────
     return (
         <div className="space-y-5">
@@ -167,8 +151,8 @@ export default function LeadDetailPage() {
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                             <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${getLeadTemperature(lead.score).style}`}>
-                                {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                                {statusInfo.emoji} {statusInfo.label}
                             </span>
                         </div>
                         <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
@@ -179,9 +163,9 @@ export default function LeadDetailPage() {
                 <div className="flex flex-col items-end gap-1.5">
                     <button
                         onClick={handleConvert}
-                        disabled={converting || lead.status === "CLOSED"}
+                        disabled={converting || lead.status === "DEAD"}
                         className={`flex items-center gap-2 h-9 px-5 rounded-lg text-white text-[13px] font-semibold transition-colors shadow-sm ${
-                            lead.status === "CLOSED" 
+                            lead.status === "DEAD" 
                                 ? "bg-gray-400 cursor-not-allowed" 
                                 : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 disabled:opacity-70"
                         }`}
@@ -193,8 +177,8 @@ export default function LeadDetailPage() {
                         )}
                         {converting 
                             ? "Converting..." 
-                            : lead.status === "CLOSED" 
-                                ? "Converted to Deal" 
+                            : lead.status === "DEAD" 
+                                ? "Cannot Convert Dead Lead" 
                                 : "Convert to Deal"}
                     </button>
                     {convertError && (
@@ -205,38 +189,13 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-            {/* Lead Score Card */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <div className="flex items-start justify-between flex-wrap gap-4">
-                    <div>
-                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Lead Score</p>
-                        <div className="flex items-center gap-3 mb-2">
-                            <span className="text-3xl font-bold text-gray-900">{lead.score ?? 0}</span>
-                            <span className="text-sm text-gray-500">/100</span>
-                        </div>
-                        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-3">
-                            <div 
-                                className={`h-full rounded-full transition-all duration-500 ${getLeadTemperature(lead.score).progressColor}`}
-                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
-                            />
-                        </div>
-                        <p className="text-sm text-gray-600 flex items-center gap-1.5">
-                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).conversionReadiness}
-                        </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                        <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${getLeadTemperature(lead.score).style}`}>
-                            {getLeadTemperature(lead.score).emoji} {getLeadTemperature(lead.score).label}
-                        </span>
-                    </div>
-                </div>
-            </div>
-
-            {/* Status / Source / Created row */}
+            {/* Status, Source & Created row */}
             <div className="flex gap-4 flex-wrap">
                 <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Status</p>
-                    <StatusBadge status={lead.status} />
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                        {statusInfo.emoji} {statusInfo.label}
+                    </span>
                 </div>
                 <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Source</p>
@@ -271,7 +230,7 @@ export default function LeadDetailPage() {
                     <div className="flex items-start gap-3">
                         <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
                         <div>
-                            <p className="text-xs text-gray-400 mb-0.5">City</p>
+                            <p className="text-xs text-gray-400 mb-0.5">Location</p>
                             <p className="text-sm text-gray-800">{lead.city || "—"}</p>
                         </div>
                     </div>
@@ -285,7 +244,7 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-            {/* Assignment */}
+            {/* Ownership & Assignment */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                 <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
                     <h3 className="text-sm font-semibold text-gray-700">Assignment</h3>
@@ -293,7 +252,7 @@ export default function LeadDetailPage() {
                 <div className="p-5 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
                         {lead.assignedTo?.name
-                            ? lead.assignedTo.name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
+                            ? lead.assignedTo.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
                             : "NA"}
                     </div>
                     <div>

@@ -21,9 +21,8 @@ import {
 import {
     Lead,
     LeadsFilters,
-    LeadStatus,
 } from "@/types/leads";
-import { getLeadTemperature } from "@/utils/leadTemperature";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
 
 export interface LeadsTableProps {
     leads: Lead[];
@@ -42,13 +41,6 @@ export interface LeadsTableProps {
     onAction: (action: string, lead: Lead) => void;
     setOpenMenu: (id: string | null) => void;
 }
-
-const STATUS_STYLES: Record<LeadStatus, string> = {
-    NEW: "bg-blue-50 text-blue-600 border border-blue-200",
-    CONTACTED: "bg-amber-50 text-amber-600 border border-amber-200",
-    QUALIFIED: "bg-green-50 text-green-600 border border-green-200",
-    CLOSED: "bg-purple-50 text-purple-600 border border-purple-200",
-};
 
 function Avatar({ initials }: { initials: string }) {
     return (
@@ -96,8 +88,8 @@ export function LeadsTable({
     openMenu,
     convertingId,
     onPageChange,
-    onFiltersChange,
     onRefreshLeads,
+    onFiltersChange,
     onNewLead,
     onExport,
     onAction,
@@ -186,7 +178,7 @@ export function LeadsTable({
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
                     <Select
                         value={filters.status}
-                        options={["All Status", "NEW", "CONTACTED", "QUALIFIED", "CLOSED"]}
+                        options={["All Status", "NEW", "WARM", "HOT", "DEAD"]}
                         onChange={(v) => { onFiltersChange({ ...filters, status: v }); onPageChange(1); }}
                     />
                     <Select
@@ -216,11 +208,11 @@ export function LeadsTable({
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto  overflow-y-visible rounded-b-2xl">
+                <div className="overflow-x-auto overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
                     <tr className="border-b border-gray-100">
-                        {["Lead Name", "Company", "Temperature", "Score", "Owner", "Status", "Created At", "Actions"].map((h) => (
+                        {["Lead Name", "Company", "Owner", "Status", "Created At", "Actions"].map((h) => (
                             <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                 {h}
                             </th>
@@ -231,7 +223,7 @@ export function LeadsTable({
                     {loading ? (
                         Array.from({ length: perPage }).map((_, i) => (
                             <tr key={i} className="border-b border-gray-50">
-                                {Array.from({ length: 8 }).map((_, j) => (
+                                {Array.from({ length: 6 }).map((_, j) => (
                                     <td key={j} className="px-5 py-4">
                                         <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
                                     </td>
@@ -240,33 +232,17 @@ export function LeadsTable({
                         ))
                     ) : safeLeads.length === 0 ? (
                         <tr>
-                            <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
+                            <td colSpan={6} className="text-center py-16 text-gray-400 text-sm">
                                 No leads found.
                             </td>
                         </tr>
                     ) : (
                         safeLeads.map((lead) => {
-                            const tempInfo = getLeadTemperature(lead.score);
+                            const statusInfo = getLeadStatusInfo(lead.status);
                             return (
                             <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                                 <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
                                 <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
-                                <td className="px-5 py-3.5 whitespace-nowrap">
-                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${tempInfo.style}`}>
-                                        {tempInfo.emoji} {tempInfo.label}
-                                    </span>
-                                </td>
-                                <td className="px-5 py-3.5 whitespace-nowrap">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                            <div 
-                                                className={`h-full rounded-full ${tempInfo.progressColor}`}
-                                                style={{ width: `${Math.min(Math.max(lead.score ?? 0, 0), 100)}%` }}
-                                            />
-                                        </div>
-                                        <span className="text-[12px] text-gray-600 font-medium">{lead.score ?? 0}/100</span>
-                                    </div>
-                                </td>
                                 {/* ✅ Owner — shows "NA" badge if unassigned */}
 
                                 <td className="px-5 py-3.5 whitespace-nowrap">
@@ -294,12 +270,10 @@ export function LeadsTable({
                                 </td>
 
                                 <td className="px-5 py-3.5 whitespace-nowrap">
-                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_STYLES[lead.status]}`}>
-                                        {lead.status}
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${statusInfo.style}`}>
+                                        {statusInfo.emoji} {statusInfo.label}
                                     </span>
                                 </td>
-
-
 
                                 <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
 
