@@ -41,7 +41,6 @@ export interface LeadsTableProps {
     onAction: (action: string, lead: Lead) => void;
     setOpenMenu: (id: string | null) => void;
 }
-
 function Avatar({ initials }: { initials: string }) {
     return (
         <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[11px] font-bold flex items-center justify-center shrink-0">

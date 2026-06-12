@@ -14,7 +14,7 @@ import {
     Loader2,
     AlertCircle,
 } from "lucide-react";
-import { Lead, LeadStatus } from "@/types/leads";
+import { Lead } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
 import {convertLeadToDeal } from "@/lib/api/leadsApi";
 import api from "@/lib/api/api";
@@ -28,7 +28,6 @@ async function fetchLeadById(leadId: string): Promise<Lead> {
     const res = await api.get<Lead>(`/leads/get-lead/${leadId}`);
     return res.data;
 }
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LeadDetailPage() {
@@ -189,7 +188,7 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-            {/* Status, Source & Created row */}
+            {/* Status / Source / Created row */}
             <div className="flex gap-4 flex-wrap">
                 <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
                     <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Status</p>
