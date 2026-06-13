@@ -1,12 +1,13 @@
 // components/finance/OutstandingInvoices.tsx
 import React from 'react';
-import { UpcomingPayment } from '@/lib/api/finance/financeApi';
+import { UpcomingPayment } from '@/lib/api/finance/financeApi';   // ← real data source
 
 interface OutstandingInvoicesProps {
-  payments: UpcomingPayment[];
+  payments?: UpcomingPayment[];
+  isLoading?: boolean;
 }
 
-export const OutstandingInvoices: React.FC<OutstandingInvoicesProps> = ({ payments }) => {
+export const OutstandingInvoices: React.FC<OutstandingInvoicesProps> = ({ payments = [], isLoading = false }) => {
   const getPriorityBadge = (priority: 'High' | 'Medium' | 'Low') => {
     switch (priority) {
       case 'High':
@@ -15,8 +16,40 @@ export const OutstandingInvoices: React.FC<OutstandingInvoicesProps> = ({ paymen
         return <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-amber-50 text-amber-600">Medium</span>;
       case 'Low':
         return <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-emerald-50 text-emerald-600">Low</span>;
+      default:
+        return <span className="px-2.5 py-1 text-xs font-semibold rounded-md bg-gray-50 text-gray-600">Medium</span>;
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm w-full flex flex-col h-full">
+        <div className="flex items-center justify-between mb-5">
+          <div className="h-6 bg-gray-200 rounded w-40 animate-pulse"></div>
+          <div className="h-4 bg-gray-200 rounded w-16 animate-pulse"></div>
+        </div>
+        <div className="space-y-4">
+          {[...Array(4)].map((_, idx) => (
+            <div key={idx} className="h-20 bg-gray-100 rounded animate-pulse"></div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!payments || payments.length === 0) {
+    return (
+      <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm w-full flex flex-col h-full">
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-base font-bold text-gray-900">Upcoming Payments</h3>
+          <span className="text-xs text-blue-600 font-semibold hover:underline cursor-pointer">View All</span>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <p className="text-gray-500 text-center">No pending payments</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm w-full flex flex-col h-full">
@@ -53,3 +86,5 @@ export const OutstandingInvoices: React.FC<OutstandingInvoicesProps> = ({ paymen
     </div>
   );
 };
+
+export default OutstandingInvoices;

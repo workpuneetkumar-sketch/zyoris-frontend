@@ -1,8 +1,85 @@
-// lib/api/finance/financeApi.ts
-
-import api from "../api";
+import api from "@/lib/api/api";
+import { getInvoices } from './invoicesApi';   // for dashboard & chart
+// import type { Invoice } from './invoicesApi';
 
 // ── Types ────────────────────────────────────────────────
+export type ExpenseCategory = 'TRAVEL' | 'OFFICE' | 'MARKETING' | 'OTHER';
+
+export interface Expense {
+  id: string;
+  organizationId: string;
+  submittedById: string;
+  category: ExpenseCategory;
+  status: "PENDING" | "APPROVED" | "REIMBURSED";
+  amount: number;
+  description: string;
+  expenseDate: string;
+  createdAt: string;
+  updatedAt: string;
+  submittedBy?: {
+    id: string;
+    name: string;
+    email: string;
+    department?: string;
+    avatar?: string;
+  };
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    department?: string;
+    avatar?: string;
+  };
+  employee?: {
+    id: string;
+    name: string;
+    email: string;
+    department?: string;
+    avatar?: string;
+    user?: {
+      id: string;
+      name: string;
+      email: string;
+      department?: string;
+      avatar?: string;
+    };
+  };
+}
+export interface UpcomingPayment {
+  id: string;
+  vendor: string;      
+  amount: string;     
+  dueDate: string;    
+  priority: 'High' | 'Medium' | 'Low';
+}
+export interface Transaction {
+  id: string;
+  date: string;           
+  client: string;         
+  category: string;      
+  amount: number;
+  status: 'Received' | 'Paid' | 'Approved'; 
+}
+export interface CreateExpenseData {
+  category: ExpenseCategory;
+  amount: number;
+  description: string;
+  expenseDate: string;
+}
+export interface ExpenseBreakdownPoint {
+  name: string;
+  value: number;
+  color: string;
+  percentage: string;
+}
+
+export interface UpdateExpenseData {
+  category?: ExpenseCategory;
+  amount?: number;
+  description?: string;
+  expenseDate?: string;
+  status?: "PENDING" | "APPROVED" | "REIMBURSED";
+}
 
 export interface StatCardData {
   title: string;
@@ -11,108 +88,450 @@ export interface StatCardData {
   subtext: string;
   type: 'revenue' | 'expense' | 'profit' | 'invoice' | 'cashflow';
 }
+export interface CashFlowDataPoint {
+  month: string;
+  inflow: number;
+  outflow: number;
+}
 
 export interface ChartDataPoint {
-  month: string;
-  revenue: number;
-  expenses: number;
+  month: string;    // e.g. "Jan"
+  revenue: number;  // in Crores
+  expenses: number; // in Crores
 }
 
-export interface ExpenseBreakdownPoint {
-  name: string;
-  value: number;
-  percentage: string;
-  color: string;
+// ── Helper: extract expense data from API response ──────
+function extractExpenseFromResponse(res: any): Expense {
+  let data = res.data?.data || res.data?.expense || res.data;
+  if (data?.data) data = data.data;
+  if (data?.expense) data = data.expense;
+
+  if (!data || typeof data !== 'object') {
+    throw new Error('Invalid response from server');
+  }
+
+  if (!data.submittedBy && (data.user || data.employee)) {
+    data.submittedBy = data.user || data.employee;
+  }
+
+  return data;
 }
 
-export interface UpcomingPayment {
-  id: string;
-  vendor: string;
-  amount: string;
-  dueDate: string;
-  priority: 'High' | 'Medium' | 'Low';
+// Helper to extract user info
+export function extractUserInfo(expense: any): { name: string; department: string; avatar: string | null; email: string } {
+  const name = expense?.submittedBy?.name ||
+    expense?.submittedBy?.user?.name ||
+    expense?.user?.name ||
+    expense?.employee?.name ||
+    expense?.employee?.user?.name ||
+    "Unknown User";
+
+  const department = expense?.submittedBy?.department ||
+    expense?.submittedBy?.user?.department ||
+    expense?.user?.department ||
+    expense?.employee?.department ||
+    expense?.employee?.user?.department ||
+    "";
+
+  const avatar = expense?.submittedBy?.avatar ||
+    expense?.submittedBy?.user?.avatar ||
+    expense?.user?.avatar ||
+    expense?.employee?.avatar ||
+    null;
+
+  const email = expense?.submittedBy?.email ||
+    expense?.submittedBy?.user?.email ||
+    expense?.user?.email ||
+    expense?.employee?.email ||
+    "";
+
+  return { name, department, avatar, email };
 }
 
-export interface FinanceDashboardData {
-  stats: StatCardData[];
-  trendData: ChartDataPoint[];
-  expenseBreakdown: ExpenseBreakdownPoint[];
-  upcomingPayments: UpcomingPayment[];
-}
+// ── Expense CRUD ────────────────────────────────────────
+export async function fetchExpenses(filters?: {
+  category?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+}): Promise<Expense[]> {
+  try {
+    const params: Record<string, string> = {};
+    if (filters?.category && filters.category !== "ALL") params.category = filters.category;
+    if (filters?.status && filters.status !== "ALL") params.status = filters.status;
+    if (filters?.startDate) params.startDate = filters.startDate;
+    if (filters?.endDate) params.endDate = filters.endDate;
 
-// ── Demo Data ────────────────────────────────────────────
+    const res = await api.get("/finance/expenses/get-expenses", { params });
+    let data = res.data?.data || res.data;
 
-const DEMO_FINANCE_DASHBOARD: FinanceDashboardData = {
-  stats: [
-    {
-      title: "Total Revenue",
-      value: "₹24.8 Cr",
-      change: "+12.5%",
-      subtext: "vs last year",
-      type: "revenue"
-    },
-    {
-      title: "Total Expenses",
-      value: "₹9.1 Cr",
-      change: "+8.2%",
-      subtext: "vs last year",
-      type: "expense"
-    },
-    {
-      title: "Net Profit",
-      value: "₹15.7 Cr",
-      change: "+15.3%",
-      subtext: "vs last year",
-      type: "profit"
-    },
-    {
-      title: "Pending Invoices",
-      value: "₹3.2 Cr",
-      change: "-5.1%",
-      subtext: "from last month",
-      type: "invoice"
-    },
-    {
-      title: "Cash Flow",
-      value: "₹8.4 Cr",
-      change: "Positive",
-      subtext: "current month",
-      type: "cashflow"
+    if (data?.expenses && Array.isArray(data.expenses)) {
+      return data.expenses.map((exp: any) => ({
+        ...exp,
+        submittedBy: exp.submittedBy || exp.user || exp.employee || null
+      }));
     }
-  ],
-  trendData: [
-    { month: "Jan", revenue: 18.2, expenses: 7.8 },
-    { month: "Feb", revenue: 19.5, expenses: 8.2 },
-    { month: "Mar", revenue: 21.1, expenses: 8.9 },
-    { month: "Apr", revenue: 20.8, expenses: 8.5 },
-    { month: "May", revenue: 22.4, expenses: 9.1 },
-    { month: "Jun", revenue: 23.6, expenses: 9.3 },
-    { month: "Jul", revenue: 24.8, expenses: 9.6 },
-    { month: "Aug", revenue: 23.9, expenses: 9.2 },
-    { month: "Sep", revenue: 25.1, expenses: 9.7 },
-    { month: "Oct", revenue: 26.3, expenses: 10.1 },
-    { month: "Nov", revenue: 25.8, expenses: 9.8 },
-    { month: "Dec", revenue: 27.2, expenses: 10.3 }
-  ],
-  expenseBreakdown: [
-    { name: "Salaries", value: 3.8, percentage: "38%", color: "#3b82f6" },
-    { name: "Marketing", value: 2.1, percentage: "21%", color: "#f59e0b" },
-    { name: "Operations", value: 1.5, percentage: "15%", color: "#10b981" },
-    { name: "Technology", value: 1.2, percentage: "12%", color: "#8b5cf6" },
-    { name: "Others", value: 1.4, percentage: "14%", color: "#ef4444" }
-  ],
-  upcomingPayments: [
-    { id: "PAY-001", vendor: "Cloud Services Ltd", amount: "₹1,25,000", dueDate: "Dec 15, 2024", priority: "High" },
-    { id: "PAY-002", vendor: "Marketing Agency", amount: "₹85,000", dueDate: "Dec 18, 2024", priority: "Medium" },
-    { id: "PAY-003", vendor: "Office Supplies Co", amount: "₹42,500", dueDate: "Dec 20, 2024", priority: "Low" },
-    { id: "PAY-004", vendor: "Consulting Firm", amount: "₹2,10,000", dueDate: "Dec 22, 2024", priority: "High" },
-    { id: "PAY-005", vendor: "IT Support", amount: "₹65,000", dueDate: "Dec 25, 2024", priority: "Medium" }
-  ]
-};
 
-// ── Fetch Finance Dashboard Data ─────────────────────────
+    if (Array.isArray(data)) {
+      return data.map((exp: any) => ({
+        ...exp,
+        submittedBy: exp.submittedBy || exp.user || exp.employee || null
+      }));
+    }
 
-export async function fetchFinanceDashboardData(): Promise<FinanceDashboardData> {
-  // Always use demo data - no API call needed
-  return DEMO_FINANCE_DASHBOARD;
+    return [];
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to fetch expenses');
+  }
 }
+export function computeUpcomingPayments(
+  invoices: Invoice[]
+): UpcomingPayment[] {
+  const now = new Date();
+
+  const priorityFromInvoice = (
+    status: string,
+    dueDateStr: string
+  ): 'High' | 'Medium' | 'Low' => {
+    if (status === 'OVERDUE') return 'High';
+    const due = new Date(dueDateStr);
+    const diffDays = (due.getTime() - now.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays <= 7) return 'Medium';
+    return 'Low';
+  };
+
+  // Keep only invoices that are not PAID
+  const pending = invoices.filter(inv => inv.status !== 'PAID');
+
+  // Sort by due date ascending
+  pending.sort(
+    (a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+  );
+
+  return pending.map(inv => {
+    const due = new Date(inv.dueDate);
+    const formattedDue = due.toLocaleDateString('en-IN', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const formatAmount = (amount: number) => {
+      if (amount >= 10000000) return `₹${(amount / 10000000).toFixed(1)} Cr`;
+      if (amount >= 100000) return `₹${(amount / 100000).toFixed(1)} L`;
+      return `₹${amount.toLocaleString('en-IN')}`;
+    };
+
+    return {
+      id: inv.id,
+      vendor: inv.clientName,
+      amount: formatAmount(inv.totalAmount),
+      dueDate: formattedDue,
+      priority: priorityFromInvoice(inv.status, inv.dueDate),
+    };
+  });
+}
+export function computeCashFlowData(
+  expenses: Expense[],
+  invoices: Invoice[]
+): CashFlowDataPoint[] {
+  const monthlyMap: Record<string, { inflow: number; outflow: number }> = {};
+
+  const toMonth = (dateStr: string): string => {
+    const d = new Date(dateStr);
+    return d.toLocaleString('en-US', { month: 'short' }); // "Jan", "Feb" …
+  };
+
+  // Inflow = revenue from paid invoices
+  invoices
+    .filter(inv => inv.status === 'PAID')
+    .forEach(inv => {
+      const month = toMonth(inv.createdAt);   // or dueDate
+      if (!monthlyMap[month]) monthlyMap[month] = { inflow: 0, outflow: 0 };
+      monthlyMap[month].inflow += inv.totalAmount;
+    });
+
+  // Outflow = approved/reimbursed expenses
+  expenses
+    .filter(exp => exp.status === 'APPROVED' || exp.status === 'REIMBURSED')
+    .forEach(exp => {
+      const month = toMonth(exp.expenseDate);
+      if (!monthlyMap[month]) monthlyMap[month] = { inflow: 0, outflow: 0 };
+      monthlyMap[month].outflow += exp.amount;
+    });
+
+  const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return monthOrder
+    .filter(m => monthlyMap[m])
+    .map(month => ({
+      month,
+      inflow: monthlyMap[month].inflow,
+      outflow: monthlyMap[month].outflow,
+    }));
+}
+export async function createExpense(data: CreateExpenseData): Promise<Expense> {
+  try {
+    const payload = {
+      category: data.category,
+      amount: Number(data.amount),
+      description: data.description.trim(),
+      expenseDate: data.expenseDate,
+    };
+
+    const res = await api.post("/finance/expenses/create", payload);
+    return extractExpenseFromResponse(res);
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to create expense');
+  }
+}
+
+export function computeRecentTransactions(
+  expenses: Expense[],
+  invoices: Invoice[]
+): Transaction[] {
+  const txns: Transaction[] = [];
+
+  // 1. Paid invoices → "Received"
+  invoices
+    .filter(inv => inv.status === 'PAID')
+    .forEach(inv => {
+      const d = new Date(inv.createdAt);
+      const dateStr = d.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+      txns.push({
+        id: inv.id,
+        date: dateStr,
+        client: inv.clientName || 'Unknown Client',
+        category: 'Invoice',
+        amount: inv.totalAmount,
+        status: 'Received',
+      });
+    });
+
+  // 2. Expenses (APPROVED / REIMBURSED) → "Paid"
+  expenses
+    .filter(exp => exp.status === 'APPROVED' || exp.status === 'REIMBURSED')
+    .forEach(exp => {
+      const d = new Date(exp.expenseDate);
+      const dateStr = d.toLocaleDateString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+      txns.push({
+        id: exp.id,
+        date: dateStr,
+        client: exp.description || 'Expense',
+        category: exp.category,
+        amount: exp.amount,
+        status: 'Paid',       // treated as outgoing
+      });
+    });
+
+  // Sort by date descending (most recent first)
+  txns.sort((a, b) => {
+    const da = new Date(a.date);
+    const db = new Date(b.date);
+    return db.getTime() - da.getTime();
+  });
+
+  return txns;
+}
+export function computeExpenseBreakdown(expenses: Expense[]): ExpenseBreakdownPoint[] {
+  const categoryColors: Record<string, string> = {
+    TRAVEL: '#f59e0b',   // amber
+    OFFICE: '#3b82f6',   // blue
+    MARKETING: '#8b5cf6', // purple
+    OTHER: '#6b7280',    // gray
+  };
+  const categoryTotals: Record<string, number> = {};
+  const totalAmount = expenses
+    .filter(exp => exp.status === 'APPROVED' || exp.status === 'REIMBURSED')
+    .reduce((sum, exp) => {
+      categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
+      return sum + exp.amount;
+    }, 0);
+  if (totalAmount === 0) return [];
+  return Object.entries(categoryTotals).map(([category, amount]) => ({
+    name: category.charAt(0) + category.slice(1).toLowerCase(),
+    value: amount,
+    color: categoryColors[category] || '#6b7280',
+    percentage: `${((amount / totalAmount) * 100).toFixed(1)}%`,
+  }));
+}
+
+export async function fetchExpenseById(id: string): Promise<Expense> {
+  try {
+    const res = await api.get(`/finance/expenses/get-expense/${id}`);
+    return extractExpenseFromResponse(res);
+  } catch (error: any) {
+    if (error.response?.status === 404) {
+      throw new Error('Expense not found');
+    }
+    throw new Error(error.response?.data?.message || 'Failed to fetch expense');
+  }
+}
+
+export async function updateExpense(id: string, data: UpdateExpenseData): Promise<Expense> {
+  try {
+    const payload: Record<string, any> = {};
+
+    if (data.category !== undefined) payload.category = data.category;
+    if (data.amount !== undefined) payload.amount = Number(data.amount);
+    if (data.description !== undefined) payload.description = data.description;
+    if (data.expenseDate !== undefined) payload.expenseDate = data.expenseDate;
+    if (data.status !== undefined) payload.status = data.status;
+
+    const res = await api.patch(`/finance/expenses/update-expense/${id}`, payload);
+    return extractExpenseFromResponse(res);
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to update expense');
+  }
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  try {
+    await api.delete(`/finance/expenses/delete-expense/${id}`);
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to delete expense');
+  }
+}
+
+export async function approveExpense(id: string): Promise<Expense> {
+  try {
+    const res = await api.patch(`/finance/expenses/approve/${id}`);
+    return extractExpenseFromResponse(res);
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to approve expense');
+  }
+}
+
+export async function reimburseExpense(id: string): Promise<Expense> {
+  try {
+    const res = await api.patch(`/finance/expenses/reimburse/${id}`);
+    return extractExpenseFromResponse(res);
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || 'Failed to reimburse expense');
+  }
+}
+
+// ── Dashboard Computation (no dedicated API) ────────────
+export async function fetchFinanceDashboardData(): Promise<StatCardData[]> {
+  // 1. Fetch all expenses and invoices
+  const [expenses, invoices] = await Promise.all([
+    fetchExpenses(),
+    getInvoices(),
+  ]);
+
+  // 2. Revenue: only PAID invoices
+  const paidInvoices = invoices.filter(inv => inv.status === 'PAID');
+  const totalRevenue = paidInvoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
+  const revenueChange = '';
+  const revenueSubtext = `${paidInvoices.length} paid invoices`;
+
+  // 3. Expenses: only APPROVED or REIMBURSED
+  const realisedExpenses = expenses.filter(
+    exp => exp.status === 'APPROVED' || exp.status === 'REIMBURSED'
+  );
+  const totalExpenses = realisedExpenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const expenseChange = '';
+  const expenseSubtext = `${realisedExpenses.length} expenses`;
+
+  // 4. Net Profit
+  const netProfit = totalRevenue - totalExpenses;
+  const profitSubtext = 'Revenue - Expenses';
+
+  // 5. Invoice count
+  const invoiceCount = invoices.length;
+  const invoiceSubtext = `${paidInvoices.length} paid, ${invoices.length - paidInvoices.length} pending`;
+
+  // 6. Cash Flow (simplified)
+  const cashFlow = netProfit;
+  const cashflowSubtext = 'Net cash movement';
+
+  return [
+    {
+      title: 'Total Revenue',
+      value: `₹${totalRevenue.toLocaleString()}`,
+      change: revenueChange,
+      subtext: revenueSubtext,
+      type: 'revenue',
+    },
+    {
+      title: 'Total Expenses',
+      value: `₹${totalExpenses.toLocaleString()}`,
+      change: expenseChange,
+      subtext: expenseSubtext,
+      type: 'expense',
+    },
+    {
+      title: 'Net Profit',
+      value: `₹${netProfit.toLocaleString()}`,
+      change: '',
+      subtext: profitSubtext,
+      type: 'profit',
+    },
+    {
+      title: 'Invoices',
+      value: invoiceCount.toString(),
+      change: '',
+      subtext: invoiceSubtext,
+      type: 'invoice',
+    },
+    {
+      title: 'Cash Flow',
+      value: `₹${cashFlow.toLocaleString()}`,
+      change: '',
+      subtext: cashflowSubtext,
+      type: 'cashflow',
+    },
+  ];
+}
+
+// ── Monthly Trend for Chart ─────────────────────────────
+export function computeMonthlyTrend(
+  expenses: Expense[],
+  invoices: Invoice[]
+): ChartDataPoint[] {
+  const monthlyMap: Record<string, { revenue: number; expenses: number }> = {};
+
+  const toMonth = (dateStr: string): string => {
+    const d = new Date(dateStr);
+    return d.toLocaleString('en-US', { month: 'short' }); // "Jan", "Feb", ...
+  };
+
+  // Revenue from paid invoices (using createdAt or dueDate)
+  invoices
+    .filter(inv => inv.status === 'PAID')
+    .forEach(inv => {
+      const month = toMonth(inv.createdAt);  // you can change to dueDate
+      if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, expenses: 0 };
+      monthlyMap[month].revenue += inv.totalAmount;
+    });
+
+  // Expenses from approved/reimbursed
+  expenses
+    .filter(exp => exp.status === 'APPROVED' || exp.status === 'REIMBURSED')
+    .forEach(exp => {
+      const month = toMonth(exp.expenseDate);
+      if (!monthlyMap[month]) monthlyMap[month] = { revenue: 0, expenses: 0 };
+      monthlyMap[month].expenses += exp.amount;
+    });
+
+  // Order by calendar month
+  const monthOrder = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return monthOrder
+    .filter(m => monthlyMap[m])
+    .map(month => ({
+      month,
+      revenue: parseFloat((monthlyMap[month].revenue / 1e7).toFixed(2)),   // in Cr
+      expenses: parseFloat((monthlyMap[month].expenses / 1e7).toFixed(2)),
+    }));
+}
+
+// (Invoice type is needed here, so we import it from invoicesApi)
+import type { Invoice } from './invoicesApi';
