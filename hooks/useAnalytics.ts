@@ -87,11 +87,11 @@ function deriveKPI(conversion: Conversion[] | null): KPI {
     let highProbDeals: number | "—" = "—";
 
     if (conversion && conversion.length > 0) {
-        const sum = conversion.reduce((sum, c) => sum + c.score, 0);
+        const sum = conversion.reduce((sum, c) => sum + c.conversionProbability, 0);
         avgScore = Math.round((sum / conversion.length) * 100);
         if (isNaN(avgScore) || !isFinite(avgScore)) avgScore = "—";
 
-        highProbDeals = conversion.filter(c => c.score >= 0.75).length;
+        highProbDeals = conversion.filter(c => c.conversionProbability >= 0.7).length;
     }
 
     return { avgScore, highProbDeals };

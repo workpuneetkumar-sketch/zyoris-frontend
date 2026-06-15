@@ -38,11 +38,11 @@ export interface Segment {
 }
 
 export interface Conversion {
-    deal: string;
-    company: string;
-    stage: "Negotiation" | "Proposal" | "Qualified" | "Demo";
-    value: number;
-    score: number;
+    dealId: string;
+    name: string;
+    stage: string;
+    amount: number;
+    conversionProbability: number;
 }
 
 export interface DriverTotals {
