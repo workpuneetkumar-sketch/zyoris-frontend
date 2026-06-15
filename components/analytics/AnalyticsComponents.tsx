@@ -130,54 +130,35 @@ export function CardHeader({ title, sub, badge, isDemo }: CardHeaderWithDemoProp
 //      can cause type errors and silent render failures.
 // ══════════════════════════════════════════════════════════
 
+
+
 const KPI_CONFIGS: {
     key: keyof KPI;
     label: string;
-    fmt: (v: number) => string;
+    fmt: (v: number | "—") => string;
     iconCls: string;
     icon: string;
 }[] = [
         {
-            key: "totalRevenue",
-            label: "Total Revenue",
-            fmt: fmt$,
-            iconCls: "bg-blue-50 text-blue-600",
-            icon: "fa-dollar-sign",
-        },
-        {
-            key: "activeDeals",
-            label: "Active Deals",
-            fmt: (v) => String(v),           // ← was (v) => v (number, not string)
-            iconCls: "bg-green-50 text-green-600",
-            icon: "fa-handshake",
-        },
-        {
             key: "highProbDeals",
             label: "High-prob Deals",
-            fmt: (v) => String(v),           // ← same fix
+            fmt: (v) => v === "—" ? "—" : String(v),
             iconCls: "bg-amber-50 text-amber-500",
             icon: "fa-trophy",
         },
         {
             key: "avgScore",
             label: "Avg Conv. Score",
-            fmt: (v) => `${v}%`,
+            fmt: (v) => v === "—" ? "—" : `${v}%`,
             iconCls: "bg-purple-50 text-purple-600",
             icon: "fa-bullseye",
-        },
-        {
-            key: "forecastPeak",
-            label: "90-day Peak Rev.",
-            fmt: fmtK,
-            iconCls: "bg-sky-50 text-sky-500",
-            icon: "fa-chart-line",
         },
     ];
 
 export function KpiRow({ kpi }: { kpi: KPI | null }) {
     if (!kpi) return <Spinner text="Loading KPIs…" />;
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 gap-3 mb-4">
             {KPI_CONFIGS.map((cfg) => (
                 <Card key={cfg.key}>
                     <div className="flex items-start gap-2.5">

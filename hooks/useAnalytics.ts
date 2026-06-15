@@ -3,7 +3,7 @@
 // error state for the Analytics page.
 // ─────────────────────────────────────────────────────────
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { fetchAllAnalytics } from "../lib/api/analyticsApi";
 import {
     Forecast,
@@ -28,12 +28,8 @@ import {
 // ─────────────────────────────────────────────────────────
 
 interface KPI {
-    totalRevenue: number;
-    avgScore: number;
-    highProbDeals: number;
-    avgDealValue: number;
-    forecastPeak: number;
-    activeDeals: number;
+    avgScore: number | "—";
+    highProbDeals: number | "—";
 }
 
 type DateRange = "7D" | "30D" | "90D" | "1Y";
@@ -83,71 +79,52 @@ function isDriversEmpty(d: DriverResponse | null): boolean {
 }
 
 // ─────────────────────────────────────────────────────────
-// Derive KPI
+// Derive KPI (only from conversion scores)
 // ─────────────────────────────────────────────────────────
 
-function deriveKPI(
-    forecast: Forecast | null,
-    drivers: DriverResponse | null,
-    conversion: Conversion[] | null
-): KPI {
-    // Fallback to demo KPI values if data is missing
-    const fallbackKPI: KPI = {
-        totalRevenue: 4500000,
-        avgScore: 78,
-        highProbDeals: 12,
-        avgDealValue: 125000,
-        forecastPeak: 300000,
-        activeDeals: 24,
-    };
+function deriveKPI(conversion: Conversion[] | null): KPI {
+    let avgScore: number | "—" = "—";
+    let highProbDeals: number | "—" = "—";
 
-    const hasForecast = forecast && forecast.datapoints && forecast.datapoints.length > 0;
-    const hasDrivers = drivers && drivers.totals;
-    const hasConversion = conversion && conversion.length > 0;
-
-    if (!hasForecast && !hasDrivers && !hasConversion) {
-        return fallbackKPI;
-    }
-
-    const totalRevenue = hasDrivers && drivers.totals.totalRevenue !== 0
-        ? drivers.totals.totalRevenue
-        : fallbackKPI.totalRevenue;
-
-    let avgScore = fallbackKPI.avgScore;
-    if (hasConversion) {
+    if (conversion && conversion.length > 0) {
         const sum = conversion.reduce((sum, c) => sum + c.score, 0);
         avgScore = Math.round((sum / conversion.length) * 100);
-        if (isNaN(avgScore) || !isFinite(avgScore)) avgScore = fallbackKPI.avgScore;
-    }
+        if (isNaN(avgScore) || !isFinite(avgScore)) avgScore = "—";
 
-    let highProbDeals = fallbackKPI.highProbDeals;
-    if (hasConversion) {
         highProbDeals = conversion.filter(c => c.score >= 0.75).length;
     }
 
-    let avgDealValue = fallbackKPI.avgDealValue;
-    if (hasConversion) {
-        const sum = conversion.reduce((sum, c) => sum + c.value, 0);
-        avgDealValue = Math.round(sum / conversion.length);
-        if (isNaN(avgDealValue) || !isFinite(avgDealValue)) avgDealValue = fallbackKPI.avgDealValue;
-    }
+    return { avgScore, highProbDeals };
+}
 
-    let forecastPeak = fallbackKPI.forecastPeak;
-    if (hasForecast) {
-        const lastPoint = forecast.datapoints[forecast.datapoints.length - 1];
-        forecastPeak = lastPoint.forecast;
-        if (isNaN(forecastPeak) || !isFinite(forecastPeak)) forecastPeak = fallbackKPI.forecastPeak;
-    }
+// ─────────────────────────────────────────────────────────
+// In-memory date range filtering
+// ─────────────────────────────────────────────────────────
 
-    const activeDeals = hasConversion ? conversion.length : fallbackKPI.activeDeals;
+function getDateRangeDays(range: DateRange): number {
+    switch (range) {
+        case "7D": return 7;
+        case "30D": return 30;
+        case "1Y": return 365;
+        case "90D":
+        default: return 90;
+    }
+}
+
+function filterForecastByDateRange(forecast: Forecast, range: DateRange): Forecast {
+    const days = getDateRangeDays(range);
+    const now = new Date();
+    const cutoff = new Date(now);
+    cutoff.setDate(now.getDate() - days);
+
+    const filteredDatapoints = forecast.datapoints.filter(d => {
+        const date = new Date(d.label);
+        return date >= cutoff;
+    });
 
     return {
-        totalRevenue,
-        avgScore,
-        highProbDeals,
-        avgDealValue,
-        forecastPeak,
-        activeDeals,
+        ...forecast,
+        datapoints: filteredDatapoints.length > 0 ? filteredDatapoints : forecast.datapoints,
     };
 }
 
@@ -175,7 +152,7 @@ export function useAnalytics() {
         setState(prev => ({ ...prev, loading: true, error: null }));
         try {
             const data = await fetchAllAnalytics();
-            const kpi = deriveKPI(data.forecast, data.drivers, data.conversion);
+            const kpi = deriveKPI(data.conversion);
             setState({
                 loading: false,
                 error: null,
@@ -211,35 +188,69 @@ export function useAnalytics() {
         }
     };
 
-    const forecast = isForecastEmpty(state.realData.forecast)
-        ? getDemoForecast(state.dateRange)
-        : state.realData.forecast;
-    const isForecastDemo = isForecastEmpty(state.realData.forecast);
+    // Compute filtered/demo data based on date range
+    const {
+        filteredForecast,
+        isForecastDemo,
+        filteredDemand,
+        isDemandDemo,
+        filteredSegments,
+        isSegmentsDemo,
+        filteredDrivers,
+        isDriversDemo,
+    } = useMemo(() => {
+        let f = state.realData.forecast;
+        const isFDemo = isForecastEmpty(f);
+        let filteredF = f ? filterForecastByDateRange(f, state.dateRange) : null;
+        if (isFDemo) {
+            filteredF = getDemoForecast(state.dateRange);
+        }
 
-    const demand = isDemandEmpty(state.realData.demand) ? DEMO_DEMAND : state.realData.demand;
-    const isDemandDemo = isDemandEmpty(state.realData.demand);
+        let d = state.realData.demand;
+        const isDDemo = isDemandEmpty(d);
+        let filteredD = d;
+        if (isDDemo) {
+            filteredD = DEMO_DEMAND;
+        }
 
-    const segments = isSegmentsEmpty(state.realData.segments) ? DEMO_SEGMENTS : state.realData.segments;
-    const isSegmentsDemo = isSegmentsEmpty(state.realData.segments);
+        let s = state.realData.segments;
+        const isSDemo = isSegmentsEmpty(s);
+        let filteredS = s;
+        if (isSDemo) {
+            filteredS = DEMO_SEGMENTS;
+        }
 
-    const drivers = isDriversEmpty(state.realData.drivers) ? DEMO_DRIVERS : state.realData.drivers;
-    const isDriversDemo = isDriversEmpty(state.realData.drivers);
+        let dr = state.realData.drivers;
+        const isDrDemo = isDriversEmpty(dr);
+        let filteredDr = dr;
+        if (isDrDemo) {
+            filteredDr = DEMO_DRIVERS;
+        }
 
-    const conversion = state.realData.conversion;
-    const recommendations = state.realData.recommendations;
+        return {
+            filteredForecast: filteredF,
+            isForecastDemo: isFDemo,
+            filteredDemand: filteredD,
+            isDemandDemo: isDDemo,
+            filteredSegments: filteredS,
+            isSegmentsDemo: isSDemo,
+            filteredDrivers: filteredDr,
+            isDriversDemo: isDrDemo,
+        };
+    }, [state.realData, state.dateRange]);
 
     return {
         ...state,
-        forecast,
+        forecast: filteredForecast,
         isForecastDemo,
-        demand,
+        demand: filteredDemand,
         isDemandDemo,
-        segments,
+        segments: filteredSegments,
         isSegmentsDemo,
-        drivers,
+        drivers: filteredDrivers,
         isDriversDemo,
-        conversion,
-        recommendations,
+        conversion: state.realData.conversion,
+        recommendations: state.realData.recommendations,
         refetch: load,
         setDateRange,
     };
