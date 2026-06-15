@@ -1,7 +1,5 @@
-export default function Page() {
-    return (
-        <div className="h-screen flex items-center justify-center">
-            <h1 className="text-xl font-semibold">Calendar Coming Soon</h1>
-        </div>
-    );
+import { CalendarUI } from "@/components/calendar/CalendarUI";
+
+export default function CalendarPage() {
+    return <CalendarUI />;
 }
