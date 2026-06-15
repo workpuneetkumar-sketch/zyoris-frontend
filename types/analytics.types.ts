@@ -29,11 +29,8 @@ export interface CardHeaderProps {
 }
 
 export interface KPI {
-    totalRevenue: number;
-    activeDeals: number;
-    highProbDeals: number;
-    avgScore: number;
-    forecastPeak: number;
+    avgScore: number | "—";
+    highProbDeals: number | "—";
 }
 
 export interface KpiRowProps {
