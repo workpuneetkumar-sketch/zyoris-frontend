@@ -163,6 +163,27 @@ const KPI_CONFIGS: {
         },
     ];
 
+export function KpiRow({ kpi }: { kpi: KPI | null }) {
+    if (!kpi) return <Spinner text="Loading KPIs…" />;
+    return (
+        <div className="grid grid-cols-5 gap-3 mb-4">
+            {KPI_CONFIGS.map((cfg) => (
+                <Card key={cfg.key}>
+                    <div className="flex items-start gap-2.5">
+                        <div className={`w-7 h-7 rounded flex items-center justify-center ${cfg.iconCls}`}>
+                            <i className={`fa-solid ${cfg.icon} text-xs`} />
+                        </div>
+                        <div>
+                            <p className="text-[10.5px] text-gray-400 uppercase tracking-wide">{cfg.label}</p>
+                            <p className="text-lg font-bold text-gray-900 mt-0.5">{cfg.fmt(kpi[cfg.key])}</p>
+                        </div>
+                    </div>
+                </Card>
+            ))}
+        </div>
+    );
+}
+
 // ══════════════════════════════════════════════════════════
 // FORECAST CHART
 // FIX 1: labels run through formatLabel() → no more raw ISO strings

@@ -9,17 +9,16 @@ import { useState } from "react";
 import { useAnalytics } from "@/hooks/useAnalytics";
 
 import {
-
     ForecastChart,
     DemandChart,
     SegmentList,
     DriversList,
-
     SourceDonut,
     Card,
     CardHeader,
     EndpointBadge,
     Spinner,
+    KpiRow,
 } from "../../../components/analytics/AnalyticsComponents";
 
 // ─────────────────────────────────────────────────────────
@@ -37,13 +36,10 @@ interface TopbarProps {
 // ─────────────────────────────────────────────────────────
 
 const TABS: string[] = [
-    "Overview",
-    "Revenue",
-    "Deals",
-    "Conversions",
+    "Revenue Forecast",
+    "Demand Trends",
     "Segments",
-    "Forecast",
-    "Recommendations",
+    "Drivers",
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -105,7 +101,7 @@ function Topbar({ activeTab, onTab, onRefetch }: TopbarProps) {
 // ─────────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
-    const [activeTab, setActiveTab] = useState("Overview");
+    const [activeTab, setActiveTab] = useState("Revenue Forecast");
 
     const {
         loading,
@@ -145,43 +141,42 @@ export default function AnalyticsPage() {
                 <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2.5">
                     Key Metrics
                 </p>
+                <KpiRow kpi={kpi} />
 
-
-
-                {/* CHARTS */}
-                <div className="grid grid-cols-[1.2fr_1fr] gap-3.5 mb-4">
+                {/* CHARTS BASED ON ACTIVE TAB */}
+                {activeTab === "Revenue Forecast" && (
                     <Card>
                         <CardHeader title="Revenue Forecast" />
                         <ForecastChart data={forecast} />
                     </Card>
+                )}
 
+                {activeTab === "Demand Trends" && (
                     <Card>
                         <CardHeader title="Demand Trends" />
                         <DemandChart data={demand} />
                     </Card>
-                </div>
+                )}
 
-                {/* SEGMENTS + DRIVERS */}
-                <div className="grid grid-cols-[1.2fr_1fr] gap-3.5 mb-4">
+                {activeTab === "Segments" && (
                     <Card>
                         <CardHeader title="Segments" />
                         <SegmentList data={segments} />
                     </Card>
+                )}
 
-                    <Card>
-                        <CardHeader title="Drivers" />
-                        <DriversList data={drivers} />
-                    </Card>
-                </div>
-
-
-
-
-                {/* SOURCE */}
-                <Card>
-                    <CardHeader title="Revenue Sources" />
-                    <SourceDonut data={drivers} />
-                </Card>
+                {activeTab === "Drivers" && (
+                    <div className="space-y-4">
+                        <Card>
+                            <CardHeader title="Drivers" />
+                            <DriversList data={drivers} />
+                        </Card>
+                        <Card>
+                            <CardHeader title="Revenue Sources" />
+                            <SourceDonut data={drivers} />
+                        </Card>
+                    </div>
+                )}
 
             </main>
         </div>
