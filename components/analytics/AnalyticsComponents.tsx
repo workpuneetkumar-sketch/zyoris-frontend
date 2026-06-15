@@ -498,7 +498,7 @@ export function SourceDonut({ data }: SourceDonutProps) {
                 labels,
                 datasets: [
                     {
-                        label: "Revenue by source",        // ← FIX: was missing
+                        label: "Revenue by source",
                         data: impacts,
                         backgroundColor: SOURCE_COLORS,
                         borderWidth: 1.5,
@@ -508,16 +508,26 @@ export function SourceDonut({ data }: SourceDonutProps) {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
+                maintainAspectRatio: true,
+                aspectRatio: 1.5,
+                layout: {
+                    padding: {
+                        top: 10,
+                        right: 20,
+                        bottom: 10,
+                        left: 20,
+                    },
+                },
                 plugins: {
                     legend: {
-                        position: "right" as const,
+                        position: "bottom" as const,
+                        align: "center" as const,
                         labels: {
                             font: { size: 11 },
                             color: "#6b7280",
                             boxWidth: 10,
                             boxHeight: 10,
-                            padding: 12,
+                            padding: 16,
                         },
                     },
                     tooltip: {
@@ -527,7 +537,7 @@ export function SourceDonut({ data }: SourceDonutProps) {
                         },
                     },
                 },
-                cutout: "70%",
+                cutout: "65%",
             },
         });
 
@@ -539,8 +549,8 @@ export function SourceDonut({ data }: SourceDonutProps) {
     }
 
     return (
-        <div className="relative h-44 flex items-center justify-center">
-            <canvas ref={canvasRef} />
+        <div className="relative w-full min-h-[280px] flex items-center justify-center">
+            <canvas ref={canvasRef} className="max-w-full" />
         </div>
     );
 }
