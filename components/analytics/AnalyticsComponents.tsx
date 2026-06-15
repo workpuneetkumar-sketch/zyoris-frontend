@@ -98,16 +98,27 @@ export function Card({ children, className = "" }: CardProps) {
 // CARD HEADER
 // ══════════════════════════════════════════════════════════
 
-export function CardHeader({ title, sub, badge }: CardHeaderProps) {
+interface CardHeaderWithDemoProps extends CardHeaderProps {
+    isDemo?: boolean;
+}
+
+export function CardHeader({ title, sub, badge, isDemo }: CardHeaderWithDemoProps) {
     return (
         <div className="flex items-start justify-between mb-4">
-            <div>
+            <div className="flex items-center gap-2">
                 <p className="text-[13.5px] font-bold text-gray-900">{title}</p>
+                {isDemo && (
+                    <span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full border border-yellow-100">
+                        Demo Data
+                    </span>
+                )}
+            </div>
+            <div className="flex items-center gap-2">
                 {sub && (
                     <p className="text-[11px] text-gray-500 mt-0.5">{sub}</p>
                 )}
+                {badge && <EndpointBadge label={badge} />}
             </div>
-            {badge && <EndpointBadge label={badge} />}
         </div>
     );
 }
@@ -166,16 +177,16 @@ const KPI_CONFIGS: {
 export function KpiRow({ kpi }: { kpi: KPI | null }) {
     if (!kpi) return <Spinner text="Loading KPIs…" />;
     return (
-        <div className="grid grid-cols-5 gap-3 mb-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mb-4">
             {KPI_CONFIGS.map((cfg) => (
                 <Card key={cfg.key}>
                     <div className="flex items-start gap-2.5">
                         <div className={`w-7 h-7 rounded flex items-center justify-center ${cfg.iconCls}`}>
                             <i className={`fa-solid ${cfg.icon} text-xs`} />
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <p className="text-[10.5px] text-gray-400 uppercase tracking-wide">{cfg.label}</p>
-                            <p className="text-lg font-bold text-gray-900 mt-0.5">{cfg.fmt(kpi[cfg.key])}</p>
+                            <p className="text-lg font-bold text-gray-900 mt-0.5 truncate">{cfg.fmt(kpi[cfg.key])}</p>
                         </div>
                     </div>
                 </Card>
