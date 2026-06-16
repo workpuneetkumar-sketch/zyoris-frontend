@@ -16,10 +16,10 @@ export function CalendarUI() {
 
     const [currentDate, setCurrentDate] = useState(new Date());
     const [viewMode, setViewMode] = useState<ViewMode>("month");
-    
+
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [isScheduleOpen, setIsScheduleOpen] = useState(false);
-    
+
     // Fetch meetings
     const loadMeetings = async () => {
         setMeetingsLoading(true);
@@ -74,7 +74,7 @@ export function CalendarUI() {
         const days = [];
         const totalDays = getDaysInMonth(currentYear, currentMonth);
         const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
-        
+
         for (let i = 0; i < firstDay; i++) {
             days.push(null);
         }
@@ -130,13 +130,13 @@ export function CalendarUI() {
                 </div>
                 <div className="flex items-center gap-3">
                     <div className="flex bg-gray-100 p-1 rounded-xl">
-                        <button 
+                        <button
                             onClick={() => setViewMode("month")}
                             className={`px-4 py-1.5 text-[13px] font-bold rounded-lg transition-all ${viewMode === "month" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                         >
                             Month
                         </button>
-                        <button 
+                        <button
                             onClick={() => setViewMode("week")}
                             className={`px-4 py-1.5 text-[13px] font-bold rounded-lg transition-all ${viewMode === "week" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
                         >
@@ -183,9 +183,9 @@ export function CalendarUI() {
                             </div>
                         ))}
                         {monthDays.map((date, idx) => (
-                            <CalendarCell 
-                                key={idx} 
-                                date={date} 
+                            <CalendarCell
+                                key={idx}
+                                date={date}
                                 getItemsForDate={getItemsForDate}
                                 onClick={() => date && setSelectedDate(date)}
                                 isToday={date ? date.toLocaleDateString() === new Date().toLocaleDateString() : false}
@@ -201,9 +201,9 @@ export function CalendarUI() {
                             </div>
                         ))}
                         {weekDays.map((date, idx) => (
-                            <CalendarCell 
-                                key={`week-${idx}`} 
-                                date={date} 
+                            <CalendarCell
+                                key={`week-${idx}`}
+                                date={date}
                                 getItemsForDate={getItemsForDate}
                                 onClick={() => date && setSelectedDate(date)}
                                 isToday={date ? date.toLocaleDateString() === new Date().toLocaleDateString() : false}
@@ -215,7 +215,7 @@ export function CalendarUI() {
             </div>
 
             {selectedDate && (
-                <DateDetailsModal 
+                <DateDetailsModal
                     date={selectedDate}
                     onClose={() => setSelectedDate(null)}
                     items={getItemsForDate(selectedDate)}
@@ -225,7 +225,7 @@ export function CalendarUI() {
             {isScheduleOpen && (
                 <ScheduleMeetingModal
                     onClose={() => setIsScheduleOpen(false)}
-                    onSave={async (data) => {
+                    onSave={async (data: CreateMeetingPayload) => {
                         await createMeeting(data);
                         await loadMeetings();
                         setIsScheduleOpen(false);
@@ -238,12 +238,12 @@ export function CalendarUI() {
 
 function CalendarCell({ date, getItemsForDate, onClick, isToday, isWeekView = false }: any) {
     if (!date) return <div className="bg-white min-h-[120px] border-t border-gray-200" />;
-    
+
     const { dayTasks, dayMeetings } = getItemsForDate(date);
     const hasItems = dayTasks.length > 0 || dayMeetings.length > 0;
 
     return (
-        <div 
+        <div
             onClick={onClick}
             className={`bg-white p-2 min-h-[120px] border-t border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors ${isWeekView ? 'min-h-[400px]' : ''} ${isToday ? 'bg-blue-50/30' : ''}`}
         >
@@ -268,7 +268,7 @@ function CalendarCell({ date, getItemsForDate, onClick, isToday, isWeekView = fa
 
 function DateDetailsModal({ date, onClose, items }: any) {
     const { dayTasks, dayMeetings } = items;
-    
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-3 md:p-4">
             <div className="bg-white w-full max-w-lg rounded-2xl shadow-xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -303,7 +303,7 @@ function DateDetailsModal({ date, onClose, items }: any) {
                             </div>
                         )}
                     </div>
-                    
+
                     <div>
                         <h3 className="text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-3 flex items-center gap-2">
                             <CalendarIcon size={14} /> Tasks Due ({dayTasks.length})
@@ -354,7 +354,7 @@ function ScheduleMeetingModal({ onClose, onSave }: any) {
             // 1 & 2. Combine the selected date with the selected start and end times
             const startDateTime = new Date(`${form.date}T${form.startTime}`);
             const endDateTime = new Date(`${form.date}T${form.endTime}`);
-            
+
             // 3. Convert both values into ISO datetime strings using toISOString()
             const startTimeIso = startDateTime.toISOString();
             const endTimeIso = endDateTime.toISOString();
@@ -365,7 +365,7 @@ function ScheduleMeetingModal({ onClose, onSave }: any) {
                 startTime: startTimeIso,
                 endTime: endTimeIso,
             };
-            
+
             if (form.description) {
                 payload.description = form.description;
             }
@@ -390,7 +390,7 @@ function ScheduleMeetingModal({ onClose, onSave }: any) {
                         <X size={20} />
                     </button>
                 </div>
-                
+
                 <div className="p-5 md:p-6 space-y-5">
                     {error && (
                         <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-[13px] text-red-600 flex items-center gap-2">
@@ -409,7 +409,7 @@ function ScheduleMeetingModal({ onClose, onSave }: any) {
                             placeholder="Enter meeting title"
                         />
                     </div>
-                    
+
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Date <span className="text-red-500">*</span></label>
