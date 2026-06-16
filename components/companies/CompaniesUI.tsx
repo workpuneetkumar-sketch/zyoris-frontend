@@ -565,10 +565,16 @@ export function CompaniesUI({
             </div>
 
             {/* Content — split layout when a company is selected */}
-            <div className={`flex gap-5 items-start ${selectedCompany ? "grid grid-cols-[1fr_340px]" : ""}`}>
+            <div
+  className={
+    selectedCompany
+      ? "grid grid-cols-[minmax(0,1fr)_340px] gap-5 items-start"
+      : "flex gap-5 items-start"
+  }
+>
 
                 {/* Left: Table */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm min-w-0">
                     {/* Filters */}
                     <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
                         <div className="relative">
@@ -610,8 +616,8 @@ export function CompaniesUI({
                     </div>
 
                     {/* Table */}
-                    <div className="overflow-x-auto overflow-y-visible">
-                        <table className="w-full text-sm">
+                    <div className="overflow-x-auto overflow-y-visible w-full">
+                        <table className="min-w-[900px] text-sm">
                             <thead>
                                 <tr className="border-b border-gray-100">
                                     {["Company", "Industry", "Email", "Phone", "City", "Status", "Created", "Actions"].map((h) => (

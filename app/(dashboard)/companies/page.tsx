@@ -2,6 +2,7 @@
 
 import { CompaniesUI } from "@/components/companies/CompaniesUI";
 import { useCompanies } from "@/hooks/useCompanies";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 
 export default function CompaniesPage() {
     const {
@@ -13,15 +14,18 @@ export default function CompaniesPage() {
         loading,
         error,
         openMenu,
+        confirmDelete,
         selectedCompany,
         companyContacts,
         contactsLoading,
         contactsError,
         setPage,
         setOpenMenu,
+        setConfirmDelete,
         handleFiltersChange,
         handleSelectCompany,
         handleDelete,
+        executeDelete,
         retry,
         reload,
     } = useCompanies();
@@ -41,24 +45,36 @@ export default function CompaniesPage() {
     }
 
     return (
-        <CompaniesUI
-            companies={companies}
-            total={total}
-            page={page}
-            perPage={perPage}
-            filters={filters}
-            loading={loading}
-            openMenu={openMenu}
-            selectedCompany={selectedCompany}
-            companyContacts={companyContacts}
-            contactsLoading={contactsLoading}
-            contactsError={contactsError}
-            onPageChange={setPage}
-            onFiltersChange={handleFiltersChange}
-            onSelectCompany={handleSelectCompany}
-            onDelete={handleDelete}
-            onReload={reload}
-            setOpenMenu={setOpenMenu}
-        />
+        <>
+            <CompaniesUI
+                companies={companies}
+                total={total}
+                page={page}
+                perPage={perPage}
+                filters={filters}
+                loading={loading}
+                openMenu={openMenu}
+                selectedCompany={selectedCompany}
+                companyContacts={companyContacts}
+                contactsLoading={contactsLoading}
+                contactsError={contactsError}
+                onPageChange={setPage}
+                onFiltersChange={handleFiltersChange}
+                onSelectCompany={handleSelectCompany}
+                onDelete={handleDelete}
+                onReload={reload}
+                setOpenMenu={setOpenMenu}
+            />
+
+            <ConfirmationModal
+                isOpen={confirmDelete !== null}
+                title="Delete Company"
+                message={`Are you sure you want to delete company "${confirmDelete?.name}"?`}
+                variant="danger"
+                confirmText="Delete"
+                onConfirm={executeDelete}
+                onCancel={() => setConfirmDelete(null)}
+            />
+        </>
     );
 }

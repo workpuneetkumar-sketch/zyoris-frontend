@@ -1,10 +1,23 @@
 "use client";
 
-import { AppShell } from "@/components/Shell";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api/api";
-import { useEffect, useState } from "react";
+import { fetchTasks, Task } from "@/lib/api/tasksApi";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Package,
+  AlertTriangle,
+  Cog,
+  Shield,
+  Boxes,
+  ListTodo,
+  ClipboardList,
+  Sparkles,
+} from "lucide-react";
 
 interface InventoryRisk {
   sku: string;
@@ -12,12 +25,120 @@ interface InventoryRisk {
   quantity: number;
   safetyStock: number;
   coverageRatio: number;
-  risk: "LOW" | "MEDIUM" | "HIGH";
+  risk?: "LOW" | "MEDIUM" | "HIGH";
 }
 
 interface OpsResponse {
   demandForecast: string;
   inventoryRiskAlerts: InventoryRisk[];
+  optimizationSuggestions?: string[];
+}
+
+function isOperationsDataEmpty(data: OpsResponse | null | undefined): boolean {
+  if (!data) return true;
+  const hasAlerts = (data.inventoryRiskAlerts?.length ?? 0) > 0;
+  const hasSuggestions = (data.optimizationSuggestions?.length ?? 0) > 0;
+  return !hasAlerts && !hasSuggestions;
+}
+
+const OPERATIONS_MOCK_DATA: OpsResponse = {
+  demandForecast: "increasing",
+  inventoryRiskAlerts: [
+    { sku: "SKU-1042", name: "Industrial Valve Assembly", quantity: 42, safetyStock: 80, coverageRatio: 0.53, risk: "HIGH" },
+    { sku: "SKU-2087", name: "Precision Bearing Kit", quantity: 156, safetyStock: 120, coverageRatio: 1.30, risk: "LOW" },
+    { sku: "SKU-3156", name: "Hydraulic Pump Module", quantity: 28, safetyStock: 50, coverageRatio: 0.56, risk: "HIGH" },
+    { sku: "SKU-4021", name: "Control Panel Enclosure", quantity: 67, safetyStock: 60, coverageRatio: 1.12, risk: "MEDIUM" },
+    { sku: "SKU-5093", name: "Servo Motor 2.4kW", quantity: 19, safetyStock: 35, coverageRatio: 0.54, risk: "HIGH" },
+  ],
+  optimizationSuggestions: [
+    "Reallocate 20% production capacity from SKU-2087 to SKU-1042 to reduce stockout risk.",
+    "Trigger expedited PO for hydraulic pump modules — lead time exceeds coverage window.",
+    "Bundle slow-moving enclosures with high-velocity valve assemblies to accelerate turnover.",
+  ],
+};
+
+function DemoDataBadge() {
+  return (
+    <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-md">
+      Demo Data
+    </span>
+  );
+}
+
+function riskBadgeClasses(risk: InventoryRisk["risk"]) {
+  switch (risk) {
+    case "HIGH":
+      return "bg-red-50 text-red-600 border-red-100";
+    case "MEDIUM":
+      return "bg-amber-50 text-amber-600 border-amber-100";
+    default:
+      return "bg-emerald-50 text-emerald-600 border-emerald-100";
+  }
+}
+
+function DemandForecastDisplay({ forecast }: { forecast?: string }) {
+  if (forecast === "increasing") {
+    return (
+      <span className="inline-flex items-center gap-2 text-emerald-600">
+        <TrendingUp size={28} strokeWidth={2.5} />
+        <span>Increasing</span>
+      </span>
+    );
+  }
+  if (forecast === "decreasing") {
+    return (
+      <span className="inline-flex items-center gap-2 text-red-600">
+        <TrendingDown size={28} strokeWidth={2.5} />
+        <span>Decreasing</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-2 text-blue-600">
+      <Minus size={28} strokeWidth={2.5} />
+      <span>Stable</span>
+    </span>
+  );
+}
+
+function OverviewStatCard({
+  label,
+  value,
+  accent,
+}: {
+  label: string;
+  value: number;
+  accent?: "red" | "amber" | "emerald" | "blue" | "slate";
+}) {
+  const accentClasses = {
+    red: "text-red-600",
+    amber: "text-amber-600",
+    emerald: "text-emerald-600",
+    blue: "text-blue-600",
+    slate: "text-gray-900",
+  };
+
+  return (
+    <div className="bg-gray-50/80 border border-gray-100 rounded-2xl p-4 md:p-5">
+      <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest mb-2">{label}</p>
+      <p className={`text-2xl md:text-3xl font-extrabold tracking-tight ${accent ? accentClasses[accent] : "text-gray-900"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function aggregateTaskStats(tasks: Task[]) {
+  const pending = tasks.filter((t) => t.status === "TODO").length;
+  const inProgress = tasks.filter((t) => t.status === "IN_PROGRESS").length;
+  const completed = tasks.filter((t) => t.status === "DONE").length;
+
+  return {
+    total: tasks.length,
+    pending,
+    inProgress,
+    completed,
+  };
 }
 
 export default function OperationsDashboardPage() {
@@ -25,6 +146,9 @@ export default function OperationsDashboardPage() {
   const router = useRouter();
 
   const [ops, setOps] = useState<OpsResponse | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [demandTrendLabel, setDemandTrendLabel] = useState<string | null>(null);
+  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -39,97 +163,290 @@ export default function OperationsDashboardPage() {
   useEffect(() => {
     async function load() {
       try {
-        const res = await api.get<OpsResponse>("/dashboard/operations");
-        setOps(res.data);
+        const [opsRes, tasksRes, trendsRes] = await Promise.all([
+          api.get<OpsResponse>("/dashboard/operations"),
+          fetchTasks().catch(() => ({ tasks: [], total: 0 })),
+          api.get("/analytics/demand/trends").catch(() => ({ data: null })),
+        ]);
+
+        setOps(opsRes.data);
+        setTasks(tasksRes.tasks ?? []);
+
+        const trend = trendsRes.data?.overallTrend;
+        if (typeof trend === "string" && trend.trim()) {
+          setDemandTrendLabel(trend);
+        }
       } catch {
         // ignore
+      } finally {
+        setDataLoaded(true);
       }
     }
     load();
   }, []);
 
+  const usingDemoData = dataLoaded && isOperationsDataEmpty(ops);
+  const finalOps = usingDemoData
+    ? OPERATIONS_MOCK_DATA
+    : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [], optimizationSuggestions: [] });
+
+  const alerts = finalOps.inventoryRiskAlerts ?? [];
+  const suggestions = finalOps.optimizationSuggestions ?? [];
+  const hasRiskLevels = alerts.some((a) => a.risk);
+
+  const inventoryOverview = useMemo(() => {
+    return {
+      total: alerts.length,
+      high: alerts.filter((a) => a.risk === "HIGH").length,
+      medium: alerts.filter((a) => a.risk === "MEDIUM").length,
+      low: alerts.filter((a) => a.risk === "LOW").length,
+    };
+  }, [alerts]);
+
+  const taskStats = useMemo(() => aggregateTaskStats(tasks), [tasks]);
+
   if (!user) return null;
 
-  const alerts = ops?.inventoryRiskAlerts ?? [];
-
   return (
-    <AppShell>
-      <div className="topbar">
+    <div className="space-y-8 max-w-[1400px] mx-auto p-1">
+      {/* 1. Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <div className="topbar-title">Operations · Demand & inventory</div>
-          <div className="topbar-subtitle">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+              Operations · Demand &amp; Inventory
+            </h1>
+            {usingDemoData && <DemoDataBadge />}
+          </div>
+          <p className="text-sm text-gray-500 mt-1">
             Align production, inventory, and demand using unified telemetry.
-          </div>
+          </p>
         </div>
-        <div className="topbar-actions">
-          <div className="pill">Role · Operations</div>
+        <div className="flex items-center gap-3">
+          <div className="px-3.5 py-1.5 bg-blue-50 text-blue-600 text-xs font-bold uppercase tracking-wider rounded-xl border border-blue-100 flex items-center gap-1.5 shadow-sm">
+            <Shield size={13} />
+            Role · Operations
+          </div>
         </div>
       </div>
 
-      <div className="cards-grid">
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Demand forecast</div>
+      {/* 2. Summary Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+        <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex justify-between items-start mb-4">
+            <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
+              Demand Forecast
+            </p>
+            <div className="p-2 rounded-2xl bg-blue-50 border border-blue-100 text-blue-600 group-hover:scale-110 transition-all">
+              <TrendingUp size={16} />
+            </div>
           </div>
-          <div className="card-metric">
-            {ops?.demandForecast === "increasing"
-              ? "↑ Increasing"
-              : ops?.demandForecast === "decreasing"
-                ? "↓ Decreasing"
-                : "→ Stable"}
+          <div className="text-2xl md:text-3xl font-extrabold tracking-tight">
+            <DemandForecastDisplay forecast={finalOps.demandForecast} />
           </div>
-          <div className="card-trend">
+          <p className="text-xs text-gray-400 mt-2 font-medium">
             Blend of bookings, revenue, and inventory signals.
-          </div>
+            {demandTrendLabel && (
+              <span className="block mt-1 text-gray-500">
+                Analytics trend: {demandTrendLabel.charAt(0).toUpperCase() + demandTrendLabel.slice(1)}
+              </span>
+            )}
+          </p>
         </div>
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Inventory alerts</div>
+
+        <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm hover:shadow-md transition-all group">
+          <div className="flex justify-between items-start mb-4">
+            <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
+              Inventory Alerts
+            </p>
+            <div className="p-2 rounded-2xl bg-red-50 border border-red-100 text-red-600 group-hover:scale-110 transition-all">
+              <AlertTriangle size={16} />
+            </div>
           </div>
-          <div className="card-metric metric-negative">{alerts.length}</div>
-          <div className="card-trend">
+          <div className="flex items-baseline gap-2">
+            <h4 className="text-3xl font-extrabold text-red-600 tracking-tight">
+              {inventoryOverview.total}
+            </h4>
+            {inventoryOverview.high > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-red-50 text-red-600 border-red-100">
+                {inventoryOverview.high} high risk
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 mt-2 font-medium">
             SKUs below safety stock threshold or near stockout.
-          </div>
+          </p>
         </div>
-        <div className="card">
-          <div className="card-header">
-            <div className="card-title">Optimization focus</div>
+
+        <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm hover:shadow-md transition-all group sm:col-span-2 lg:col-span-1">
+          <div className="flex justify-between items-start mb-4">
+            <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">
+              Optimization Focus
+            </p>
+            <div className="p-2 rounded-2xl bg-violet-50 border border-violet-100 text-violet-600 group-hover:scale-110 transition-all">
+              <Cog size={16} />
+            </div>
           </div>
-          <div className="card-metric">Mix shift</div>
-          <div className="card-trend">
+          <h4 className="text-2xl md:text-3xl font-extrabold text-gray-900 tracking-tight">
+            Mix shift
+          </h4>
+          <p className="text-xs text-gray-400 mt-2 font-medium">
             Reallocate capacity from slow movers into high-velocity SKUs.
-          </div>
+          </p>
         </div>
       </div>
 
-      <div className="panel" style={{ marginTop: "1.25rem" }}>
-        <div className="panel-title">Inventory risk by SKU</div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>SKU</th>
-              <th>Name</th>
-              <th>On hand</th>
-              <th>Safety stock</th>
-              <th>Coverage</th>
-              <th>Risk</th>
-            </tr>
-          </thead>
-          <tbody>
-            {alerts.map((a) => (
-              <tr key={a.sku}>
-                <td>{a.sku}</td>
-                <td>{a.name}</td>
-                <td>{a.quantity}</td>
-                <td>{a.safetyStock}</td>
-                <td>{a.coverageRatio.toFixed(2)}x</td>
-                <td>{a.risk}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* 3. Inventory Overview */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Package size={18} className="text-blue-600 shrink-0" />
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Inventory Overview</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Alert breakdown from inventory risk telemetry.</p>
+          </div>
+        </div>
+        <div className={`grid grid-cols-2 ${hasRiskLevels ? "md:grid-cols-4" : "md:grid-cols-1"} gap-3 md:gap-4`}>
+          <OverviewStatCard label="Total Alerts" value={inventoryOverview.total} accent="red" />
+          {hasRiskLevels && (
+            <>
+              <OverviewStatCard label="High Risk" value={inventoryOverview.high} accent="red" />
+              <OverviewStatCard label="Medium Risk" value={inventoryOverview.medium} accent="amber" />
+              <OverviewStatCard label="Low Risk" value={inventoryOverview.low} accent="emerald" />
+            </>
+          )}
+        </div>
       </div>
-    </AppShell>
+
+      {/* 4. Tasks Overview */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <ListTodo size={18} className="text-violet-600 shrink-0" />
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Tasks Overview</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Client-side aggregation from active task records.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+          <OverviewStatCard label="Total Tasks" value={taskStats.total} accent="slate" />
+          <OverviewStatCard label="Pending Tasks" value={taskStats.pending} accent="amber" />
+          <OverviewStatCard label="In Progress Tasks" value={taskStats.inProgress} accent="blue" />
+          <OverviewStatCard label="Completed Tasks" value={taskStats.completed} accent="emerald" />
+        </div>
+      </div>
+
+      {/* 5. Recommendations */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex items-center gap-2 mb-5">
+          <Sparkles size={18} className="text-violet-600 shrink-0" />
+          <div>
+            <h3 className="text-base font-bold text-gray-800">Optimization Recommendations</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Actionable suggestions to improve inventory and capacity mix.</p>
+          </div>
+        </div>
+        {suggestions.length > 0 ? (
+          <ul className="space-y-3">
+            {suggestions.map((suggestion) => (
+              <li key={suggestion} className="text-sm text-gray-600 leading-relaxed flex gap-3 bg-gray-50/80 border border-gray-100 rounded-2xl px-4 py-3">
+                <ClipboardList size={16} className="text-violet-500 shrink-0 mt-0.5" />
+                <span>{suggestion}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="py-10 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            <Sparkles className="mx-auto text-gray-300 mb-2" size={28} />
+            <p className="text-sm">No optimization recommendations available.</p>
+          </div>
+        )}
+      </div>
+
+      {/* 6. Inventory Table */}
+      <div className="bg-white border border-gray-100 rounded-3xl p-5 md:p-6 shadow-sm">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+          <div className="flex items-center gap-2">
+            <Package size={18} className="text-blue-600 shrink-0" />
+            <div>
+              <h3 className="text-base font-bold text-gray-800">Inventory Risk by SKU</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Coverage ratios and safety stock thresholds across active SKUs.
+              </p>
+            </div>
+          </div>
+          {alerts.length > 0 && (
+            <div className="px-2.5 py-1 bg-gray-50 text-gray-600 text-[10px] font-bold rounded-lg border border-gray-100 self-start">
+              {alerts.length} SKU{alerts.length !== 1 ? "s" : ""} flagged
+            </div>
+          )}
+        </div>
+
+        {alerts.length > 0 ? (
+          <div className="overflow-x-auto -mx-1">
+            <table className="w-full text-left min-w-[640px]">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-4 md:px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                    SKU
+                  </th>
+                  <th className="px-4 md:px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider">
+                    Name
+                  </th>
+                  <th className="px-4 md:px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider text-right">
+                    On Hand
+                  </th>
+                  <th className="px-4 md:px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider text-right">
+                    Safety Stock
+                  </th>
+                  <th className="px-4 md:px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider text-right">
+                    Coverage
+                  </th>
+                  <th className="px-4 md:px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-wider text-right">
+                    Risk
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {alerts.map((a) => (
+                  <tr key={a.sku} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 md:px-5 py-4 text-sm font-semibold text-gray-700 font-mono">
+                      {a.sku}
+                    </td>
+                    <td className="px-4 md:px-5 py-4 text-sm text-gray-600">{a.name}</td>
+                    <td className="px-4 md:px-5 py-4 text-sm text-gray-600 text-right font-mono">
+                      {a.quantity}
+                    </td>
+                    <td className="px-4 md:px-5 py-4 text-sm text-gray-600 text-right font-mono">
+                      {a.safetyStock}
+                    </td>
+                    <td className="px-4 md:px-5 py-4 text-sm text-gray-600 text-right font-mono">
+                      {a.coverageRatio.toFixed(2)}x
+                    </td>
+                    <td className="px-4 md:px-5 py-4 text-right">
+                      {a.risk ? (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${riskBadgeClasses(a.risk)}`}
+                        >
+                          {a.risk}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="py-12 md:py-16 text-center text-gray-400 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+            <Boxes className="mx-auto text-gray-300 mb-3" size={36} />
+            <p className="text-sm font-medium text-gray-500">No inventory risk alerts</p>
+            <p className="text-xs mt-1 max-w-sm mx-auto">
+              All SKUs are within safety stock thresholds. Alerts will appear here when coverage drops.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
-
+///

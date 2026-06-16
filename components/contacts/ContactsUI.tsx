@@ -158,7 +158,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     value={form.name}
                                     onChange={handleChange}
                                     placeholder="Jane Smith"
-                                    className={`w-full h-10 rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${errors.name ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
+                                    className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.name ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
                                 />
                                 {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
                             </div>
@@ -170,7 +170,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     value={form.email}
                                     onChange={handleChange}
                                     placeholder="jane@example.com"
-                                    className={`w-full h-10 rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${errors.email ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
+                                    className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.email ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
                                 />
                                 {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
                             </div>
@@ -181,7 +181,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     value={form.phone}
                                     onChange={handleChange}
                                     placeholder="+1 555 000 0000"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
@@ -191,7 +191,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     value={form.company}
                                     onChange={handleChange}
                                     placeholder="Acme Corp"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
@@ -201,7 +201,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     value={form.position}
                                     onChange={handleChange}
                                     placeholder="Sales Manager"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
@@ -211,7 +211,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     value={form.city}
                                     onChange={handleChange}
                                     placeholder="New York"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <div>
@@ -220,7 +220,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     name="source"
                                     value={form.source}
                                     onChange={handleChange}
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Select Source</option>
                                     {SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -232,7 +232,7 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                     name="status"
                                     value={form.status}
                                     onChange={handleChange}
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Select Status</option>
                                     {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -244,14 +244,14 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                     {/* Notes */}
                     <div className="bg-white border border-gray-200 rounded-2xl p-5">
                         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Notes</h3>
-                        <textarea
-                            name="note"
-                            value={form.note}
-                            onChange={handleChange}
-                            placeholder="Additional notes..."
-                            rows={3}
-                            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                        />
+                       <textarea
+    name="note"
+    value={form.note}
+    onChange={handleChange}
+    placeholder="Additional notes..."
+    rows={3}
+    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 outline-none resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+/>
                     </div>
                 </div>
 

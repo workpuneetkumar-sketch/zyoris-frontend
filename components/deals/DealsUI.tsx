@@ -2,6 +2,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import {
     Search,
     Settings2,
@@ -273,49 +274,51 @@ function DealCard({
     };
 
     return (
-        <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md transition-shadow group">
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-                <div className="flex-1">
-                    <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors cursor-pointer">
-                        {deal.name}
-                    </p>
+        <Link href={`/deals/${deal.dealId}`} className="block">
+            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md transition-shadow group">
+                <div className="flex items-start justify-between gap-2 mb-1.5">
+                    <div className="flex-1">
+                        <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors">
+                            {deal.name}
+                        </p>
+                    </div>
+                    {isWon  && <CheckCircle2 size={15} className="text-green-500 shrink-0 mt-0.5" />}
+                    {isLost && <XCircle      size={15} className="text-red-400   shrink-0 mt-0.5" />}
                 </div>
-                {isWon  && <CheckCircle2 size={15} className="text-green-500 shrink-0 mt-0.5" />}
-                {isLost && <XCircle      size={15} className="text-red-400   shrink-0 mt-0.5" />}
-            </div>
 
-            <p className={`text-[15px] font-bold mb-1.5 ${cfg?.color ?? "text-blue-500"}`}>
-                {formatAmount(deal.amount)}
-            </p>
+                <p className={`text-[15px] font-bold mb-1.5 ${cfg?.color ?? "text-blue-500"}`}>
+                    {formatAmount(deal.amount)}
+                </p>
 
-            {/* Stage selector */}
-            <div className="mb-2.5">
-                <select
-                    value={deal.stage}
-                    onChange={handleStageChange}
-                    className="appearance-none w-full h-8 pl-2.5 pr-7 rounded-md border border-gray-200 bg-white text-[12px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                    {[...DEAL_STAGES].map((stage) => (
-                        <option key={stage} value={stage}>
-                            {STAGE_CONFIG[stage]?.label || stage}
-                        </option>
-                    ))}
-                </select>
-            </div>
-
-            {/* Conversion probability */}
-            <div className="flex items-center justify-between">
-                <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                        className={`h-full rounded-full transition-all ${isWon ? "bg-green-400" : isLost ? "bg-red-300" : "bg-blue-400"}`}
-                        style={{ width: `${Math.round(deal.conversionProbability * 100)}%` }}
-                    />
+                {/* Stage selector */}
+                <div className="mb-2.5" onClick={(e) => e.stopPropagation()}>
+                    <select
+                        value={deal.stage}
+                        onChange={handleStageChange}
+                        className="appearance-none w-full h-8 pl-2.5 pr-7 rounded-md border border-gray-200 bg-white text-[12px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    >
+                        {[...DEAL_STAGES].map((stage) => (
+                            <option key={stage} value={stage}>
+                                {STAGE_CONFIG[stage]?.label || stage}
+                            </option>
+                        ))}
+                    </select>
                 </div>
-                <span className="text-[11px] text-gray-400 ml-2 shrink-0">
-                    {Math.round(deal.conversionProbability * 100)}%
-                </span>
+
+                {/* Conversion probability */}
+                <div className="flex items-center justify-between">
+                    <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                            className={`h-full rounded-full transition-all ${isWon ? "bg-green-400" : isLost ? "bg-red-300" : "bg-blue-400"}`}
+                            style={{ width: `${Math.round(deal.conversionProbability * 100)}%` }}
+                        />
+                    </div>
+                    <span className="text-[11px] text-gray-400 ml-2 shrink-0">
+                        {Math.round(deal.conversionProbability * 100)}%
+                    </span>
+                </div>
             </div>
-        </div>
+        </Link>
     );
 }
 

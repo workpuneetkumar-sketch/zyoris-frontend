@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "react-toastify";
 import {
     Activity,
     ActivitiesFilters,
@@ -27,6 +28,7 @@ export function useActivities() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<Activity | null>(null);
     const [stats, setStats] = useState<ActivityStats | null>(null);
     const [overdue, setOverdue] = useState<OverdueActivity[]>([]);
     const [breakdown, setBreakdown] = useState<ActivityTypeBreakdown[]>([]);
@@ -77,15 +79,23 @@ export function useActivities() {
                 router.push(`/activities/${activity.id}/edit`);
                 break;
             case "Delete": {
-                if (!window.confirm(`Delete "${activity.title}"?`)) return;
-                try {
-                    await deleteActivity(activity.id);
-                    loadActivities();
-                } catch (err) {
-                    console.error("Delete error:", err);
-                }
+                setConfirmDelete(activity);
                 break;
             }
+        }
+    }
+
+    async function executeDelete() {
+        if (!confirmDelete) return;
+        const activity = confirmDelete;
+        setConfirmDelete(null);
+        try {
+            await deleteActivity(activity.id);
+            loadActivities();
+            toast.success(`Activity "${activity.title}" deleted successfully`);
+        } catch (err: any) {
+            console.error("Delete error:", err);
+            toast.error(err.message || "Failed to delete activity.");
         }
     }
 
@@ -98,6 +108,7 @@ export function useActivities() {
         loading,
         error,
         openMenu,
+        confirmDelete,
         stats,
         overdue,
         breakdown,
@@ -105,12 +116,14 @@ export function useActivities() {
         // setters
         setPage,
         setOpenMenu,
+        setConfirmDelete,
         setDateRange,
         // handlers
         handleFiltersChange,
         handleTabChange,
         handleNewActivity,
         handleAction,
+        executeDelete,
         retry: loadActivities,
     };
 }

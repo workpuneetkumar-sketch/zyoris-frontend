@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ReactNode, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../context/AuthContext";
 import classNames from "classnames";
@@ -34,6 +34,7 @@ import {
   Cog,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
+import { ConfirmationModal } from "./ui/ConfirmationModal";
 
 type NavItem = {
   href: string;
@@ -219,13 +220,13 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/sales",
         label: "Sales",
         icon: TrendingUp,
-        roles: ["ADMIN", "SALES_HEAD"],
+        roles: ["ADMIN", "SALES_HEAD", "SALES_USER"],
       },
       {
         href: "/operations",
         label: "Operations",
         icon: Cog,
-        roles: ["ADMIN", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"],
       },
     ],
   },
@@ -236,6 +237,49 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
+  const [logoutCountdown, setLogoutCountdown] = useState(10);
+  const logoutTriggeredRef = useRef(false);
+
+  const closeLogoutModal = useCallback(() => {
+    setLogoutModalOpen(false);
+    setLogoutCountdown(10);
+    logoutTriggeredRef.current = false;
+  }, []);
+
+  const openLogoutModal = useCallback(() => {
+    logoutTriggeredRef.current = false;
+    setLogoutCountdown(10);
+    setLogoutModalOpen(true);
+  }, []);
+
+  const confirmLogout = useCallback(async () => {
+    if (logoutTriggeredRef.current) return;
+    logoutTriggeredRef.current = true;
+    setLogoutModalOpen(false);
+    setLogoutCountdown(10);
+    await logout();
+  }, [logout]);
+
+  useEffect(() => {
+    if (!logoutModalOpen) return;
+
+    const interval = setInterval(() => {
+      setLogoutCountdown((prev) => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [logoutModalOpen]);
+
+  useEffect(() => {
+    if (!logoutModalOpen || logoutCountdown > 0) return;
+    if (logoutTriggeredRef.current) return;
+
+    logoutTriggeredRef.current = true;
+    setLogoutModalOpen(false);
+    setLogoutCountdown(10);
+    void logout();
+  }, [logoutModalOpen, logoutCountdown, logout]);
 
   const displayName =
     user?.name && user.name.trim().length > 0
@@ -337,7 +381,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1 shrink-0">
             <NotificationBell />
             <button
-              onClick={logout}
+              onClick={openLogoutModal}
               className="p-1 rounded-lg hover:bg-red-50 transition-colors group"
               title="Logout"
             >
@@ -448,6 +492,17 @@ export function AppShell({ children }: { children: ReactNode }) {
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
 
+      <ConfirmationModal
+        isOpen={logoutModalOpen}
+        title="Log out"
+        message="Are you sure you want to log out?"
+        confirmText="Logout Now"
+        cancelText="Cancel"
+        variant="danger"
+        countdownSeconds={logoutModalOpen ? logoutCountdown : null}
+        onConfirm={confirmLogout}
+        onCancel={closeLogoutModal}
+      />
     </div>
   );
 }

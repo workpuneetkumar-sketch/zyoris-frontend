@@ -29,6 +29,7 @@ export default function EditLeadModal({
         city: lead.city || "",
         source: lead.source || "",
         status: lead.status || "",
+        estimatedValue: (lead as any).estimatedValue?.toString() || "",
         assignedToId: lead.assignedToId || "",
         tags: Array.isArray(lead.tags)
             ? lead.tags.map((tag: any) =>

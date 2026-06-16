@@ -3,6 +3,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "react-toastify";
 
 import LeadForm, {
     LeadFormValues,
@@ -21,6 +22,7 @@ export default function NewLeadPage() {
         city: "",
         source: "",
         status: "",
+        estimatedValue: "",
         assignedToId: "",
         tags: [],
         note: "",
@@ -34,6 +36,8 @@ export default function NewLeadPage() {
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async () => {
+        console.log('[NewLeadPage] Form values before submission:', form);
+
         const newErrors: {
             name?: string;
             email?: string;
@@ -55,15 +59,25 @@ export default function NewLeadPage() {
         try {
             setLoading(true);
 
-            await createLead({
+            const payload = {
                 ...form,
+                estimatedValue: (form.estimatedValue !== "" && form.estimatedValue !== undefined && form.estimatedValue !== null) 
+                    ? Number(form.estimatedValue) 
+                    : undefined,
                 assignedToId:
                     form.assignedToId.trim() || null,
-            });
+            };
+            console.log('[NewLeadPage] Payload to createLead:', payload);
 
+            const newLead = await createLead(payload);
+            console.log('[NewLeadPage] Created lead:', newLead);
+
+            toast.success("Lead created successfully");
             router.push("/leads");
-        } catch (error) {
-            console.error(error);
+        } catch (error: any) {
+            console.error('[NewLeadPage] Error creating lead:', error);
+            const errorMsg = error.response?.data?.message || error.message || "Failed to create lead";
+            toast.error(errorMsg);
         } finally {
             setLoading(false);
         }

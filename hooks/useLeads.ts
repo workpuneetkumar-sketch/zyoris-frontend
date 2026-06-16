@@ -1,10 +1,11 @@
-// app/(dashboard)/leads/_hooks/useLeads.ts
+// hooks/useLeads.ts
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Lead, LeadsFilters, DEFAULT_FILTERS } from "../types/leads";
-import { fetchLeads, deleteLead } from "../lib/api/leadsApi";
+import { toast } from "react-toastify";
+import { Lead, LeadsFilters, DEFAULT_FILTERS } from "@/types/leads";
+import { fetchLeads, deleteLead, convertLeadToDeal } from "@/lib/api/leadsApi";
 
 function quoteCsv(value: unknown) {
     const text = value == null ? "" : String(value);
@@ -64,6 +65,11 @@ export function useLeads() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
+    const [convertingId, setConvertingId] = useState<string | null>(null);
+    const [confirmAction, setConfirmAction] = useState<{
+        type: "Convert" | "Delete" | null;
+        lead: Lead | null;
+    }>({ type: null, lead: null });
 
     // ── Data fetching ─────────────────────────────────────────────────────────
     const loadLeads = useCallback(async () => {
@@ -122,15 +128,63 @@ export function useLeads() {
             case "Assign":
                 router.push(`/leads/${lead.id}/assign`);
                 break;
-            case "Delete": {
-                if (!window.confirm(`Delete lead "${lead.name}"?`)) return;
-                try {
-                    await deleteLead(lead.id);
-                    loadLeads();
-                } catch (err) {
-                    console.error("Delete error:", err);
+            case "Convert": {
+                if (lead.status === "DEAD") {
+                    toast.warning("This lead is dead and cannot be converted.");
+                    return;
                 }
+                if (convertingId) return;
+
+                setConfirmAction({ type: "Convert", lead });
                 break;
+            }
+            case "Delete": {
+                setConfirmAction({ type: "Delete", lead });
+                break;
+            }
+        }
+    }
+
+    async function executeConfirmedAction() {
+        const { type, lead } = confirmAction;
+        if (!type || !lead) return;
+
+        setConfirmAction({ type: null, lead: null });
+
+        if (type === "Convert") {
+            setConvertingId(lead.id);
+            try {
+                // Mapping: lead.estimatedValue -> deal.amount
+                // Ensure 0 is passed correctly and not treated as falsy
+                const amount = (lead.estimatedValue !== undefined && lead.estimatedValue !== null) 
+                    ? Number(lead.estimatedValue) 
+                    : undefined;
+
+                const res = await convertLeadToDeal(lead.id, { amount });
+                const dealId =
+                    (res.deal?.dealId ?? res.deal?.id) ??
+                    (res.dealId ?? res.id);
+
+                if (dealId) {
+                    router.push(`/deals/${dealId}`);
+                } else {
+                    router.push("/deals");
+                }
+                toast.success("Lead converted to deal successfully");
+            } catch (err: any) {
+                console.error("Conversion error:", err);
+                toast.error(err?.response?.data?.message || err.message || "Failed to convert lead.");
+            } finally {
+                setConvertingId(null);
+            }
+        } else if (type === "Delete") {
+            try {
+                await deleteLead(lead.id);
+                loadLeads();
+                toast.success("Lead deleted successfully");
+            } catch (err) {
+                console.error("Delete error:", err);
+                toast.error("Failed to delete lead");
             }
         }
     }
@@ -144,14 +198,18 @@ export function useLeads() {
         loading,
         error,
         openMenu,
+        convertingId,
+        confirmAction,
         // setters
         setPage,
         setOpenMenu,
+        setConfirmAction,
         // handlers
         handleFiltersChange,
         handleNewLead,
         handleExport,
         handleAction,
+        executeConfirmedAction,
         retry: loadLeads,
     };
 }

@@ -57,15 +57,24 @@ export async function createLead(data: {
     city?: string;
     source?: string;
     status?: string;
+    estimatedValue?: number;
     assignedToId?: string | null;
     tags?: string[];
     note?: string;
 }): Promise<Lead> {
-    const res = await api.post("/leads/create-leads", {
-        ...data,
-        assignedToId: data.assignedToId?.trim() || null, // ← "" → null
-    });
-    return res.data;
+    console.log('[API createLead] Request payload:', data);
+    try {
+        const res = await api.post("/leads/create-leads", {
+            ...data,
+            assignedToId: data.assignedToId?.trim() || null, // ← "" → null
+        });
+        console.log('[API createLead] API response status:', res.status);
+        console.log('[API createLead] API response data:', res.data);
+        return res.data;
+    } catch (error: any) {
+        console.error('[API createLead] API error:', error.response?.data || error.message);
+        throw error;
+    }
 }
 // ── PATCH update a lead ────────────────────────────────────
 
@@ -135,4 +144,37 @@ export function triggerBlobDownload(
 export async function fetchTeamMembers(): Promise<any> {
     const res = await api.get("/organizations/team-members");
     return res.data;
+}
+
+// ── POST convert lead to deal ──────────────────────────────
+// Endpoint: POST /leads/:id/convert-to-deal
+// Response shape: { deal: { id, dealId, name, stage, ... } } or flat deal object
+
+export interface ConvertToDealResponse {
+    deal?: {
+        id?: string;
+        dealId?: string;
+        [key: string]: any;
+    };
+    id?: string;
+    dealId?: string;
+    [key: string]: any;
+}
+
+export async function convertLeadToDeal(
+    leadId: string,
+    data?: { amount?: number }
+): Promise<ConvertToDealResponse> {
+    console.log(`[API] convertLeadToDeal - leadId: ${leadId}`, data);
+    try {
+        const res = await api.post<ConvertToDealResponse>(
+            `/leads/${leadId}/convert-to-deal`,
+            data
+        );
+        console.log(`[API] convertLeadToDeal - success status: ${res.status}`);
+        return res.data;
+    } catch (error: any) {
+        console.error(`[API] convertLeadToDeal - error:`, error.response?.data || error.message);
+        throw error;
+    }
 }

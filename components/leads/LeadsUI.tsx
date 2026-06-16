@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
+import UploadLeadsModal from "./UploadLeadsModal";
 import { updateLead, assignLead, fetchTeamMembers } from "@/lib/api/leadsApi";
 import { TeamMember } from "./AssignLeadModal";
 
@@ -14,13 +15,14 @@ import {
     MoreVertical,
     ChevronLeft,
     ChevronRight,
+    Upload,
 } from "lucide-react";
 
 import {
     Lead,
     LeadsFilters,
-    LeadStatus,
 } from "@/types/leads";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
 
 export interface LeadsTableProps {
     leads: Lead[];
@@ -30,6 +32,7 @@ export interface LeadsTableProps {
     filters: LeadsFilters;
     loading: boolean;
     openMenu: string | null;
+    convertingId?: string | null;
     onPageChange: (page: number) => void;
     onRefreshLeads: () => Promise<void>;
     onFiltersChange: (filters: LeadsFilters) => void;
@@ -38,14 +41,6 @@ export interface LeadsTableProps {
     onAction: (action: string, lead: Lead) => void;
     setOpenMenu: (id: string | null) => void;
 }
-
-const STATUS_STYLES: Record<LeadStatus, string> = {
-    NEW: "bg-blue-50 text-blue-600 border border-blue-200",
-    CONTACTED: "bg-amber-50 text-amber-600 border border-amber-200",
-    QUALIFIED: "bg-green-50 text-green-600 border border-green-200",
-    CLOSED: "bg-purple-50 text-purple-600 border border-purple-200",
-};
-
 function Avatar({ initials }: { initials: string }) {
     return (
         <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[11px] font-bold flex items-center justify-center shrink-0">
@@ -90,9 +85,10 @@ export function LeadsTable({
     filters,
     loading,
     openMenu,
+    convertingId,
     onPageChange,
-    onFiltersChange,
     onRefreshLeads,
+    onFiltersChange,
     onNewLead,
     onExport,
     onAction,
@@ -105,6 +101,7 @@ export function LeadsTable({
     const [isEditOpen, setIsEditOpen] = useState(false);
     const [viewingLead, setViewingLead] = useState<Lead | null>(null);
     const [isViewOpen, setIsViewOpen] = useState(false);
+    const [isUploadOpen, setIsUploadOpen] = useState(false);
 
     // States for inline vertical assignment submenu
     const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
@@ -150,6 +147,13 @@ export function LeadsTable({
                 </div>
                 <div className="flex items-center gap-2.5">
                     <button
+                        onClick={() => setIsUploadOpen(true)}
+                        className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                    >
+                        <Upload size={14} />
+                        Upload
+                    </button>
+                    <button
                         onClick={onExport}
                         className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                     >
@@ -173,7 +177,7 @@ export function LeadsTable({
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
                     <Select
                         value={filters.status}
-                        options={["All Status", "NEW", "CONTACTED", "QUALIFIED", "CLOSED"]}
+                        options={["All Status", "NEW", "WARM", "HOT", "DEAD"]}
                         onChange={(v) => { onFiltersChange({ ...filters, status: v }); onPageChange(1); }}
                     />
                     <Select
@@ -203,99 +207,103 @@ export function LeadsTable({
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto  overflow-y-visible rounded-b-2xl">
+                <div className="overflow-x-auto overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="border-b border-gray-100">
-                                {/* ✅ Score column removed */}
-                                {["Lead Name", "Company", "Source", "Owner", "Status", "Created At", "Actions"].map((h) => (
-                                    <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                                        {h}
-                                    </th>
+                    <tr className="border-b border-gray-100">
+                        {["Lead Name", "Company", "Owner", "Status", "Created At", "Actions"].map((h) => (
+                            <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                                {h}
+                            </th>
+                        ))}
+                    </tr>
+                </thead>
+                <tbody>
+                    {loading ? (
+                        Array.from({ length: perPage }).map((_, i) => (
+                            <tr key={i} className="border-b border-gray-50">
+                                {Array.from({ length: 6 }).map((_, j) => (
+                                    <td key={j} className="px-5 py-4">
+                                        <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
+                                    </td>
                                 ))}
                             </tr>
-                        </thead>
-                        <tbody>
-                            {loading ? (
-                                Array.from({ length: perPage }).map((_, i) => (
-                                    <tr key={i} className="border-b border-gray-50">
-                                        {Array.from({ length: 7 }).map((_, j) => (
-                                            <td key={j} className="px-5 py-4">
-                                                <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))
-                            ) : safeLeads.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
-                                        No leads found.
-                                    </td>
-                                </tr>
-                            ) : (
-                                safeLeads.map((lead) => (
-                                    <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                                        <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
-                                        <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
-                                        <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.source}</td>
+                        ))
+                    ) : safeLeads.length === 0 ? (
+                        <tr>
+                            <td colSpan={6} className="text-center py-16 text-gray-400 text-sm">
+                                No leads found.
+                            </td>
+                        </tr>
+                    ) : (
+                        safeLeads.map((lead) => {
+                            const statusInfo = getLeadStatusInfo(lead.status);
+                            return (
+                            <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
+                                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
+                                {/* ✅ Owner — shows "NA" badge if unassigned */}
 
-                                        {/* ✅ Owner — shows "NA" badge if unassigned */}
-
-                                        <td className="px-5 py-3.5 whitespace-nowrap">
-                                            {lead.assignedTo ? (
-                                                <div className="flex items-center gap-2">
-                                                    <Avatar
-                                                        initials={
-                                                            lead.assignedTo.name
-                                                                .split(" ")
-                                                                .map((n) => n[0])
-                                                                .join("")
-                                                                .toUpperCase()
-                                                                .slice(0, 2)
-                                                        }
-                                                    />
-                                                    <span className="text-gray-700">
-                                                        {lead.assignedTo.name}
-                                                    </span>
-                                                </div>
-                                            ) : (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
-                                                    NA
-                                                </span>
-                                            )}
-                                        </td>
-
-                                        <td className="px-5 py-3.5 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_STYLES[lead.status]}`}>
-                                                {lead.status}
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    {lead.assignedTo ? (
+                                        <div className="flex items-center gap-2">
+                                            <Avatar
+                                                initials={
+                                                    lead.assignedTo.name
+                                                        .split(" ")
+                                                        .map((n) => n[0])
+                                                        .join("")
+                                                        .toUpperCase()
+                                                        .slice(0, 2)
+                                                }
+                                            />
+                                            <span className="text-gray-700">
+                                                {lead.assignedTo.name}
                                             </span>
-                                        </td>
+                                        </div>
+                                    ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
+                                            NA
+                                        </span>
+                                    )}
+                                </td>
 
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${statusInfo.style}`}>
+                                        {statusInfo.emoji} {statusInfo.label}
+                                    </span>
+                                </td>
 
-
-                                        <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
+                                <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
 
                                         {/*  Actions — overflow-visible so dropdown isn't clipped */}
                                         <td className="px-5 py-3.5 whitespace-nowrap">
-                                            <button
-                                                onClick={(e) => {
-                                                    if (openMenu === lead.id) {
-                                                        setOpenMenu(null);
-                                                        setMenuPos(null);
-                                                    } else {
-                                                        const rect = e.currentTarget.getBoundingClientRect();
-                                                        setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
-                                                        setOpenMenu(lead.id);
-                                                    }
-                                                }}
-                                                className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                            >
-                                                <MoreVertical size={16} />
-                                            </button>
+                                            {convertingId === lead.id ? (
+                                                <div className="w-8 h-8 flex items-center justify-center">
+                                                    <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                                                </div>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => {
+                                                        if (openMenu === lead.id) {
+                                                            setOpenMenu(null);
+                                                            setMenuPos(null);
+                                                        } else {
+                                                            const rect = e.currentTarget.getBoundingClientRect();
+                                                            setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
+                                                            setOpenMenu(lead.id);
+                                                        }
+                                                    }}
+                                                    className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
-                                ))
-                            )}
+                            );
+                        })
+                    )}
                         </tbody>
                     </table>
                 </div>
@@ -359,7 +367,7 @@ export function LeadsTable({
                     />
                     {menuPos && (
                         <div
-                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-36"
+                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-44"
                                 }`}
                             style={{
                                 top: menuPos.top,
@@ -367,7 +375,7 @@ export function LeadsTable({
                             }}
                         >
                             {!isAssignSubmenuOpen ? (
-                                ["View", "Edit", "Assign", "Delete"].map((action) => (
+                                ["View", "Edit", "Convert to Deal", "Assign", "Delete"].map((action) => (
                                     <button
                                         key={action}
                                         onClick={() => {
@@ -385,6 +393,10 @@ export function LeadsTable({
                                                     setMenuPos(null);
                                                 } else if (action === "Assign") {
                                                     setIsAssignSubmenuOpen(true);
+                                                } else if (action === "Convert to Deal") {
+                                                    onAction("Convert", lead);
+                                                    setOpenMenu(null);
+                                                    setMenuPos(null);
                                                 } else {
                                                     onAction(action, lead);
                                                     setOpenMenu(null);
@@ -508,6 +520,7 @@ export function LeadsTable({
                         city: editingLead.city || "",
                         source: editingLead.source || "",
                         status: editingLead.status || "",
+                        estimatedValue: editingLead.estimatedValue?.toString() || "",
                         assignedToId: editingLead.assignedToId || "",
                         tags: editingLead.tags || [],
                         note: editingLead.note || "",
@@ -518,7 +531,13 @@ export function LeadsTable({
                     }}
                     onSave={async (updatedData) => {
                         try {
-                            await updateLead(editingLead.id, updatedData as unknown as Partial<Lead>);
+                            const payload = {
+                                ...updatedData,
+                                estimatedValue: (updatedData.estimatedValue !== "" && updatedData.estimatedValue !== undefined && updatedData.estimatedValue !== null) 
+                                    ? Number(updatedData.estimatedValue) 
+                                    : undefined,
+                            };
+                            await updateLead(editingLead.id, payload as unknown as Partial<Lead>);
                             setIsEditOpen(false);
                             setEditingLead(null);
                             onFiltersChange({ ...filters });
@@ -535,6 +554,15 @@ export function LeadsTable({
                     onClose={() => {
                         setIsViewOpen(false);
                         setViewingLead(null);
+                    }}
+                />
+            )}
+
+            {isUploadOpen && (
+                <UploadLeadsModal
+                    onClose={() => setIsUploadOpen(false)}
+                    onSuccess={async () => {
+                        await onRefreshLeads();
                     }}
                 />
             )}

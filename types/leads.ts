@@ -2,8 +2,13 @@
 
 export type LeadStatus =
     | "NEW"
+    | "WARM"
+    | "HOT"
+    | "DEAD"
     | "CONTACTED"
     | "QUALIFIED"
+    | "PROPOSAL"
+    | "NEGOTIATION"
     | "CLOSED";
 
 export type LeadSource =
@@ -60,6 +65,8 @@ export interface Lead {
     phone?: string;
 
     city?: string;
+
+    estimatedValue?: number;
 
     assignedToId?: string | null;
 
