@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
+import { CrmSearch } from "./crm/CrmSearch";
 
 type NavItem = {
   href: string;
@@ -284,7 +285,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const displayName =
     user?.name && user.name.trim().length > 0
       ? user.name
-      : user?.email?.split("@")[0] ?? "User";
+      : user?.email?.split("@")[0] || "User";
 
   const visibleNavGroups = NAV_GROUPS.map((group) => ({
     ...group,
@@ -298,7 +299,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       {visibleNavGroups.map((group) => (
         <div key={group.label} className="space-y-2">
-          <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-400">
+          <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">
             {group.label}
           </p>
           <div className="space-y-1">
@@ -359,7 +360,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               >
                 {displayName
                   .split(" ")
-                  .map((p: string) => p[0]?.toUpperCase() ?? "")
+                  .map((p: string) => p[0]?.toUpperCase() || "")
                   .join("")
                   .slice(0, 2)}
               </div>
@@ -372,7 +373,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {displayName}
               </p>
               <p className="text-[11.5px] text-gray-400 truncate">
-                {user?.email ?? ""}
+                {user?.email || ""}
               </p>
             </div>
           </button>
@@ -474,22 +475,39 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ── Main area ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
 
-        {/* Mobile top bar */}
-        <header className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 shrink-0">
+        {/* Top bar (desktop + mobile) */}
+        <header className="flex items-center gap-4 px-4 md:px-6 py-3 bg-white border-b border-gray-100 shrink-0">
+          {/* Mobile menu button */}
           <button
             onClick={() => setDrawerOpen(true)}
-            className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+            className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             aria-label="Open menu"
           >
             <Menu size={20} className="text-[#1a237e]" />
           </button>
-          <LogoMark small />
-          <div className="ml-auto">
+
+          {/* Mobile logo */}
+          <div className="md:hidden">
+            <LogoMark small />
+          </div>
+
+          {/* Search component */}
+          <div className="flex-1 flex justify-start">
+            <CrmSearch />
+          </div>
+
+          {/* Right side: notification bell (desktop) */}
+          <div className="hidden md:block">
+            <NotificationBell />
+          </div>
+
+          {/* Mobile notification bell */}
+          <div className="md:hidden">
             <NotificationBell />
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
 
       <ConfirmationModal
