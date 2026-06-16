@@ -1,10 +1,5 @@
 "use client";
 
-<<<<<<< HEAD
-// External Imports
-import React, { useEffect, useState } from 'react';
-import { Search, Bell, Mail } from 'lucide-react';
-=======
 // 1. External Imports
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
@@ -12,13 +7,11 @@ import {
   Search, Bell, Mail, ChevronDown, User, 
   Settings, LogOut, Shield, Calendar, Clock, Menu 
 } from 'lucide-react';
->>>>>>> 32c8e17c3aa87fcce1d2aaac445b10887acbad93
 
-// Internal Imports
+// 2. Internal Imports
 import { useAuth } from '@/context/AuthContext';
-import HrHeaderDropdown from './HrHeaderDropdown';
 
-// Types & Interfaces
+// 3. Interfaces
 interface Profile {
   id: string;
   email: string;
@@ -32,17 +25,14 @@ export default function HrHeader() {
   // ==========================================
   // Hooks & State Management
   // ==========================================
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const router = useRouter();
   
   const [profile, setProfile] = useState<Profile | null>(null);
-<<<<<<< HEAD
-  const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(false);
-=======
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
   const dropdownRef = useRef<HTMLDivElement>(null);
->>>>>>> 32c8e17c3aa87fcce1d2aaac445b10887acbad93
 
   // ==========================================
   // Effects
@@ -51,10 +41,6 @@ export default function HrHeader() {
   // Sync user context with profile state
   useEffect(() => {
     if (user) {
-<<<<<<< HEAD
-      // Type assertion for extended user properties
-=======
->>>>>>> 32c8e17c3aa87fcce1d2aaac445b10887acbad93
       const u = user as typeof user & { createdAt?: string; updatedAt?: string };
       
       setProfile({
@@ -67,6 +53,57 @@ export default function HrHeader() {
       });
     }
   }, [user]);
+
+  // Handle clicking outside of dropdown to close it
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // ==========================================
+  // Helper Functions & Derived State
+  // ==========================================
+  const getUserInitials = () => {
+    if (profile?.name) {
+      return profile.name
+        .split(' ')
+        .map(n => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2);
+    }
+    return 'U';
+  };
+
+  const avatarUrl = profile?.name 
+    ? `https://ui-avatars.com/api/?name=${encodeURIComponent(profile.name)}&background=4F46E5&color=fff&length=2`
+    : 'https://ui-avatars.com/api/?name=User&background=4F46E5&color=fff';
+
+  // ==========================================
+  // Event Handlers
+  // ==========================================
+  const handleLogout = async () => {
+    if (logout) {
+      await logout();
+      router.push('/login');
+    }
+  };
+
+  const handleViewProfile = () => {
+    router.push('/profile');
+    setIsDropdownOpen(false);
+  };
+
+  const handleSettings = () => {
+    router.push('/settings');
+    setIsDropdownOpen(false);
+  };
 
   // ==========================================
   // Render
@@ -101,32 +138,6 @@ export default function HrHeader() {
           <button className="lg:hidden p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors bg-white">
             <Search className="w-5 h-5 text-slate-600" />
           </button>
-<<<<<<< HEAD
-
-          {/* Action Icons */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <button className="relative p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors bg-white">
-              <Bell className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">
-                5
-              </span>
-            </button>
-            
-            <button className="relative p-2 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors bg-white hidden sm:block">
-              <Mail className="w-5 h-5 text-slate-600" />
-              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-white">
-                3
-              </span>
-            </button>
-          </div>
-
-          {/* User Profile Dropdown Component */}
-          <HrHeaderDropdown 
-            profile={profile}
-            isDropdownOpen={isDropdownOpen}
-            setIsDropdownOpen={setIsDropdownOpen}
-          />
-=======
 
           {/* Action Icons */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -254,7 +265,6 @@ export default function HrHeader() {
               </div>
             )}
           </div>
->>>>>>> 32c8e17c3aa87fcce1d2aaac445b10887acbad93
           
         </div>
       </div>

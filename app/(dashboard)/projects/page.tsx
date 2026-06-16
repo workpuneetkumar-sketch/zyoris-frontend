@@ -490,16 +490,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-
-// ── Global CSS injection for toast animation ────────────────────────────
-const style = document.createElement("style");
-style.textContent = `
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-  .animate-slide-in {
-    animation: slideIn 0.3s ease-out;
-  }
-`;
-document.head.appendChild(style);
