@@ -22,10 +22,16 @@ export default function MeetingsPage() {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             const upcoming = data.filter(m => {
-                const meetingDate = new Date(m.date);
+                const meetingDateStr = m.date || m.startTime;
+                if (!meetingDateStr) return false;
+                const meetingDate = new Date(meetingDateStr);
                 meetingDate.setHours(0, 0, 0, 0);
                 return meetingDate >= today;
-            }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+            }).sort((a, b) => {
+                const dateA = new Date(a.date || a.startTime).getTime();
+                const dateB = new Date(b.date || b.startTime).getTime();
+                return dateA - dateB;
+            });
             
             setMeetings(upcoming);
         } catch (err) {
@@ -34,6 +40,17 @@ export default function MeetingsPage() {
         } finally {
             setLoading(false);
         }
+    };
+
+    const formatTime = (timeString: string) => {
+        if (!timeString) return "";
+        if (timeString.includes("T")) {
+            const d = new Date(timeString);
+            if (!isNaN(d.getTime())) {
+                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+        return timeString;
     };
 
     if (loading) {
@@ -94,23 +111,25 @@ export default function MeetingsPage() {
                                 <div className="space-y-3 flex-1">
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-lg font-bold text-gray-900">{meeting.title}</h3>
-                                        <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                                            meeting.status === "SCHEDULED" ? "bg-blue-50 text-blue-700 border border-blue-100" :
-                                            meeting.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-                                            "bg-gray-50 text-gray-700 border border-gray-200"
-                                        }`}>
-                                            {meeting.status}
-                                        </span>
+                                        {meeting.status && (
+                                            <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                                                meeting.status === "SCHEDULED" ? "bg-blue-50 text-blue-700 border border-blue-100" :
+                                                meeting.status === "COMPLETED" ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                                                "bg-gray-50 text-gray-700 border border-gray-200"
+                                            }`}>
+                                                {meeting.status}
+                                            </span>
+                                        )}
                                     </div>
 
                                     <div className="flex flex-wrap items-center gap-4 text-sm font-medium text-gray-600">
                                         <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
                                             <CalendarIcon size={14} className="text-blue-600"/>
-                                            <span>{new Date(meeting.date).toLocaleDateString("en-US", { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                            <span>{new Date(meeting.date || meeting.startTime).toLocaleDateString("en-US", { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}</span>
                                         </div>
                                         <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
                                             <Clock size={14} className="text-amber-600"/>
-                                            <span>{meeting.startTime} - {meeting.endTime}</span>
+                                            <span>{formatTime(meeting.startTime)} - {formatTime(meeting.endTime)}</span>
                                         </div>
                                         {meeting.location && (
                                             <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
@@ -118,10 +137,10 @@ export default function MeetingsPage() {
                                                 <span>{meeting.location}</span>
                                             </div>
                                         )}
-                                        {meeting.link && (
+                                        {(meeting.link || meeting.meetingLink) && (
                                             <div className="flex items-center gap-1.5 bg-gray-50 px-2 py-1 rounded-md border border-gray-100">
                                                 <Video size={14} className="text-violet-500"/>
-                                                <a href={meeting.link} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Join Link</a>
+                                                <a href={meeting.link || meeting.meetingLink} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">Join Link</a>
                                             </div>
                                         )}
                                     </div>

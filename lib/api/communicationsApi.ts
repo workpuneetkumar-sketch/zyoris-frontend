@@ -20,7 +20,34 @@ export async function getInbox(): Promise<CommunicationItem[]> {
     try {
         const res = await api.get("/api/communications/inbox");
         if (Array.isArray(res.data) && res.data.length > 0) {
-            inbox = res.data;
+            inbox = res.data.map((item: any) => {
+                const type = (item.type || "").toLowerCase() as CommunicationType;
+                let contact = "Unknown";
+                let preview = "";
+
+                if (type === "email") {
+                    contact = item.description || "Unknown";
+                    preview = item.title || "No Subject";
+                } else if (type === "call") {
+                    contact = item.title || "Call";
+                    preview = item.description || "No notes";
+                } else if (type === "meeting") {
+                    contact = "Meeting";
+                    preview = item.title || "Scheduled Meeting";
+                } else {
+                    contact = item.title || "Unknown";
+                    preview = item.description || "";
+                }
+
+                return {
+                    id: item.id,
+                    type,
+                    contact,
+                    preview,
+                    timestamp: item.timestamp,
+                    originalData: item
+                };
+            });
         }
     } catch (err) {
         console.warn("Failed to fetch /api/communications/inbox, falling back to enrichment", err);

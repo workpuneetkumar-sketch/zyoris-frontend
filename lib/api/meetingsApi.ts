@@ -6,13 +6,14 @@ export interface Meeting {
     id: string;
     title: string;
     description?: string;
-    date: string; // ISO format
-    startTime: string; // ISO format or just time string
-    endTime: string;
-    status: MeetingStatus;
+    date?: string; // ISO format, sometimes missing
+    startTime: string; // ISO format
+    endTime: string; // ISO format
+    status?: MeetingStatus;
     attendees?: { id: string; name: string; email?: string }[];
     location?: string;
     link?: string;
+    meetingLink?: string;
     createdAt?: string;
     updatedAt?: string;
     [key: string]: unknown;
