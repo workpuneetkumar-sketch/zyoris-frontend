@@ -5,7 +5,9 @@ import Dashboard from "@/components/dashboard/dashboard";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api/api";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
-import { Users, Briefcase, DollarSign, Clock, LucideIcon } from "lucide-react";
+import { fetchEmails } from "@/lib/api/emailApi";
+import { fetchCalls } from "@/lib/api/callsApi";
+import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon } from "lucide-react";
 
 interface LeadsStatsResponse {
   total?: number;
@@ -118,6 +120,8 @@ export default function DashboardPage() {
   const [dealValue, setDealValue] = useState<number | null>(null);
   const [revenue, setRevenue] = useState<number | null>(null);
   const [overdueTasks, setOverdueTasks] = useState<number | null>(null);
+  const [emailsSent, setEmailsSent] = useState<number | null>(null);
+  const [callsToday, setCallsToday] = useState<number | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -133,6 +137,8 @@ export default function DashboardPage() {
         cfoRes,
         driversRes,
         forecastRes,
+        emailsRes,
+        callsRes,
       ] = await Promise.all([
         api.get<LeadsStatsResponse>("/leads/stats").catch(() => ({ data: null })),
         api.get<PipelineStatsResponse>("/api/deals/pipeline-stats").catch(() => ({ data: null })),
@@ -141,12 +147,27 @@ export default function DashboardPage() {
         isCfo ? api.get("/dashboard/cfo").catch(() => ({ data: null })) : Promise.resolve({ data: null }),
         api.get("/analytics/revenue/drivers").catch(() => ({ data: null })),
         api.get("/analytics/revenue/forecast").catch(() => ({ data: null })),
+        fetchEmails().catch(() => ({ emails: [], total: 0 })),
+        fetchCalls().catch(() => ({ calls: [], total: 0 })),
       ]);
 
       setLeadsCount(extractLeadsCount(leadsRes.data));
       setDealValue(sumPipelineDealValue(pipelineRes.data));
       setRevenue(extractRevenue(ceoRes.data, cfoRes.data, driversRes.data, forecastRes.data));
       setOverdueTasks(countOverdueTasks(tasksRes.tasks ?? []));
+      
+      setEmailsSent(emailsRes.total);
+      
+      // Calculate calls today
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const callsTodayCount = (callsRes.calls ?? []).filter((call: any) => {
+        if (!call.date) return false;
+        const callDate = new Date(call.date);
+        callDate.setHours(0, 0, 0, 0);
+        return callDate.getTime() === today.getTime();
+      }).length;
+      setCallsToday(callsTodayCount);
     }
 
     loadKpis();
@@ -178,8 +199,20 @@ export default function DashboardPage() {
         value: overdueTasks != null ? overdueTasks.toLocaleString() : "--",
         color: "amber" as const,
       },
+      {
+        icon: Mail,
+        label: "Emails Sent",
+        value: emailsSent != null ? emailsSent.toLocaleString() : "--",
+        color: "blue" as const,
+      },
+      {
+        icon: PhoneCall,
+        label: "Calls Today",
+        value: callsToday != null ? callsToday.toLocaleString() : "--",
+        color: "emerald" as const,
+      },
     ],
-    [leadsCount, dealValue, revenue, overdueTasks]
+    [leadsCount, dealValue, revenue, overdueTasks, emailsSent, callsToday]
   );
 
   return (

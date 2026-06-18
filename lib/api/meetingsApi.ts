@@ -34,12 +34,12 @@ export interface UpdateMeetingPayload extends Partial<CreateMeetingPayload> {
 }
 
 export async function createMeeting(data: CreateMeetingPayload): Promise<Meeting> {
-    const res = await api.post("/meetings/create", data);
+    const res = await api.post("/api/meetings/create", data);
     return res.data;
 }
 
 export async function getMeetings(): Promise<Meeting[]> {
-    const res = await api.get("/meetings/get-meetings");
+    const res = await api.get("/api/meetings/get-meetings");
     if (Array.isArray(res.data)) {
         return res.data;
     }
@@ -54,6 +54,6 @@ export async function getMeetings(): Promise<Meeting[]> {
 }
 
 export async function updateMeeting(id: string, data: UpdateMeetingPayload): Promise<Meeting> {
-    const res = await api.patch(`/meetings/update-meeting/${id}`, data);
+    const res = await api.patch(`/api/meetings/update-meeting/${id}`, data);
     return res.data;
 }
