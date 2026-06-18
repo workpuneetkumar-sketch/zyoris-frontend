@@ -13,6 +13,7 @@ export interface Deal {
   closeDate?: string | null;
   createdAt?: string;
   updatedAt?: string;
+  leadId?: string;
 }
 
 export interface DealActivity {
@@ -48,16 +49,17 @@ export const DEFAULT_DEALS_FILTERS: DealsFilters = {
   dateTo: "",
 };
 
-export const DEAL_STAGES = [
-  "NEW",
-  "QUALIFIED",
-  "PROPOSAL",
-  "NEGOTIATION",
-  "WON",
-  "LOST",
+export const DEFAULT_DEAL_STAGES = [
+    "NEW",
+    "HOT",
+    "WARM",
+    "WON",
+    "LOST",
+    "DEAD",
 ] as const;
 
-export type DealStage = (typeof DEAL_STAGES)[number];
+// Use a flexible type for DealStage to allow any string
+export type DealStage = string;
 
 // Stage configuration interface (actual config is in lib/dealConfig.ts)
 export interface StageConfigEntry {

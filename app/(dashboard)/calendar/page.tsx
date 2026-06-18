@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { Plus, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
 import { getMeetings, createMeeting, updateMeeting, Meeting } from "@/lib/api/meetingsApi";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
 export default function CalendarPage() {
     const [view, setView] = useState<"month" | "week">("month");

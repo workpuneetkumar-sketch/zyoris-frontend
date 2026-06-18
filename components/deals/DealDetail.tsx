@@ -1,7 +1,7 @@
 "use client";
 
 import { Deal } from "@/types/deals";
-import { STAGE_CONFIG } from "@/lib/dealConfig";
+import { getStageConfig } from "@/lib/dealConfig";
 import {
   Calendar,
   User,
@@ -16,10 +16,11 @@ import {
   AlertCircle,
   Loader2,
   Save,
+  Link2,
 } from "lucide-react";
 import { useState } from "react";
 import { updateDeal, UpdateDealPayload } from "@/lib/api/dealsApi";
-import { DEAL_STAGES } from "@/types/deals";
+import { DEFAULT_DEAL_STAGES } from "@/types/deals";
 
 interface DealDetailProps {
   deal: Deal;
@@ -42,9 +43,9 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
 
   if (!deal) return null;
 
-  const stageConfig = STAGE_CONFIG[deal.stage] || { label: deal.stage || 'Unknown', color: 'bg-gray-400' };
-  const isWon = deal.stage === "WON";
-  const isLost = deal.stage === "LOST";
+  const stageConfig = getStageConfig(deal.stage);
+  const isWon = deal.stage.toUpperCase() === "WON";
+  const isLost = deal.stage.toUpperCase() === "LOST";
 
   const handleStageChange = async (newStage: string) => {
     if (newStage === deal.stage) return;
@@ -304,6 +305,19 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                 {deal.dealId}
               </p>
             </div>
+            {deal.leadId && (
+              <div className="p-4 bg-blue-50 rounded-xl space-y-1">
+                <div className="flex items-center gap-1">
+                  <Link2 className="w-3.5 h-3.5 text-blue-400" />
+                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">
+                    Converted from Lead
+                  </p>
+                </div>
+                <p className="text-[12px] text-blue-600 font-mono break-all font-medium">
+                  {deal.leadId}
+                </p>
+              </div>
+            )}
 
             <div className="space-y-4">
               <div className="flex justify-between items-center">
@@ -316,9 +330,9 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                   disabled={isUpdating}
                   className="bg-transparent text-[13px] font-black text-gray-800 focus:outline-none focus:ring-0 cursor-pointer hover:text-blue-600 transition-colors"
                 >
-                  {DEAL_STAGES.map((s) => (
+                  {DEFAULT_DEAL_STAGES.map((s) => (
                     <option key={s} value={s}>
-                      {STAGE_CONFIG[s]?.label || s}
+                      {getStageConfig(s).label}
                     </option>
                   ))}
                 </select>
@@ -412,8 +426,8 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                     onChange={(e) => setEditForm(prev => ({ ...prev, stage: e.target.value }))}
                     className="w-full px-5 py-3.5 bg-gray-50 border border-gray-100 text-gray-900 rounded-2xl text-[14px] font-bold focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all outline-none appearance-none"
                   >
-                    {DEAL_STAGES.map(s => (
-                      <option key={s} value={s}>{STAGE_CONFIG[s]?.label || s}</option>
+                    {DEFAULT_DEAL_STAGES.map(s => (
+                      <option key={s} value={s}>{getStageConfig(s).label}</option>
                     ))}
                   </select>
                 </div>

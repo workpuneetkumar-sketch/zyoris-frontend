@@ -1,45 +1,54 @@
-// lib/dealConfig.ts
 import { CheckCircle2, XCircle } from "lucide-react";
+import { StageConfigEntry } from "@/types/deals";
+import React from "react";
 
-export const STAGE_CONFIG: Record<
-  string,
-  {
-    label: string;
-    color: string;       // text color class
-    borderColor: string; // Tailwind border-t class
-    icon?: React.ReactNode;
-  }
-> = {
+const BASE_CONFIG: Record<string, StageConfigEntry & { icon?: React.ReactNode }> = {
   NEW: {
     label: "New",
-    color: "text-gray-500",
-    borderColor: "border-t-gray-500",
-  },
-  QUALIFIED: {
-    label: "Qualified",
-    color: "text-blue-500",
+    color: "text-blue-600",
     borderColor: "border-t-blue-500",
   },
-  PROPOSAL: {
-    label: "Proposal",
-    color: "text-purple-500",
-    borderColor: "border-t-purple-500",
+  HOT: {
+    label: "Hot",
+    color: "text-red-600",
+    borderColor: "border-t-red-500",
   },
-  NEGOTIATION: {
-    label: "Negotiation",
-    color: "text-yellow-500",
-    borderColor: "border-t-yellow-400",
+  WARM: {
+    label: "Warm",
+    color: "text-orange-600",
+    borderColor: "border-t-orange-500",
   },
   WON: {
     label: "Won",
-    color: "text-green-500",
-    borderColor: "border-t-green-500",
+    color: "text-emerald-600",
+    borderColor: "border-t-emerald-500",
     icon: <CheckCircle2 size={15} className="text-green-500" />,
   },
   LOST: {
     label: "Lost",
-    color: "text-red-500",
-    borderColor: "border-t-red-500",
+    color: "text-gray-600",
+    borderColor: "border-t-gray-500",
     icon: <XCircle size={15} className="text-red-400" />,
   },
+  DEAD: {
+    label: "Dead",
+    color: "text-slate-600",
+    borderColor: "border-t-slate-500",
+  },
 };
+
+export function getStageConfig(stage: string): StageConfigEntry & { icon?: React.ReactNode } {
+  const normalizedStage = stage.toUpperCase();
+  if (BASE_CONFIG[normalizedStage]) {
+    return BASE_CONFIG[normalizedStage];
+  }
+  // For unknown stages, use default config
+  return {
+    label: stage,
+    color: "text-gray-600",
+    borderColor: "border-t-gray-400",
+  };
+}
+
+export const STAGE_CONFIG = BASE_CONFIG;
+export const DEFAULT_DEAL_STAGES = ["NEW", "HOT", "WARM", "WON", "LOST", "DEAD"] as const;

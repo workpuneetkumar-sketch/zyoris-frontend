@@ -146,6 +146,21 @@ export async function fetchTeamMembers(): Promise<any> {
     return res.data;
 }
 
+// ── GET single lead ────────────────────────────────────────
+export async function fetchLeadById(leadId: string): Promise<any> {
+    const res = await api.get(`/leads/get-lead/${leadId}`);
+    return res.data;
+}
+
+// ── POST add note to lead ──────────────────────────────────
+export async function addLeadNote(
+    leadId: string,
+    note: string
+): Promise<any> {
+    const res = await api.post(`/leads/add-note/${leadId}`, { note });
+    return res.data;
+}
+
 // ── POST convert lead to deal ──────────────────────────────
 // Endpoint: POST /leads/:id/convert-to-deal
 // Response shape: { deal: { id, dealId, name, stage, ... } } or flat deal object
@@ -162,19 +177,25 @@ export interface ConvertToDealResponse {
 }
 
 export async function convertLeadToDeal(
-    leadId: string,
-    data?: { amount?: number }
+    leadId: string
 ): Promise<ConvertToDealResponse> {
-    console.log(`[API] convertLeadToDeal - leadId: ${leadId}`, data);
+    console.log(`[API] convertLeadToDeal - leadId: ${leadId}`);
     try {
         const res = await api.post<ConvertToDealResponse>(
-            `/leads/${leadId}/convert-to-deal`,
-            data
+            `/leads/${leadId}/convert-to-deal`
         );
-        console.log(`[API] convertLeadToDeal - success status: ${res.status}`);
+        console.log(`[API] convertLeadToDeal - full response:`, {
+            status: res.status,
+            statusText: res.statusText,
+            data: res.data,
+        });
         return res.data;
     } catch (error: any) {
-        console.error(`[API] convertLeadToDeal - error:`, error.response?.data || error.message);
+        console.error(`[API] convertLeadToDeal - error:`, {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+        });
         throw error;
     }
 }

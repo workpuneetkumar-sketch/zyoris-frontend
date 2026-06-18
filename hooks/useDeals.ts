@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
-import { Deal, DealsFilters, DEFAULT_DEALS_FILTERS, DealStage } from "@/types/deals";
+import { Deal, DealsFilters, DEFAULT_DEALS_FILTERS, DealStage, DEFAULT_DEAL_STAGES } from "@/types/deals";
 import {
     fetchDeals,
     createDeal,
@@ -88,14 +88,24 @@ export function useDeals() {
         return Math.round(avg * 100 * 10) / 10;
     }, [filteredDeals]);
 
-    // ── Deals grouped by stage (Kanban) ────────────────────────────────────
+    // ── Deals grouped by stage (Kanban) ───────────────────────────────────
     const dealsByStage = useMemo(() => {
         const map = new Map<string, Deal[]>();
-        for (const d of filteredDeals) {
-            const arr = map.get(d.stage) ?? [];
-            arr.push(d);
-            map.set(d.stage, arr);
+        // Initialize default stages to empty arrays
+        for (const stage of DEFAULT_DEAL_STAGES) {
+            map.set(stage, []);
         }
+        // Add all deals to the map, creating stages as needed
+        for (const d of filteredDeals) {
+            const stage = d.stage.toUpperCase(); // Normalize to uppercase to match default stages!
+            console.log(`[useDeals] Processing deal:`, { dealId: d.dealId, name: d.name, originalStage: d.stage, normalizedStage: stage });
+            if (!map.has(stage)) {
+                map.set(stage, []);
+            }
+            const arr = map.get(stage)!;
+            arr.push(d);
+        }
+        console.log(`[useDeals] Final dealsByStage:`, Array.from(map.entries()));
         return map;
     }, [filteredDeals]);
 

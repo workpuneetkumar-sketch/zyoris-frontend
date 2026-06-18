@@ -31,27 +31,32 @@ interface BackendDeal {
     // conversionProbability may come from analytics enrichment
     conversionProbability?: number;
     companyName?: string;
+    leadId?: string;
     [key: string]: unknown;
 }
 
 // ── Map BackendDeal → frontend Deal ───────────────────────────────────────
 
 function mapDeal(raw: BackendDeal): Deal {
-    return {
-        dealId: raw.id,
-        externalId: raw.externalId ?? null,
-        name: raw.name,
-        stage: raw.stage,
-        amount: raw.amount ?? 0,
-        conversionProbability: typeof raw.conversionProbability === "number"
-            ? raw.conversionProbability
-            : 0.5,
-        owner: raw.owner ?? undefined,
-        companyName: raw.companyName ?? undefined,
-        closeDate: raw.closeDate ?? null,
-        createdAt: raw.createdAt,
-        updatedAt: raw.updatedAt,
-    };
+  console.log(`[mapDeal] Raw backend deal:`, raw);
+  const mappedStage = raw.stage ? raw.stage.toUpperCase() : "NEW";
+  console.log(`[mapDeal] Mapped stage:`, mappedStage);
+  return {
+    dealId: raw.id,
+    externalId: raw.externalId ?? null,
+    name: raw.name,
+    stage: mappedStage,
+    amount: raw.amount ?? 0,
+    conversionProbability: typeof raw.conversionProbability === "number"
+      ? raw.conversionProbability
+      : 0.5,
+    owner: raw.owner ?? undefined,
+    companyName: raw.companyName ?? undefined,
+    closeDate: raw.closeDate ?? null,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    leadId: raw.leadId ?? undefined,
+  };
 }
 
 // ── Normalise list response ────────────────────────────────────────────────
@@ -79,9 +84,20 @@ export async function fetchDeals(): Promise<Deal[]> {
 // ── GET single deal ───────────────────────────────────────────────────────
 // Swagger: GET /api/deals/get-deal/{id}
 
-export async function fetchDealById(dealId: string): Promise<Deal> {
-    const res = await api.get<BackendDeal>(`/api/deals/get-deal/${dealId}`);
-    return mapDeal(res.data);
+export async function fetchDealById(
+    dealId: string
+): Promise<Deal> {
+
+    const res = await api.get(
+        `/api/deals/get-deal/${dealId}`
+    );
+
+    const raw =
+        res.data?.data ||
+        res.data?.deal ||
+        res.data;
+
+    return mapDeal(raw);
 }
 
 // ── POST create deal ──────────────────────────────────────────────────────
@@ -139,16 +155,75 @@ export async function updateDeal(
     dealId: string,
     data: UpdateDealPayload
 ): Promise<Deal> {
-    const payload: Record<string, unknown> = {};
-    
-    if (data.name !== undefined) payload.name = data.name;
-    if (data.amount !== undefined) payload.amount = data.amount;
-    if (data.stage !== undefined) payload.stage = data.stage;
-    if (data.assignedToId !== undefined) payload.assignedToId = data.assignedToId;
-    if (data.contactId !== undefined) payload.contactId = data.contactId;
-    if (data.companyId !== undefined) payload.companyId = data.companyId;
-    if (data.closeDate !== undefined) payload.closeDate = data.closeDate;
 
-    const res = await api.patch<BackendDeal>(`/api/deals/update-deal/${dealId}`, payload);
+    const payload = {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.stage !== undefined && {
+            stage: String(data.stage).toUpperCase(),
+        }),
+        ...(data.amount !== undefined && {
+            amount: Number(data.amount),
+        }),
+        ...(data.assignedToId !== undefined && {
+            assignedToId: data.assignedToId,
+        }),
+        ...(data.contactId !== undefined && {
+            contactId: data.contactId,
+        }),
+        ...(data.companyId !== undefined && {
+            companyId: data.companyId,
+        }),
+        ...(data.closeDate !== undefined && {
+            closeDate: data.closeDate,
+        }),
+    };
+
+    const res = await api.patch(
+        `/api/deals/update-deal/${dealId}`,
+        payload
+    );
+
     return mapDeal(res.data);
+}
+
+// ── GET pipeline stats ─────────────────────────────────────
+export interface PipelineStageStat {
+    stage?: string;
+    amount?: number;
+    totalAmount?: number;
+    value?: number;
+    [key: string]: unknown;
+}
+
+export interface PipelineStatsResponse {
+    stages?: PipelineStageStat[];
+    pipeline?: PipelineStageStat[];
+    data?: PipelineStageStat[];
+    totalValue?: number;
+    [key: string]: unknown;
+}
+
+export async function fetchPipelineStats(): Promise<PipelineStatsResponse> {
+    const res = await api.get<PipelineStatsResponse>("/api/deals/pipeline-stats");
+    return res.data;
+}
+
+// ── POST assign deal ───────────────────────────────────────
+export async function assignDeal(
+    dealId: string,
+    assignedToId: string
+): Promise<Deal> {
+    const res = await api.post<BackendDeal>(`/api/deals/assign-deal/${dealId}`, {
+        assignedToId,
+    });
+    return mapDeal(res.data);
+}
+
+// ── POST add note to deal ───────────────────────────────────
+export async function addDealNote(
+    dealId: string,
+    note: string
+): Promise<any> {
+    const res = await api.post(`/api/deals/add-note/${dealId}`, { note });
+    return res.data;
 }
