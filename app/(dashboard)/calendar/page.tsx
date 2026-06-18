@@ -97,8 +97,22 @@ export default function CalendarPage() {
 
     const getItemsForDay = (date: Date) => {
         const dayTasks = tasks.filter(t => t.dueDate && isSameDay(new Date(t.dueDate), date));
-        const dayMeetings = meetings.filter(m => m.date && isSameDay(new Date(m.date), date));
+        const dayMeetings = meetings.filter(m => {
+            const meetingDate = m.date ? new Date(m.date) : new Date(m.startTime);
+            return isSameDay(meetingDate, date);
+        });
         return { dayTasks, dayMeetings };
+    };
+
+    const formatTime = (timeString: string) => {
+        if (!timeString) return "";
+        if (timeString.includes("T")) {
+            const d = new Date(timeString);
+            if (!isNaN(d.getTime())) {
+                return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            }
+        }
+        return timeString;
     };
 
     const days = view === "month" ? getDaysInMonth(currentDate) : getDaysInWeek(currentDate);
@@ -177,7 +191,7 @@ export default function CalendarPage() {
                                     <div className="flex flex-col gap-1 overflow-y-auto max-h-[80px] no-scrollbar">
                                         {dayMeetings.map(m => (
                                             <div key={m.id} className="truncate text-xs px-2 py-1 rounded bg-purple-50 text-purple-700 border border-purple-100 font-medium">
-                                                {m.startTime} {m.title}
+                                                {formatTime(m.startTime)} {m.title}
                                             </div>
                                         ))}
                                         {dayTasks.map(t => (
@@ -218,7 +232,7 @@ export default function CalendarPage() {
                                                 Edit
                                             </button>
                                         </div>
-                                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {m.startTime} - {m.endTime}</p>
+                                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {formatTime(m.startTime)} - {formatTime(m.endTime)}</p>
                                     </div>
                                 )) : <p className="text-sm text-gray-400">No meetings scheduled.</p>}
                             </div>
@@ -264,9 +278,26 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate, editing
         if (isOpen) {
             if (editingMeeting) {
                 setTitle(editingMeeting.title);
-                setDate(editingMeeting.date.split("T")[0]);
-                setStartTime(editingMeeting.startTime);
-                setEndTime(editingMeeting.endTime);
+                const meetingDateStr = editingMeeting.date || editingMeeting.startTime;
+                if (meetingDateStr) {
+                    setDate(new Date(meetingDateStr).toISOString().split("T")[0]);
+                } else {
+                    setDate("");
+                }
+                
+                const extractTime = (isoString: string) => {
+                    if (!isoString) return "";
+                    if (isoString.includes("T")) {
+                        const d = new Date(isoString);
+                        if (!isNaN(d.getTime())) {
+                            return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                        }
+                    }
+                    return isoString;
+                };
+
+                setStartTime(extractTime(editingMeeting.startTime));
+                setEndTime(extractTime(editingMeeting.endTime));
             } else {
                 setTitle("");
                 setStartTime("");
@@ -284,20 +315,23 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate, editing
         e.preventDefault();
         setLoading(true);
         try {
+            const startDateTime = new Date(`${date}T${startTime}`);
+            const endDateTime = new Date(`${date}T${endTime}`);
+            
             if (editingMeeting) {
                 await updateMeeting(editingMeeting.id, {
                     title,
                     date: new Date(date).toISOString(),
-                    startTime,
-                    endTime
+                    startTime: startDateTime.toISOString(),
+                    endTime: endDateTime.toISOString()
                 });
                 toast.success("Meeting updated successfully");
             } else {
                 await createMeeting({
                     title,
                     date: new Date(date).toISOString(),
-                    startTime,
-                    endTime
+                    startTime: startDateTime.toISOString(),
+                    endTime: endDateTime.toISOString()
                 });
                 toast.success("Meeting scheduled successfully");
             }

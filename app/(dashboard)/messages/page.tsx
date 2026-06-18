@@ -59,8 +59,8 @@ export default function MessagesPage() {
         setInputText("");
 
         try {
-            const newMsg = await sendMessage(activeSession.id, text);
-            setMessages(prev => [...prev, newMsg]);
+            const newMsgs = await sendMessage(activeSession.id, text);
+            setMessages(prev => [...prev, ...newMsgs]);
             
             // Update session last message
             setSessions(prev => prev.map(s => 
