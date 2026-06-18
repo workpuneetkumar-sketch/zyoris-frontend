@@ -315,17 +315,17 @@ function CFODemoDashboard({ data, forecast }: { data: CFODashboardData; forecast
 }
 
 export default function CfoDashboardPage() {
-  const { user, token, isLoading } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
   const [apiData, setApiData] = useState<CFODashboardData | null>(null);
   const [apiForecast, setApiForecast] = useState<ForecastResponse | null>(null);
   const [dataChecked, setDataChecked] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && user && user.role !== "CFO" && user.role !== "ADMIN") {
+    if (!isInitializing && user && user.role !== "CFO" && user.role !== "ADMIN") {
       router.replace("/dashboard");
     }
-  }, [user, isLoading, router]);
+  }, [user, isInitializing, router]);
 
   useEffect(() => {
     if (!token) return;
@@ -350,7 +350,7 @@ export default function CfoDashboardPage() {
     loadCfoData();
   }, [token]);
 
-  if (isLoading || !user) return <div className="min-h-screen bg-[#f5f7fb]" />;
+  if (isInitializing || !user) return <div className="min-h-screen bg-[#f5f7fb]" />;
 
   const usingDemoData = dataChecked && isCFODataEmpty(apiData);
   const finalData = usingDemoData ? CFO_MOCK_DATA : apiData!;

@@ -1,6 +1,6 @@
 "use client";
 
-import { loginApi, registerApi, AuthResponse, logoutApi } from "@/lib/api/authApi";
+import { loginApi, registerApi, AuthResponse, logoutApi, getMeApi } from "@/lib/api/authApi";
 import React, {
   createContext,
   useCallback,
@@ -27,22 +27,24 @@ export interface User {
 }
 
 interface AuthContextValue {
-  user: User | null;
-  token: string | null;
-  login: (
-    email: string,
-    password: string
-  ) => Promise<AuthResponse>;
-  register: (data: {
-    name: string;
-    email: string;
-    password: string;
-    role: string;
-    designation: string;
-  }) => Promise<User>;
-  logout: () => Promise<void>;
-  isLoading: boolean;
-  error: string | null;
+    user: User | null;
+    token: string | null;
+    login: (
+        email: string,
+        password: string
+    ) => Promise<AuthResponse>;
+    register: (data: {
+        name: string;
+        email: string;
+        password: string;
+        role: string;
+        designation: string;
+    }) => Promise<User>;
+    logout: () => Promise<void>;
+    isInitializing: boolean;
+    isLoading: boolean; // Backward compatibility
+    isAuthenticated: boolean;
+    error: string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -62,68 +64,80 @@ function clearTokenCookie() {
   document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
 }
 
+function clearAuthState() {
+  localStorage.removeItem(STORAGE_KEY);
+  clearTokenCookie();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   // Restore session
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      setUser(parsed.user);
-      setToken(parsed.token);
-      // Re-sync the cookie in case it was cleared (e.g. browser restart)
-      if (parsed.token) {
-        setTokenCookie(parsed.token);
+    const restoreSession = async () => {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) {
+        setIsInitializing(false);
+        return;
       }
-    } catch {
-      localStorage.removeItem(STORAGE_KEY);
-    } finally {
-      setIsLoading(false);
-    }
+
+      try {
+        const parsed = JSON.parse(raw);
+        if (!parsed.token) {
+          throw new Error("No token found");
+        }
+        
+        setToken(parsed.token);
+        setTokenCookie(parsed.token);
+        
+        // Validate token by fetching current user
+        const userData = await getMeApi();
+        setUser(userData);
+        setIsAuthenticated(true);
+      } catch {
+        // If token is invalid, clear everything
+        clearAuthState();
+        setUser(null);
+        setToken(null);
+        setIsAuthenticated(false);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
   // LOGIN
   const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
     setError(null);
 
-    try {
-      const res = await loginApi(email, password);
+    const res = await loginApi(email, password);
 
-      setUser(res.user);
-      setToken(res.token);
+    setUser(res.user);
+    setToken(res.token);
+    setIsAuthenticated(true);
 
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          user: res.user,
-          token: res.token,
-          refreshToken: res.refreshToken,
-        })
-      );
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        user: res.user,
+        token: res.token,
+        refreshToken: res.refreshToken,
+      })
+    );
 
-      // Set cookie so middleware can verify authentication on navigation
-      setTokenCookie(res.token);
+    // Set cookie so middleware can verify authentication on navigation
+    setTokenCookie(res.token);
 
-      return res;
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Login failed");
-      throw e;
-    } finally {
-      setIsLoading(false);
-    }
+    return res;
   }, []);
 
   // REGISTER
@@ -134,33 +148,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     role: string;
     designation: string;
   }) => {
-    setIsLoading(true);
     setError(null);
 
-    try {
-      const res = await registerApi(data);
+    const res = await registerApi(data);
 
-      setUser(res.user);
-      setToken(res.token);
+    setUser(res.user);
+    setToken(res.token);
+    setIsAuthenticated(true);
 
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          user: res.user,
-          token: res.token,
-          refreshToken: res.refreshToken,
-        })
-      );
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        user: res.user,
+        token: res.token,
+        refreshToken: res.refreshToken,
+      })
+    );
 
-      setTokenCookie(res.token);
+    setTokenCookie(res.token);
 
-      return res.user;
-    } catch (e: any) {
-      setError(e?.response?.data?.message || "Register failed");
-      throw e;
-    } finally {
-      setIsLoading(false);
-    }
+    return res.user;
   }, []);
 
   const logout = useCallback(async () => {
@@ -176,32 +183,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setToken(null);
-      localStorage.removeItem(STORAGE_KEY);
-      clearTokenCookie();
+      setIsAuthenticated(false);
+      clearAuthState();
       router.push("/login");
     }
   }, [router]);
 
 
   return (
-    <AuthContext.Provider
-      value={{ user, token, login, register, logout, isLoading, error }}
-    >
-      {children}
-      <ToastContainer
-        position="top-right"
-        autoClose={3000}
-        hideProgressBar={false}
-        newestOnTop={false}
-        closeOnClick
-        rtl={false}
-        pauseOnFocusLoss
-        draggable
-        pauseOnHover
-        theme="light"
-      />
-    </AuthContext.Provider>
-  );
+        <AuthContext.Provider
+            value={{ 
+                user, 
+                token, 
+                login, 
+                register, 
+                logout, 
+                isInitializing, 
+                isLoading: isInitializing, // Backward compatibility
+                isAuthenticated, 
+                error 
+            }}
+        >
+            {children}
+            <ToastContainer
+                position="top-right"
+                autoClose={3000}
+                hideProgressBar={false}
+                newestOnTop={false}
+                closeOnClick
+                rtl={false}
+                pauseOnFocusLoss
+                draggable
+                pauseOnHover
+                theme="light"
+            />
+        </AuthContext.Provider>
+    );
 }
 
 export function useAuth() {

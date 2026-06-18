@@ -1,9 +1,6 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "../../context/AuthContext";
-import { AppShell } from "../Shell";
 import { Search, Bell, Plus } from "lucide-react";
 
 // Sub-components
@@ -11,18 +8,12 @@ import { CEOOverviewSection } from "./compoents/CEOOverviewSection";
 import { CFOOverviewSection } from "./compoents/CFOOverviewSection";
 import { RecommendationsSection } from "./compoents/RecommendationsSection";
 import { DataIngestionSection } from "./compoents/DataIngestionSection";
+import { useAuth } from "../../context/AuthContext";
 
 export default function Dashboard() {
-    const { user, token, isLoading: authLoading } = useAuth();
-    const router = useRouter();
+    const { user, token, isInitializing } = useAuth();
 
-    useEffect(() => {
-        if (!authLoading && (!user || !token)) {
-            router.replace("/login");
-        }
-    }, [user, token, authLoading, router]);
-
-    if (authLoading || !user) {
+    if (isInitializing || !user || !token) {
         return <div className="min-h-screen bg-[#f5f7fb]" />;
     }
 

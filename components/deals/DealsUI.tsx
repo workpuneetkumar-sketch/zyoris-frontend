@@ -18,8 +18,8 @@ import {
     X,
     AlertCircle,
 } from "lucide-react";
-import { Deal, DealsFilters, DEAL_STAGES } from "@/types/deals";
-import { STAGE_CONFIG } from "@/lib/dealConfig";
+import { Deal, DealsFilters, DEFAULT_DEAL_STAGES } from "@/types/deals";
+import { getStageConfig } from "@/lib/dealConfig";
 import { CreateDealPayload } from "@/lib/api/dealsApi";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -180,9 +180,9 @@ function CreateDealModal({ defaultStage, creating, createError, onClose, onSave 
                             onChange={handleChange}
                             className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                         >
-                            {[...DEAL_STAGES].map((s) => (
+                            {[...DEFAULT_DEAL_STAGES].map((s) => (
                                 <option key={s} value={s}>
-                                    {STAGE_CONFIG[s]?.label ?? s}
+                                    {getStageConfig(s).label}
                                 </option>
                             ))}
                         </select>
@@ -263,9 +263,9 @@ function DealCard({
     deal: Deal;
     onStageChange: (dealId: string, newStage: string) => void;
 }) {
-    const cfg = STAGE_CONFIG[deal.stage];
-    const isWon  = deal.stage === "WON";
-    const isLost = deal.stage === "LOST";
+    const cfg = getStageConfig(deal.stage);
+    const isWon  = deal.stage.toUpperCase() === "WON";
+    const isLost = deal.stage.toUpperCase() === "LOST";
 
     const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         e.stopPropagation();
@@ -286,7 +286,7 @@ function DealCard({
                     {isLost && <XCircle      size={15} className="text-red-400   shrink-0 mt-0.5" />}
                 </div>
 
-                <p className={`text-[15px] font-bold mb-1.5 ${cfg?.color ?? "text-blue-500"}`}>
+                <p className={`text-[15px] font-bold mb-1.5 ${cfg.color}`}>
                     {formatAmount(deal.amount)}
                 </p>
 
@@ -297,9 +297,9 @@ function DealCard({
                         onChange={handleStageChange}
                         className="appearance-none w-full h-8 pl-2.5 pr-7 rounded-md border border-gray-200 bg-white text-[12px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                     >
-                        {[...DEAL_STAGES].map((stage) => (
+                        {[...DEFAULT_DEAL_STAGES].map((stage) => (
                             <option key={stage} value={stage}>
-                                {STAGE_CONFIG[stage]?.label || stage}
+                                {getStageConfig(stage).label}
                             </option>
                         ))}
                     </select>
@@ -337,7 +337,7 @@ function KanbanColumn({
     onStageChange: (dealId: string, newStage: string) => void;
     onAddDeal: (stage: string) => void;
 }) {
-    const cfg = STAGE_CONFIG[stage] ?? { label: stage, color: "text-gray-500", borderColor: "border-t-gray-400" };
+    const cfg = getStageConfig(stage);
 
     const columnTotal = useMemo(
         () => deals.reduce((sum, d) => sum + d.amount, 0),
@@ -349,7 +349,6 @@ function KanbanColumn({
             {/* Column header */}
             <div className="px-4 pt-4 pb-3 border-b border-gray-50">
                 <div className="flex items-center gap-1.5 mb-1">
-                    {cfg.icon}
                     <h3 className={`text-[13px] font-semibold ${cfg.color}`}>{cfg.label}</h3>
                 </div>
                 <p className="text-[12px] text-gray-400">
@@ -411,12 +410,15 @@ export function DealsUI({
     const handleStageChange = onStageChange ?? (() => {});
 
     const allStages = useMemo(() => {
-        const fromData  = Array.from(dealsByStage.keys());
-        const canonical = DEAL_STAGES as readonly string[];
-        return Array.from(new Set([...canonical, ...fromData]));
+        // Use all stages from dealsByStage, preserve order of default stages first
+        const defaultSet = new Set<string>(DEFAULT_DEAL_STAGES);
+        const extraStages = Array.from(dealsByStage.keys()).filter(stage => !defaultSet.has(stage));
+        return [...DEFAULT_DEAL_STAGES, ...extraStages];
     }, [dealsByStage]);
 
-    const stageFilterOptions = ["All Stages", ...DEAL_STAGES];
+    const stageFilterOptions = useMemo(() => {
+        return ["All Stages", ...allStages];
+    }, [allStages]);
 
     return (
         <div className="flex flex-col min-h-full gap-5">

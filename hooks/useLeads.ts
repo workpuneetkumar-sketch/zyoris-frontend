@@ -152,32 +152,26 @@ export function useLeads() {
         setConfirmAction({ type: null, lead: null });
 
         if (type === "Convert") {
-            setConvertingId(lead.id);
-            try {
-                // Mapping: lead.estimatedValue -> deal.amount
-                // Ensure 0 is passed correctly and not treated as falsy
-                const amount = (lead.estimatedValue !== undefined && lead.estimatedValue !== null) 
-                    ? Number(lead.estimatedValue) 
-                    : undefined;
+                setConvertingId(lead.id);
+                try {
+                    const res = await convertLeadToDeal(lead.id);
+                    const dealId =
+                        (res.deal?.dealId ?? res.deal?.id) ??
+                        (res.dealId ?? res.id);
 
-                const res = await convertLeadToDeal(lead.id, { amount });
-                const dealId =
-                    (res.deal?.dealId ?? res.deal?.id) ??
-                    (res.dealId ?? res.id);
-
-                if (dealId) {
-                    router.push(`/deals/${dealId}`);
-                } else {
-                    router.push("/deals");
+                    if (dealId) {
+                        router.push(`/deals/${dealId}`);
+                    } else {
+                        router.push("/deals");
+                    }
+                    toast.success("Lead converted to deal successfully");
+                } catch (err: any) {
+                    console.error("Conversion error:", err);
+                    toast.error(err?.response?.data?.message || err.message || "Failed to convert lead.");
+                } finally {
+                    setConvertingId(null);
                 }
-                toast.success("Lead converted to deal successfully");
-            } catch (err: any) {
-                console.error("Conversion error:", err);
-                toast.error(err?.response?.data?.message || err.message || "Failed to convert lead.");
-            } finally {
-                setConvertingId(null);
-            }
-        } else if (type === "Delete") {
+            } else if (type === "Delete") {
             try {
                 await deleteLead(lead.id);
                 loadLeads();

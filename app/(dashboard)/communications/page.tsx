@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { Mail, Phone, MessageCircle, Calendar as CalendarIcon, Filter, Search } from "lucide-react";
 import { getInbox, CommunicationItem, CommunicationType } from "@/lib/api/communicationsApi";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
 export default function CommunicationsPage() {
     const [items, setItems] = useState<CommunicationItem[]>([]);

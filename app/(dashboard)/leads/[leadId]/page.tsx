@@ -16,19 +16,11 @@ import {
 } from "lucide-react";
 import { Lead } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
-import {convertLeadToDeal } from "@/lib/api/leadsApi";
-import api from "@/lib/api/api";
+import { convertLeadToDeal, fetchLeadById } from "@/lib/api/leadsApi";
+import { updateDeal } from "@/lib/api/dealsApi";
+import { mapLeadStatusToDealStage } from "@/lib/dealStageMapper";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { toast } from "react-toastify";
-
-// ── Fetch a single lead by ID ─────────────────────────────────────────────────
-// The backend has GET /leads/get-lead/:leadId per Swagger.
-
-async function fetchLeadById(leadId: string): Promise<Lead> {
-    const res = await api.get<Lead>(`/leads/get-lead/${leadId}`);
-    return res.data;
-}
-// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function LeadDetailPage() {
     const params = useParams();
@@ -64,40 +56,91 @@ export default function LeadDetailPage() {
     };
 
     const executeConvert = async () => {
-        setIsConfirmModalOpen(false);
-        setConverting(true);
-        setConvertError(null);
-        try {
-            // Mapping: lead.estimatedValue -> deal.amount
-            // Ensure 0 is passed correctly and not treated as falsy
-            const amount = (lead?.estimatedValue !== undefined && lead?.estimatedValue !== null) 
-                ? Number(lead.estimatedValue) 
-                : undefined;
+    setIsConfirmModalOpen(false);
+    setConverting(true);
+    setConvertError(null);
 
-            const res = await convertLeadToDeal(leadId, { amount });
-            // Normalize response — backend may return { deal: { id } } or { id } at root
-            const dealId =
-                (res.deal?.dealId ?? res.deal?.id) ??
-                (res.dealId ?? res.id);
-            if (dealId) {
-                toast.success("Lead converted to deal successfully");
-                router.push(`/deals/${dealId}`);
-            } else {
-                // Fallback: go to deals list if no ID returned
-                router.push("/deals");
-            }
-        } catch (err: any) {
-            const msg =
-                err?.response?.data?.error ??
-                err?.response?.data?.message ??
-                (err instanceof Error ? err.message : "Failed to convert lead.");
-            setConvertError(msg);
-            toast.error(msg);
-        } finally {
-            setConverting(false);
+    try {
+        if (!lead) {
+            throw new Error("Lead data missing");
         }
-    };
 
+        // STEP 1 → Create deal from lead
+        const createdDeal = await convertLeadToDeal(leadId);
+
+        console.log("[Lead Convert] Response:", createdDeal);
+
+        // Backend returns flat deal object
+        const dealId =
+            createdDeal?.id ||
+            createdDeal?.deal?.id ||
+            createdDeal?.dealId;
+
+        if (!dealId) {
+            console.error("Deal creation response:", createdDeal);
+            throw new Error("Deal ID not returned");
+        }
+
+        // STEP 2 → Sync lead data into created deal
+try {
+    const payload = {
+    name: lead.name,
+    amount: Number(lead.estimatedValue || 0),
+
+    stage: "NEW", // temporary hardcode
+
+    assignedToId:
+        lead.assignedToId?.trim() || null,
+
+    companyId:
+        (lead as any).companyId || null,
+
+    contactId:
+        (lead as any).contactId || null,
+};
+
+    console.log("[Lead Convert] Updating deal", {
+        dealId,
+        payload,
+    });
+
+    const updated = await updateDeal(dealId, payload);
+
+    console.log("[Lead Convert] Updated response", updated);
+
+} catch (err: any) {
+    console.error(
+        "[Lead Convert] updateDeal FULL ERROR",
+        err?.response?.data || err
+    );
+
+    throw new Error(
+        err?.response?.data?.message ||
+        "Deal created but sync failed"
+    );
+}
+
+        toast.success("Lead converted successfully");
+
+        // STEP 3 → Navigate immediately
+        router.replace(`/deals/${dealId}`);
+
+    } catch (err: any) {
+        console.error("[Lead Convert Error]", err);
+
+        const msg =
+            err?.response?.data?.error ||
+            err?.response?.data?.message ||
+            err?.message ||
+            "Conversion failed";
+
+        setConvertError(msg);
+        toast.error(msg);
+
+    } finally {
+        setConverting(false);
+    }
+};
     // ── Loading ────────────────────────────────────────────────────────────────
     if (loading) {
         return (

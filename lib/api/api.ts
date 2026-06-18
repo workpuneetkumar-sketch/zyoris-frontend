@@ -12,6 +12,7 @@ const api = axios.create({
     headers: {
         "Content-Type": "application/json",
     },
+    timeout: 10000,
 });
 
 /* ---------------------------------------------------
@@ -49,6 +50,8 @@ api.interceptors.request.use(
    Auto refresh expired token
 --------------------------------------------------- */
 
+let isRedirecting = false;
+
 api.interceptors.response.use(
     (response) => response,
 
@@ -70,6 +73,11 @@ api.interceptors.response.use(
                 const raw = localStorage.getItem("zyoris-auth");
 
                 if (!raw) {
+                    // No auth data, redirect immediately
+                    if (!isRedirecting) {
+                        isRedirecting = true;
+                        window.location.href = "/login";
+                    }
                     return Promise.reject(error);
                 }
 
@@ -78,6 +86,14 @@ api.interceptors.response.use(
                 const refreshToken = parsed?.refreshToken;
 
                 if (!refreshToken) {
+                    // No refresh token, redirect immediately
+                    if (!isRedirecting) {
+                        isRedirecting = true;
+                        localStorage.removeItem("zyoris-auth");
+                        const TOKEN_COOKIE = "zyoris-token";
+                        document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+                        window.location.href = "/login";
+                    }
                     return Promise.reject(error);
                 }
 
@@ -89,6 +105,9 @@ api.interceptors.response.use(
                     `${BASE_URL}/auth/refresh`,
                     {
                         refreshToken,
+                    },
+                    {
+                        timeout: 5000,
                     }
                 );
 
@@ -123,6 +142,12 @@ api.interceptors.response.use(
                 );
 
                 /* -----------------------------------
+                   UPDATE COOKIE
+                ----------------------------------- */
+                const TOKEN_COOKIE = "zyoris-token";
+                document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
+
+                /* -----------------------------------
                    RETRY ORIGINAL REQUEST
                 ----------------------------------- */
 
@@ -136,9 +161,14 @@ api.interceptors.response.use(
                    LOGOUT USER
                 ----------------------------------- */
 
-                localStorage.removeItem("zyoris-auth");
-
-                window.location.href = "/login";
+                if (!isRedirecting) {
+                    isRedirecting = true;
+                    localStorage.removeItem("zyoris-auth");
+                    // Clear cookie too
+                    const TOKEN_COOKIE = "zyoris-token";
+                    document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+                    window.location.href = "/login";
+                }
 
                 return Promise.reject(refreshError);
             }

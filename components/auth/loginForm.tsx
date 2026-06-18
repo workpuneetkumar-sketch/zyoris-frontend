@@ -44,16 +44,21 @@ export default function LoginForm() {
                 router.push("/dashboard");
             }
         } catch (err: any) {
-            console.error("LOGIN ERROR:", err);
+      console.error("LOGIN ERROR:", err);
 
-            setError(
-                err?.response?.data?.error ??
-                err?.response?.data?.message ??
-                "Login failed. Please try again."
-            );
-        } finally {
-            setIsLoading(false);
-        }
+      // Check for network errors or CORS issues
+      if (!err.response) {
+        setError("Login unavailable. Please check your connection and try again later.");
+      } else {
+        setError(
+          err?.response?.data?.error ??
+          err?.response?.data?.message ??
+          "Login failed. Please try again."
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
     };
 
     return (
