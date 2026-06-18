@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { Plus, ChevronLeft, ChevronRight, X, Calendar as CalendarIcon, Clock } from "lucide-react";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
-import { getMeetings, createMeeting, Meeting } from "@/lib/api/meetingsApi";
+import { getMeetings, createMeeting, updateMeeting, Meeting } from "@/lib/api/meetingsApi";
 import { toast } from "sonner";
 
 export default function CalendarPage() {
@@ -13,6 +13,7 @@ export default function CalendarPage() {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+    const [editingMeeting, setEditingMeeting] = useState<Meeting | null>(null);
 
     useEffect(() => {
         loadData();
@@ -126,7 +127,7 @@ export default function CalendarPage() {
                         </button>
                     </div>
                     <button
-                        onClick={() => { setSelectedDate(new Date()); setIsModalOpen(true); }}
+                        onClick={() => { setEditingMeeting(null); setSelectedDate(new Date()); setIsModalOpen(true); }}
                         className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                     >
                         <Plus size={18} /> Schedule Meeting
@@ -205,7 +206,18 @@ export default function CalendarPage() {
                             <div className="space-y-2">
                                 {getItemsForDay(selectedDate).dayMeetings.length > 0 ? getItemsForDay(selectedDate).dayMeetings.map(m => (
                                     <div key={m.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                        <p className="font-medium text-gray-900">{m.title}</p>
+                                        <div className="flex items-center justify-between">
+                                            <p className="font-medium text-gray-900">{m.title}</p>
+                                            <button 
+                                                onClick={() => {
+                                                    setEditingMeeting(m);
+                                                    setIsModalOpen(true);
+                                                }} 
+                                                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                            >
+                                                Edit
+                                            </button>
+                                        </div>
                                         <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {m.startTime} - {m.endTime}</p>
                                     </div>
                                 )) : <p className="text-sm text-gray-400">No meetings scheduled.</p>}
@@ -229,15 +241,19 @@ export default function CalendarPage() {
             {/* Schedule Meeting Modal */}
             <ScheduleMeetingModal 
                 isOpen={isModalOpen} 
-                onClose={() => setIsModalOpen(false)} 
+                onClose={() => {
+                    setIsModalOpen(false);
+                    setEditingMeeting(null);
+                }} 
                 onSuccess={loadData}
                 initialDate={selectedDate}
+                editingMeeting={editingMeeting}
             />
         </div>
     );
 }
 
-function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate }: { isOpen: boolean, onClose: () => void, onSuccess: () => void, initialDate: Date | null }) {
+function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate, editingMeeting }: { isOpen: boolean, onClose: () => void, onSuccess: () => void, initialDate: Date | null, editingMeeting?: Meeting | null }) {
     const [title, setTitle] = useState("");
     const [date, setDate] = useState("");
     const [startTime, setStartTime] = useState("");
@@ -245,10 +261,22 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate }: { isO
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (isOpen && initialDate) {
-            setDate(initialDate.toISOString().split("T")[0]);
+        if (isOpen) {
+            if (editingMeeting) {
+                setTitle(editingMeeting.title);
+                setDate(editingMeeting.date.split("T")[0]);
+                setStartTime(editingMeeting.startTime);
+                setEndTime(editingMeeting.endTime);
+            } else {
+                setTitle("");
+                setStartTime("");
+                setEndTime("");
+                if (initialDate) {
+                    setDate(initialDate.toISOString().split("T")[0]);
+                }
+            }
         }
-    }, [isOpen, initialDate]);
+    }, [isOpen, initialDate, editingMeeting]);
 
     if (!isOpen) return null;
 
@@ -256,18 +284,28 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate }: { isO
         e.preventDefault();
         setLoading(true);
         try {
-            await createMeeting({
-                title,
-                date: new Date(date).toISOString(),
-                startTime,
-                endTime
-            });
-            toast.success("Meeting scheduled successfully");
+            if (editingMeeting) {
+                await updateMeeting(editingMeeting.id, {
+                    title,
+                    date: new Date(date).toISOString(),
+                    startTime,
+                    endTime
+                });
+                toast.success("Meeting updated successfully");
+            } else {
+                await createMeeting({
+                    title,
+                    date: new Date(date).toISOString(),
+                    startTime,
+                    endTime
+                });
+                toast.success("Meeting scheduled successfully");
+            }
             onSuccess();
             onClose();
         } catch (error) {
             console.error(error);
-            toast.error("Failed to schedule meeting");
+            toast.error(editingMeeting ? "Failed to update meeting" : "Failed to schedule meeting");
         } finally {
             setLoading(false);
         }
@@ -277,7 +315,7 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate }: { isO
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
             <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <h2 className="text-lg font-semibold text-gray-900">Schedule Meeting</h2>
+                    <h2 className="text-lg font-semibold text-gray-900">{editingMeeting ? "Edit Meeting" : "Schedule Meeting"}</h2>
                     <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors">
                         <X size={18} />
                     </button>
@@ -307,7 +345,7 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate }: { isO
                 <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                     <button type="submit" form="meeting-form" disabled={loading} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50">
-                        {loading ? "Scheduling..." : "Schedule Meeting"}
+                        {loading ? "Saving..." : editingMeeting ? "Update Meeting" : "Schedule Meeting"}
                     </button>
                 </div>
             </div>
