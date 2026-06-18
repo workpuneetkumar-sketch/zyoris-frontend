@@ -1,7 +1,8 @@
 import api from "@/lib/api/api";
+import { getEmployees } from "./hrApi";
 
 export interface ChatSession {
-    id: string;
+    id: string; // Will map to employee's userId
     name: string;
     avatar?: string;
     lastMessage?: string;
@@ -16,63 +17,76 @@ export interface ChatMessage {
     timestamp: string;
 }
 
-// In-memory mock data for team chat
-const mockSessions: ChatSession[] = [
-    { id: "team-1", name: "Alice Johnson", lastMessage: "Can you send the report?", updatedAt: new Date().toISOString() },
-    { id: "team-2", name: "Bob Smith", lastMessage: "Sounds good.", updatedAt: new Date(Date.now() - 3600000).toISOString() },
-    { id: "team-3", name: "Charlie Davis", lastMessage: "I will check it out.", updatedAt: new Date(Date.now() - 86400000).toISOString() },
-];
-
-const mockMessages: Record<string, ChatMessage[]> = {
-    "team-1": [
-        { id: "m1", sessionId: "team-1", text: "Hey! How is the project going?", senderId: "team-1", timestamp: new Date(Date.now() - 7200000).toISOString() },
-        { id: "m2", sessionId: "team-1", text: "Going well, just finishing up.", senderId: "me", timestamp: new Date(Date.now() - 3600000).toISOString() },
-        { id: "m3", sessionId: "team-1", text: "Can you send the report?", senderId: "team-1", timestamp: new Date().toISOString() },
-    ]
-};
-
 export async function getChatSessions(): Promise<ChatSession[]> {
     try {
-        const res = await api.get("/chat/sessions");
-        if (Array.isArray(res.data) && res.data.length > 0) return res.data;
+        const employees = await getEmployees();
+        // Map employees to chat sessions (Team Chat)
+        const sessions: ChatSession[] = employees
+            .filter(emp => emp.userId) // must have a userId to receive messages
+            .map(emp => ({
+                id: emp.userId,
+                name: emp.name,
+                avatar: emp.avatar,
+                lastMessage: "Start a conversation",
+                updatedAt: new Date().toISOString()
+            }));
+        return sessions;
     } catch (e) {
-        console.warn("Failed to fetch sessions, using mock");
+        console.error("Failed to fetch employees for team chat", e);
+        return [];
     }
-    return [...mockSessions];
 }
 
 export async function getSessionMessages(sessionId: string): Promise<ChatMessage[]> {
     try {
-        const res = await api.get(`/chat/session/${sessionId}`);
-        if (Array.isArray(res.data) && res.data.length > 0) return res.data;
+        const res = await api.get(`/messages/get-messages?receiverId=${sessionId}`);
+        if (res.data?.success && Array.isArray(res.data.data)) {
+            return res.data.data.map((msg: any, index: number) => {
+                if (typeof msg === 'string') {
+                    return {
+                        id: `msg-${index}`,
+                        sessionId,
+                        text: msg,
+                        senderId: sessionId,
+                        timestamp: new Date().toISOString()
+                    };
+                }
+                return {
+                    id: msg.id || `msg-${index}`,
+                    sessionId,
+                    text: msg.content || msg.text || msg.message || "",
+                    senderId: msg.senderId || sessionId,
+                    timestamp: msg.createdAt || msg.timestamp || new Date().toISOString()
+                };
+            });
+        }
     } catch (e) {
-        console.warn("Failed to fetch session messages, using mock");
+        console.warn("API /messages/get-messages returned an error (likely not implemented yet). Returning empty conversation.");
     }
-    return mockMessages[sessionId] || [];
+    return [];
 }
 
-export async function sendMessage(sessionId: string, text: string): Promise<ChatMessage> {
-    try {
-        const res = await api.post("/chat/message", { sessionId, message: text });
-        if (res.data && res.data.id) return res.data;
-    } catch (e) {
-        console.warn("Failed to send message, using mock");
-    }
-    const newMsg: ChatMessage = {
-        id: `msg-${Date.now()}`,
+export async function sendMessage(sessionId: string, text: string): Promise<ChatMessage[]> {
+    // Optimistic user message
+    const userMsg: ChatMessage = {
+        id: `msg-${Date.now()}-user`,
         sessionId,
         text,
         senderId: "me",
         timestamp: new Date().toISOString()
     };
-    if (!mockMessages[sessionId]) mockMessages[sessionId] = [];
-    mockMessages[sessionId].push(newMsg);
-    
-    const session = mockSessions.find(s => s.id === sessionId);
-    if (session) {
-        session.lastMessage = text;
-        session.updatedAt = new Date().toISOString();
+
+    try {
+        const payload = {
+            receiverId: sessionId,
+            channel: "direct",
+            content: text
+        };
+        // Hit the actual endpoint required by the spec
+        await api.post("/messages/send", payload);
+    } catch (e) {
+        console.warn("API /messages/send returned an error (likely not implemented yet). Optimistically keeping message in UI.");
     }
-    
-    return newMsg;
+
+    return [userMsg];
 }

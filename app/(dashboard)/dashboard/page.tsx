@@ -137,8 +137,7 @@ export default function DashboardPage() {
         cfoRes,
         driversRes,
         forecastRes,
-        emailsRes,
-        callsRes,
+        commStatsRes,
       ] = await Promise.all([
         api.get<LeadsStatsResponse>("/leads/stats").catch(() => ({ data: null })),
         api.get<PipelineStatsResponse>("/api/deals/pipeline-stats").catch(() => ({ data: null })),
@@ -147,8 +146,7 @@ export default function DashboardPage() {
         isCfo ? api.get("/dashboard/cfo").catch(() => ({ data: null })) : Promise.resolve({ data: null }),
         api.get("/analytics/revenue/drivers").catch(() => ({ data: null })),
         api.get("/analytics/revenue/forecast").catch(() => ({ data: null })),
-        fetchEmails().catch(() => ({ emails: [], total: 0 })),
-        fetchCalls().catch(() => ({ calls: [], total: 0 })),
+        api.get("/api/communications/stats").catch(() => ({ data: null })),
       ]);
 
       setLeadsCount(extractLeadsCount(leadsRes.data));
@@ -156,18 +154,8 @@ export default function DashboardPage() {
       setRevenue(extractRevenue(ceoRes.data, cfoRes.data, driversRes.data, forecastRes.data));
       setOverdueTasks(countOverdueTasks(tasksRes.tasks ?? []));
       
-      setEmailsSent(emailsRes.total);
-      
-      // Calculate calls today
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const callsTodayCount = (callsRes.calls ?? []).filter((call: any) => {
-        if (!call.date) return false;
-        const callDate = new Date(call.date);
-        callDate.setHours(0, 0, 0, 0);
-        return callDate.getTime() === today.getTime();
-      }).length;
-      setCallsToday(callsTodayCount);
+      setEmailsSent(commStatsRes.data?.emailsSent ?? 0);
+      setCallsToday(commStatsRes.data?.calls ?? 0);
     }
 
     loadKpis();
