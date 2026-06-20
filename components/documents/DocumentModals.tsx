@@ -1,15 +1,21 @@
-import React, { useState, useRef } from "react";
+"use client";
+
+import React, { useState, useEffect } from "react";
 import {
   X,
   Upload,
   File,
+  AlertCircle,
   Copy,
   Download,
   Link,
   Trash2,
+  Loader,
+  Eye,
 } from "lucide-react";
-import { Document } from "@/lib/api/documentsApi";
+import { Document, getDocumentDownloadUrl } from "@/lib/api/documentsApi";
 
+// ─── Props ──────────────────────────────────────────────────────────────
 interface DocumentModalsProps {
   showUploadModal: boolean;
   setShowUploadModal: (show: boolean) => void;
@@ -28,398 +34,50 @@ interface DocumentModalsProps {
     entityId: string
   ) => Promise<void>;
   copyToClipboard: (url: string) => void;
-  handleDownload: (doc: Document) => Promise<void>;
-  showToast: (type: "success" | "error", msg: string) => void;
+  handleDownload: (doc: Document) => void;
+  showToast: (type: "success" | "error", message: string) => void;
   formatBytes: (bytes: number) => string;
   fileCategory: (fileType: string) => string;
   getFileIcon: (fileType: string) => React.ComponentType<any>;
   StatusBadge: React.FC<{ status: string }>;
 }
 
-// ── Upload Modal ──
-function UploadModal({
-  onClose,
-  onUpload,
-  showToast,
-  formatBytes,
-}: {
-  onClose: () => void;
-  onUpload: (file: File, onProgress?: (p: number) => void) => Promise<void>;
-  showToast: (type: "success" | "error", msg: string) => void;
-  formatBytes: (bytes: number) => string;
-}) {
-  const [dragOver, setDragOver] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [progress, setProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+// ─── प्रीव्यू हुक – presigned URL का उपयोग करें ──────────────────────
+const useDocumentPreview = (doc: Document | null) => {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
-  const handleFileSelect = (selectedFile: File) => {
-    if (selectedFile.size > 100 * 1024 * 1024) {
-      showToast("error", "File size must be under 100 MB");
+  useEffect(() => {
+    if (!doc || !doc.fileType.startsWith("image/")) {
+      setPreviewUrl(null);
+      setError(false);
+      setLoading(false);
       return;
     }
-    setFile(selectedFile);
-    setProgress(0);
-  };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) handleFileSelect(droppedFile);
-  };
+    const fetchPreview = async () => {
+      setLoading(true);
+      setError(false);
+      try {
+        const url = await getDocumentDownloadUrl(doc.id);
+        setPreviewUrl(url);
+      } catch (err) {
+        console.error("Preview fetch failed", err);
+        setError(true);
+        setPreviewUrl(null);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleBrowse = () => {
-    fileInputRef.current?.click();
-  };
+    fetchPreview();
+  }, [doc?.id, doc?.fileType]);
 
-  const handleUpload = async () => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      await onUpload(file, (p) => setProgress(p));
-    } catch (err: any) {
-      showToast("error", err.message);
-    } finally {
-      setUploading(false);
-      setFile(null);
-      setProgress(0);
-    }
-  };
+  return { previewUrl, loading, error };
+};
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900">Upload File</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-6">
-          <div
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${
-              dragOver
-                ? "border-indigo-500 bg-indigo-50"
-                : "border-gray-300 hover:border-indigo-400"
-            }`}
-          >
-            {!file ? (
-              <div>
-                <Upload className="w-10 h-10 mx-auto text-gray-400 mb-3" />
-                <p className="text-gray-600 font-medium">
-                  Drag & drop your file here
-                </p>
-                <p className="text-xs text-gray-500 mt-1">or</p>
-                <button
-                  type="button"
-                  onClick={handleBrowse}
-                  className="mt-3 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold"
-                >
-                  Browse Files
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => {
-                    if (e.target.files?.[0]) handleFileSelect(e.target.files[0]);
-                  }}
-                />
-              </div>
-            ) : (
-              <div>
-                <File className="w-10 h-10 mx-auto text-indigo-500 mb-3" />
-                <p className="text-sm font-medium text-gray-900">{file.name}</p>
-                <p className="text-xs text-gray-500">{formatBytes(file.size)}</p>
-                {uploading && (
-                  <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-indigo-600 h-2 rounded-full transition-all"
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                )}
-                <div className="mt-4 flex justify-center gap-2">
-                  <button
-                    onClick={() => {
-                      setFile(null);
-                      setProgress(0);
-                    }}
-                    disabled={uploading}
-                    className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-                  >
-                    Remove
-                  </button>
-                  <button
-                    onClick={handleUpload}
-                    disabled={uploading}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {uploading ? `Uploading ${progress}%` : "Upload"}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Document Detail Modal ──
-function DocumentDetailModal({
-  document,
-  onClose,
-  onCopyUrl,
-  onDownload,
-  onDelete,
-  onLinkEntity,
-  formatBytes,
-  fileCategory,
-  getFileIcon,
-  StatusBadge,
-}: {
-  document: Document;
-  onClose: () => void;
-  onCopyUrl: (url: string) => void;
-  onDownload: (doc: Document) => void;
-  onDelete: () => void;
-  onLinkEntity: () => void;
-  formatBytes: (bytes: number) => string;
-  fileCategory: (fileType: string) => string;
-  getFileIcon: (fileType: string) => React.ComponentType<any>;
-  StatusBadge: React.FC<{ status: string }>;
-}) {
-  const DetailItem = ({
-    label,
-    value,
-    className,
-  }: {
-    label: string;
-    value: React.ReactNode;
-    className?: string;
-  }) => (
-    <div className={className}>
-      <p className="text-xs text-gray-500 uppercase font-medium">{label}</p>
-      <div className="mt-0.5 text-gray-900 font-medium break-words">{value}</div>
-    </div>
-  );
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900">Document Details</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-6 space-y-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gray-50 rounded-xl">
-              {React.createElement(getFileIcon(document.fileType), {
-                className: "w-8 h-8 text-indigo-500",
-              })}
-            </div>
-            <div>
-              <h3 className="font-semibold text-gray-900">
-                {document.fileName}
-              </h3>
-              <p className="text-sm text-gray-500">
-                {fileCategory(document.fileType)} •{" "}
-                {formatBytes(document.fileSize)}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <DetailItem
-              label="Status"
-              value={<StatusBadge status={document.status} />}
-            />
-            <DetailItem
-              label="Uploaded By"
-              value={document.uploadedBy?.name || "—"}
-            />
-            <DetailItem
-              label="Upload Date"
-              value={new Date(document.createdAt).toLocaleString()}
-            />
-            <DetailItem
-              label="Entity Type"
-              value={document.entityType || "None"}
-            />
-            <DetailItem label="Entity ID" value={document.entityId || "—"} />
-            <DetailItem label="File Type" value={document.fileType} />
-            <DetailItem
-              label="S3 Key"
-              value={document.s3Key}
-              className="col-span-2 truncate"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 pt-2">
-            <button
-              onClick={() => onCopyUrl(document.s3Url)}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              <Copy size={15} /> Copy URL
-            </button>
-            <button
-              onClick={() => onDownload(document)}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-            >
-              <Download size={15} /> Download
-            </button>
-            <button
-              onClick={onLinkEntity}
-              className="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100"
-            >
-              <Link size={15} /> Link
-            </button>
-            <button
-              onClick={onDelete}
-              className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
-            >
-              <Trash2 size={15} />
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Link Entity Modal ──
-function LinkEntityModal({
-  document,
-  onClose,
-  onLink,
-}: {
-  document: Document;
-  onClose: () => void;
-  onLink: (
-    entityType: "LEAD" | "DEAL" | "PROJECT",
-    entityId: string
-  ) => void;
-}) {
-  const [entityType, setEntityType] = useState<"LEAD" | "DEAL" | "PROJECT">(
-    "LEAD"
-  );
-  const [entityId, setEntityId] = useState("");
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (entityId.trim()) onLink(entityType, entityId.trim());
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900">Link to Entity</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl">
-            <X size={20} />
-          </button>
-        </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Entity Type
-            </label>
-            <select
-              value={entityType}
-              onChange={(e) => setEntityType(e.target.value as any)}
-              className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white"
-            >
-              <option value="LEAD">Lead</option>
-              <option value="DEAL">Deal</option>
-              <option value="PROJECT">Project</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Entity ID
-            </label>
-            <input
-              type="text"
-              value={entityId}
-              onChange={(e) => setEntityId(e.target.value)}
-              placeholder="Enter entity ID"
-              required
-              className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700"
-            >
-              Link
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-// ── Delete Confirmation Modal ──
-function DeleteConfirmationModal({
-  fileName,
-  onClose,
-  onDelete,
-}: {
-  fileName: string;
-  onClose: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-        <h3 className="text-lg font-semibold text-gray-900">
-          Delete Document
-        </h3>
-        <p className="mt-2 text-sm text-gray-600">
-          Are you sure you want to delete “{fileName}”? This action cannot be
-          undone.
-        </p>
-        <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onDelete}
-            className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700"
-          >
-            Yes, delete
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Main Modals Wrapper ──
+// ─── मुख्य कंपोनेंट ─────────────────────────────────────────────────────
 export default function DocumentModals({
   showUploadModal,
   setShowUploadModal,
@@ -442,52 +100,301 @@ export default function DocumentModals({
   getFileIcon,
   StatusBadge,
 }: DocumentModalsProps) {
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [linkEntityType, setLinkEntityType] = useState<"LEAD" | "DEAL" | "PROJECT">("LEAD");
+  const [linkEntityId, setLinkEntityId] = useState("");
+  const { previewUrl, loading: previewLoading, error: previewError } = useDocumentPreview(selectedDoc);
+
+  const handleUploadClick = async () => {
+    if (!uploadFile) return;
+    setUploading(true);
+    try {
+      await handleUpload(uploadFile, (progress) => setUploadProgress(progress));
+    } finally {
+      setUploading(false);
+      setUploadProgress(0);
+      setUploadFile(null);
+    }
+  };
+
+  // अगर कोई मोडल खुला नहीं है तो कुछ न दिखाएँ
+  if (!showUploadModal && !showDetailModal && !showLinkModal && !showDeleteModal) {
+    return null;
+  }
+
   return (
     <>
+      {/* ─── Upload Modal ─── */}
       {showUploadModal && (
-        <UploadModal
-          onClose={() => setShowUploadModal(false)}
-          onUpload={handleUpload}
-          showToast={showToast}
-          formatBytes={formatBytes}
-        />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h3 className="text-lg font-semibold">Upload File</h3>
+              <button
+                onClick={() => setShowUploadModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-8 cursor-pointer hover:border-indigo-400 transition-colors">
+                <Upload className="w-10 h-10 text-gray-400 mb-2" />
+                <span className="text-sm text-gray-600 font-medium">
+                  {uploadFile ? uploadFile.name : "Choose a file"}
+                </span>
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                />
+              </label>
+
+              {uploading && (
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div
+                    className="bg-indigo-600 h-2 rounded-full transition-all"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowUploadModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleUploadClick}
+                  disabled={!uploadFile || uploading}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {uploading ? "Uploading..." : "Upload"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
+      {/* ─── Detail Modal ─── */}
       {showDetailModal && selectedDoc && (
-        <DocumentDetailModal
-          document={selectedDoc}
-          onClose={() => {
-            setShowDetailModal(false);
-            setSelectedDoc(null);
-          }}
-          onCopyUrl={copyToClipboard}
-          onDownload={handleDownload}
-          onDelete={() => {
-            setShowDetailModal(false);
-            setShowDeleteModal(true);
-          }}
-          onLinkEntity={() => setShowLinkModal(true)}
-          formatBytes={formatBytes}
-          fileCategory={fileCategory}
-          getFileIcon={getFileIcon}
-          StatusBadge={StatusBadge}
-        />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl max-h-[90vh] overflow-auto">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h3 className="text-lg font-semibold">Document Details</h3>
+              <button
+                onClick={() => setShowDetailModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Preview area */}
+              <div className="bg-gray-50 rounded-xl p-4 flex items-center justify-center min-h-[200px]">
+                {selectedDoc.fileType.startsWith("image/") ? (
+                  previewLoading ? (
+                    <Loader className="w-8 h-8 animate-spin text-indigo-500" />
+                  ) : previewError ? (
+                    <div className="text-center">
+                      <AlertCircle className="w-10 h-10 mx-auto text-red-400 mb-2" />
+                      <p className="text-sm text-red-600">Failed to load preview</p>
+                    </div>
+                  ) : previewUrl ? (
+                    <img
+                      src={previewUrl}
+                      alt={selectedDoc.fileName}
+                      className="max-w-full max-h-64 rounded-lg object-contain"
+                    />
+                  ) : (
+                    <File className="w-16 h-16 text-gray-300" />
+                  )
+                ) : (
+                  <File className="w-16 h-16 text-gray-300" />
+                )}
+              </div>
+
+              {/* File info */}
+              <div>
+                <h4 className="font-semibold text-gray-900 truncate">{selectedDoc.fileName}</h4>
+                <div className="mt-2 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-500">Type:</span> {fileCategory(selectedDoc.fileType)}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Size:</span> {formatBytes(selectedDoc.fileSize)}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Status:</span> <StatusBadge status={selectedDoc.status} />
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Uploaded:</span>{" "}
+                    {new Date(selectedDoc.createdAt).toLocaleString()}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Entity:</span>{" "}
+                    {selectedDoc.entityType ? `${selectedDoc.entityType} #${selectedDoc.entityId}` : "—"}
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Uploaded by:</span> {selectedDoc.uploadedBy?.name || "—"}
+                  </div>
+                </div>
+              </div>
+
+              {/* ─── Action Buttons ─── */}
+              <div className="flex flex-wrap gap-2 pt-2">
+                {/* Download */}
+                <button
+                  onClick={() => handleDownload(selectedDoc)}
+                  className="flex items-center gap-1 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
+                >
+                  <Download size={16} />
+                  Download
+                </button>
+
+                {/* Copy URL (presigned URL) */}
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = await getDocumentDownloadUrl(selectedDoc.id);
+                      await navigator.clipboard.writeText(url);
+                      showToast("success", "Image URL copied to clipboard");
+                    } catch {
+                      showToast("error", "Failed to get URL");
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+                >
+                  <Copy size={16} />
+                  Copy URL
+                </button>
+
+                {/* View (new tab) */}
+                <button
+                  onClick={async () => {
+                    try {
+                      const url = await getDocumentDownloadUrl(selectedDoc.id);
+                      window.open(url, "_blank");
+                    } catch {
+                      showToast("error", "Failed to open image");
+                    }
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100"
+                >
+                  <Eye size={16} />
+                  View
+                </button>
+
+                {/* Link to Entity */}
+                <button
+                  onClick={() => {
+                    setShowDetailModal(false);
+                    setShowLinkModal(true);
+                  }}
+                  className="flex items-center gap-1 px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100"
+                >
+                  <Link size={16} />
+                  Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
+      {/* ─── Link to Entity Modal ─── */}
       {showLinkModal && selectedDoc && (
-        <LinkEntityModal
-          document={selectedDoc}
-          onClose={() => setShowLinkModal(false)}
-          onLink={handleLinkEntity}
-        />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="flex items-center justify-between p-5 border-b border-gray-100">
+              <h3 className="text-lg font-semibold">Link to Entity</h3>
+              <button
+                onClick={() => setShowLinkModal(false)}
+                className="p-1 hover:bg-gray-100 rounded-lg"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Entity Type</label>
+                <select
+                  value={linkEntityType}
+                  onChange={(e) => setLinkEntityType(e.target.value as "LEAD" | "DEAL" | "PROJECT")}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                >
+                  <option value="LEAD">Lead</option>
+                  <option value="DEAL">Deal</option>
+                  <option value="PROJECT">Project</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Entity ID</label>
+                <input
+                  type="text"
+                  value={linkEntityId}
+                  onChange={(e) => setLinkEntityId(e.target.value)}
+                  placeholder="e.g., 123"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setShowLinkModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (linkEntityId.trim()) {
+                      handleLinkEntity(linkEntityType, linkEntityId.trim());
+                      setLinkEntityId("");
+                    }
+                  }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+                >
+                  Link
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
+      {/* ─── Delete Confirmation Modal ─── */}
       {showDeleteModal && selectedDoc && (
-        <DeleteConfirmationModal
-          fileName={selectedDoc.fileName}
-          onClose={() => setShowDeleteModal(false)}
-          onDelete={handleDelete}
-        />
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl">
+            <div className="p-5 text-center">
+              <Trash2 className="w-12 h-12 mx-auto text-red-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Document?</h3>
+              <p className="text-sm text-gray-600">
+                Are you sure you want to delete{" "}
+                <span className="font-medium">{selectedDoc.fileName}</span>? This action cannot be undone.
+              </p>
+              <div className="flex justify-center gap-3 mt-6">
+                <button
+                  onClick={() => setShowDeleteModal(false)}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </>
   );

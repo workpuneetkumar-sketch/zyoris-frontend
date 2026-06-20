@@ -1,6 +1,6 @@
-import api from "@/lib/api/api"; // your pre-configured axios instance
+import api from "@/lib/api/api";
 
-// ── Types ───────────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────
 export interface Document {
   id: string;
   organizationId: string;
@@ -9,7 +9,7 @@ export interface Document {
   fileType: string;
   fileSize: number;
   s3Key: string;
-  s3Url: string;           // may be private – don't use directly for download
+  s3Url: string;
   detectedType: string;
   status: string;          // "DONE" | "PROCESSING" | "FAILED"
   rowsTotal: number;
@@ -30,9 +30,37 @@ export interface LinkEntityPayload {
   entityId: string;
 }
 
-// ── API Methods ──────────────────────────────────────────────────────────
+// ─── Helper: presigned download URL प्राप्त करें ──────────────────────
+export async function getDocumentDownloadUrl(id: string): Promise<string> {
+  try {
+    const res = await api.get(`/documents/download/${id}`);
+    const data = res.data?.data || res.data;
+    const url = data.downloadUrl;
+    if (!url) throw new Error("No download URL in response");
+    return url;
+  } catch (error: any) {
+    const message = error.response?.data?.message || "Failed to get download URL";
+    throw new Error(message);
+  }
+}
 
-/** Fetch all documents */
+// ─── डाउनलोड – a टैग + download एट्रिब्यूट (कोई नया टैब नहीं) ──────
+export async function downloadDocument(id: string, fileName: string): Promise<void> {
+  try {
+    const downloadUrl = await getDocumentDownloadUrl(id);
+    // एक invisible a टैग बनाएँ
+    const link = document.createElement("a");
+    link.href = downloadUrl;
+    link.download = fileName;          // इससे ब्राउज़र डाउनलोड करेगा, नेविगेट नहीं
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (error: any) {
+    throw new Error(error.message || "Download failed");
+  }
+}
+
+// ─── सभी डॉक्यूमेंट प्राप्त करें ──────────────────────────────────────
 export async function getDocuments(): Promise<Document[]> {
   try {
     const res = await api.get("/documents/get-documents");
@@ -43,7 +71,7 @@ export async function getDocuments(): Promise<Document[]> {
   }
 }
 
-/** Get single document by ID (simulated via full list – replace with real endpoint if available) */
+// ─── एक डॉक्यूमेंट (ID से) ─────────────────────────────────────────────
 export async function getDocumentById(id: string): Promise<Document> {
   const all = await getDocuments();
   const doc = all.find((d) => d.id === id);
@@ -51,7 +79,7 @@ export async function getDocumentById(id: string): Promise<Document> {
   return doc;
 }
 
-/** Upload a file (with optional progress callback) */
+// ─── अपलोड ──────────────────────────────────────────────────────────────
 export async function uploadDocument(
   file: File,
   onProgress?: (percent: number) => void
@@ -59,14 +87,11 @@ export async function uploadDocument(
   try {
     const formData = new FormData();
     formData.append("file", file);
-
     const res = await api.post("/documents/upload", formData, {
       headers: { "Content-Type": "multipart/form-data" },
       onUploadProgress: (progressEvent) => {
         if (progressEvent.total && onProgress) {
-          const percent = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          );
+          const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
           onProgress(percent);
         }
       },
@@ -77,7 +102,7 @@ export async function uploadDocument(
   }
 }
 
-/** Delete a document */
+// ─── डिलीट ──────────────────────────────────────────────────────────────
 export async function deleteDocument(id: string): Promise<void> {
   try {
     await api.delete(`/documents/delete/${id}`);
@@ -86,40 +111,7 @@ export async function deleteDocument(id: string): Promise<void> {
   }
 }
 
-/**
- * Download a document securely.
- * Fetches the file as a blob with auth headers, then triggers a browser download.
- */
-export async function downloadDocument(id: string, fileName: string): Promise<void> {
-  try {
-    const response = await api.get(`/documents/download/${id}`, {
-      responseType: "blob",
-    });
-
-    // Create a blob URL and force download
-    const url = window.URL.createObjectURL(new Blob([response.data]));
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", fileName);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  } catch (error: any) {
-    // If the backend returns an error as JSON, parse it (error.response.data may be a blob)
-    let message = "Failed to download document";
-    if (error.response?.data instanceof Blob) {
-      try {
-        const text = await error.response.data.text();
-        const parsed = JSON.parse(text);
-        message = parsed.message || message;
-      } catch {}
-    }
-    throw new Error(message);
-  }
-}
-
-/** Link a document to an entity (Lead, Deal, Project) */
+// ─── Entity से लिंक करें ───────────────────────────────────────────────
 export async function linkDocumentToEntity(
   id: string,
   payload: LinkEntityPayload
@@ -128,7 +120,6 @@ export async function linkDocumentToEntity(
     const res = await api.patch(`/documents/${id}/link`, payload);
     return res.data?.data || res.data;
   } catch (error: any) {
-    console.error("Link document error:", error.response?.status, error.response?.data);
     throw new Error(error.response?.data?.message || "Failed to link document");
   }
 }
