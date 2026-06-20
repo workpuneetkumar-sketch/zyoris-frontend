@@ -79,7 +79,6 @@ export async function sendMessage(sessionId: string, text: string): Promise<Chat
     try {
         const payload = {
             receiverId: sessionId,
-            channel: "direct",
             content: text
         };
         // Hit the actual endpoint required by the spec
