@@ -79,30 +79,10 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          {
-            label: "Total Documents",
-            value: totalDocs,
-            icon: Files,
-            color: "text-indigo-600 bg-indigo-50",
-          },
-          {
-            label: "Uploaded Today",
-            value: uploadedToday,
-            icon: Clock,
-            color: "text-emerald-600 bg-emerald-50",
-          },
-          {
-            label: "Linked Documents",
-            value: linkedDocs,
-            icon: Link,
-            color: "text-blue-600 bg-blue-50",
-          },
-          {
-            label: "Storage Used",
-            value: formatBytes(totalStorage),
-            icon: HardDrive,
-            color: "text-amber-600 bg-amber-50",
-          },
+          { label: "Total Documents", value: totalDocs, icon: Files, color: "text-indigo-600 bg-indigo-50" },
+          { label: "Uploaded Today", value: uploadedToday, icon: Clock, color: "text-emerald-600 bg-emerald-50" },
+          { label: "Linked Documents", value: linkedDocs, icon: Link, color: "text-blue-600 bg-blue-50" },
+          { label: "Storage Used", value: formatBytes(totalStorage), icon: HardDrive, color: "text-amber-600 bg-amber-50" },
         ].map((card) => (
           <div
             key={card.label}
@@ -148,21 +128,13 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
         <div className="flex items-center gap-1 border border-gray-200 rounded-xl p-1 bg-white">
           <button
             onClick={() => setViewMode("grid")}
-            className={`p-2 rounded-lg ${
-              viewMode === "grid"
-                ? "bg-indigo-100 text-indigo-600"
-                : "text-gray-500"
-            }`}
+            className={`p-2 rounded-lg ${viewMode === "grid" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"}`}
           >
             <Grid size={18} />
           </button>
           <button
             onClick={() => setViewMode("list")}
-            className={`p-2 rounded-lg ${
-              viewMode === "list"
-                ? "bg-indigo-100 text-indigo-600"
-                : "text-gray-500"
-            }`}
+            className={`p-2 rounded-lg ${viewMode === "list" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"}`}
           >
             <List size={18} />
           </button>
@@ -172,9 +144,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
           disabled={loading}
           className="p-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
         >
-          <RefreshCw
-            className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-          />
+          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
         </button>
       </div>
 
@@ -189,10 +159,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
         <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
           <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
           <p className="text-red-600 font-medium">{error}</p>
-          <button
-            onClick={loadDocuments}
-            className="mt-4 text-indigo-600 font-semibold"
-          >
+          <button onClick={loadDocuments} className="mt-4 text-indigo-600 font-semibold">
             Try again
           </button>
         </div>
@@ -249,10 +216,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                     </button>
                   </div>
                 </div>
-                <h3
-                  className="font-medium text-gray-900 text-sm truncate"
-                  title={doc.fileName}
-                >
+                <h3 className="font-medium text-gray-900 text-sm truncate" title={doc.fileName}>
                   {doc.fileName}
                 </h3>
                 <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
@@ -262,9 +226,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                 </div>
                 <div className="mt-3 flex items-center justify-between">
                   <StatusBadge status={doc.status} />
-                  <span className="text-xs text-gray-400">
-                    {new Date(doc.createdAt).toLocaleDateString()}
-                  </span>
+                  <span className="text-xs text-gray-400">{new Date(doc.createdAt).toLocaleDateString()}</span>
                 </div>
               </div>
             );
@@ -277,15 +239,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {[
-                    "File Name",
-                    "Type",
-                    "Size",
-                    "Status",
-                    "Uploaded",
-                    "Entity",
-                    "",
-                  ].map((heading) => (
+                  {["File Name", "Type", "Size", "Status", "Uploaded", "Entity", ""].map((heading) => (
                     <th
                       key={heading}
                       className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
@@ -299,29 +253,18 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                 {filteredDocs.map((doc) => {
                   const Icon = getFileIcon(doc.fileType);
                   return (
-                    <tr
-                      key={doc.id}
-                      className="hover:bg-gray-50/50 transition-colors"
-                    >
+                    <tr key={doc.id} className="hover:bg-gray-50/50 transition-colors">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <Icon className="w-6 h-6 text-indigo-500 flex-shrink-0" />
                           <div>
-                            <p className="font-medium text-gray-900 text-sm">
-                              {doc.fileName}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {formatBytes(doc.fileSize)}
-                            </p>
+                            <p className="font-medium text-gray-900 text-sm">{doc.fileName}</p>
+                            <p className="text-xs text-gray-500">{formatBytes(doc.fileSize)}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">
-                        {fileCategory(doc.fileType)}
-                      </td>
-                      <td className="px-5 py-4 text-sm text-gray-600">
-                        {formatBytes(doc.fileSize)}
-                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{fileCategory(doc.fileType)}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600">{formatBytes(doc.fileSize)}</td>
                       <td className="px-5 py-4">
                         <StatusBadge status={doc.status} />
                       </td>
@@ -390,9 +333,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                 <div key={doc.id} className="p-4 flex items-center gap-4">
                   <Icon className="w-8 h-8 text-indigo-500 flex-shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 text-sm truncate">
-                      {doc.fileName}
-                    </p>
+                    <p className="font-medium text-gray-900 text-sm truncate">{doc.fileName}</p>
                     <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
                       <span>{fileCategory(doc.fileType)}</span>
                       <span>•</span>
@@ -402,16 +343,10 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => handleViewDetail(doc)}
-                      className="p-1.5 text-gray-500"
-                    >
+                    <button onClick={() => handleViewDetail(doc)} className="p-1.5 text-gray-500">
                       <Eye size={16} />
                     </button>
-                    <button
-                      onClick={() => handleDownload(doc)}
-                      className="p-1.5 text-gray-500"
-                    >
+                    <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-500">
                       <Download size={16} />
                     </button>
                     <button

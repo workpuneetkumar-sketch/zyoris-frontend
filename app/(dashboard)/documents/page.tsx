@@ -7,12 +7,6 @@ import {
   CheckCircle,
   AlertCircle,
   X,
-  File,
-  FileText,
-  FileImage,
-  FileSpreadsheet,
-  FileArchive,
-  FileVideo,
 } from "lucide-react";
 import {
   getDocuments,
@@ -23,8 +17,10 @@ import {
   linkDocumentToEntity,
   Document,
 } from "@/lib/api/documentsApi";
+import DocumentListSection from "@/components/documents/DocumentListSection";
+import DocumentModals from "@/components/documents/DocumentModals";
 
-// ── Helpers (no export – used only via props) ──
+// Helpers
 const formatBytes = (bytes: number): string => {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -33,10 +29,18 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
 };
 
+import {
+  File,
+  FileText,
+  FileImage,
+  FileSpreadsheet,
+  FileArchive,
+  FileVideo,
+} from "lucide-react";
+
 const getFileIcon = (fileType: string) => {
   if (fileType.startsWith("image/")) return FileImage;
-  if (fileType.includes("spreadsheet") || fileType.includes("excel"))
-    return FileSpreadsheet;
+  if (fileType.includes("spreadsheet") || fileType.includes("excel")) return FileSpreadsheet;
   if (fileType.startsWith("video/")) return FileVideo;
   if (fileType.includes("pdf")) return FileText;
   if (fileType.includes("zip") || fileType.includes("rar")) return FileArchive;
@@ -45,8 +49,7 @@ const getFileIcon = (fileType: string) => {
 
 const fileCategory = (fileType: string): string => {
   if (fileType.startsWith("image/")) return "Image";
-  if (fileType.includes("spreadsheet") || fileType.includes("excel"))
-    return "Spreadsheet";
+  if (fileType.includes("spreadsheet") || fileType.includes("excel")) return "Spreadsheet";
   if (fileType.startsWith("video/")) return "Video";
   if (fileType.includes("pdf")) return "PDF";
   if (fileType.includes("zip") || fileType.includes("rar")) return "Archive";
@@ -74,12 +77,7 @@ const Skeleton = ({ className }: { className?: string }) => (
   <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
 );
 
-// ── Components ──
-import DocumentListSection from "@/components/documents/DocumentListSection";
-import DocumentModals from "@/components/documents/DocumentModals";
-
 export default function DocumentsPage() {
-  // State (unchanged)
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -91,10 +89,7 @@ export default function DocumentsPage() {
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [toast, setToast] = useState<{
-    type: "success" | "error";
-    message: string;
-  } | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
@@ -181,9 +176,7 @@ export default function DocumentsPage() {
         entityType,
         entityId,
       });
-      setDocuments((prev) =>
-        prev.map((d) => (d.id === updated.id ? updated : d))
-      );
+      setDocuments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)));
       setSelectedDoc(updated);
       setShowLinkModal(false);
       showToast("success", "Document linked to entity");
@@ -234,10 +227,7 @@ export default function DocumentsPage() {
             <AlertCircle className="w-5 h-5" />
           )}
           {toast.message}
-          <button
-            onClick={() => setToast(null)}
-            className="ml-2 hover:opacity-70"
-          >
+          <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
             <X size={16} />
           </button>
         </div>
@@ -250,9 +240,7 @@ export default function DocumentsPage() {
             <Files className="w-8 h-8 text-indigo-600" />
             Documents
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage all your uploaded files and documents
-          </p>
+          <p className="text-sm text-gray-500 mt-1">Manage all your uploaded files and documents</p>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
@@ -317,19 +305,4 @@ export default function DocumentsPage() {
       />
     </div>
   );
-}
-
-// Global CSS for toast animation
-if (typeof document !== "undefined") {
-  const style = document.createElement("style");
-  style.textContent = `
-    @keyframes slideIn {
-      from { opacity: 0; transform: translateX(20px); }
-      to { opacity: 1; transform: translateX(0); }
-    }
-    .animate-slide-in {
-      animation: slideIn 0.3s ease-out;
-    }
-  `;
-  document.head.appendChild(style);
 }
