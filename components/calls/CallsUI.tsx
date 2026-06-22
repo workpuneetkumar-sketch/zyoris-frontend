@@ -211,19 +211,19 @@ export function CallsUI({
                         </thead>
                         <tbody>
                             {loading ? (
-                                Array.from({ length: 5 }).map((_, i) => (
-                                    <tr key={i} className="border-b border-gray-50">
-                                        {Array.from({ length: 6 }).map((_, j) => (
-                                            <td key={j} className="px-5 py-4">
-                                                <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
-                                            </td>
-                                        ))}
-                                    </tr>
-                                ))
+                                <tr>
+                                    <td colSpan={6} className="py-16">
+                                        <div className="flex justify-center items-center h-full p-4">
+                                            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                        </div>
+                                    </td>
+                                </tr>
                             ) : calls.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-16 text-gray-400 text-sm">
-                                        No calls logged.
+                                    <td colSpan={6} className="text-center py-16">
+                                        <Phone size={32} className="text-gray-200 mx-auto mb-3" />
+                                        <p className="text-gray-400 text-sm font-medium">No calls logged yet.</p>
+                                        <p className="text-xs text-gray-400 mt-1">Log a call to start tracking interactions.</p>
                                     </td>
                                 </tr>
                             ) : (

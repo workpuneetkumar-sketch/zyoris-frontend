@@ -2,6 +2,7 @@
 
 import { CallsUI } from "@/components/calls/CallsUI";
 import { useCalls } from "@/hooks/useCalls";
+import { AlertCircle } from "lucide-react";
 
 export default function CallsPage() {
     const {
@@ -18,6 +19,7 @@ export default function CallsPage() {
     if (error) {
         return (
             <div className="flex flex-col items-center justify-center h-64 gap-3">
+                <AlertCircle size={32} className="text-red-400" />
                 <p className="text-red-500 text-sm">{error}</p>
                 <button
                     onClick={retry}
