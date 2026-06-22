@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Send, User, AlertTriangle, MessageCircle, Plus } from "lucide-react";
+import { Send, User, AlertTriangle, MessageCircle, Plus, AlertCircle } from "lucide-react";
 import { WhatsAppConversation } from "@/lib/api/whatsappApi";
 
 interface WhatsAppUIProps {
@@ -78,10 +78,21 @@ export function WhatsAppUI({
                         <h2 className="text-sm font-semibold text-gray-700">Conversations</h2>
                     </div>
                     <div className="flex-1 overflow-y-auto">
-                        {loading ? (
-                            <div className="p-6 text-center text-sm text-gray-400">Loading conversations...</div>
+                        {error ? (
+                            <div className="flex flex-col items-center justify-center h-full p-6 text-center gap-2">
+                                <AlertCircle size={24} className="text-red-400" />
+                                <p className="text-sm text-red-500">{error}</p>
+                            </div>
+                        ) : loading ? (
+                            <div className="flex justify-center items-center h-full p-4">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                            </div>
                         ) : conversations.length === 0 ? (
-                            <div className="p-6 text-center text-sm text-gray-400">No conversations found.</div>
+                            <div className="flex flex-col items-center justify-center h-full p-6 text-center text-gray-400">
+                                <MessageCircle size={32} className="mb-3 text-gray-300" />
+                                <p className="text-sm font-medium">No conversations found.</p>
+                                <p className="text-xs mt-1">When you receive messages, they will appear here.</p>
+                            </div>
                         ) : (
                             conversations.map(conv => {
                                 const lastMsg = conv.messages[conv.messages.length - 1];

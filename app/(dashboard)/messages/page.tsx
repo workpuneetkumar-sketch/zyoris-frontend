@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Send, UserCircle2, MessageCircle } from "lucide-react";
+import { Send, UserCircle2, MessageCircle, AlertCircle } from "lucide-react";
 import { getChatSessions, getSessionMessages, sendMessage, ChatSession, ChatMessage } from "@/lib/api/messagesApi";
 
 export default function MessagesPage() {
@@ -10,6 +10,8 @@ export default function MessagesPage() {
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [inputText, setInputText] = useState("");
     const [loading, setLoading] = useState(true);
+    const [messagesLoading, setMessagesLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -30,6 +32,7 @@ export default function MessagesPage() {
 
     const loadSessions = async () => {
         try {
+            setError(null);
             const data = await getChatSessions();
             setSessions(data);
             if (data.length > 0 && !activeSession) {
@@ -37,17 +40,21 @@ export default function MessagesPage() {
             }
         } catch (error) {
             console.error("Failed to load chat sessions", error);
+            setError("Failed to load chat sessions. Please try again.");
         } finally {
             setLoading(false);
         }
     };
 
     const loadMessages = async (sessionId: string) => {
+        setMessagesLoading(true);
         try {
             const data = await getSessionMessages(sessionId);
             setMessages(data);
         } catch (error) {
             console.error("Failed to load messages", error);
+        } finally {
+            setMessagesLoading(false);
         }
     };
 
@@ -88,9 +95,20 @@ export default function MessagesPage() {
                         <p className="text-sm text-gray-500">Direct messages</p>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                        {loading ? (
-                            <div className="flex justify-center p-4">
+                        {error ? (
+                            <div className="flex flex-col items-center justify-center h-full p-6 text-center gap-2">
+                                <AlertCircle size={24} className="text-red-400" />
+                                <p className="text-sm text-red-500">{error}</p>
+                            </div>
+                        ) : loading ? (
+                            <div className="flex justify-center items-center h-full p-4">
                                 <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                            </div>
+                        ) : sessions.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center h-full p-6 text-center text-gray-400">
+                                <MessageCircle size={32} className="mb-3 text-gray-300" />
+                                <p className="text-sm font-medium">No chats available.</p>
+                                <p className="text-xs mt-1">Start a new conversation to see it here.</p>
                             </div>
                         ) : sessions.map(session => (
                             <div 
@@ -135,24 +153,32 @@ export default function MessagesPage() {
 
                             {/* Messages */}
                             <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gray-50/30">
-                                {messages.map((msg, idx) => {
-                                    const isMe = msg.senderId === "me";
-                                    return (
-                                        <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                                            <div className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
-                                                isMe 
-                                                    ? "bg-blue-600 text-white rounded-tr-sm" 
-                                                    : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
-                                            }`}>
-                                                {msg.text}
-                                            </div>
-                                            <span className="text-[10px] text-gray-400 mt-1 px-1">
-                                                {formatTime(msg.timestamp)}
-                                            </span>
-                                        </div>
-                                    );
-                                })}
-                                <div ref={messagesEndRef} />
+                                {messagesLoading ? (
+                                    <div className="flex justify-center items-center h-full p-4">
+                                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                    </div>
+                                ) : (
+                                    <>
+                                        {messages.map((msg, idx) => {
+                                            const isMe = msg.senderId === "me";
+                                            return (
+                                                <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                                                    <div className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
+                                                        isMe 
+                                                            ? "bg-blue-600 text-white rounded-tr-sm" 
+                                                            : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
+                                                    }`}>
+                                                        {msg.text}
+                                                    </div>
+                                                    <span className="text-[10px] text-gray-400 mt-1 px-1">
+                                                        {formatTime(msg.timestamp)}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                        <div ref={messagesEndRef} />
+                                    </>
+                                )}
                             </div>
 
                             {/* Input Area */}

@@ -141,7 +141,7 @@ export default function CalendarPage() {
                         </button>
                     </div>
                     <button
-                        onClick={() => { setEditingMeeting(null); setSelectedDate(new Date()); setIsModalOpen(true); }}
+                        onClick={() => { setEditingMeeting(null); setIsModalOpen(true); }}
                         className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
                     >
                         <Plus size={18} /> Schedule Meeting
@@ -171,7 +171,7 @@ export default function CalendarPage() {
                             </div>
                         ))}
                     </div>
-                    <div className={`flex-1 grid grid-cols-7 ${view === "month" ? "grid-rows-6" : "grid-rows-1"}`}>
+                    <div className={`flex-1 grid grid-cols-7 ${view === "month" ? "grid-rows-6" : "grid-rows-1"} overflow-y-auto`}>
                         {days.map((date, i) => {
                             const isCurrentMonth = date.getMonth() === currentDate.getMonth();
                             const isToday = isSameDay(date, new Date());
@@ -260,7 +260,7 @@ export default function CalendarPage() {
                     setEditingMeeting(null);
                 }} 
                 onSuccess={loadData}
-                initialDate={selectedDate}
+                initialDate={selectedDate || new Date()}
                 editingMeeting={editingMeeting}
             />
         </div>
