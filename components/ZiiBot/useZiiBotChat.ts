@@ -79,7 +79,7 @@ function playNotificationSound() {
 }
 
 export function useZiiBotChat() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [isTyping, setIsTyping] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
@@ -141,7 +141,8 @@ export function useZiiBotChat() {
           messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
           orgContext: orgContext,
           roleContext: roleContext,
-          userRole: user?.role
+          userRole: user?.role,
+          token: token
         }),
         signal: (abortRef.current = new AbortController()).signal,
       });
@@ -189,7 +190,7 @@ export function useZiiBotChat() {
       setIsTyping(false);
       abortRef.current = null;
     }
-  }, [messages, isTyping, orgContext, roleContext, user, soundOn, voiceService]);
+  }, [messages, isTyping, orgContext, roleContext, user, token, soundOn, voiceService]);
 
   const toggleSound = useCallback(() => {
     const next = !getSoundEnabled();

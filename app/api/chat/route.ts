@@ -201,13 +201,15 @@ export async function POST(req: NextRequest) {
       sessionId,
       orgContext,
       roleContext,
-      userRole
+      userRole,
+      token
     } = body as { 
       messages?: { role: string; content: string }[]; 
       sessionId?: string;
       orgContext?: any;
       roleContext?: string;
       userRole?: string;
+      token?: string;
     };
     
     const apiKey = process.env.OPENAI_API_KEY;
@@ -226,18 +228,12 @@ export async function POST(req: NextRequest) {
     let formattedData = null;
 
     // Try to fetch data if intent is specific
-    if (intent !== 'general' && orgContext) {
+    if (intent !== 'general' && token) {
       try {
-        // Get token from context or storage
-        const authData = typeof window !== 'undefined' ? localStorage.getItem('zyoris-auth') : null;
-        let token = authData ? JSON.parse(authData).token : null;
-        
-        if (token) {
-          intentData = await fetchDataByIntent(intent, token);
-          if (intentData) {
-            formattedData = formatDataForResponse(intent, intentData);
-            console.log('📊 Fetched data for intent:', intent);
-          }
+        intentData = await fetchDataByIntent(intent, token);
+        if (intentData) {
+          formattedData = formatDataForResponse(intent, intentData);
+          console.log('📊 Fetched data for intent:', intent);
         }
       } catch (e) {
         console.warn('Could not fetch intent data:', e);
