@@ -858,3 +858,74 @@ a {
   }
 }
 
+/* ZiiBot FAB Button */
+.zii-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
+  transition: all 0.3s ease;
+  z-index: 40;
+}
+
+.zii-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(99, 102, 241, 0.5);
+}
+
+.zii-fab:active {
+  transform: scale(0.95);
+}
+
+/* Scrollbar styling */
+.zii-chat-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.zii-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.zii-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 10px;
+}
+
+.zii-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+/* Message animations */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.message-enter {
+  animation: messageIn 0.25s ease-out forwards;
+}
+
+/* Pulse animation for online status */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.status-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}

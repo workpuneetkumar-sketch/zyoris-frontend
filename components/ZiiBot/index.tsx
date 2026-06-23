@@ -96,6 +96,7 @@ export function ZiiBot() {
         ) : null}
       </AnimatePresence>
 
+      {/* ── UPDATED FAB BUTTON ── */}
       {!fullscreen && (
         <motion.button
           type="button"
@@ -106,16 +107,16 @@ export function ZiiBot() {
           animate={{
             scale: 1,
             boxShadow: [
-              "0 4px 24px rgba(99, 102, 241, 0.35), 0 0 0 0 rgba(99, 102, 241, 0.4)",
-              "0 4px 28px rgba(99, 102, 241, 0.45), 0 0 0 8px rgba(99, 102, 241, 0)",
-              "0 4px 24px rgba(99, 102, 241, 0.35), 0 0 0 0 rgba(99, 102, 241, 0.4)",
+              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
+              "0 8px 40px rgba(99, 102, 241, 0.5), 0 0 0 12px rgba(99, 102, 241, 0)",
+              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
             ],
           }}
           transition={{
-            boxShadow: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+            boxShadow: { repeat: Infinity, duration: 2.5, ease: "easeInOut" },
           }}
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.96 }}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
         >
           <ZiiBotAvatar isIdle={!chat.isTyping} isTyping={chat.isTyping} size="button" />
         </motion.button>

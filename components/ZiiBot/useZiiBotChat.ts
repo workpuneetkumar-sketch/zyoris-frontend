@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { ZII_GREETING } from "./ZiiBotAvatar";
+import { getOrgSummary, getRoleContext, OrgSummary } from "@/lib/api/organizationsApi";
+import { useAuth } from "@/context/AuthContext";
+import { getVoiceService } from "./voiceService";
 
 const SESSION_KEY = "zii-bot-session";
 const HISTORY_KEY = "zii-bot-history";
@@ -41,7 +44,7 @@ function saveHistory(messages: ChatMessage[]) {
   try {
     localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-50)));
   } catch {
-    //
+    // Ignore
   }
 }
 
@@ -71,16 +74,38 @@ function playNotificationSound() {
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime + 0.12);
   } catch {
-    //
+    // Ignore
   }
 }
 
 export function useZiiBotChat() {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
   const [isTyping, setIsTyping] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
+  const [orgContext, setOrgContext] = useState<OrgSummary | null>(null);
+  const [roleContext, setRoleContext] = useState<string>("");
   const sessionIdRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
+  const contextLoadedRef = useRef(false);
+  const voiceService = getVoiceService();
+
+  // Load organization context on mount
+  useEffect(() => {
+    async function loadContext() {
+      if (contextLoadedRef.current) return;
+      contextLoadedRef.current = true;
+      
+      const org = await getOrgSummary();
+      setOrgContext(org);
+      
+      if (user?.role) {
+        const ctx = await getRoleContext(user.role);
+        setRoleContext(ctx);
+      }
+    }
+    loadContext();
+  }, [user]);
 
   useEffect(() => {
     sessionIdRef.current = getSessionId();
@@ -114,6 +139,9 @@ export function useZiiBotChat() {
         body: JSON.stringify({
           sessionId: sessionIdRef.current || getSessionId(),
           messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
+          orgContext: orgContext,
+          roleContext: roleContext,
+          userRole: user?.role
         }),
         signal: (abortRef.current = new AbortController()).signal,
       });
@@ -124,8 +152,20 @@ export function useZiiBotChat() {
       }
 
       const data = (await res.json()) as { message?: string; text?: string };
-      const assistantText = data.message ?? data.text ?? "I’m here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.";
+      const assistantText = data.message ?? data.text ?? "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.";
+      
+      // Play notification sound
       playNotificationSound();
+      
+      // 🎤 Speak the response aloud (if sound is on)
+      if (soundOn) {
+        try {
+          voiceService.speak(assistantText);
+        } catch (e) {
+          console.warn("Voice output error:", e);
+        }
+      }
+      
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
@@ -149,15 +189,21 @@ export function useZiiBotChat() {
       setIsTyping(false);
       abortRef.current = null;
     }
-  }, [messages, isTyping]);
+  }, [messages, isTyping, orgContext, roleContext, user, soundOn, voiceService]);
 
   const toggleSound = useCallback(() => {
     const next = !getSoundEnabled();
     setSoundEnabled(next);
     setSoundOn(next);
-  }, []);
+    
+    // If turning off sound, stop any ongoing speech
+    if (!next) {
+      voiceService.stopSpeaking();
+    }
+  }, [voiceService]);
 
   const showGreeting = messages.length === 0;
+  
   return {
     messages,
     sendMessage,

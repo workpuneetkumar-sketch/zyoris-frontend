@@ -282,6 +282,49 @@ export function AppShell({ children }: { children: ReactNode }) {
     void logout();
   }, [logoutModalOpen, logoutCountdown, logout]);
 
+  // ── Mobile Swipe Gesture Support ──
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    let touchStartX = 0;
+    let touchStartY = 0;
+    
+    const handleTouchStart = (e: TouchEvent) => {
+      const touch = e.changedTouches[0];
+      touchStartX = touch.screenX;
+      touchStartY = touch.screenY;
+    };
+    
+    const handleTouchEnd = (e: TouchEvent) => {
+      const touch = e.changedTouches[0];
+      const touchEndX = touch.screenX;
+      const touchEndY = touch.screenY;
+      
+      const swipeDistanceX = touchEndX - touchStartX;
+      const swipeDistanceY = touchEndY - touchStartY;
+      
+      // Only handle horizontal swipes
+      if (Math.abs(swipeDistanceX) < Math.abs(swipeDistanceY)) return;
+      
+      // Swipe right to open (if on left edge of screen)
+      if (swipeDistanceX > 80 && touchStartX < 50 && !drawerOpen) {
+        setDrawerOpen(true);
+      }
+      // Swipe left to close
+      if (swipeDistanceX < -80 && drawerOpen) {
+        setDrawerOpen(false);
+      }
+    };
+    
+    document.addEventListener("touchstart", handleTouchStart, { passive: true });
+    document.addEventListener("touchend", handleTouchEnd, { passive: true });
+    
+    return () => {
+      document.removeEventListener("touchstart", handleTouchStart);
+      document.removeEventListener("touchend", handleTouchEnd);
+    };
+  }, [drawerOpen]);
+
   const displayName =
     user?.name && user.name.trim().length > 0
       ? user.name
@@ -447,13 +490,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       {/* ── Mobile Drawer (below md) ── */}
       {drawerOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          {/* Backdrop */}
+          {/* Backdrop with smooth animation */}
           <div
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/40 transition-opacity duration-300"
             onClick={() => setDrawerOpen(false)}
           />
-          {/* Drawer panel */}
-          <aside className="absolute top-0 left-0 bottom-0 w-[220px] bg-white flex flex-col shadow-xl z-50">
+          {/* Drawer panel with smooth slide animation */}
+          <aside className="absolute top-0 left-0 bottom-0 w-[280px] bg-white flex flex-col shadow-2xl z-50 transition-transform duration-300 ease-out">
             <div className="flex items-center justify-between px-5 pt-5 pb-4">
               <LogoMark />
               <button
