@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@tailwindcss/typography": "^0.5.20",
     "axios": "^1.16.0",
     "classnames": "^2.5.1",
     "framer-motion": "^11.0.0",
@@ -24,6 +23,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.66",

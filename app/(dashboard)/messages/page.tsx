@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Send, UserCircle2, MessageCircle, AlertCircle } from "lucide-react";
+import { Send, UserCircle2, MessageCircle, AlertCircle, ChevronLeft } from "lucide-react";
 import { getChatSessions, getSessionMessages, sendMessage, ChatSession, ChatMessage } from "@/lib/api/messagesApi";
 
 export default function MessagesPage() {
@@ -12,6 +12,7 @@ export default function MessagesPage() {
     const [loading, setLoading] = useState(true);
     const [messagesLoading, setMessagesLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [showMobileChat, setShowMobileChat] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -85,11 +86,11 @@ export default function MessagesPage() {
     };
 
     return (
-        <div className="flex h-[calc(100vh-theme(spacing.16))] p-6 bg-gray-50/50">
-            <div className="w-full max-w-6xl mx-auto flex bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="flex h-[calc(100vh-theme(spacing.16))] p-0 md:p-6 bg-gray-50/50">
+            <div className="w-full max-w-6xl mx-auto flex bg-white md:rounded-2xl shadow-sm md:border border-gray-100 overflow-hidden">
                 
                 {/* Left Panel - Team Members */}
-                <div className="w-80 border-r border-gray-100 flex flex-col bg-gray-50/30">
+                <div className={`w-full md:w-80 border-r border-gray-100 flex-col bg-gray-50/30 shrink-0 ${showMobileChat ? 'hidden md:flex' : 'flex'}`}>
                     <div className="p-4 border-b border-gray-100 bg-white shrink-0">
                         <h2 className="text-lg font-bold text-gray-900">Team Chat</h2>
                         <p className="text-sm text-gray-500">Direct messages</p>
@@ -113,7 +114,7 @@ export default function MessagesPage() {
                         ) : sessions.map(session => (
                             <div 
                                 key={session.id}
-                                onClick={() => setActiveSession(session)}
+                                onClick={() => { setActiveSession(session); setShowMobileChat(true); }}
                                 className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${
                                     activeSession?.id === session.id 
                                         ? "bg-blue-50 hover:bg-blue-100" 
@@ -138,12 +139,15 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Right Panel - Chat Area */}
-                <div className="flex-1 flex flex-col min-w-0 bg-white">
+                <div className={`flex-1 flex flex-col min-w-0 bg-white ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
                     {activeSession ? (
                         <>
                             {/* Chat Header */}
                             <div className="flex items-center p-4 border-b border-gray-100 shrink-0">
-                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mr-3">
+                                <button onClick={() => setShowMobileChat(false)} className="md:hidden p-2 mr-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+                                    <ChevronLeft size={20} />
+                                </button>
+                                <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mr-3 shrink-0">
                                     <UserCircle2 size={24} />
                                 </div>
                                 <div>
@@ -163,11 +167,11 @@ export default function MessagesPage() {
                                             const isMe = msg.senderId === "me";
                                             return (
                                                 <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                                                    <div className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
+                                                    <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
                                                         isMe 
                                                             ? "bg-blue-600 text-white rounded-tr-sm" 
                                                             : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
-                                                    }`}>
+                                                    } break-words`}>
                                                         {msg.text}
                                                     </div>
                                                     <span className="text-[10px] text-gray-400 mt-1 px-1">
@@ -182,7 +186,7 @@ export default function MessagesPage() {
                             </div>
 
                             {/* Input Area */}
-                            <div className="p-4 bg-white border-t border-gray-100 shrink-0">
+                            <div className="p-4 pr-20 md:pr-4 bg-white border-t border-gray-100 shrink-0">
                                 <form onSubmit={handleSend} className="flex gap-2">
                                     <input 
                                         type="text" 
