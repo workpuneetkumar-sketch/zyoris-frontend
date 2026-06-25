@@ -1,4 +1,6 @@
-import api from "@/lib/api/api"; // your pre-configured axios instance
+// lib/api/projectsApi.ts
+
+import api from "@/lib/api/api";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -85,6 +87,15 @@ export async function getProjects(): Promise<Project[]> {
   }
 }
 
+export async function getProjectById(id: string): Promise<Project> {
+  try {
+    const res = await api.get(`/projects/${id}`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to fetch project");
+  }
+}
+
 export async function createProject(data: CreateProjectPayload): Promise<Project> {
   try {
     const res = await api.post("/projects/create", data);
@@ -130,11 +141,43 @@ export async function createMilestone(projectId: string, data: CreateMilestonePa
   }
 }
 
-export async function addProjectMember(projectId: string, data: AddMemberPayload): Promise<Member> {
+export async function addProjectMember(projectId: string, data: AddMemberPayload): Promise<any> {
   try {
     const res = await api.post(`/projects/${projectId}/members`, data);
     return res.data?.data || res.data;
   } catch (error: any) {
     throw new Error(error.response?.data?.message || "Failed to add member");
+  }
+}
+
+// ── Employee and Project Members (with fallback) ──────────────────────
+
+/**
+ * Fetch all employees of the current organization.
+ * Returns array of employee objects with nested user info.
+ */
+export async function getEmployees(): Promise<any[]> {
+  try {
+    const res = await api.get("/hr/employees/get-employees");
+    // The API returns an array directly
+    return res.data || [];
+  } catch (error: any) {
+    console.error("Failed to fetch employees:", error);
+    return []; // fallback to empty array
+  }
+}
+
+/**
+ * Fetch members of a project.
+ * If the endpoint fails, return an empty array.
+ */
+export async function getProjectMembers(projectId: string): Promise<any[]> {
+  try {
+    const res = await api.get(`/projects/${projectId}/members`);
+    const data = res.data?.data || res.data;
+    return Array.isArray(data) ? data : [];
+  } catch (error: any) {
+    console.error("Failed to fetch project members:", error);
+    return []; // fallback to empty array
   }
 }
