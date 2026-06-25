@@ -60,7 +60,7 @@ function getInitials(email: string): string {
 
 function Avatar({ email }: { email: string }) {
     return (
-        <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 text-[12px] font-bold flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 text-[13px] font-bold flex items-center justify-center shrink-0 shadow-sm border border-blue-200/50">
             {getInitials(email)}
         </div>
     );
@@ -105,10 +105,10 @@ function ComposeModal({ sending, sendError, onClose, onSend }: ComposeModalProps
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="bg-gray-50 w-full max-w-xl rounded-2xl shadow-xl overflow-hidden">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
+                <div className="flex items-center justify-between px-6 py-5 bg-white border-b border-gray-100">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">New Email</h2>
-                        <p className="text-sm text-gray-400 mt-0.5">Compose and send an email</p>
+                        <h2 className="text-xl font-semibold tracking-tight text-gray-900">New Email</h2>
+                        <p className="text-sm text-gray-500 mt-1">Compose and send an email to your contact</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -174,8 +174,8 @@ function ComposeModal({ sending, sendError, onClose, onSend }: ComposeModalProps
                             onChange={handleChange}
                             placeholder="Write your message here..."
                             rows={7}
-                            className={`w-full rounded-lg border px-3 py-2.5 text-sm text-gray-900 outline-none resize-none transition-colors focus:ring-2 focus:ring-blue-500 leading-relaxed ${
-                                errors.body ? "border-red-400 bg-red-50/30" : "border-gray-300 focus:border-blue-500"
+                            className={`w-full rounded-xl border px-4 py-3 text-[15px] text-gray-900 outline-none resize-none transition-all duration-200 focus:ring-4 focus:ring-blue-500/20 leading-relaxed shadow-sm ${
+                                errors.body ? "border-red-400 bg-red-50/30" : "border-gray-200 focus:border-blue-500 hover:border-gray-300"
                             }`}
                         />
                         {errors.body && <p className="text-xs text-red-500 mt-1">{errors.body}</p>}
@@ -183,23 +183,23 @@ function ComposeModal({ sending, sendError, onClose, onSend }: ComposeModalProps
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between gap-3 px-6 py-4 bg-white border-t border-gray-200">
-                    <p className="text-[12px] text-gray-400">
-                        All fields marked <span className="text-red-400">*</span> are required
+                <div className="flex items-center justify-between gap-3 px-6 py-5 bg-gray-50/50 border-t border-gray-100">
+                    <p className="text-[13px] text-gray-500">
+                        All fields marked <span className="text-red-500">*</span> are required
                     </p>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-3">
                         <button
                             onClick={onClose}
-                            className="h-9 px-4 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                            className="h-10 px-5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-white hover:shadow-sm transition-all duration-200"
                         >
                             Discard
                         </button>
                         <button
                             onClick={handleSend}
                             disabled={sending}
-                            className="flex items-center gap-2 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-70 transition-colors shadow-sm shadow-blue-200"
+                            className="flex items-center gap-2 h-10 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-bold hover:shadow-md hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none transition-all duration-200 shadow-sm shadow-blue-200"
                         >
-                            <Send size={14} />
+                            <Send size={16} />
                             {sending ? "Sending..." : "Send Email"}
                         </button>
                     </div>
@@ -348,28 +348,28 @@ export function EmailUI({
         <div className="min-h-full space-y-5">
 
             {/* ── Page Header ── */}
-            <div className="flex items-start justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">Email</h1>
-                    <p className="text-sm text-gray-400 mt-0.5">
-                        Send and track all your email communications.
+                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">Email Hub</h1>
+                    <p className="text-[15px] text-gray-500 mt-1.5 font-medium">
+                        Send, track, and manage all your external communications.
                     </p>
                 </div>
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-3">
                     <button
                         onClick={onRetry}
                         disabled={loading}
                         title="Refresh"
-                        className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                        className="flex items-center gap-2 h-10 px-4 rounded-xl border border-gray-200 bg-white shadow-sm text-[14px] font-semibold text-gray-700 hover:bg-gray-50 hover:shadow-md disabled:opacity-50 transition-all duration-200"
                     >
-                        <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                        <RefreshCw size={16} className={loading ? "animate-spin text-blue-600" : ""} />
                         Refresh
                     </button>
                     <button
                         onClick={onOpenCompose}
-                        className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                        className="flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
                     >
-                        <Plus size={15} />
+                        <Plus size={18} />
                         Compose
                     </button>
                 </div>
@@ -382,31 +382,33 @@ export function EmailUI({
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
 
                     {/* Toolbar */}
-                    <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
-                        <div className="flex items-center gap-2">
-                            <Inbox size={15} className="text-blue-500" />
-                            <span className="text-[13px] font-semibold text-gray-700">
+                    <div className="flex items-center gap-4 px-6 py-5 border-b border-gray-100 flex-wrap bg-gray-50/30">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shadow-sm">
+                                <Inbox size={16} />
+                            </div>
+                            <span className="text-[15px] font-bold text-gray-800 tracking-tight">
                                 All Emails
                             </span>
                             {!loading && total > 0 && (
-                                <span className="px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500 text-[11px] font-semibold">
+                                <span className="px-2 py-0.5 rounded-full bg-white border border-gray-200 text-gray-600 text-[12px] font-bold shadow-sm">
                                     {total}
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-2 ml-auto">
-                            <button className="flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                                <Filter size={12} />
+                        <div className="flex items-center gap-3 ml-auto">
+                            <button className="flex items-center gap-2 h-9 px-4 rounded-xl border border-gray-200 bg-white shadow-sm text-[13px] font-semibold text-gray-700 hover:bg-gray-50 hover:shadow-md transition-all duration-200">
+                                <Filter size={14} />
                                 Filter
                             </button>
-                            <div className="relative">
-                                <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <div className="relative group">
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-500 transition-colors" />
                                 <input
                                     type="text"
                                     placeholder="Search emails..."
                                     value={search}
                                     onChange={(e) => onSearchChange(e.target.value)}
-                                    className="h-8 pl-8 pr-4 rounded-lg border border-gray-200 bg-gray-50 text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-48 transition-colors"
+                                    className="h-9 pl-9 pr-4 rounded-xl border border-gray-200 bg-gray-50/50 text-[14px] text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 focus:bg-white w-64 transition-all duration-200"
                                 />
                             </div>
                         </div>
