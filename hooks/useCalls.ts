@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { toast } from "react-toastify";
 import { Call, fetchCalls, createCall } from "@/lib/api/callsApi";
+import { fetchContactById } from "@/lib/api/contactsApi";
 
 export function useCalls() {
     const [calls, setCalls] = useState<Call[]>([]);
@@ -16,7 +17,24 @@ export function useCalls() {
         setError(null);
         try {
             const data = await fetchCalls(page);
-            setCalls(data.calls);
+            
+            // Enrich calls with contact names if missing
+            const enrichedCalls = await Promise.all(
+                data.calls.map(async (call) => {
+                    if (!call.contactName && call.contactId) {
+                        try {
+                            const contact = await fetchContactById(call.contactId);
+                            return { ...call, contactName: contact.name };
+                        } catch (err) {
+                            console.error(`Failed to fetch contact ${call.contactId}`, err);
+                            return call;
+                        }
+                    }
+                    return call;
+                })
+            );
+            
+            setCalls(enrichedCalls);
             setTotal(data.total);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to fetch calls.");
