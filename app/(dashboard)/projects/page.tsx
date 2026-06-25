@@ -1,5 +1,3 @@
-// app/(dashboard)/projects/page.tsx
-
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -24,6 +22,8 @@ import {
   createProject,
   updateProject,
   deleteProject,
+  getEmployees,
+  getProjectMembers,
   Project,
   CreateProjectPayload,
   UpdateProjectPayload,
@@ -32,8 +32,8 @@ import {
 import { StatusBadge, ProgressBar, Skeleton } from "@/components/projects/SharedComponents";
 import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import MilestonesModal from "@/components/projects/MilestonesModal";
+import TeamModal from "@/components/projects/TeamMembersModal";
 
-// ── Page Component ──────────────────────────────────────────────────────
 export default function ProjectsPage() {
   // Core state
   const [projects, setProjects] = useState<Project[]>([]);
@@ -45,8 +45,9 @@ export default function ProjectsPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
 
-  // Selected project for actions
+  // Selected project
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   // Filters
@@ -58,6 +59,16 @@ export default function ProjectsPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // Employee map: userId -> { name, email }
+  const [employeeMap, setEmployeeMap] = useState<
+    Record<string, { name: string; email: string }>
+  >({});
+
+  // Project members: projectId -> Member[]
+  const [projectMembers, setProjectMembers] = useState<
+    Record<string, Array<{ id: string; name: string; email: string }>>
+  >({});
 
   // ── Load projects ──────────────────────────────────────────────────
   const loadProjects = useCallback(async () => {
@@ -76,6 +87,74 @@ export default function ProjectsPage() {
   useEffect(() => {
     loadProjects();
   }, [loadProjects]);
+
+  // ── Load employees once ────────────────────────────────────────────
+  useEffect(() => {
+    async function loadEmployees() {
+      try {
+        const employees = await getEmployees();
+        const map: Record<string, { name: string; email: string }> = {};
+        employees.forEach((emp: any) => {
+          if (emp.user) {
+            map[emp.userId] = {
+              name: emp.user.name,
+              email: emp.user.email,
+            };
+          }
+        });
+        setEmployeeMap(map);
+      } catch (err) {
+        // Silently fail; members will show only IDs
+      }
+    }
+    loadEmployees();
+  }, []);
+
+  // ── Load members for all projects ──────────────────────────────────
+  useEffect(() => {
+    if (projects.length === 0) return;
+
+    async function loadMembers() {
+      const membersMap: typeof projectMembers = {};
+      await Promise.all(
+        projects.map(async (project) => {
+          try {
+            const members = await getProjectMembers(project.id);
+            const detailedMembers = members
+              .map((m: any) => ({
+                id: m.userId,
+                name: employeeMap[m.userId]?.name || m.user?.name || "Unknown",
+                email: employeeMap[m.userId]?.email || m.user?.email || "",
+              }))
+              .filter((m) => m.name !== "Unknown" || m.email);
+            membersMap[project.id] = detailedMembers;
+          } catch {
+            membersMap[project.id] = [];
+          }
+        })
+      );
+      setProjectMembers(membersMap);
+    }
+
+    loadMembers();
+  }, [projects, employeeMap]);
+
+  // ── Refresh a single project's members (local update after add) ──
+  const refreshProjectMembers = useCallback(
+    (projectId: string, newMember?: { id: string; name: string; email: string }) => {
+      if (newMember) {
+        // Append the new member to the existing list
+        setProjectMembers((prev) => ({
+          ...prev,
+          [projectId]: [...(prev[projectId] || []), newMember],
+        }));
+      } else {
+        // Optionally re-fetch from API if needed, but we rely on local updates
+        // You can call getProjectMembers again if desired, but we skip for reliability.
+      }
+    },
+    []
+  );
 
   // ── Filtering ──────────────────────────────────────────────────────
   const filteredProjects = projects.filter((p) => {
@@ -286,142 +365,201 @@ export default function ProjectsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {filteredProjects.map((project) => (
-                  <tr
-                    key={project.id}
-                    className="hover:bg-gray-50/50 transition-colors"
-                  >
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-gray-900">{project.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                        {project.description || "—"}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-700">
-                      {project.client?.name || project.clientId}
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusBadge status={project.status} />
-                    </td>
-                    <td className="px-5 py-4 w-32">
-                      <div className="flex items-center gap-2">
-                        <ProgressBar progress={project.progress} />
-                        <span className="text-xs text-gray-600">{project.progress || 0}%</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-700">
-                      <div className="flex items-center gap-1">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        {project.memberCount ?? project.members?.length ?? 0}
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {new Date(project.startDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {project.endDate
-                        ? new Date(project.endDate).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowMilestonesModal(true);
-                          }}
-                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                          title="Milestones"
-                        >
-                          <ListChecks size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowEditModal(true);
-                          }}
-                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                          title="Edit"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowDeleteModal(true);
-                          }}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {filteredProjects.map((project) => {
+                  const members = projectMembers[project.id] || [];
+                  return (
+                    <tr
+                      key={project.id}
+                      className="hover:bg-gray-50/50 transition-colors"
+                    >
+                      <td className="px-5 py-4">
+                        <p className="font-semibold text-gray-900">{project.name}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
+                          {project.description || "—"}
+                        </p>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-700">
+                        {project.client?.name || project.clientId || "—"}
+                      </td>
+                      <td className="px-5 py-4">
+                        <StatusBadge status={project.status} />
+                      </td>
+                      <td className="px-5 py-4 w-32">
+                        <div className="flex items-center gap-2">
+                          <ProgressBar progress={project.progress} />
+                          <span className="text-xs text-gray-600">{project.progress || 0}%</span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-700">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <Users className="w-4 h-4 text-gray-400 shrink-0" />
+                          {members.length > 0 ? (
+                            members.slice(0, 3).map((member, idx) => (
+                              <span
+                                key={member.id}
+                                className="inline-flex items-center gap-1 bg-gray-100 rounded-full px-2 py-0.5 text-xs"
+                                title={member.email}
+                              >
+                                {member.name}
+                                {idx < Math.min(members.length, 3) - 1 ? "," : ""}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-gray-400">
+                              {project.memberCount ?? project.members?.length ?? 0}
+                            </span>
+                          )}
+                          {members.length > 3 && (
+                            <span className="text-xs text-gray-500">
+                              +{members.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {new Date(project.startDate).toLocaleDateString()}
+                      </td>
+                      <td className="px-5 py-4 text-sm text-gray-600">
+                        {project.endDate
+                          ? new Date(project.endDate).toLocaleDateString()
+                          : "—"}
+                      </td>
+                      <td className="px-5 py-4">
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowMilestonesModal(true);
+                            }}
+                            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                            title="Milestones"
+                          >
+                            <ListChecks size={16} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowTeamModal(true);
+                            }}
+                            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                            title="Team"
+                          >
+                            <Users size={16} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowEditModal(true);
+                            }}
+                            className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                            title="Edit"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setSelectedProject(project);
+                              setShowDeleteModal(true);
+                            }}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                            title="Delete"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile Cards */}
           <div className="md:hidden divide-y divide-gray-100">
-            {filteredProjects.map((project) => (
-              <div key={project.id} className="p-4 flex flex-col gap-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{project.name}</p>
-                    <p className="text-xs text-gray-500">{project.client?.name || project.clientId}</p>
+            {filteredProjects.map((project) => {
+              const members = projectMembers[project.id] || [];
+              return (
+                <div key={project.id} className="p-4 flex flex-col gap-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-900">{project.name}</p>
+                      <p className="text-xs text-gray-500">{project.client?.name || project.clientId || "—"}</p>
+                    </div>
+                    <StatusBadge status={project.status} />
                   </div>
-                  <StatusBadge status={project.status} />
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <CalendarDays className="w-4 h-4 text-gray-400" />
-                  <span>
-                    {new Date(project.startDate).toLocaleDateString()}
-                    {project.endDate && ` – ${new Date(project.endDate).toLocaleDateString()}`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <ProgressBar progress={project.progress} />
-                  <span className="text-xs text-gray-600">{project.progress || 0}%</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" />
-                    {project.memberCount ?? project.members?.length ?? 0}
-                  </span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowMilestonesModal(true);
-                      }}
-                      className="p-1.5 text-gray-500"
-                    >
-                      <ListChecks size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowEditModal(true);
-                      }}
-                      className="p-1.5 text-gray-500"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowDeleteModal(true);
-                      }}
-                      className="p-1.5 text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                  <div className="flex items-center gap-2 text-sm">
+                    <CalendarDays className="w-4 h-4 text-gray-400" />
+                    <span>
+                      {new Date(project.startDate).toLocaleDateString()}
+                      {project.endDate && ` – ${new Date(project.endDate).toLocaleDateString()}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ProgressBar progress={project.progress} />
+                    <span className="text-xs text-gray-600">{project.progress || 0}%</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">
+                      <Users className="w-3.5 h-3.5" />
+                      {members.length > 0 ? (
+                        members.map((member) => (
+                          <span
+                            key={member.id}
+                            className="bg-gray-100 px-1.5 py-0.5 rounded text-xs"
+                            title={member.email}
+                          >
+                            {member.name}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs">
+                          {project.memberCount ?? project.members?.length ?? 0}
+                        </span>
+                      )}
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowMilestonesModal(true);
+                        }}
+                        className="p-1.5 text-gray-500"
+                      >
+                        <ListChecks size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowTeamModal(true);
+                        }}
+                        className="p-1.5 text-gray-500"
+                      >
+                        <Users size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowEditModal(true);
+                        }}
+                        className="p-1.5 text-gray-500"
+                      >
+                        <Edit size={16} />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedProject(project);
+                          setShowDeleteModal(true);
+                        }}
+                        className="p-1.5 text-red-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -485,6 +623,23 @@ export default function ProjectsPage() {
             setSelectedProject(null);
           }}
           showToast={showToast}
+        />
+      )}
+
+      {/* Team Modal */}
+      {showTeamModal && selectedProject && (
+        <TeamModal
+          projectId={selectedProject.id}
+          projectName={selectedProject.name}
+          currentMembers={projectMembers[selectedProject.id] || []}
+          onClose={() => {
+            setShowTeamModal(false);
+            setSelectedProject(null);
+          }}
+          showToast={showToast}
+          onMemberAdded={(newMember) =>
+            refreshProjectMembers(selectedProject.id, newMember)
+          }
         />
       )}
     </div>

@@ -1,6 +1,7 @@
 // lib/api/hrApi.ts
 
 import api from "@/lib/api/api";
+import { Member } from "./projectsApi";
 
 // ── Types ────────────────────────────────────────────────
 
@@ -441,3 +442,4 @@ export async function updateLeaveStatus(
 ): Promise<LeaveRequest> {
   return status === "APPROVED" ? approveLeave(id) : rejectLeave(id);
 }
+
