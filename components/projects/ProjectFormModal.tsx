@@ -1,4 +1,3 @@
-// app/(dashboard)/projects/components/ProjectFormModal.tsx
 import React, { useState } from "react";
 import { X } from "lucide-react";
 import { Project } from "@/lib/api/projectsApi";
@@ -22,19 +21,24 @@ export default function ProjectFormModal({
     name: initialData?.name || "",
     description: initialData?.description || "",
     clientId: initialData?.clientId || "",
-    status: initialData?.status || "ACTIVE",
+    status: initialData?.status || "PLANNING",   // default to PLANNING
     startDate: initialData?.startDate ? initialData.startDate.split("T")[0] : "",
     endDate: initialData?.endDate ? initialData.endDate.split("T")[0] : "",
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     onSubmit({
-      ...form,
+      name: form.name,
+      description: form.description || undefined,
+      clientId: form.clientId || undefined,
+      status: form.status,
       startDate: form.startDate || undefined,
       endDate: form.endDate || undefined,
     });
@@ -76,12 +80,12 @@ export default function ProjectFormModal({
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Client ID *</label>
+              <label className="block text-sm font-medium text-gray-700">Client ID</label>
               <input
                 name="clientId"
-                required
                 value={form.clientId}
                 onChange={handleChange}
+                placeholder="Optional client ID"
                 className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
               />
             </div>
@@ -93,10 +97,10 @@ export default function ProjectFormModal({
                 onChange={handleChange}
                 className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white"
               >
+                <option value="PLANNING">Planning</option>
                 <option value="ACTIVE">Active</option>
-                <option value="PENDING">Pending</option>
+                <option value="ON_HOLD">On Hold</option>
                 <option value="COMPLETED">Completed</option>
-                <option value="CANCELLED">Cancelled</option>
               </select>
             </div>
           </div>

@@ -22,7 +22,10 @@ export default function PortalLoginPage() {
     setError(null);
     try {
       const response = await portalLogin({ email, password });
-      localStorage.setItem("portalAuth", JSON.stringify({ token: response.token, client: response.client }));
+      localStorage.setItem(
+        "portalAuth",
+        JSON.stringify({ token: response.token, client: response.client })
+      );
       router.push("/portal/dashboard");
     } catch (err: any) {
       if (err.message === "INVALID_CREDENTIALS") {
@@ -43,7 +46,9 @@ export default function PortalLoginPage() {
             <LogIn className="w-8 h-8 text-indigo-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">Client Portal</h1>
-          <p className="text-sm text-gray-500 mt-1">Sign in to view your projects, invoices, and documents</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Sign in to view your projects, invoices, and documents
+          </p>
         </div>
         {error && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-sm text-red-700">

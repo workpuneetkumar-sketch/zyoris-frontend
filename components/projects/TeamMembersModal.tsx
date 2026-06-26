@@ -1,53 +1,90 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useState, useEffect } from "react";
 import { X, Search, UserPlus } from "lucide-react";
 import {
-  getEmployees,
   addProjectMember,
+  getEmployees,
+  getProjectById,
+  ProjectMember,
 } from "@/lib/api/projectsApi";
 
 interface TeamModalProps {
   projectId: string;
   projectName: string;
-  currentMembers: any[]; // array of { id, name, email } passed from parent
   onClose: () => void;
   showToast: (type: "success" | "error", message: string) => void;
-  onMemberAdded: (newMember: { id: string; name: string; email: string }) => void;
+  onMemberAdded: (member: { id: string; name: string; email: string }) => void;
+}
+
+interface MemberDisplay {
+  id: string;         // userId
+  name: string;
+  email: string;
 }
 
 export default function TeamMembersModal({
   projectId,
   projectName,
-  currentMembers,
   onClose,
   showToast,
   onMemberAdded,
 }: TeamModalProps) {
+  const [currentMembers, setCurrentMembers] = useState<MemberDisplay[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(true);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loadingEmployees, setLoadingEmployees] = useState(true);
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState<string | null>(null);
+  const [employeeMap, setEmployeeMap] = useState<Record<string, { name: string; email: string }>>({});
 
-  // Load all employees once
+  // Load employees & build map
   useEffect(() => {
     async function loadEmployees() {
       try {
-        setLoading(true);
         const emps = await getEmployees();
         setEmployees(emps);
-      } catch (err: any) {
-        showToast("error", err.message || "Failed to load employees");
+        const map: Record<string, { name: string; email: string }> = {};
+        emps.forEach((emp: any) => {
+          if (emp.user) {
+            map[emp.userId] = { name: emp.user.name, email: emp.user.email };
+          }
+        });
+        setEmployeeMap(map);
+      } catch (err) {
+        showToast("error", "Failed to load employees");
       } finally {
-        setLoading(false);
+        setLoadingEmployees(false);
       }
     }
     loadEmployees();
-  }, [showToast]);
+  }, []);
 
-  // Filter employees not already in the project (using userId)
+  // Fetch project members from GET /projects/{id}
+  useEffect(() => {
+    async function loadMembers() {
+      try {
+        const project = await getProjectById(projectId);
+        const members: ProjectMember[] = project.members || [];
+        const enriched: MemberDisplay[] = members.map((m) => ({
+          id: m.userId,
+          name: employeeMap[m.userId]?.name || "Loading...",
+          email: employeeMap[m.userId]?.email || "",
+        }));
+        setCurrentMembers(enriched);
+      } catch (err) {
+        showToast("error", "Failed to load project members");
+      } finally {
+        setLoadingMembers(false);
+      }
+    }
+    if (Object.keys(employeeMap).length > 0) {
+      loadMembers();
+    }
+  }, [projectId, employeeMap]);
+
   const availableEmployees = employees.filter(
-    (emp) => !currentMembers.some((m: any) => m.id === emp.userId)
+    (emp) => !currentMembers.some((m) => m.id === emp.userId)
   );
 
   const filteredEmployees = search
@@ -58,12 +95,18 @@ export default function TeamMembersModal({
       )
     : availableEmployees;
 
-  const handleAddMember = async (userId: string, name: string, email: string) => {
+  const handleAdd = async (userId: string) => {
     setAdding(userId);
     try {
       await addProjectMember(projectId, { userId });
-      // Notify parent with the new member data
-      onMemberAdded({ id: userId, name, email });
+      const emp = employees.find((e) => e.userId === userId);
+      const newMember: MemberDisplay = {
+        id: userId,
+        name: emp?.user?.name || "Unknown",
+        email: emp?.user?.email || "",
+      };
+      setCurrentMembers((prev) => [...prev, newMember]);
+      onMemberAdded(newMember);
       showToast("success", "Member added successfully");
     } catch (err: any) {
       showToast("error", err.message || "Failed to add member");
@@ -75,7 +118,6 @@ export default function TeamMembersModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
       <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[85vh] overflow-y-auto">
-        {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-100">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Team Members</h2>
@@ -86,14 +128,15 @@ export default function TeamMembersModal({
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-6">
-          {/* Current Members */}
+          {/* Current members */}
           <div>
             <h3 className="text-sm font-semibold text-gray-700 mb-3">
               Current Members ({currentMembers.length})
             </h3>
-            {currentMembers.length === 0 ? (
+            {loadingMembers ? (
+              <p className="text-sm text-gray-400 italic">Loading members...</p>
+            ) : currentMembers.length === 0 ? (
               <p className="text-sm text-gray-400 italic">No members yet.</p>
             ) : (
               <div className="space-y-2">
@@ -115,11 +158,9 @@ export default function TeamMembersModal({
             )}
           </div>
 
-          {/* Add Members */}
+          {/* Add members */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">
-              Add Members
-            </h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Add Members</h3>
             <div className="relative mb-4">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
@@ -130,13 +171,11 @@ export default function TeamMembersModal({
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500"
               />
             </div>
-            {loading ? (
+            {loadingEmployees ? (
               <p className="text-sm text-gray-400 italic">Loading employees...</p>
             ) : filteredEmployees.length === 0 ? (
               <p className="text-sm text-gray-400 italic">
-                {search
-                  ? "No matching employees found."
-                  : "All employees are already members."}
+                {search ? "No matching employees found." : "All employees are already members."}
               </p>
             ) : (
               <div className="space-y-2 max-h-60 overflow-y-auto">
@@ -155,9 +194,7 @@ export default function TeamMembersModal({
                       </div>
                     </div>
                     <button
-                      onClick={() =>
-                        handleAddMember(emp.userId, emp.user?.name, emp.user?.email)
-                      }
+                      onClick={() => handleAdd(emp.userId)}
                       disabled={adding === emp.userId}
                       className="inline-flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50"
                     >

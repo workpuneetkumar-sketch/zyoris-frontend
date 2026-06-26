@@ -1,6 +1,5 @@
 import axios from "axios";
 
-// Dedicated portal API instance (separate from admin)
 const portalApi = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL,
 });
@@ -30,6 +29,13 @@ export interface LoginResponse {
     name: string;
     email: string;
   };
+}
+
+export interface PortalProfile {
+  id: string;
+  name: string;
+  email: string;
+  // any other fields returned by /portal/me
 }
 
 export interface PortalDashboardData {
@@ -72,7 +78,7 @@ export interface SetPasswordPayload {
   password: string;
 }
 
-// ── Real API Methods ─────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────
 export async function portalLogin(data: LoginPayload): Promise<LoginResponse> {
   try {
     const res = await portalApi.post("/portal/login", data);
@@ -81,6 +87,18 @@ export async function portalLogin(data: LoginPayload): Promise<LoginResponse> {
     const message = error.response?.data?.message || "Login failed";
     if (message === "INVALID_CREDENTIALS") throw new Error("INVALID_CREDENTIALS");
     throw new Error(message);
+  }
+}
+
+/** Validate the current token and return client profile */
+export async function getPortalProfile(): Promise<PortalProfile> {
+  try {
+    const res = await portalApi.get("/portal/me");
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    // If token is invalid/expired, clear local storage
+    localStorage.removeItem("portalAuth");
+    throw new Error("Session expired or invalid. Please login again.");
   }
 }
 
@@ -95,6 +113,7 @@ export async function setClientPortalPassword(
   }
 }
 
+// ── Data ──────────────────────────────────────────────────────────
 export async function getPortalDashboard(): Promise<PortalDashboardData> {
   try {
     const res = await portalApi.get("/portal/dashboard");
@@ -132,115 +151,4 @@ export async function getPortalDocuments(): Promise<PortalDocument[]> {
   } catch (error: any) {
     throw new Error(error.response?.data?.message || "Failed to fetch documents");
   }
-}
-
-// ── DEMO DATA (used when toggled) ────────────────────────────────
-export function getDemoDashboard(): PortalDashboardData {
-  return {
-    projectsCount: 8,
-    invoicesCount: 12,
-    documentsCount: 5,
-    recentProjects: getDemoProjects().slice(0, 3),
-    recentInvoices: getDemoInvoices().slice(0, 3),
-    recentDocuments: getDemoDocuments().slice(0, 3),
-  };
-}
-
-export function getDemoProjects(): PortalProject[] {
-  return [
-    {
-      id: "demo-1",
-      name: "Website Redesign",
-      status: "ACTIVE",
-      startDate: "2026-05-10T00:00:00Z",
-      endDate: "2026-07-15T00:00:00Z",
-      progress: 65,
-    },
-    {
-      id: "demo-2",
-      name: "Mobile App Development",
-      status: "ACTIVE",
-      startDate: "2026-04-01T00:00:00Z",
-      endDate: "2026-08-30T00:00:00Z",
-      progress: 40,
-    },
-    {
-      id: "demo-3",
-      name: "CRM Integration",
-      status: "COMPLETED",
-      startDate: "2026-01-20T00:00:00Z",
-      endDate: "2026-03-15T00:00:00Z",
-      progress: 100,
-    },
-    {
-      id: "demo-4",
-      name: "Inventory System",
-      status: "PENDING",
-      startDate: "2026-06-01T00:00:00Z",
-      progress: 0,
-    },
-  ];
-}
-
-export function getDemoInvoices(): PortalInvoice[] {
-  return [
-    {
-      id: "inv-1",
-      number: "INV-2026-001",
-      amount: 2500.0,
-      status: "PAID",
-      dueDate: "2026-05-20T00:00:00Z",
-      downloadUrl: "#",
-    },
-    {
-      id: "inv-2",
-      number: "INV-2026-002",
-      amount: 1800.0,
-      status: "SENT",
-      dueDate: "2026-06-15T00:00:00Z",
-      downloadUrl: "#",
-    },
-    {
-      id: "inv-3",
-      number: "INV-2026-003",
-      amount: 3200.0,
-      status: "OVERDUE",
-      dueDate: "2026-04-30T00:00:00Z",
-    },
-    {
-      id: "inv-4",
-      number: "INV-2026-004",
-      amount: 950.0,
-      status: "DRAFT",
-      dueDate: "2026-07-01T00:00:00Z",
-    },
-  ];
-}
-
-export function getDemoDocuments(): PortalDocument[] {
-  return [
-    {
-      id: "doc-1",
-      fileName: "Project_Proposal.pdf",
-      fileType: "application/pdf",
-      fileSize: 245000,
-      uploadDate: "2026-06-10T10:30:00Z",
-      downloadUrl: "#",
-    },
-    {
-      id: "doc-2",
-      fileName: "Contract_v2.docx",
-      fileType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      fileSize: 128000,
-      uploadDate: "2026-06-12T14:00:00Z",
-      downloadUrl: "#",
-    },
-    {
-      id: "doc-3",
-      fileName: "Invoice_March.xlsx",
-      fileType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      fileSize: 82000,
-      uploadDate: "2026-06-13T08:15:00Z",
-    },
-  ];
 }
