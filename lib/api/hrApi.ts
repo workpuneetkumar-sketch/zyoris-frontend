@@ -1,8 +1,7 @@
 // lib/api/hrApi.ts
 
 import api from "@/lib/api/api";
-import { Member } from "./projectsApi";
-
+import { ProjectMember as Member } from "./projectsApi"; 
 // ── Types ────────────────────────────────────────────────
 
 export interface Employee {
