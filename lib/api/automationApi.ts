@@ -183,8 +183,13 @@ export const getValidActionsForTrigger = (trigger: TriggerType): ActionType[] =>
 export async function getRules(): Promise<AutomationRule[]> {
   try {
     const res = await api.get("/automation/rules");
-    const data = res.data?.data || res.data;
-    return Array.isArray(data) ? data : [];
+    let data = res.data?.data || res.data;
+    if (!Array.isArray(data)) data = [];
+    // Ensure config is always an object
+    return data.map((rule: any) => ({
+      ...rule,
+      config: rule.config || {},
+    }));
   } catch (error: any) {
     console.error("Error fetching rules:", error);
     throw new Error(error.response?.data?.message || "Failed to fetch rules");
@@ -194,7 +199,11 @@ export async function getRules(): Promise<AutomationRule[]> {
 export async function createRule(payload: CreateRulePayload): Promise<AutomationRule> {
   try {
     const res = await api.post("/automation/rules", payload);
-    return res.data?.data || res.data;
+    const rule = res.data?.data || res.data;
+    return {
+      ...rule,
+      config: rule.config || {},
+    };
   } catch (error: any) {
     console.error("Error creating rule:", error);
     throw new Error(error.response?.data?.message || "Failed to create rule");

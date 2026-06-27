@@ -263,10 +263,10 @@ export default function AutomationRulesList({
               </div>
 
               {/* Config Preview */}
-              {Object.keys(rule.config).length > 0 && (
+              {Object.keys(rule.config || {}).length > 0 && (
                 <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
                   <p className="text-xs text-gray-500 mb-0.5">Config:</p>
-                  {Object.entries(rule.config).map(([key, value]) => (
+                  {Object.entries(rule.config || {}).map(([key, value]) => (
                     <div key={key} className="text-xs text-gray-600 flex items-center gap-2">
                       <span className="font-mono text-gray-400">{key}:</span>
                       <span className="font-medium">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
