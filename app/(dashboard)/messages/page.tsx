@@ -202,16 +202,16 @@ export default function MessagesPage() {
                                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                                     </div>
                                 ) : (
-                                    <>
-{messages.map((msg, idx) => {
+                                    <div className="space-y-4">
+                                        {messages.map((msg, idx) => {
                                             const isMe = msg.senderId === "me";
                                             const isEditing = editingMessageId === msg.id;
                                             
                                             return (
-                                                <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"} mb-4 position-relative`}>
+                                                <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"} mb-4 relative`}>
                                                     {/* Message actions (hover to show for sender's messages) */}
                                                     {isMe && !isEditing && (
-                                                        <div className="absolute right-0 top-0 -mt-2 -mr-2 flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <div className="absolute right-0 top-0 -mt-2 -mr-2 flex items-center space-x-1.5 opacity-0 hover:opacity-100 transition-opacity">
                                                             <button
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
@@ -290,7 +290,7 @@ export default function MessagesPage() {
                                             );
                                         })}
                                         <div ref={messagesEndRef} />
-                                    </ul>
+                                    </div>
                                 )}
                             </div>
 
