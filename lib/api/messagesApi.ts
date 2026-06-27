@@ -89,3 +89,36 @@ export async function sendMessage(sessionId: string, text: string): Promise<Chat
 
     return [userMsg];
 }
+
+export async function updateMessage(messageId: string, text: string): Promise<ChatMessage | null> {
+    try {
+        const payload = {
+            messageId,
+            content: text
+        };
+        const res = await api.put(`/messages/update`, payload);
+        if (res.data?.success && res.data.data) {
+            const msg = res.data.data;
+            return {
+                id: msg.id,
+                sessionId: msg.sessionId || "",
+                text: msg.content || msg.text || "",
+                senderId: msg.senderId || "",
+                timestamp: msg.createdAt || msg.timestamp || new Date().toISOString()
+            };
+        }
+    } catch (error) {
+        console.warn("API /messages/update returned an error:", error);
+    }
+    return null;
+}
+
+export async function deleteMessage(messageId: string): Promise<boolean> {
+    try {
+        const res = await api.delete(`/messages/delete/${messageId}`);
+        return res.data?.success || false;
+    } catch (error) {
+        console.warn("API /messages/delete returned an error:", error);
+        return false;
+    }
+}

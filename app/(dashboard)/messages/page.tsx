@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Send, UserCircle2, MessageCircle, AlertCircle } from "lucide-react";
-import { getChatSessions, getSessionMessages, sendMessage, ChatSession, ChatMessage } from "@/lib/api/messagesApi";
+import { Send, UserCircle2, MessageCircle, AlertCircle, Edit, Trash2, Menu, ChevronDown } from "lucide-react";
+import { getChatSessions, getSessionMessages, sendMessage, updateMessage, deleteMessage, ChatSession, ChatMessage } from "@/lib/api/messagesApi";
 
 export default function MessagesPage() {
     const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -13,6 +13,10 @@ export default function MessagesPage() {
     const [messagesLoading, setMessagesLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    
+    // Edit state
+    const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+    const [editText, setEditText] = useState("");
 
     useEffect(() => {
         loadSessions();
@@ -55,6 +59,46 @@ export default function MessagesPage() {
             console.error("Failed to load messages", error);
         } finally {
             setMessagesLoading(false);
+        }
+    };
+
+    const handleEditStart = (message: ChatMessage) => {
+        setEditingMessageId(message.id);
+        setEditText(message.text);
+    };
+
+    const handleEditCancel = () => {
+        setEditingMessageId(null);
+        setEditText("");
+    };
+
+    const handleEditSave = async (message: ChatMessage) => {
+        if (!editText.trim()) {
+            handleEditCancel();
+            return;
+        }
+
+        try {
+            const updatedMessage = await updateMessage(message.id, editText.trim());
+            if (updatedMessage) {
+                setMessages(prev => 
+                    prev.map(m => m.id === message.id ? updatedMessage : m)
+                );
+            }
+            handleEditCancel();
+        } catch (error) {
+            console.error("Failed to update message", error);
+        }
+    };
+
+    const handleDelete = async (message: ChatMessage) => {
+        try {
+            const success = await deleteMessage(message.id);
+            if (success) {
+                setMessages(prev => prev.filter(m => m.id !== message.id));
+            }
+        } catch (error) {
+            console.error("Failed to delete message", error);
         }
     };
 
@@ -159,17 +203,86 @@ export default function MessagesPage() {
                                     </div>
                                 ) : (
                                     <>
-                                        {messages.map((msg, idx) => {
+{messages.map((msg, idx) => {
                                             const isMe = msg.senderId === "me";
+                                            const isEditing = editingMessageId === msg.id;
+                                            
                                             return (
-                                                <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                                                <div key={msg.id || idx} className={`flex flex-col ${isMe ? "items-end" : "items-start"} mb-4 position-relative`}>
+                                                    {/* Message actions (hover to show for sender's messages) */}
+                                                    {isMe && !isEditing && (
+                                                        <div className="absolute right-0 top-0 -mt-2 -mr-2 flex items-center space-x-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleEditStart(msg);
+                                                                }}
+                                                                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full p-1"
+                                                                title="Edit"
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    handleDelete(msg);
+                                                                }}
+                                                                className="text-gray-400 hover:text-red-500 hover:bg-gray-100 rounded-full p-1"
+                                                                title="Delete"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Message content */}
                                                     <div className={`max-w-[70%] rounded-2xl px-4 py-2 text-sm ${
                                                         isMe 
-                                                            ? "bg-blue-600 text-white rounded-tr-sm" 
+                                                            ? isEditing 
+                                                                ? "bg-blue-50 border border-blue-200 rounded-tr-sm" 
+                                                                : "bg-blue-600 text-white rounded-tr-sm" 
                                                             : "bg-white border border-gray-200 text-gray-800 rounded-tl-sm shadow-sm"
                                                     }`}>
-                                                        {msg.text}
+                                                        {isEditing ? (
+                                                            <textarea
+                                                                value={editText}
+                                                                onChange={(e) => setEditText(e.target.value)}
+                                                                className="w-full resize-none border-none bg-transparent text-sm py-1 px-0 focus:outline-none focus:ring-0"
+                                                                autoFocus
+                                                                rows={2}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                                                        e.preventDefault();
+                                                                        handleEditSave(msg);
+                                                                    }
+                                                                    if (e.key === 'Escape') {
+                                                                        handleEditCancel();
+                                                                    }
+                                                                }}
+                                                            />
+                                                        ) : (
+                                                                <span>{msg.text}</span>
+                                                            )}
                                                     </div>
+                                                    
+                                                    {/* Edit controls when editing */}
+                                                    {isEditing && isMe && (
+                                                        <div className="mt-2 flex w-full justify-end space-x-2">
+                                                            <button
+                                                                onClick={() => handleEditSave(msg)}
+                                                                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                onClick={handleEditCancel}
+                                                                className="px-3 py-1 text-sm bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                    
                                                     <span className="text-[10px] text-gray-400 mt-1 px-1">
                                                         {formatTime(msg.timestamp)}
                                                     </span>
@@ -177,7 +290,7 @@ export default function MessagesPage() {
                                             );
                                         })}
                                         <div ref={messagesEndRef} />
-                                    </>
+                                    </ul>
                                 )}
                             </div>
 
