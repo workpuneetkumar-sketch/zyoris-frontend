@@ -2,11 +2,12 @@
 const nextConfig = {
   reactStrictMode: true,
   async rewrites() {
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || "https://zyoris.onrender.com";
     return {
       fallback: [
         {
           source: "/:path*",
-          destination: `${process.env.NEXT_PUBLIC_BACKEND_URL}/:path*`,
+          destination: `${backendUrl}/:path*`,
         },
       ],
     };

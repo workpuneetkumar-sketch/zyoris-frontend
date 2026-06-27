@@ -180,7 +180,7 @@ export function ZiiBotPanel({
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 30, scale: 0.95 }}
           transition={{ duration: 0.3, ease: "easeOut" }}
-          className="fixed bottom-24 right-6 z-50 w-[440px] max-w-[calc(100vw-2rem)] h-[640px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl flex flex-col overflow-hidden bg-white"
+          className={`fixed bottom-24 right-6 z-50 w-[440px] max-w-[calc(100vw-2rem)] h-[640px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl flex flex-col overflow-hidden bg-white ${isFullscreen ? "fullscreen-mode" : ""}`}
         >
           {/* ── Header: White with Blue Gradient ── */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-white">
