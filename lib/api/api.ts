@@ -12,7 +12,7 @@ const api = axios.create({
     headers: {
         "Content-Type": "application/json",
     },
-    timeout: 10000,
+    timeout: 30000, // 30 seconds instead of 10
 });
 
 /* ---------------------------------------------------
@@ -47,18 +47,37 @@ api.interceptors.request.use(
 
 /* ---------------------------------------------------
    RESPONSE INTERCEPTOR
-   Auto refresh expired token
+   Auto refresh expired token + retry network errors
 --------------------------------------------------- */
 
 let isRedirecting = false;
+// Helper function to delay retries
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 api.interceptors.response.use(
     (response) => response,
 
     async (error: AxiosError<any>) => {
         const originalRequest: any = error.config;
+        
+        // Check if it's a network error or timeout
+        const isNetworkError = !error.response || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
+        
+        // Retry logic for network errors
+        if (isNetworkError && !originalRequest?._retryCount) {
+            originalRequest._retryCount = 1;
+        }
+        
+        if (isNetworkError && originalRequest._retryCount && originalRequest._retryCount < 3) {
+            originalRequest._retryCount += 1;
+            // Exponential backoff: 1s, 2s, 4s
+            const backoffTime = Math.pow(2, originalRequest._retryCount - 1) * 1000;
+            console.log(`Network error, retrying in ${backoffTime/1000}s... (attempt ${originalRequest._retryCount}/3)`);
+            await delay(backoffTime);
+            return api(originalRequest);
+        }
 
-        // Prevent infinite retry loop
+        // Prevent infinite retry loop for 401
         if (
             error.response?.status === 401 &&
             !originalRequest?._retry
@@ -107,7 +126,7 @@ api.interceptors.response.use(
                         refreshToken,
                     },
                     {
-                        timeout: 5000,
+                        timeout: 10000,
                     }
                 );
 
