@@ -10,6 +10,9 @@ import {
 } from "lucide-react";
 import { toast } from "react-toastify";
 
+// ─── Import the AI Insights Widget ────────────────────────────────────
+import AIInsightsWidget from "@/components/dashboard/AIInsightsWidget";
+
 interface ConversionScore {
   dealId: string;
   externalId: string | null;
@@ -304,6 +307,11 @@ export default function SalesDashboardPage() {
           <p className="text-xs text-gray-400 mt-2 font-medium">Attention recommended for these customer profiles.</p>
         </div>
 
+      </div>
+
+      {/* ─── AI Insights Widget ────────────────────────────────────────── */}
+      <div className="grid grid-cols-1 gap-6">
+        <AIInsightsWidget />
       </div>
 
       {/* ── Grid: Lead Funnel & Stats ── */}

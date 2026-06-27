@@ -1,4 +1,6 @@
-import api from "@/lib/api/api"; // your pre-configured axios instance
+"use client";
+
+import api from "@/lib/api/api";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -7,38 +9,35 @@ export interface Client {
   name: string;
 }
 
-export interface Member {
-  id: string;
-  name: string;
-  email: string;
-  role?: string;
-  avatar?: string;
-}
-
 export interface Milestone {
   id: string;
   projectId: string;
   title: string;
   description?: string;
   status: "PENDING" | "IN_PROGRESS" | "COMPLETED";
-  dueDate: string;
+  dueDate: string;      // stays required (backend always returns it)
   completedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ProjectMember {
+  id: string;           // membership id
+  projectId: string;
+  userId: string;       // user id
 }
 
 export interface Project {
   id: string;
   name: string;
   description?: string;
-  clientId: string;
+  clientId: string | null;
   client?: Client;
-  status: "ACTIVE" | "COMPLETED" | "PENDING" | "CANCELLED" | string;
-  progress?: number;
+  status: "PLANNING" | "ACTIVE" | "ON_HOLD" | "COMPLETED";
   startDate: string;
   endDate?: string;
-  members?: Member[];
-  memberCount?: number;
+  members?: ProjectMember[];   // only in GET /projects/{id}
+  milestones?: Milestone[];    // only in GET /projects/{id}
   createdAt: string;
   updatedAt: string;
 }
@@ -46,8 +45,8 @@ export interface Project {
 export interface CreateProjectPayload {
   name: string;
   description?: string;
-  clientId: string;
-  status?: string;
+  clientId?: string;       // optional, backend allows null
+  status?: "PLANNING" | "ACTIVE" | "ON_HOLD" | "COMPLETED";
   startDate: string;
   endDate?: string;
 }
@@ -56,7 +55,7 @@ export interface UpdateProjectPayload {
   name?: string;
   description?: string;
   clientId?: string;
-  status?: string;
+  status?: "PLANNING" | "ACTIVE" | "ON_HOLD" | "COMPLETED";
   startDate?: string;
   endDate?: string;
 }
@@ -65,7 +64,7 @@ export interface CreateMilestonePayload {
   title: string;
   description?: string;
   status?: string;
-  dueDate: string;
+  dueDate?: string;   // ✅ now optional – matches component usage
 }
 
 export interface AddMemberPayload {
@@ -85,12 +84,21 @@ export async function getProjects(): Promise<Project[]> {
   }
 }
 
+export async function getProjectById(id: string): Promise<Project> {
+  try {
+    const res = await api.get(`/projects/${id}`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to fetch project");
+  }
+}
+
 export async function createProject(data: CreateProjectPayload): Promise<Project> {
   try {
     const res = await api.post("/projects/create", data);
     return res.data?.data || res.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || "Failed to create project");
+    throw error;
   }
 }
 
@@ -99,7 +107,7 @@ export async function updateProject(id: string, data: UpdateProjectPayload): Pro
     const res = await api.patch(`/projects/${id}`, data);
     return res.data?.data || res.data;
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || "Failed to update project");
+    throw error;
   }
 }
 
@@ -107,7 +115,7 @@ export async function deleteProject(id: string): Promise<void> {
   try {
     await api.delete(`/projects/${id}`);
   } catch (error: any) {
-    throw new Error(error.response?.data?.message || "Failed to delete project");
+    throw error;
   }
 }
 
@@ -130,11 +138,29 @@ export async function createMilestone(projectId: string, data: CreateMilestonePa
   }
 }
 
-export async function addProjectMember(projectId: string, data: AddMemberPayload): Promise<Member> {
+export async function addProjectMember(projectId: string, data: AddMemberPayload): Promise<any> {
   try {
     const res = await api.post(`/projects/${projectId}/members`, data);
     return res.data?.data || res.data;
   } catch (error: any) {
     throw new Error(error.response?.data?.message || "Failed to add member");
   }
+}
+
+// ── Employee helpers ──────────────────────────────────────────────────
+
+export async function getEmployees(): Promise<any[]> {
+  try {
+    const res = await api.get("/hr/employees/get-employees");
+    return res.data || [];
+  } catch (error: any) {
+    console.error("Failed to fetch employees:", error);
+    return [];
+  }
+}
+
+// Fetches project details (including members) and returns the members array
+export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
+  const project = await getProjectById(projectId);
+  return project.members || [];
 }

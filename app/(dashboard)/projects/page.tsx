@@ -1,5 +1,3 @@
-// app/(dashboard)/projects/page.tsx
-
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -18,48 +16,45 @@ import {
   CheckCircle,
   AlertCircle,
   ListChecks,
+  PauseCircle,
 } from "lucide-react";
 import {
   getProjects,
   createProject,
   updateProject,
   deleteProject,
+  getEmployees,
   Project,
   CreateProjectPayload,
   UpdateProjectPayload,
 } from "@/lib/api/projectsApi";
 
-import { StatusBadge, ProgressBar, Skeleton } from "@/components/projects/SharedComponents";
+import { StatusBadge, Skeleton } from "@/components/projects/SharedComponents";
 import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import MilestonesModal from "@/components/projects/MilestonesModal";
+import TeamModal from "@/components/projects/TeamMembersModal";
 
-// ── Page Component ──────────────────────────────────────────────────────
 export default function ProjectsPage() {
-  // Core state
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
 
-  // Selected project for actions
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
-  // Filters
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
 
-  // Toast
   const [toast, setToast] = useState<{
     type: "success" | "error";
     message: string;
   } | null>(null);
 
-  // ── Load projects ──────────────────────────────────────────────────
   const loadProjects = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -77,31 +72,11 @@ export default function ProjectsPage() {
     loadProjects();
   }, [loadProjects]);
 
-  // ── Filtering ──────────────────────────────────────────────────────
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch =
-      searchQuery.trim() === "" ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus =
-      statusFilter === "ALL" || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  // ── Summary stats ──────────────────────────────────────────────────
-  const stats = {
-    total: projects.length,
-    active: projects.filter((p) => p.status === "ACTIVE").length,
-    completed: projects.filter((p) => p.status === "COMPLETED").length,
-    pending: projects.filter((p) => p.status === "PENDING").length,
-  };
-
-  // ── Toast helper ───────────────────────────────────────────────────
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
   };
 
-  // ── CRUD Actions ───────────────────────────────────────────────────
   const handleCreate = async (payload: CreateProjectPayload) => {
     try {
       const newProject = await createProject(payload);
@@ -109,7 +84,9 @@ export default function ProjectsPage() {
       setShowCreateModal(false);
       showToast("success", "Project created successfully");
     } catch (err: any) {
-      showToast("error", err.message);
+      const message =
+        err?.response?.data?.message || err.message || "Something went wrong";
+      showToast("error", message);
     }
   };
 
@@ -123,7 +100,9 @@ export default function ProjectsPage() {
       setSelectedProject(null);
       showToast("success", "Project updated successfully");
     } catch (err: any) {
-      showToast("error", err.message);
+      const message =
+        err?.response?.data?.message || err.message || "Something went wrong";
+      showToast("error", message);
     }
   };
 
@@ -136,14 +115,30 @@ export default function ProjectsPage() {
       setSelectedProject(null);
       showToast("success", "Project deleted successfully");
     } catch (err: any) {
-      showToast("error", err.message);
+      const message =
+        err?.response?.data?.message || err.message || "Something went wrong";
+      showToast("error", message);
     }
   };
 
-  // ── Render ─────────────────────────────────────────────────────────
+  const filteredProjects = projects.filter((p) => {
+    const matchesSearch =
+      searchQuery.trim() === "" ||
+      p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "ALL" || p.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const stats = {
+    total: projects.length,
+    active: projects.filter((p) => p.status === "ACTIVE").length,
+    completed: projects.filter((p) => p.status === "COMPLETED").length,
+    planning: projects.filter((p) => p.status === "PLANNING").length,
+    onHold: projects.filter((p) => p.status === "ON_HOLD").length,
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-slate-100 p-6">
-      {/* Toast */}
       {toast && (
         <div
           className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-in ${
@@ -164,7 +159,6 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
@@ -182,13 +176,13 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {[
-          { label: "Total Projects", value: stats.total, icon: FolderKanban, color: "text-indigo-600 bg-indigo-50" },
+          { label: "Total", value: stats.total, icon: FolderKanban, color: "text-indigo-600 bg-indigo-50" },
           { label: "Active", value: stats.active, icon: BarChart3, color: "text-emerald-600 bg-emerald-50" },
+          { label: "Planning", value: stats.planning, icon: Clock, color: "text-purple-600 bg-purple-50" },
+          { label: "On Hold", value: stats.onHold, icon: PauseCircle, color: "text-amber-600 bg-amber-50" },
           { label: "Completed", value: stats.completed, icon: CheckCircle, color: "text-blue-600 bg-blue-50" },
-          { label: "Pending", value: stats.pending, icon: Clock, color: "text-amber-600 bg-amber-50" },
         ].map((card) => (
           <div
             key={card.label}
@@ -205,7 +199,6 @@ export default function ProjectsPage() {
         ))}
       </div>
 
-      {/* Filters & Search */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -223,10 +216,10 @@ export default function ProjectsPage() {
           className="px-4 py-2.5 border border-gray-200 rounded-xl text-gray-800 text-sm font-medium bg-white cursor-pointer"
         >
           <option value="ALL">All Status</option>
+          <option value="PLANNING">Planning</option>
           <option value="ACTIVE">Active</option>
+          <option value="ON_HOLD">On Hold</option>
           <option value="COMPLETED">Completed</option>
-          <option value="PENDING">Pending</option>
-          <option value="CANCELLED">Cancelled</option>
         </select>
         <button
           onClick={loadProjects}
@@ -237,7 +230,6 @@ export default function ProjectsPage() {
         </button>
       </div>
 
-      {/* Project List */}
       {loading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -268,12 +260,11 @@ export default function ProjectsPage() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          {/* Desktop Table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Project Name", "Client", "Status", "Progress", "Team", "Start", "End", ""].map(
+                  {["Project Name", "Client", "Status", "Start", "End", ""].map(
                     (heading) => (
                       <th
                         key={heading}
@@ -298,22 +289,10 @@ export default function ProjectsPage() {
                       </p>
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-700">
-                      {project.client?.name || project.clientId}
+                      {project.client?.name || project.clientId || "—"}
                     </td>
                     <td className="px-5 py-4">
                       <StatusBadge status={project.status} />
-                    </td>
-                    <td className="px-5 py-4 w-32">
-                      <div className="flex items-center gap-2">
-                        <ProgressBar progress={project.progress} />
-                        <span className="text-xs text-gray-600">{project.progress || 0}%</span>
-                      </div>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-700">
-                      <div className="flex items-center gap-1">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        {project.memberCount ?? project.members?.length ?? 0}
-                      </div>
                     </td>
                     <td className="px-5 py-4 text-sm text-gray-600">
                       {new Date(project.startDate).toLocaleDateString()}
@@ -325,6 +304,16 @@ export default function ProjectsPage() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedProject(project);
+                            setShowTeamModal(true);
+                          }}
+                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                          title="Team"
+                        >
+                          <Users size={16} />
+                        </button>
                         <button
                           onClick={() => {
                             setSelectedProject(project);
@@ -363,14 +352,13 @@ export default function ProjectsPage() {
             </table>
           </div>
 
-          {/* Mobile Cards */}
           <div className="md:hidden divide-y divide-gray-100">
             {filteredProjects.map((project) => (
               <div key={project.id} className="p-4 flex flex-col gap-3">
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-semibold text-gray-900">{project.name}</p>
-                    <p className="text-xs text-gray-500">{project.client?.name || project.clientId}</p>
+                    <p className="text-xs text-gray-500">{project.client?.name || project.clientId || "—"}</p>
                   </div>
                   <StatusBadge status={project.status} />
                 </div>
@@ -381,22 +369,26 @@ export default function ProjectsPage() {
                     {project.endDate && ` – ${new Date(project.endDate).toLocaleDateString()}`}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <ProgressBar progress={project.progress} />
-                  <span className="text-xs text-gray-600">{project.progress || 0}%</span>
-                </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 flex items-center gap-1">
-                    <Users className="w-3.5 h-3.5" />
-                    {project.memberCount ?? project.members?.length ?? 0}
-                  </span>
+                  <span className="text-xs text-gray-500"></span>
                   <div className="flex gap-1">
+                    <button
+                      onClick={() => {
+                        setSelectedProject(project);
+                        setShowTeamModal(true);
+                      }}
+                      className="p-1.5 text-gray-500"
+                      title="Team"
+                    >
+                      <Users size={16} />
+                    </button>
                     <button
                       onClick={() => {
                         setSelectedProject(project);
                         setShowMilestonesModal(true);
                       }}
                       className="p-1.5 text-gray-500"
+                      title="Milestones"
                     >
                       <ListChecks size={16} />
                     </button>
@@ -406,6 +398,7 @@ export default function ProjectsPage() {
                         setShowEditModal(true);
                       }}
                       className="p-1.5 text-gray-500"
+                      title="Edit"
                     >
                       <Edit size={16} />
                     </button>
@@ -415,6 +408,7 @@ export default function ProjectsPage() {
                         setShowDeleteModal(true);
                       }}
                       className="p-1.5 text-red-500"
+                      title="Delete"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -426,9 +420,6 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* ── Modals ─────────────────────────────────────────────────────── */}
-
-      {/* Create / Edit Project Modal */}
       {(showCreateModal || showEditModal) && (
         <ProjectFormModal
           isOpen={showCreateModal || showEditModal}
@@ -449,7 +440,6 @@ export default function ProjectsPage() {
         />
       )}
 
-      {/* Delete Confirmation Modal */}
       {showDeleteModal && selectedProject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
@@ -475,7 +465,6 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Milestones Modal */}
       {showMilestonesModal && selectedProject && (
         <MilestonesModal
           projectId={selectedProject.id}
@@ -485,6 +474,21 @@ export default function ProjectsPage() {
             setSelectedProject(null);
           }}
           showToast={showToast}
+        />
+      )}
+
+      {showTeamModal && selectedProject && (
+        <TeamModal
+          projectId={selectedProject.id}
+          projectName={selectedProject.name}
+          onClose={() => {
+            setShowTeamModal(false);
+            setSelectedProject(null);
+          }}
+          showToast={showToast}
+          onMemberAdded={(newMember) => {
+            // optional refresh
+          }}
         />
       )}
     </div>

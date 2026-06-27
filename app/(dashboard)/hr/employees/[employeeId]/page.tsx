@@ -47,7 +47,7 @@ interface EditFormData extends Omit<UpdateEmployeeData, 'status'> {
 
 export default function EmployeeDetailPage() {
   const params = useParams();
-  const employeeId = params.employeeId as string;
+  const employeeId = params?.employeeId as string;
   
   // State Management
   const [employee, setEmployee] = useState<Employee | null>(null);

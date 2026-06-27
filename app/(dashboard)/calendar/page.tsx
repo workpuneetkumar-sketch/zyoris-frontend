@@ -118,31 +118,31 @@ export default function CalendarPage() {
     const days = view === "month" ? getDaysInMonth(currentDate) : getDaysInWeek(currentDate);
 
     return (
-        <div className="flex flex-col h-[calc(100vh-theme(spacing.16))] p-6 bg-gray-50/50">
+        <div className="flex flex-col h-[calc(100vh-theme(spacing.16))] p-4 md:p-6 bg-gray-50/50">
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Calendar</h1>
-                    <p className="text-sm text-gray-500 mt-1">Manage your schedule, tasks, and meetings</p>
+                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">Calendar</h1>
+                    <p className="text-[15px] text-gray-500 mt-1.5 font-medium">Manage your schedule, tasks, and meetings</p>
                 </div>
-                <div className="flex items-center gap-4">
-                    <div className="flex bg-white rounded-lg p-1 border border-gray-200">
+                <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                    <div className="flex bg-white/50 backdrop-blur-sm rounded-xl p-1 border border-gray-200 shadow-sm">
                         <button
                             onClick={() => setView("month")}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${view === "month" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
+                            className={`px-4 py-2 text-[13px] font-semibold rounded-lg transition-all duration-200 ${view === "month" ? "bg-white shadow-sm text-blue-700" : "text-gray-500 hover:text-gray-900 hover:bg-white/50"}`}
                         >
                             Month
                         </button>
                         <button
                             onClick={() => setView("week")}
-                            className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${view === "week" ? "bg-blue-50 text-blue-700" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"}`}
+                            className={`px-4 py-2 text-[13px] font-semibold rounded-lg transition-all duration-200 ${view === "week" ? "bg-white shadow-sm text-blue-700" : "text-gray-500 hover:text-gray-900 hover:bg-white/50"}`}
                         >
                             Week
                         </button>
                     </div>
                     <button
                         onClick={() => { setEditingMeeting(null); setIsModalOpen(true); }}
-                        className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+                        className="flex items-center justify-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200 w-full md:w-auto"
                     >
                         <Plus size={18} /> Schedule Meeting
                     </button>
@@ -151,22 +151,22 @@ export default function CalendarPage() {
 
             {/* Calendar Controls */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex-1 flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-4">
-                        <button onClick={prevPeriod} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"><ChevronLeft size={20} /></button>
-                        <h2 className="text-lg font-semibold text-gray-900 min-w-[160px] text-center">
+                <div className="flex flex-col sm:flex-row items-center justify-between px-4 md:px-6 py-5 bg-gray-50/50 border-b border-gray-100 gap-4">
+                    <div className="flex items-center gap-2 md:gap-4 w-full sm:w-auto justify-between sm:justify-start">
+                        <button onClick={prevPeriod} className="p-2 hover:bg-white hover:shadow-sm rounded-full text-gray-500 transition-all duration-200"><ChevronLeft size={20} /></button>
+                        <h2 className="text-base md:text-lg font-bold tracking-tight text-gray-900 min-w-[140px] md:min-w-[160px] text-center">
                             {view === "week" ? "Week of " : ""}{formatMonthYear(currentDate)}
                         </h2>
-                        <button onClick={nextPeriod} className="p-2 hover:bg-gray-100 rounded-full text-gray-500 transition-colors"><ChevronRight size={20} /></button>
+                        <button onClick={nextPeriod} className="p-2 hover:bg-white hover:shadow-sm rounded-full text-gray-500 transition-all duration-200"><ChevronRight size={20} /></button>
                     </div>
-                    <button onClick={() => setCurrentDate(new Date())} className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors px-3 py-1.5 hover:bg-blue-50 rounded-lg">Today</button>
+                    <button onClick={() => setCurrentDate(new Date())} className="text-[13px] font-bold text-blue-600 hover:text-blue-700 transition-colors px-4 py-2 hover:bg-blue-50 rounded-xl w-full sm:w-auto border sm:border-none border-gray-200">Today</button>
                 </div>
 
                 {/* Calendar Grid */}
                 <div className="flex-1 flex flex-col min-h-0">
                     <div className="grid grid-cols-7 border-b border-gray-100 shrink-0">
                         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
-                            <div key={day} className="py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <div key={day} className="py-2 md:py-3 text-center text-[10px] md:text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 {day}
                             </div>
                         ))}
@@ -180,22 +180,22 @@ export default function CalendarPage() {
                             return (
                                 <div 
                                     key={i} 
-                                    className={`min-h-[100px] border-r border-b border-gray-100 p-2 cursor-pointer transition-colors ${!isCurrentMonth && view === "month" ? "bg-gray-50" : "bg-white hover:bg-gray-50"}`}
+                                    className={`min-h-[80px] md:min-h-[100px] border-r border-b border-gray-100 p-1 md:p-2 cursor-pointer transition-colors ${!isCurrentMonth && view === "month" ? "bg-gray-50" : "bg-white hover:bg-gray-50"}`}
                                     onClick={() => setSelectedDate(date)}
                                 >
-                                    <div className="flex justify-between items-start mb-2">
-                                        <span className={`w-7 h-7 flex items-center justify-center rounded-full text-sm ${isToday ? "bg-blue-600 text-white font-medium shadow-sm" : !isCurrentMonth && view === "month" ? "text-gray-400" : "text-gray-700 font-medium"}`}>
+                                    <div className="flex justify-between items-start mb-1 md:mb-2">
+                                        <span className={`w-8 h-8 flex items-center justify-center rounded-full text-[13px] transition-all duration-200 ${isToday ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-bold shadow-md shadow-blue-500/30" : !isCurrentMonth && view === "month" ? "text-gray-400 font-medium" : "text-gray-700 font-bold hover:bg-gray-100"}`}>
                                             {date.getDate()}
                                         </span>
                                     </div>
-                                    <div className="flex flex-col gap-1 overflow-y-auto max-h-[80px] no-scrollbar">
+                                    <div className="flex flex-col gap-1 overflow-y-auto max-h-[60px] md:max-h-[80px] no-scrollbar">
                                         {dayMeetings.map(m => (
-                                            <div key={m.id} className="truncate text-xs px-2 py-1 rounded bg-purple-50 text-purple-700 border border-purple-100 font-medium">
+                                            <div key={m.id} className="truncate text-[10px] md:text-xs px-1 md:px-2 py-0.5 md:py-1 rounded bg-purple-50 text-purple-700 border border-purple-100 font-medium">
                                                 {formatTime(m.startTime)} {m.title}
                                             </div>
                                         ))}
                                         {dayTasks.map(t => (
-                                            <div key={t.id} className="truncate text-xs px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-100">
+                                            <div key={t.id} className="truncate text-[10px] md:text-xs px-1 md:px-2 py-0.5 md:py-1 rounded bg-blue-50 text-blue-700 border border-blue-100">
                                                 {t.title}
                                             </div>
                                         ))}
@@ -209,30 +209,35 @@ export default function CalendarPage() {
 
             {/* Selected Date Drawer/Details */}
             {selectedDate && (
-                <div className="mt-6 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                        <CalendarIcon size={20} className="text-blue-600" />
+                <div className="fixed inset-0 z-50 bg-white overflow-y-auto p-4 md:static md:mt-6 md:rounded-3xl md:shadow-md md:border md:border-gray-100 md:p-8 md:z-auto bg-gradient-to-b from-white to-gray-50/30">
+                    <div className="md:hidden flex items-center mb-6">
+                        <button onClick={() => setSelectedDate(null)} className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-200">
+                            <ChevronLeft size={18} /> Back to Calendar
+                        </button>
+                    </div>
+                    <h3 className="text-xl font-bold tracking-tight text-gray-900 mb-6 flex items-center gap-2">
+                        <CalendarIcon size={22} className="text-blue-600" />
                         Schedule for {selectedDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })}
                     </h3>
-                    <div className="grid grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                             <h4 className="text-sm font-medium text-gray-500 uppercase tracking-wider mb-3">Meetings</h4>
                             <div className="space-y-2">
                                 {getItemsForDay(selectedDate).dayMeetings.length > 0 ? getItemsForDay(selectedDate).dayMeetings.map(m => (
-                                    <div key={m.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-                                        <div className="flex items-center justify-between">
-                                            <p className="font-medium text-gray-900">{m.title}</p>
+                                    <div key={m.id} className="p-3 bg-gray-50 rounded-xl border border-gray-100 flex flex-col">
+                                        <div className="flex items-center justify-between mb-1.5">
+                                            <p className="font-medium text-gray-900 line-clamp-1">{m.title}</p>
                                             <button 
                                                 onClick={() => {
                                                     setEditingMeeting(m);
                                                     setIsModalOpen(true);
                                                 }} 
-                                                className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                                className="text-[11px] uppercase tracking-wider text-blue-600 hover:text-blue-700 font-bold px-2 py-1 bg-blue-50 hover:bg-blue-100 rounded shrink-0 ml-2 transition-colors"
                                             >
                                                 Edit
                                             </button>
                                         </div>
-                                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {formatTime(m.startTime)} - {formatTime(m.endTime)}</p>
+                                        <p className="text-xs text-gray-500 flex items-center gap-1.5"><Clock size={12}/> {formatTime(m.startTime)} - {formatTime(m.endTime)}</p>
                                     </div>
                                 )) : <p className="text-sm text-gray-400">No meetings scheduled.</p>}
                             </div>
@@ -348,13 +353,13 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate, editing
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
             <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                <div className="flex items-center justify-between px-4 md:px-6 py-4 border-b border-gray-100">
                     <h2 className="text-lg font-semibold text-gray-900">{editingMeeting ? "Edit Meeting" : "Schedule Meeting"}</h2>
                     <button onClick={onClose} className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors">
                         <X size={18} />
                     </button>
                 </div>
-                <div className="p-6 overflow-y-auto">
+                <div className="p-4 md:p-6 overflow-y-auto">
                     <form id="meeting-form" onSubmit={handleSubmit} className="space-y-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Title <span className="text-red-500">*</span></label>
@@ -364,7 +369,7 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate, editing
                             <label className="block text-sm font-medium text-gray-700 mb-1">Date <span className="text-red-500">*</span></label>
                             <input required value={date} onChange={e => setDate(e.target.value)} type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Start Time <span className="text-red-500">*</span></label>
                                 <input required value={startTime} onChange={e => setStartTime(e.target.value)} type="time" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" />
@@ -376,7 +381,7 @@ function ScheduleMeetingModal({ isOpen, onClose, onSuccess, initialDate, editing
                         </div>
                     </form>
                 </div>
-                <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
+                <div className="px-4 md:px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
                     <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors">Cancel</button>
                     <button type="submit" form="meeting-form" disabled={loading} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors disabled:opacity-50">
                         {loading ? "Saving..." : editingMeeting ? "Update Meeting" : "Schedule Meeting"}

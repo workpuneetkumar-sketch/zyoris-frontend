@@ -1,7 +1,7 @@
 import api from "@/lib/api/api";
 import { fetchLeads } from "@/lib/api/leadsApi";
 import { fetchDeals } from "@/lib/api/dealsApi";
-import { getProjects } from "@/lib/api/projectsApi";
+import { getProjects, getProjectById } from "@/lib/api/projectsApi";
 import { getInvoices } from "@/lib/api/finance/invoicesApi";
 import { fetchExpenses } from "@/lib/api/finance/expenseApi";
 
@@ -86,7 +86,7 @@ export async function fetchReportData(filters: ReportFilters): Promise<ReportDat
           status: status || "All Status",
           source: "All Sources",
           owner: "All Owners",
-          search: search || "", // API handles search
+          search: search || "",
         });
         rawData = response.leads || [];
         columns = ["name", "email", "company", "status", "source", "createdAt", "assignedTo"];
@@ -102,8 +102,28 @@ export async function fetchReportData(filters: ReportFilters): Promise<ReportDat
 
       case "PROJECTS": {
         const projects = await getProjects();
-        rawData = projects || [];
-        columns = ["name", "client", "status", "progress", "startDate", "endDate", "memberCount"];
+        if (!projects || projects.length === 0) {
+          rawData = [];
+          columns = ["name", "client", "status", "startDate", "endDate", "memberCount"];
+          break;
+        }
+
+        const detailedProjects = await Promise.all(
+          projects.map(async (project) => {
+            try {
+              const detail = await getProjectById(project.id);
+              return {
+                ...project,
+                members: detail.members || [],
+              };
+            } catch (e) {
+              return { ...project, members: [] };
+            }
+          })
+        );
+
+        rawData = detailedProjects;
+        columns = ["name", "client", "status", "startDate", "endDate", "memberCount"];
         break;
       }
 
@@ -117,16 +137,16 @@ export async function fetchReportData(filters: ReportFilters): Promise<ReportDat
         break;
       }
 
-      case "EXPENSES": {
-        const expenses = await fetchExpenses({
-          status: status !== "ALL" ? status : undefined,
-          startDate,
-          endDate,
-        });
-        rawData = expenses || [];
-        columns = ["category", "amount", "description", "status", "expenseDate", "submittedBy"];
-        break;
-      }
+    case "EXPENSES": {
+  const expenses = await fetchExpenses({
+    status: status !== "ALL" ? status : undefined,
+    startDate,
+    endDate,
+  });
+  rawData = expenses || [];
+  columns = ["category", "amount", "description", "status", "expenseDate", "createdAt"]; // changed
+  break;
+}
 
       case "CAMPAIGNS": {
         const campaigns = await getCampaigns({ 

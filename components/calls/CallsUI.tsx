@@ -66,10 +66,10 @@ function CallModal({ onClose, onSave }: CallModalProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
             <div className="bg-gray-50 w-full max-w-lg rounded-2xl shadow-xl overflow-hidden">
-                <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
+                <div className="flex items-center justify-between px-6 py-5 bg-white border-b border-gray-100">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">Log Call</h2>
-                        <p className="text-sm text-gray-400 mt-0.5">Record a new call interaction</p>
+                        <h2 className="text-xl font-semibold tracking-tight text-gray-900">Log Call</h2>
+                        <p className="text-sm text-gray-500 mt-1">Record a new call interaction</p>
                     </div>
                     <button
                         onClick={onClose}
@@ -136,17 +136,17 @@ function CallModal({ onClose, onSave }: CallModalProps) {
                     </div>
                 </div>
 
-                <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-200">
+                <div className="flex items-center justify-end gap-3 px-6 py-5 bg-gray-50/50 border-t border-gray-100">
                     <button
                         onClick={onClose}
-                        className="h-10 px-5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                        className="h-10 px-5 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-white hover:shadow-sm transition-all duration-200"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={loading}
-                        className="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-70 transition-colors"
+                        className="flex items-center gap-2 h-10 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-bold hover:shadow-md hover:-translate-y-0.5 disabled:opacity-70 disabled:hover:translate-y-0 disabled:shadow-none transition-all duration-200 shadow-sm shadow-blue-200"
                     >
                         {loading ? "Saving..." : "Log Call"}
                     </button>
@@ -183,16 +183,16 @@ export function CallsUI({
 
     return (
         <div className="min-h-full">
-            <div className="flex items-start justify-between mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">Calls</h1>
-                    <p className="text-sm text-gray-400 mt-0.5">Manage and track your call logs.</p>
+                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">Calls</h1>
+                    <p className="text-[15px] text-gray-500 mt-1.5 font-medium">Manage and track your call logs</p>
                 </div>
                 <button
                     onClick={() => setIsModalOpen(true)}
-                    className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                    className="flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
                 >
-                    <Plus size={15} />
+                    <Plus size={18} />
                     Log Call
                 </button>
             </div>
@@ -231,10 +231,10 @@ export function CallsUI({
                                     <tr key={call.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                             <div className="flex items-center gap-2.5">
-                                                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                                                    <Phone size={14} />
+                                                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-700 flex items-center justify-center shrink-0 shadow-sm border border-blue-200/50">
+                                                    <Phone size={16} />
                                                 </div>
-                                                <span className="font-medium text-gray-800">{call.contactName || call.contactId || "Unknown"}</span>
+                                                <span className="font-semibold text-gray-800 text-[14px]">{call.contactName || "Unknown Contact"}</span>
                                             </div>
                                         </td>
                                         <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">

@@ -11,19 +11,12 @@ import {
   AlertCircle,
   Loader2,
   User,
-  RefreshCw,
-  Zap,
-  Database,
 } from "lucide-react";
 import {
   getPortalDashboard,
   getPortalProjects,
   getPortalInvoices,
   getPortalDocuments,
-  getDemoDashboard,
-  getDemoProjects,
-  getDemoInvoices,
-  getDemoDocuments,
   PortalDashboardData,
   PortalProject,
   PortalInvoice,
@@ -74,22 +67,14 @@ const Skeleton = ({ className }: { className?: string }) => (
 
 /* ── Main Dashboard Component ───────────────────────────────────────── */
 export default function PortalDashboardPage() {
-  const [demoMode, setDemoMode] = useState(true); // start with demo data
   const [dashboardData, setDashboardData] = useState<PortalDashboardData | null>(null);
   const [projects, setProjects] = useState<PortalProject[]>([]);
   const [invoices, setInvoices] = useState<PortalInvoice[]>([]);
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDemoData = useCallback(() => {
-    setDashboardData(getDemoDashboard());
-    setProjects(getDemoProjects());
-    setInvoices(getDemoInvoices());
-    setDocuments(getDemoDocuments());
-  }, []);
-
-  const loadRealData = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -111,16 +96,8 @@ export default function PortalDashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (demoMode) {
-      loadDemoData();
-    } else {
-      loadRealData();
-    }
-  }, [demoMode, loadDemoData, loadRealData]);
-
-  const toggleMode = () => {
-    setDemoMode(!demoMode);
-  };
+    loadData();
+  }, [loadData]);
 
   // Safeguards
   const projectsCount = dashboardData?.projectsCount ?? projects.length;
@@ -129,135 +106,119 @@ export default function PortalDashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Welcome Banner + Toggle */}
+      {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 rounded-2xl p-6 sm:p-8 text-white shadow-lg">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-white/20 rounded-xl">
-              <User className="w-8 h-8 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-bold">Welcome back!</h1>
-              <p className="text-indigo-200 mt-1">
-                Here’s a quick overview of your projects, invoices, and documents.
-              </p>
-            </div>
+        <div className="flex items-center gap-4">
+          <div className="p-3 bg-white/20 rounded-xl">
+            <User className="w-8 h-8 text-white" />
           </div>
-          <button
-            onClick={toggleMode}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm rounded-xl text-sm font-medium transition-colors"
-          >
-            {demoMode ? (
-              <>
-                <Database size={18} /> Switch to Live Data
-              </>
-            ) : (
-              <>
-                <Zap size={18} /> View Demo Data
-              </>
-            )}
-          </button>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold">Welcome back!</h1>
+            <p className="text-indigo-200 mt-1">
+              Here’s a quick overview of your projects, invoices, and documents.
+            </p>
+          </div>
         </div>
       </div>
 
-      {/* Stats Cards */}
-      {loading && !demoMode ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => (
-            <Skeleton key={i} className="h-24 rounded-2xl" />
-          ))}
+      {/* Loading state */}
+      {loading ? (
+        <div className="space-y-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-2xl" />
+            ))}
+          </div>
+          <SectionSkeleton />
+          <SectionSkeleton />
+          <SectionSkeleton />
         </div>
       ) : error ? (
         <div className="p-4 bg-red-50 border border-red-200 rounded-xl flex items-center gap-3 text-red-700">
           <AlertCircle size={20} />
           {error}
-          <button onClick={loadRealData} className="ml-auto text-sm font-medium underline">
+          <button
+            onClick={loadData}
+            className="ml-auto text-sm font-medium underline hover:text-red-800"
+          >
             Retry
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard
-            icon={<FolderKanban className="w-6 h-6 text-indigo-600" />}
-            label="Projects"
-            value={projectsCount}
-            color="bg-indigo-50"
-          />
-          <StatCard
-            icon={<Receipt className="w-6 h-6 text-emerald-600" />}
-            label="Invoices"
-            value={invoicesCount}
-            color="bg-emerald-50"
-          />
-          <StatCard
-            icon={<FileText className="w-6 h-6 text-amber-600" />}
-            label="Documents"
-            value={documentsCount}
-            color="bg-amber-50"
-          />
-        </div>
-      )}
+        <>
+          {/* Stats Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <StatCard
+              icon={<FolderKanban className="w-6 h-6 text-indigo-600" />}
+              label="Projects"
+              value={projectsCount}
+              color="bg-indigo-50"
+            />
+            <StatCard
+              icon={<Receipt className="w-6 h-6 text-emerald-600" />}
+              label="Invoices"
+              value={invoicesCount}
+              color="bg-emerald-50"
+            />
+            <StatCard
+              icon={<FileText className="w-6 h-6 text-amber-600" />}
+              label="Documents"
+              value={documentsCount}
+              color="bg-amber-50"
+            />
+          </div>
 
-      {/* Data Sections (always visible, full lists) */}
-      {loading && !demoMode ? (
-        <div className="space-y-8">
-          <SectionSkeleton />
-          <SectionSkeleton />
-          <SectionSkeleton />
-        </div>
-      ) : error ? null : (
-        <div className="space-y-8">
-          {/* Projects Section */}
-          <Section
-            title="Your Projects"
-            icon={<FolderKanban className="w-5 h-5 text-indigo-500" />}
-            count={projects.length}
-          >
-            {projects.length === 0 ? (
-              <EmptyMessage>No projects assigned to you yet.</EmptyMessage>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {projects.map((project) => (
-                  <ProjectCard key={project.id} project={project} />
-                ))}
-              </div>
-            )}
-          </Section>
+          {/* Data Sections */}
+          <div className="space-y-8">
+            <Section
+              title="Your Projects"
+              icon={<FolderKanban className="w-5 h-5 text-indigo-500" />}
+              count={projects.length}
+            >
+              {projects.length === 0 ? (
+                <EmptyMessage>No projects assigned to you yet.</EmptyMessage>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {projects.map((project) => (
+                    <ProjectCard key={project.id} project={project} />
+                  ))}
+                </div>
+              )}
+            </Section>
 
-          {/* Invoices Section */}
-          <Section
-            title="Your Invoices"
-            icon={<Receipt className="w-5 h-5 text-emerald-500" />}
-            count={invoices.length}
-          >
-            {invoices.length === 0 ? (
-              <EmptyMessage>No invoices available.</EmptyMessage>
-            ) : (
-              <div className="space-y-3">
-                {invoices.map((inv) => (
-                  <InvoiceRow key={inv.id} invoice={inv} />
-                ))}
-              </div>
-            )}
-          </Section>
+            <Section
+              title="Your Invoices"
+              icon={<Receipt className="w-5 h-5 text-emerald-500" />}
+              count={invoices.length}
+            >
+              {invoices.length === 0 ? (
+                <EmptyMessage>No invoices available.</EmptyMessage>
+              ) : (
+                <div className="space-y-3">
+                  {invoices.map((inv) => (
+                    <InvoiceRow key={inv.id} invoice={inv} />
+                  ))}
+                </div>
+              )}
+            </Section>
 
-          {/* Documents Section */}
-          <Section
-            title="Your Documents"
-            icon={<FileText className="w-5 h-5 text-amber-500" />}
-            count={documents.length}
-          >
-            {documents.length === 0 ? (
-              <EmptyMessage>No documents shared yet.</EmptyMessage>
-            ) : (
-              <div className="space-y-3">
-                {documents.map((doc) => (
-                  <DocumentRow key={doc.id} document={doc} />
-                ))}
-              </div>
-            )}
-          </Section>
-        </div>
+            <Section
+              title="Your Documents"
+              icon={<FileText className="w-5 h-5 text-amber-500" />}
+              count={documents.length}
+            >
+              {documents.length === 0 ? (
+                <EmptyMessage>No documents shared yet.</EmptyMessage>
+              ) : (
+                <div className="space-y-3">
+                  {documents.map((doc) => (
+                    <DocumentRow key={doc.id} document={doc} />
+                  ))}
+                </div>
+              )}
+            </Section>
+          </div>
+        </>
       )}
     </div>
   );
@@ -330,7 +291,6 @@ function SectionSkeleton() {
   );
 }
 
-/* ── Project Card ───────────────────────────────────────────────────── */
 function ProjectCard({ project }: { project: PortalProject }) {
   return (
     <div className="bg-gray-50 rounded-xl p-4 hover:bg-gray-100 transition-colors">
@@ -363,7 +323,6 @@ function ProjectCard({ project }: { project: PortalProject }) {
   );
 }
 
-/* ── Invoice Row ─────────────────────────────────────────────────────── */
 function InvoiceRow({ invoice }: { invoice: PortalInvoice }) {
   return (
     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
@@ -396,7 +355,6 @@ function InvoiceRow({ invoice }: { invoice: PortalInvoice }) {
   );
 }
 
-/* ── Document Row ────────────────────────────────────────────────────── */
 function DocumentRow({ document }: { document: PortalDocument }) {
   return (
     <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
