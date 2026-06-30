@@ -1,5 +1,3 @@
-// components/invoices/InvoiceTable.tsx
-
 "use client";
 
 import React from "react";
@@ -10,7 +8,6 @@ import {
   RefreshCw,
   X,
   Eye,
-  Download,
   Edit2,
   Send,
   CheckCircle2,
@@ -181,10 +178,10 @@ interface InvoiceTableProps {
   onResetFilters: () => void;
   onRefresh: () => void;
   onViewInvoice: (id: string) => void;
-  onDownloadPDF: (id: string) => void;
   onStatusUpdate: (id: string, status: "SENT" | "PAID") => Promise<void>;
   onCreateClick: () => void;
   onExportExcel: () => void;
+  onPreviewInvoice: (id: string) => void; // new prop for preview
 }
 
 export function InvoiceTable({
@@ -200,9 +197,9 @@ export function InvoiceTable({
   onResetFilters,
   onRefresh,
   onViewInvoice,
-  onDownloadPDF,
   onStatusUpdate,
   onCreateClick,
+  onPreviewInvoice,
 }: InvoiceTableProps) {
   // Filter invoices
   const filteredInvoices = invoices.filter(inv => {
@@ -332,8 +329,9 @@ export function InvoiceTable({
                           <button onClick={() => onViewInvoice(inv.id)} className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500" title="View">
                             <Eye size={14} />
                           </button>
-                          <button onClick={() => onDownloadPDF(inv.id)} className="p-1.5 hover:bg-green-50 rounded-lg text-green-500" title="PDF">
-                            <Download size={14} />
+                          {/* Preview button – opens the invoice preview modal */}
+                          <button onClick={() => onPreviewInvoice(inv.id)} className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500" title="Preview">
+                            <FileSpreadsheet size={14} />
                           </button>
                           {inv.status !== "PAID" && inv.status !== "OVERDUE" && (
                             <select 
