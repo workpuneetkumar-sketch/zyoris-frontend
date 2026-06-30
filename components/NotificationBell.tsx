@@ -7,7 +7,7 @@
 // and the appropriate loading / empty / error states — ready to wire up to a
 // real API whenever the backend ships the endpoint.
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Bell, X, CheckCheck, Info } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -78,21 +78,61 @@ interface NotificationBellProps {
     notifications?: AppNotification[];
     loading?: boolean;
     error?: string | null;
+    onMarkRead?: (id: string) => Promise<void> | void;
+    onMarkAllRead?: () => Promise<void> | void;
 }
 
 export function NotificationBell({
     notifications: externalNotifications,
     loading = false,
     error = null,
+    onMarkRead,
+    onMarkAllRead,
 }: NotificationBellProps) {
     // Local state — used when no external notifications are provided
     const [localNotifications, setLocalNotifications] = useState<AppNotification[]>([]);
     const [open, setOpen] = useState(false);
+    const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
     const panelRef = useRef<HTMLDivElement>(null);
     const buttonRef = useRef<HTMLButtonElement>(null);
 
     const notifications = externalNotifications ?? localNotifications;
     const unreadCount = notifications.filter((n) => !n.read).length;
+
+    // Group notifications by date (memoized to avoid repeated sorting)
+    const groupedNotifications = useMemo(() => {
+        const groups: { label: string; notifications: AppNotification[] }[] = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const last7Days = new Date(today);
+        last7Days.setDate(last7Days.getDate() - 7);
+
+        const sortedNotifications = [...notifications].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+
+        const todayGroup: AppNotification[] = [];
+        const yesterdayGroup: AppNotification[] = [];
+        const last7DaysGroup: AppNotification[] = [];
+        const earlierGroup: AppNotification[] = [];
+
+        sortedNotifications.forEach((n) => {
+            const date = new Date(n.createdAt);
+            if (date >= today) todayGroup.push(n);
+            else if (date >= yesterday) yesterdayGroup.push(n);
+            else if (date >= last7Days) last7DaysGroup.push(n);
+            else earlierGroup.push(n);
+        });
+
+        if (todayGroup.length > 0) groups.push({ label: "Today", notifications: todayGroup });
+        if (yesterdayGroup.length > 0) groups.push({ label: "Yesterday", notifications: yesterdayGroup });
+        if (last7DaysGroup.length > 0) groups.push({ label: "Last 7 Days", notifications: last7DaysGroup });
+        if (earlierGroup.length > 0) groups.push({ label: "Earlier", notifications: earlierGroup });
+
+        return groups;
+    }, [notifications]);
 
     // Close panel on outside click
     useEffect(() => {
@@ -110,16 +150,30 @@ export function NotificationBell({
         return () => document.removeEventListener("mousedown", handleClickOutside);
     }, [open]);
 
-    function handleMarkRead(id: string) {
-        if (externalNotifications) return; // managed externally
-        setLocalNotifications((prev) =>
-            prev.map((n) => (n.id === id ? { ...n, read: true } : n))
-        );
+    async function handleMarkRead(id: string) {
+        if (onMarkRead) {
+            await onMarkRead(id);
+        } else if (!externalNotifications) {
+            setLocalNotifications((prev) =>
+                prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+            );
+        }
     }
 
-    function handleMarkAllRead() {
-        if (externalNotifications) return;
-        setLocalNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    async function handleMarkAllRead() {
+        if (unreadCount === 0 || isMarkingAllRead) return;
+        
+        setIsMarkingAllRead(true);
+        try {
+            if (onMarkAllRead) {
+                await onMarkAllRead();
+            } else if (!externalNotifications) {
+                // Optimistic update for local state
+                setLocalNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+            }
+        } finally {
+            setIsMarkingAllRead(false);
+        }
     }
 
     return (
@@ -160,16 +214,21 @@ export function NotificationBell({
                         {unreadCount > 0 && (
                             <button
                                 onClick={handleMarkAllRead}
-                                className="flex items-center gap-1 text-[12px] text-blue-600 font-medium hover:underline"
+                                disabled={isMarkingAllRead}
+                                className={`flex items-center gap-1 text-[12px] font-medium transition-colors ${
+                                    isMarkingAllRead
+                                        ? "text-gray-400 cursor-not-allowed"
+                                        : "text-blue-600 hover:underline"
+                                }`}
                             >
                                 <CheckCheck size={13} />
-                                Mark all read
+                                {isMarkingAllRead ? "Marking..." : "Mark all read"}
                             </button>
                         )}
                     </div>
 
                     {/* Content */}
-                    <div className="max-h-[360px] overflow-y-auto">
+                    <div className="max-h-[360px] overflow-y-auto relative">
                         {loading ? (
                             <div className="divide-y divide-gray-50">
                                 {Array.from({ length: 3 }).map((_, i) => (
@@ -193,13 +252,26 @@ export function NotificationBell({
                                 <p className="text-[11px] text-gray-300 mt-0.5">You're all caught up!</p>
                             </div>
                         ) : (
-                            <div className="divide-y divide-gray-50">
-                                {notifications.map((n) => (
-                                    <NotificationItem
-                                        key={n.id}
-                                        notification={n}
-                                        onMarkRead={handleMarkRead}
-                                    />
+                            <div className="divide-y divide-gray-100">
+                                {groupedNotifications.map((group) => (
+                                    <div key={group.label}>
+                                        {/* Sticky Group Header */}
+                                        <div className="px-4 py-2 bg-gray-50/90 backdrop-blur-sm sticky top-0 z-10 border-y border-gray-100 first:border-t-0">
+                                            <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                                                {group.label}
+                                            </h4>
+                                        </div>
+                                        {/* Group Notifications */}
+                                        <div className="divide-y divide-gray-50">
+                                            {group.notifications.map((n) => (
+                                                <NotificationItem
+                                                    key={n.id}
+                                                    notification={n}
+                                                    onMarkRead={handleMarkRead}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
                                 ))}
                             </div>
                         )}
@@ -218,3 +290,4 @@ export function NotificationBell({
         </div>
     );
 }
+
