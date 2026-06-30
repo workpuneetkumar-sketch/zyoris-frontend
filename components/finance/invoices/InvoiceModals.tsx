@@ -1,5 +1,3 @@
-// components/invoices/InvoiceModals.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -13,8 +11,6 @@ import {
   XCircle,
   Loader2,
   Eye,
-  Download,
-  Printer,
   CheckCircle2,
   AlertCircle,
   Edit2,
@@ -26,7 +22,6 @@ import {
   createInvoice,
   updateInvoice,
   getInvoiceById,
-  downloadInvoicePdf,
 } from "@/lib/api/finance/invoicesApi";
 
 // ── Types ─────────────────────────────────────────────────
@@ -345,12 +340,6 @@ export function InvoiceDetailModal({
     } catch (err) { console.error(err); } finally { setUpdatingStatus(false); }
   };
 
-  const handleDownloadPDF = async () => {
-    try {
-      await downloadInvoicePdf(invoiceId);
-    } catch (err) { console.error(err); }
-  };
-
   if (loading) return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
       <div className="bg-white rounded-xl p-8"><Loader2 size={40} className="animate-spin text-blue-500" /></div>
@@ -379,10 +368,24 @@ export function InvoiceDetailModal({
               <StatusIcon size={12} /> {statusConfig.label}
             </span>
             <div className="flex gap-2">
-              {invoice.status === "DRAFT" && <button onClick={() => handleStatusUpdate("SENT")} disabled={updatingStatus} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg">Mark as Sent</button>}
-              {invoice.status === "SENT" && <button onClick={() => handleStatusUpdate("PAID")} disabled={updatingStatus} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg">Mark as Paid</button>}
-              <button onClick={handleDownloadPDF} className="flex items-center gap-1 px-3 py-1.5 bg-gray-600 hover:bg-gray-700 text-white text-sm rounded-lg"><Download size={14} /> PDF</button>
-              <button onClick={() => window.print()} className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-sm rounded-lg"><Printer size={14} /> Print</button>
+              {invoice.status === "DRAFT" && (
+                <button 
+                  onClick={() => handleStatusUpdate("SENT")} 
+                  disabled={updatingStatus} 
+                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg"
+                >
+                  Mark as Sent
+                </button>
+              )}
+              {invoice.status === "SENT" && (
+                <button 
+                  onClick={() => handleStatusUpdate("PAID")} 
+                  disabled={updatingStatus} 
+                  className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg"
+                >
+                  Mark as Paid
+                </button>
+              )}
             </div>
           </div>
 
@@ -427,7 +430,12 @@ export function InvoiceDetailModal({
             </tfoot>
           </table>
 
-          {invoice.notes && <div className="p-4 bg-gray-50 rounded-lg"><p className="text-xs text-gray-700 mb-1">Notes</p><p className="text-sm text-gray-700">{invoice.notes}</p></div>}
+          {invoice.notes && (
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <p className="text-xs text-gray-700 mb-1">Notes</p>
+              <p className="text-sm text-gray-700">{invoice.notes}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,5 +1,3 @@
-// app/(dashboard)/finance/invoices/page.tsx
-
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -19,6 +17,7 @@ import {
 import { CreateInvoiceModal, InvoiceDetailModal } from "@/components/finance/invoices/InvoiceModals";
 import { StatsCards } from "@/components/finance/invoices/InvoiceStats";
 import { InvoiceTable } from "@/components/finance/invoices/InvoiceTable";
+import { InvoicePreviewModal } from "@/components/finance/invoices/InvoicePreviewModal";
 import * as XLSX from "xlsx";
 
 // ── Types ─────────────────────────────────────────────────
@@ -74,6 +73,7 @@ export default function InvoicesPage() {
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
@@ -119,15 +119,6 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleDownloadPDF = async (id: string) => {
-    try {
-      const { downloadInvoicePdf } = await import("@/lib/api/finance/invoicesApi");
-      await downloadInvoicePdf(id);
-    } catch (err: any) {
-      setToast({ type: "error", message: err.message || "Failed to download PDF" });
-    }
-  };
-
   const handleExportExcel = () => {
     if (invoices.length === 0) {
       setToast({ type: "error", message: "No data to export" });
@@ -169,6 +160,13 @@ export default function InvoicesPage() {
       {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
       {showCreateModal && <CreateInvoiceModal onClose={() => setShowCreateModal(false)} onSuccess={handleCreateSuccess} setToast={setToast} />}
       {selectedInvoiceId && <InvoiceDetailModal invoiceId={selectedInvoiceId} onClose={() => setSelectedInvoiceId(null)} onStatusChange={handleStatusChange} setToast={setToast} />}
+      {previewInvoiceId && (
+        <InvoicePreviewModal
+          invoiceId={previewInvoiceId}
+          onClose={() => setPreviewInvoiceId(null)}
+          setToast={setToast}
+        />
+      )}
 
       <div className="px-6 py-6 max-w-[1400px] mx-auto">
         {/* Header */}
@@ -204,10 +202,10 @@ export default function InvoicesPage() {
           onResetFilters={handleResetFilters}
           onRefresh={loadInvoices}
           onViewInvoice={setSelectedInvoiceId}
-          onDownloadPDF={handleDownloadPDF}
           onStatusUpdate={handleStatusUpdate}
           onCreateClick={() => setShowCreateModal(true)}
           onExportExcel={handleExportExcel}
+          onPreviewInvoice={setPreviewInvoiceId}
         />
       </div>
 
