@@ -77,6 +77,23 @@ function Select({
     );
 }
 
+/** Returns a colour‑coded badge for a numeric lead score (0‑100). */
+function ScoreBadge({ score }: { score: number | undefined | null }) {
+    if (score == null || isNaN(Number(score))) return <span className="text-xs text-gray-300">—</span>;
+    const n = Number(score);
+    const cls =
+        n >= 70
+            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+            : n >= 40
+                ? "bg-amber-50 text-amber-700 border-amber-200"
+                : "bg-red-50 text-red-600 border-red-200";
+    return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold border ${cls}`}>
+            {n}
+        </span>
+    );
+}
+
 export function LeadsTable({
     leads,
     total,
@@ -211,7 +228,7 @@ export function LeadsTable({
                     <table className="w-full text-sm">
                         <thead>
                     <tr className="border-b border-gray-100">
-                        {["Lead Name", "Company", "Owner", "Status", "Created At", "Actions"].map((h) => (
+                        {["Lead Name", "Company", "Owner", "Status", "Score", "Created At", "Actions"].map((h) => (
                             <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                 {h}
                             </th>
@@ -222,7 +239,7 @@ export function LeadsTable({
                     {loading ? (
                         Array.from({ length: perPage }).map((_, i) => (
                             <tr key={i} className="border-b border-gray-50">
-                                {Array.from({ length: 6 }).map((_, j) => (
+                                {Array.from({ length: 7 }).map((_, j) => (
                                     <td key={j} className="px-5 py-4">
                                         <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
                                     </td>
@@ -231,7 +248,7 @@ export function LeadsTable({
                         ))
                     ) : safeLeads.length === 0 ? (
                         <tr>
-                            <td colSpan={6} className="text-center py-16 text-gray-400 text-sm">
+                            <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
                                 No leads found.
                             </td>
                         </tr>
@@ -272,6 +289,10 @@ export function LeadsTable({
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${statusInfo.style}`}>
                                         {statusInfo.emoji} {statusInfo.label}
                                     </span>
+                                </td>
+
+                                <td className="px-5 py-3.5 whitespace-nowrap">
+                                    <ScoreBadge score={lead.score} />
                                 </td>
 
                                 <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>

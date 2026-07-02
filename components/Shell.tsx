@@ -32,6 +32,7 @@ import {
   TrendingUp,
   Crown,
   Cog,
+  Shield,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -228,6 +229,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Operations",
         icon: Cog,
         roles: ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"],
+      },
+      {
+        href: "/admin",
+        label: "Admin",
+        icon: Shield,
+        roles: ["ADMIN"],
       },
     ],
   },
