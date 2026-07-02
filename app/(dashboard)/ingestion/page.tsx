@@ -12,7 +12,21 @@ export default function IngestionPage() {
     const [triggerMsg, setTriggerMsg] = useState<string | null>(null);
 
     useEffect(() => {
-        getIngestionSummaryApi().then(setSummary).catch(console.error);
+        // Normalise the summary response regardless of shape
+        getIngestionSummaryApi()
+            .then((raw: any) => {
+                // Accept { leads, deals, ... } or { totalRows, totalValue, ... } or nested { data: {...} }
+                const data = raw?.data && typeof raw.data === "object" ? raw.data : raw;
+                setSummary({
+                    leads:     typeof data.leads     === "number" ? data.leads     :
+                               typeof data.totalRows === "number" ? data.totalRows : 0,
+                    deals:     typeof data.deals     === "number" ? data.deals     : 0,
+                    expenses:  typeof data.expenses  === "number" ? data.expenses  :
+                               typeof data.totalValue=== "number" ? Math.round(data.totalValue) : 0,
+                    inventory: typeof data.inventory === "number" ? data.inventory : 0,
+                });
+            })
+            .catch(console.error);
         getLastAnalysisApi().then(setAnalysis).catch(console.error);
     }, []);
 
