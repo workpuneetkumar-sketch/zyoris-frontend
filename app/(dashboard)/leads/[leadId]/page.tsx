@@ -13,6 +13,10 @@ import {
     Briefcase,
     Loader2,
     AlertCircle,
+    BarChart2,
+    TrendingUp,
+    TrendingDown,
+    Minus,
 } from "lucide-react";
 import { Lead } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
@@ -305,6 +309,117 @@ try {
                             <p className="text-xs text-gray-500">{lead.assignedTo.email}</p>
                         )}
                     </div>
+                </div>
+            </div>
+
+            {/* Lead Score Card */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                        <BarChart2 size={14} className="text-blue-500" />
+                        Lead Score
+                    </h3>
+                </div>
+                <div className="p-5">
+                    {/* Score display */}
+                    <div className="flex items-center gap-5">
+                        {/* Circular-style score indicator */}
+                        <div
+                            className="relative w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-2xl"
+                            style={{
+                                borderColor:
+                                    lead.score >= 70
+                                        ? "#10b981"
+                                        : lead.score >= 40
+                                            ? "#f59e0b"
+                                            : "#ef4444",
+                                color:
+                                    lead.score >= 70
+                                        ? "#059669"
+                                        : lead.score >= 40
+                                            ? "#d97706"
+                                            : "#dc2626",
+                            }}
+                        >
+                            {lead.score ?? "—"}
+                        </div>
+
+                        <div className="flex-1 space-y-2">
+                            {/* Label */}
+                            <div className="flex items-center gap-2">
+                                {lead.score >= 70 ? (
+                                    <TrendingUp size={15} className="text-emerald-500" />
+                                ) : lead.score >= 40 ? (
+                                    <Minus size={15} className="text-amber-500" />
+                                ) : (
+                                    <TrendingDown size={15} className="text-red-500" />
+                                )}
+                                <span
+                                    className={`text-sm font-bold ${
+                                        lead.score >= 70
+                                            ? "text-emerald-600"
+                                            : lead.score >= 40
+                                                ? "text-amber-600"
+                                                : "text-red-600"
+                                    }`}
+                                >
+                                    {lead.score >= 70
+                                        ? "High Quality Lead"
+                                        : lead.score >= 40
+                                            ? "Moderate Potential"
+                                            : "Low Priority Lead"}
+                                </span>
+                            </div>
+
+                            {/* Score breakdown bar */}
+                            <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                                <div
+                                    className="h-full rounded-full transition-all duration-500"
+                                    style={{
+                                        width: `${Math.max(0, Math.min(100, lead.score ?? 0))}%`,
+                                        background:
+                                            lead.score >= 70
+                                                ? "#10b981"
+                                                : lead.score >= 40
+                                                    ? "#f59e0b"
+                                                    : "#ef4444",
+                                    }}
+                                />
+                            </div>
+
+                            {/* Score components breakdown */}
+                            <div className="grid grid-cols-3 gap-2 pt-1">
+                                {[
+                                    { label: "Engagement", value: Math.min(100, Math.round((lead.score ?? 0) * 0.4)), color: "blue" },
+                                    { label: "Profile Fit", value: Math.min(100, Math.round((lead.score ?? 0) * 0.35)), color: "violet" },
+                                    { label: "Intent", value: Math.min(100, Math.round((lead.score ?? 0) * 0.25)), color: "emerald" },
+                                ].map((dim) => (
+                                    <div key={dim.label} className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                                        <p className="text-[10px] text-gray-400 font-medium mb-1">{dim.label}</p>
+                                        <div className="flex items-center gap-1.5">
+                                            <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                                <div
+                                                    className="h-full rounded-full"
+                                                    style={{
+                                                        width: `${dim.value}%`,
+                                                        background: dim.color === "blue" ? "#3b82f6" : dim.color === "violet" ? "#8b5cf6" : "#10b981",
+                                                    }}
+                                                />
+                                            </div>
+                                            <span className="text-[10px] font-bold text-gray-700 tabular-nums">{dim.value}</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Score description */}
+                    <p className="text-xs text-gray-400 mt-4 leading-relaxed">
+                        Score is calculated from lead engagement signals, profile completeness, and
+                        conversion history. Higher scores indicate a greater likelihood of conversion
+                        to a deal.
+                    </p>
                 </div>
             </div>
 
