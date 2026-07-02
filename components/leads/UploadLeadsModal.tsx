@@ -126,7 +126,12 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   const pollJob = useCallback(async (id: string) => {
     try {
       const res = await getLeadImportStatus(id);
-      const job = res.data;
+      // API returns { success, data: { id, status, totalRows, ... } }
+      // but also guard against flat shape { id, status, totalRows, ... }
+      const job: LeadImportJobStatus =
+        res.data && typeof res.data === "object" && "id" in res.data
+          ? res.data
+          : (res as any).data ?? res.data;
       setJobStatus(job);
 
       if (job.status === "COMPLETED") {

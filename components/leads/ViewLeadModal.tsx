@@ -1,8 +1,8 @@
 "use client";
 
-import { Lead } from "@/types/leads";
+import { Lead, computeLeadScore } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
-import { Mail, Phone, MapPin, Building2, Tag, User, FileText } from "lucide-react";
+import { Mail, Phone, MapPin, Building2, Tag, FileText, DollarSign, BarChart2, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface ViewLeadModalProps {
     lead: Lead;
@@ -11,7 +11,22 @@ interface ViewLeadModalProps {
 
 export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
     const statusInfo = getLeadStatusInfo(lead.status);
-    
+    const score = lead.score ?? computeLeadScore(lead);
+
+    // Compute real breakdown components
+    const STATUS_SCORE: Record<string, number> = {
+        CLOSED: 40, NEGOTIATION: 36, PROPOSAL: 30, QUALIFIED: 24,
+        HOT: 20, CONTACTED: 14, WARM: 10, NEW: 6, DEAD: 0,
+    };
+    const SOURCE_SCORE: Record<string, number> = {
+        Referral: 20, LinkedIn: 16, Website: 12, "Cold Call": 8,
+    };
+    const statusPts   = STATUS_SCORE[lead.status ?? ""] ?? 6;
+    const val         = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
+    const valuePts    = val > 0 ? Math.min(30, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 30)) : 0;
+    const sourcePts   = SOURCE_SCORE[lead.source ?? ""] ?? 8;
+    const completePts = (lead.name ? 2 : 0) + (lead.email ? 2 : 0) + (lead.phone ? 2 : 0) + (lead.company ? 2 : 0) + (lead.status ? 2 : 0);
+
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
             <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -53,6 +68,80 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                         <div className="flex-1 min-w-[140px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
                             <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1">Created At</p>
                             <span className="text-sm font-medium text-gray-700">{lead.createdAt || "Unknown"}</span>
+                        </div>
+                    </div>
+
+                    {/* Score + Estimated Value row */}
+                    <div className="flex gap-4 flex-wrap">
+                        {/* Estimated Value */}
+                        <div className="flex-1 min-w-[160px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                <DollarSign size={12} className="text-emerald-500" /> Estimated Value
+                            </p>
+                            <span className="text-xl font-extrabold text-emerald-700">
+                                {val > 0 ? `$${val.toLocaleString()}` : "—"}
+                            </span>
+                        </div>
+
+                        {/* Score */}
+                        <div className="flex-1 min-w-[280px] bg-white p-4 rounded-xl border border-gray-100 shadow-sm">
+                            <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                                <BarChart2 size={12} className="text-blue-500" /> Lead Score
+                            </p>
+                            <div className="flex items-center gap-3">
+                                {/* Circle */}
+                                <div
+                                    className="w-12 h-12 rounded-full flex items-center justify-center border-4 font-extrabold text-sm shrink-0"
+                                    style={{
+                                        borderColor: score >= 70 ? "#10b981" : score >= 40 ? "#f59e0b" : "#ef4444",
+                                        color:       score >= 70 ? "#059669" : score >= 40 ? "#d97706" : "#dc2626",
+                                    }}
+                                >
+                                    {score}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 mb-1.5">
+                                        {score >= 70
+                                            ? <TrendingUp  size={12} className="text-emerald-500" />
+                                            : score >= 40
+                                                ? <Minus   size={12} className="text-amber-500" />
+                                                : <TrendingDown size={12} className="text-red-500" />}
+                                        <span className={`text-xs font-bold ${score >= 70 ? "text-emerald-600" : score >= 40 ? "text-amber-600" : "text-red-600"}`}>
+                                            {score >= 70 ? "High Quality" : score >= 40 ? "Moderate" : "Low Priority"}
+                                        </span>
+                                        <span className="ml-auto text-[10px] text-gray-400 font-semibold">{score}/100</span>
+                                    </div>
+                                    {/* Overall bar */}
+                                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden mb-2">
+                                        <div
+                                            className="h-full rounded-full"
+                                            style={{
+                                                width: `${score}%`,
+                                                background: score >= 70 ? "#10b981" : score >= 40 ? "#f59e0b" : "#ef4444",
+                                            }}
+                                        />
+                                    </div>
+                                    {/* Component mini-bars */}
+                                    <div className="grid grid-cols-4 gap-1.5">
+                                        {[
+                                            { label: "Status", pts: statusPts,   max: 40, color: "#3b82f6" },
+                                            { label: "Value",  pts: valuePts,    max: 30, color: "#8b5cf6" },
+                                            { label: "Source", pts: sourcePts,   max: 20, color: "#10b981" },
+                                            { label: "Profile",pts: completePts, max: 10, color: "#f59e0b" },
+                                        ].map((d) => (
+                                            <div key={d.label}>
+                                                <div className="flex justify-between text-[9px] text-gray-400 mb-0.5">
+                                                    <span>{d.label}</span>
+                                                    <span className="font-bold tabular-nums">{d.pts}</span>
+                                                </div>
+                                                <div className="w-full h-1 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div className="h-full rounded-full" style={{ width: `${Math.round((d.pts / d.max) * 100)}%`, background: d.color }} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

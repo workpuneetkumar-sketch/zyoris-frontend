@@ -234,10 +234,17 @@ export async function startLeadImport(file: File): Promise<LeadImportStartRespon
 /**
  * GET /leads/import/{jobId}
  * Poll import job status and progress.
+ * API response: { success: true, data: { id, status, totalRows, ... } }
  */
 export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobResponse> {
-    const res = await api.get<LeadImportJobResponse>(`/leads/import/${jobId}`);
-    return res.data;
+    const res = await api.get<any>(`/leads/import/${jobId}`);
+    const raw = res.data;
+    // Handle both { success, data: { ... } } and flat { id, status, ... }
+    const jobData: LeadImportJobStatus =
+        raw?.data && typeof raw.data === "object" && "id" in raw.data
+            ? raw.data
+            : raw;
+    return { success: raw?.success ?? true, data: jobData };
 }
 
 /**

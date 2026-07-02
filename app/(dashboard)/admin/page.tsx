@@ -174,18 +174,28 @@ export default function AdminDashboardPage() {
       setTeamMembers(Array.isArray(rawMembers) ? rawMembers : []);
 
       if (ingestionRes.data) {
-        // The /ingestion/summary endpoint may return different shapes:
-        // Shape A (expected): { leads, deals, expenses, inventory }
-        // Shape B (observed): { totalRows, totalValue, topProducts, byCategory, ... }
-        // Normalise both into a consistent { leads, deals, expenses, inventory } object
-        const raw = ingestionRes.data as Record<string, unknown>;
+        // /ingestion/summary can return multiple shapes:
+        // Shape A: { leads, deals, expenses, inventory }          ← ideal
+        // Shape B: { totalRows, totalValue, topProducts, ... }    ← observed
+        // Shape C: { data: { leads, deals, ... } }                ← nested
+        // Shape D: { data: { totalRows, totalValue, ... } }       ← nested + alt keys
+        const wrapper = ingestionRes.data as Record<string, unknown>;
+        const raw: Record<string, unknown> =
+          wrapper.data && typeof wrapper.data === "object"
+            ? (wrapper.data as Record<string, unknown>)
+            : wrapper;
+
         const normalised: Record<string, number> = {
-          leads:     typeof raw.leads     === "number" ? raw.leads     :
-                     typeof raw.totalRows === "number" ? raw.totalRows : 0,
-          deals:     typeof raw.deals     === "number" ? raw.deals     : 0,
-          expenses:  typeof raw.expenses  === "number" ? raw.expenses  :
-                     typeof raw.totalValue=== "number" ? Math.round(raw.totalValue as number) : 0,
-          inventory: typeof raw.inventory === "number" ? raw.inventory : 0,
+          leads:
+            typeof raw.leads     === "number" ? raw.leads     :
+            typeof raw.totalRows === "number" ? raw.totalRows : 0,
+          deals:
+            typeof raw.deals     === "number" ? raw.deals     : 0,
+          expenses:
+            typeof raw.expenses   === "number" ? raw.expenses   :
+            typeof raw.totalValue === "number" ? Math.round(raw.totalValue as number) : 0,
+          inventory:
+            typeof raw.inventory  === "number" ? raw.inventory  : 0,
         };
         setIngestionSummary(normalised);
       }
