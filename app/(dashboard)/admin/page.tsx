@@ -173,7 +173,22 @@ export default function AdminDashboardPage() {
       const rawMembers = teamRes.data?.members ?? teamRes.data?.data ?? teamRes.data ?? [];
       setTeamMembers(Array.isArray(rawMembers) ? rawMembers : []);
 
-      if (ingestionRes.data) setIngestionSummary(ingestionRes.data);
+      if (ingestionRes.data) {
+        // The /ingestion/summary endpoint may return different shapes:
+        // Shape A (expected): { leads, deals, expenses, inventory }
+        // Shape B (observed): { totalRows, totalValue, topProducts, byCategory, ... }
+        // Normalise both into a consistent { leads, deals, expenses, inventory } object
+        const raw = ingestionRes.data as Record<string, unknown>;
+        const normalised: Record<string, number> = {
+          leads:     typeof raw.leads     === "number" ? raw.leads     :
+                     typeof raw.totalRows === "number" ? raw.totalRows : 0,
+          deals:     typeof raw.deals     === "number" ? raw.deals     : 0,
+          expenses:  typeof raw.expenses  === "number" ? raw.expenses  :
+                     typeof raw.totalValue=== "number" ? Math.round(raw.totalValue as number) : 0,
+          inventory: typeof raw.inventory === "number" ? raw.inventory : 0,
+        };
+        setIngestionSummary(normalised);
+      }
     } catch (err: any) {
       console.error("Admin dashboard load error", err);
       setError("Failed to load admin dashboard data.");
@@ -233,7 +248,7 @@ export default function AdminDashboardPage() {
     ? [
         { label: "Leads Ingested", value: ingestionSummary.leads ?? 0, color: "blue" as const },
         { label: "Deals Ingested", value: ingestionSummary.deals ?? 0, color: "violet" as const },
-        { label: "Expenses", value: ingestionSummary.expenses ?? 0, color: "amber" as const },
+        { label: "Total Expenses", value: ingestionSummary.expenses ?? 0, color: "amber" as const },
         { label: "Inventory Items", value: ingestionSummary.inventory ?? 0, color: "emerald" as const },
       ]
     : [];
@@ -299,12 +314,20 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Data Ingestion Summary */}
-      {ingestionCards.length > 0 && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-          <div className="flex items-center gap-2 mb-4">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
             <Database size={16} className="text-blue-600" />
             <h3 className="text-sm font-bold text-gray-800">Data Warehouse Summary</h3>
           </div>
+          <button
+            onClick={() => router.push("/ingestion")}
+            className="text-xs text-blue-600 hover:underline font-semibold"
+          >
+            Manage →
+          </button>
+        </div>
+        {ingestionCards.length > 0 ? (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {ingestionCards.map((card) => {
               const colorMap = {
@@ -321,8 +344,19 @@ export default function AdminDashboardPage() {
               );
             })}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex flex-col items-center justify-center py-8 text-gray-400">
+            <Database size={28} className="text-gray-200 mb-2" />
+            <p className="text-sm">No ingestion data available yet.</p>
+            <button
+              onClick={() => router.push("/ingestion")}
+              className="mt-3 text-xs text-blue-600 hover:underline font-semibold"
+            >
+              Upload data →
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Team Directory + Role Distribution */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
