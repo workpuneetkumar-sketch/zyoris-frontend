@@ -15,17 +15,21 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
 
     // Compute real breakdown components
     const STATUS_SCORE: Record<string, number> = {
-        CLOSED: 40, NEGOTIATION: 36, PROPOSAL: 30, QUALIFIED: 24,
-        HOT: 20, CONTACTED: 14, WARM: 10, NEW: 6, DEAD: 0,
+        CLOSED: 25, NEGOTIATION: 23, PROPOSAL: 20, QUALIFIED: 17,
+        HOT: 15, WARM: 12, CONTACTED: 10, NEW: 8, DEAD: 2,
     };
     const SOURCE_SCORE: Record<string, number> = {
-        Referral: 20, LinkedIn: 16, Website: 12, "Cold Call": 8,
+        Referral: 12, LinkedIn: 10, Website: 8, "Cold Call": 6,
     };
-    const statusPts   = STATUS_SCORE[lead.status ?? ""] ?? 6;
+    const statusPts   = STATUS_SCORE[lead.status ?? ""] ?? 8;
     const val         = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
-    const valuePts    = val > 0 ? Math.min(30, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 30)) : 0;
+    const valuePts    = val > 0 ? Math.min(20, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 20)) : 0;
     const sourcePts   = SOURCE_SCORE[lead.source ?? ""] ?? 8;
-    const completePts = (lead.name ? 2 : 0) + (lead.email ? 2 : 0) + (lead.phone ? 2 : 0) + (lead.company ? 2 : 0) + (lead.status ? 2 : 0);
+    const completePts = Math.min(8,
+        (lead.name ? 2 : 0) + (lead.email ? 2 : 0) +
+        (lead.phone ? 1 : 0) + (lead.company ? 1 : 0) +
+        ((lead as any).city ? 1 : 0) + (lead.status ? 1 : 0)
+    );
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
@@ -124,10 +128,10 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                                     {/* Component mini-bars */}
                                     <div className="grid grid-cols-4 gap-1.5">
                                         {[
-                                            { label: "Status", pts: statusPts,   max: 40, color: "#3b82f6" },
-                                            { label: "Value",  pts: valuePts,    max: 30, color: "#8b5cf6" },
-                                            { label: "Source", pts: sourcePts,   max: 20, color: "#10b981" },
-                                            { label: "Profile",pts: completePts, max: 10, color: "#f59e0b" },
+                                            { label: "Status", pts: statusPts,   max: 25, color: "#3b82f6" },
+                                            { label: "Value",  pts: valuePts,    max: 20, color: "#8b5cf6" },
+                                            { label: "Source", pts: sourcePts,   max: 12, color: "#10b981" },
+                                            { label: "Profile",pts: completePts, max: 8,  color: "#f59e0b" },
                                         ].map((d) => (
                                             <div key={d.label}>
                                                 <div className="flex justify-between text-[9px] text-gray-400 mb-0.5">

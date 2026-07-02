@@ -324,26 +324,28 @@ try {
                     {(() => {
                         // Compute the real component breakdown
                         const STATUS_SCORE: Record<string, number> = {
-                            CLOSED: 40, NEGOTIATION: 36, PROPOSAL: 30, QUALIFIED: 24,
-                            HOT: 20, CONTACTED: 14, WARM: 10, NEW: 6, DEAD: 0,
+                            CLOSED: 25, NEGOTIATION: 23, PROPOSAL: 20, QUALIFIED: 17,
+                            HOT: 15, WARM: 12, CONTACTED: 10, NEW: 8, DEAD: 2,
                         };
                         const SOURCE_SCORE: Record<string, number> = {
-                            Referral: 20, LinkedIn: 16, Website: 12, "Cold Call": 8,
+                            Referral: 12, LinkedIn: 10, Website: 8, "Cold Call": 6,
                         };
-                        const statusPts  = STATUS_SCORE[lead.status ?? ""] ?? 6;
+                        const statusPts  = STATUS_SCORE[lead.status ?? ""] ?? 8;
                         const val        = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
-                        const valuePts   = val > 0 ? Math.min(30, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 30)) : 0;
+                        const valuePts   = val > 0 ? Math.min(20, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 20)) : 0;
                         const sourcePts  = SOURCE_SCORE[lead.source ?? ""] ?? 8;
-                        const completePts=
+                        const completePts= Math.min(8,
                             (lead.name ? 2 : 0) + (lead.email ? 2 : 0) +
-                            (lead.phone ? 2 : 0) + (lead.company ? 2 : 0) + (lead.status ? 2 : 0);
+                            (lead.phone ? 1 : 0) + (lead.company ? 1 : 0) +
+                            ((lead as any).city ? 1 : 0) + (lead.status ? 1 : 0)
+                        );
                         const totalScore = lead.score ?? computeLeadScore(lead);
 
                         const dims = [
-                            { label: "Status",       pts: statusPts,   max: 40, color: "#3b82f6", desc: `${lead.status ?? "—"} = ${statusPts}/40 pts` },
-                            { label: "Est. Value",   pts: valuePts,    max: 30, color: "#8b5cf6", desc: val > 0 ? `$${val.toLocaleString()} → ${valuePts}/30 pts` : "No value set" },
-                            { label: "Lead Source",  pts: sourcePts,   max: 20, color: "#10b981", desc: `${lead.source ?? "—"} = ${sourcePts}/20 pts` },
-                            { label: "Completeness", pts: completePts, max: 10, color: "#f59e0b", desc: `${completePts}/10 pts (name, email, phone, company, status)` },
+                            { label: "Status",       pts: statusPts,   max: 25, color: "#3b82f6", desc: `${lead.status ?? "—"} = ${statusPts}/25 pts` },
+                            { label: "Est. Value",   pts: valuePts,    max: 20, color: "#8b5cf6", desc: val > 0 ? `$${val.toLocaleString()} → ${valuePts}/20 pts` : "No value set" },
+                            { label: "Lead Source",  pts: sourcePts,   max: 12, color: "#10b981", desc: `${lead.source ?? "—"} = ${sourcePts}/12 pts` },
+                            { label: "Completeness", pts: completePts, max: 8,  color: "#f59e0b", desc: `${completePts}/8 pts (name, email, phone, company, city, status)` },
                         ];
 
                         return (
@@ -405,7 +407,7 @@ try {
                     })()}
 
                     <p className="text-xs text-gray-400 mt-4 leading-relaxed">
-                        Score out of 100: Status (40 pts) + Estimated Value (30 pts) + Lead Source (20 pts) + Profile Completeness (10 pts).
+                        Score out of 100: Base (35) + Status (25 pts) + Estimated Value (20 pts) + Lead Source (12 pts) + Profile Completeness (8 pts).
                     </p>
                 </div>
             </div>
