@@ -8,6 +8,7 @@ import {
     LeadsFilters,
     LeadsResponse,
     PER_PAGE,
+    computeLeadScore,
 } from "@/types/leads";
 
 // ── GET paginated + filtered leads ─────────────────────────
@@ -41,10 +42,35 @@ export async function fetchLeads(
         params,
     });
 
-    return {
-        leads: res.data.data,
-        total: res.data.pagination.total,
-    };
+    const d = res.data;
+
+    // Support multiple backend response shapes:
+    // Shape A: { data: [...], pagination: { total } }
+    // Shape B: { data: [...], total }
+    // Shape C: { leads: [...], total }
+    // Shape D: { data: { leads: [...], total } }
+    const leads: Lead[] =
+        Array.isArray(d?.data)        ? d.data :
+        Array.isArray(d?.leads)       ? d.leads :
+        Array.isArray(d?.data?.leads) ? d.data.leads :
+        [];
+
+    const total: number =
+        typeof d?.pagination?.total === "number" ? d.pagination.total :
+        typeof d?.meta?.total        === "number" ? d.meta.total :
+        typeof d?.total              === "number" ? d.total :
+        typeof d?.data?.total        === "number" ? d.data.total :
+        leads.length; // fallback: at least show current page count
+
+    // Ensure every lead has a non-zero score (compute client-side if backend returns 0/null)
+    const scoredLeads: Lead[] = leads.map((lead: Lead) => ({
+        ...lead,
+        score: (typeof lead.score === "number" && lead.score > 0)
+            ? lead.score
+            : computeLeadScore(lead),
+    }));
+
+    return { leads: scoredLeads, total };
 }
 
 // ── POST create a new lead ─────────────────────────────────
@@ -149,7 +175,12 @@ export async function fetchTeamMembers(): Promise<any> {
 // ── GET single lead ────────────────────────────────────────
 export async function fetchLeadById(leadId: string): Promise<any> {
     const res = await api.get(`/leads/get-lead/${leadId}`);
-    return res.data;
+    const lead = res.data;
+    // Ensure score is computed if backend returns 0 / null
+    if (lead && (typeof lead.score !== "number" || lead.score === 0)) {
+        lead.score = computeLeadScore(lead);
+    }
+    return lead;
 }
 
 // ── POST add note to lead ──────────────────────────────────
