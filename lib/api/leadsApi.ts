@@ -161,6 +161,66 @@ export async function addLeadNote(
     return res.data;
 }
 
+// ── Bulk CSV import ────────────────────────────────────────
+
+export interface LeadImportStartResponse {
+    success: boolean;
+    message: string;
+    jobId: string;
+}
+
+export interface LeadImportJobStatus {
+    id: string;
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
+    totalRows: number;
+    processedRows: number;
+    successRows: number;
+    failedRows: number;
+    progress: number;               // 0-100
+    errorCsvPath: string | null;
+    startedAt: string | null;
+    completedAt: string | null;
+}
+
+export interface LeadImportJobResponse {
+    success: boolean;
+    data: LeadImportJobStatus;
+}
+
+/**
+ * POST /leads/import
+ * Start a background CSV lead import. Returns a jobId immediately (202).
+ */
+export async function startLeadImport(file: File): Promise<LeadImportStartResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+    });
+    return res.data;
+}
+
+/**
+ * GET /leads/import/{jobId}
+ * Poll import job status and progress.
+ */
+export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobResponse> {
+    const res = await api.get<LeadImportJobResponse>(`/leads/import/${jobId}`);
+    return res.data;
+}
+
+/**
+ * GET /leads/import/{jobId}/errors
+ * Download the validation error CSV. Returns a Blob.
+ * Will throw if no error CSV exists (404).
+ */
+export async function downloadLeadImportErrors(jobId: string): Promise<Blob> {
+    const res = await api.get(`/leads/import/${jobId}/errors`, {
+        responseType: "blob",
+    });
+    return res.data;
+}
+
 // ── POST convert lead to deal ──────────────────────────────
 // Endpoint: POST /leads/:id/convert-to-deal
 // Response shape: { deal: { id, dealId, name, stage, ... } } or flat deal object
