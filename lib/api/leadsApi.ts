@@ -1,7 +1,6 @@
-// app/(dashboard)/leads/_api/leadsApi.ts
+// lib/api/leadsApi.ts
 
 import api from "@/lib/api/api";
-
 
 import {
     Lead,
@@ -102,6 +101,7 @@ export async function createLead(data: {
         throw error;
     }
 }
+
 // ── PATCH update a lead ────────────────────────────────────
 
 export async function updateLead(
@@ -122,10 +122,8 @@ export async function assignLead(
         assignedToId,
     });
 
-
     return res.data;
 }
-
 
 // ── PATCH soft-delete a lead ───────────────────────────────
 
@@ -223,28 +221,80 @@ export interface LeadImportJobResponse {
  * Start a background CSV lead import. Returns a jobId immediately (202).
  */
 export async function startLeadImport(file: File): Promise<LeadImportStartResponse> {
+    console.log('[startLeadImport] File received:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+    });
+    
     const formData = new FormData();
     formData.append("file", file);
-    const res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-    });
-    return res.data;
+    
+    // Verify FormData has the file
+    console.log('[startLeadImport] FormData created. Checking contents:');
+    for (let pair of formData.entries()) {
+        console.log(`  ${pair[0]}:`, pair[1] instanceof File ? `File(${pair[1].name})` : pair[1]);
+    }
+    
+    try {
+        const res = await api.post<LeadImportStartResponse>("/leads/import", formData);
+        return res.data;
+    } catch (error: any) {
+        console.error('[startLeadImport] Error:', error.response?.data || error.message);
+        throw error;
+    }
 }
 
 /**
  * GET /leads/import/{jobId}
  * Poll import job status and progress.
- * API response: { success: true, data: { id, status, totalRows, ... } }
+ * Handles both response shapes: { success, data: { ... } } and flat { id, status, ... }
  */
-export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobResponse> {
-    const res = await api.get<any>(`/leads/import/${jobId}`);
-    const raw = res.data;
-    // Handle both { success, data: { ... } } and flat { id, status, ... }
-    const jobData: LeadImportJobStatus =
-        raw?.data && typeof raw.data === "object" && "id" in raw.data
-            ? raw.data
-            : raw;
-    return { success: raw?.success ?? true, data: jobData };
+export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobStatus> {
+    console.log('[getLeadImportStatus] Polling job:', jobId);
+    
+    try {
+        const res = await api.get<any>(`/leads/import/${jobId}`);
+        console.log('[getLeadImportStatus] Raw response:', res.data);
+        
+        // Handle both response shapes
+        let jobData: LeadImportJobStatus;
+        
+        if (res.data?.data && typeof res.data.data === 'object' && 'id' in res.data.data) {
+            // Shape: { success: true, data: { id, status, ... } }
+            jobData = res.data.data;
+        } else if (res.data?.id) {
+            // Shape: { id, status, ... } (flat)
+            jobData = res.data;
+        } else {
+            // Fallback: try to use the whole response
+            jobData = res.data;
+        }
+        
+        // Ensure all numeric fields exist with defaults
+        const result: LeadImportJobStatus = {
+            id: jobData.id || jobId,
+            status: jobData.status || 'PENDING',
+            totalRows: jobData.totalRows ?? 0,
+            processedRows: jobData.processedRows ?? 0,
+            successRows: jobData.successRows ?? 0,
+            failedRows: jobData.failedRows ?? 0,
+            progress: jobData.progress ?? 0,
+            errorCsvPath: jobData.errorCsvPath || null,
+            startedAt: jobData.startedAt || null,
+            completedAt: jobData.completedAt || null,
+        };
+        
+        console.log('[getLeadImportStatus] Parsed job:', result);
+        return result;
+    } catch (error: any) {
+        console.error('[getLeadImportStatus] Error polling:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+        });
+        throw error;
+    }
 }
 
 /**
@@ -253,10 +303,22 @@ export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobR
  * Will throw if no error CSV exists (404).
  */
 export async function downloadLeadImportErrors(jobId: string): Promise<Blob> {
-    const res = await api.get(`/leads/import/${jobId}/errors`, {
-        responseType: "blob",
-    });
-    return res.data;
+    console.log('[downloadLeadImportErrors] Downloading errors for job:', jobId);
+    
+    try {
+        const res = await api.get(`/leads/import/${jobId}/errors`, {
+            responseType: "blob",
+        });
+        console.log('[downloadLeadImportErrors] Download successful');
+        return res.data;
+    } catch (error: any) {
+        console.error('[downloadLeadImportErrors] Error downloading:', {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+        });
+        throw error;
+    }
 }
 
 // ── POST convert lead to deal ──────────────────────────────

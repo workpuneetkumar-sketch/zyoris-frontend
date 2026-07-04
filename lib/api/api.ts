@@ -39,6 +39,11 @@ api.interceptors.request.use(
             }
         }
 
+        // ✅ FIX: Remove Content-Type for FormData
+        if (config.data instanceof FormData) {
+            delete config.headers['Content-Type'];
+        }
+
         return config;
     },
 
