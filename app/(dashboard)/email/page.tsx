@@ -5,40 +5,48 @@ import { useEmail } from "@/hooks/useEmail";
 
 export default function EmailPage() {
     const {
-        emails,
-        filteredEmails,
+        threads,
+        filteredThreads,
         total,
         loading,
         error,
         isComposeOpen,
         sending,
         sendError,
-        selectedEmail,
+        syncing,
+        selectedThread,
         search,
+        selectedLabel,
         setSearch,
+        setSelectedLabel,
         setIsComposeOpen,
-        setSelectedEmail,
+        setSelectedThread,
         handleSend,
+        handleSync,
         retry,
     } = useEmail();
 
     return (
         <EmailUI
-            emails={emails}
-            filteredEmails={filteredEmails}
+            threads={threads}
+            filteredThreads={filteredThreads}
             total={total}
             loading={loading}
             error={error}
             isComposeOpen={isComposeOpen}
             sending={sending}
             sendError={sendError}
-            selectedEmail={selectedEmail}
+            syncing={syncing}
+            selectedThread={selectedThread}
             search={search}
+            selectedLabel={selectedLabel}
             onSearchChange={setSearch}
+            onLabelChange={setSelectedLabel}
             onOpenCompose={() => setIsComposeOpen(true)}
             onCloseCompose={() => setIsComposeOpen(false)}
             onSendEmail={handleSend}
-            onSelectEmail={setSelectedEmail}
+            onSyncEmails={handleSync}
+            onSelectThread={setSelectedThread}
             onRetry={retry}
         />
     );
