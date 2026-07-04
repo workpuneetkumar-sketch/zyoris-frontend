@@ -1,34 +1,41 @@
 "use client";
 
 import { AppShell } from "@/components/Shell";
+import { isPathAllowedForRole, getDashboardForRole } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const { isAuthenticated, isInitializing } = useAuth();
-    const router = useRouter();
+  const { user, isAuthenticated, isInitializing } = useAuth();
+  const router = useRouter();
 
-    // Redirect to login immediately if not authenticated
-    useEffect(() => {
-        // If not initializing and not authenticated, redirect right away
-        if (!isInitializing) {
-            if (!isAuthenticated) {
-                router.replace("/login");
-            }
-        }
-    }, [isAuthenticated, isInitializing, router]);
-
-    if (isInitializing) {
-        return (
-            <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
+  useEffect(() => {
+    if (!isInitializing && !isAuthenticated) {
+      router.replace("/login");
     }
+  }, [isAuthenticated, isInitializing, router]);
 
-    // Only render the shell if we are authenticated
-    if (!isAuthenticated) return null;
+  useEffect(() => {
+    if (isInitializing || !isAuthenticated || !user) return;
 
-    return <AppShell>{children}</AppShell>;
+    const allowed = isPathAllowedForRole(window.location.pathname, user.role);
+
+    if (!allowed) {
+      const fallback = getDashboardForRole(user.role as any);
+      router.replace(fallback);
+    }
+  }, [isInitializing, isAuthenticated, router, user]);
+
+  if (isInitializing) {
+    return (
+      <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) return null;
+
+  return <AppShell>{children}</AppShell>;
 }

@@ -4,6 +4,7 @@
 import { useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
+import { getDashboardForRole } from "@/utils/roleRedirect";
 
 export default function LoginForm() {
     const router = useRouter();
@@ -41,7 +42,8 @@ export default function LoginForm() {
                     "No organization assigned. Please contact your administrator."
                 );
             } else {
-                router.push("/dashboard");
+                const target = getDashboardForRole(res.user.role);
+router.push(target);
             }
         } catch (err: any) {
       console.error("LOGIN ERROR:", err);
