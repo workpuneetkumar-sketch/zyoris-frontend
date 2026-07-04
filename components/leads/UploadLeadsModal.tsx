@@ -125,13 +125,10 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   // ── Poll job status ────────────────────────────────────────────────────────
   const pollJob = useCallback(async (id: string) => {
     try {
-      const res = await getLeadImportStatus(id);
-      // API returns { success, data: { id, status, totalRows, ... } }
-      // but also guard against flat shape { id, status, totalRows, ... }
-      const job: LeadImportJobStatus =
-        res.data && typeof res.data === "object" && "id" in res.data
-          ? res.data
-          : (res as any).data ?? res.data;
+      console.log('[pollJob] Polling job:', id);
+      const job = await getLeadImportStatus(id);
+      console.log('[pollJob] Status response:', job);
+      
       setJobStatus(job);
 
       if (job.status === "COMPLETED") {
@@ -147,6 +144,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       // Still PENDING or PROCESSING — poll again in 2 s
       pollRef.current = setTimeout(() => pollJob(id), 2000);
     } catch (err: any) {
+      console.error('[pollJob] Error polling:', err);
       // Transient network error — retry after 3 s
       pollRef.current = setTimeout(() => pollJob(id), 3000);
     }
@@ -154,6 +152,13 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
 
   // ── File selection ─────────────────────────────────────────────────────────
   const processFile = useCallback(async (selected: File) => {
+    console.log('[processFile] File selected:', {
+      name: selected.name,
+      type: selected.type,
+      size: selected.size,
+      lastModified: new Date(selected.lastModified),
+    });
+    
     if (!isValidFile(selected)) {
       setError("Invalid file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
       return;
@@ -165,7 +170,12 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       setPreview(parsed);
       setMissingHeaders(validateHeaders(parsed.headers));
       setDuplicatesInFile(detectDuplicates(parsed.rows));
-    } catch {
+      console.log('[processFile] Preview parsed:', {
+        headers: parsed.headers,
+        rows: parsed.rows.length,
+      });
+    } catch (err) {
+      console.error('[processFile] Error parsing file:', err);
       setPreview(null);
       setMissingHeaders([]);
       setDuplicatesInFile(0);
@@ -188,16 +198,46 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
 
   // ── Upload → start import job ──────────────────────────────────────────────
   const handleUpload = async () => {
-    if (!file) return;
+    if (!file) {
+      console.error('[handleUpload] No file selected');
+      setError("No file selected");
+      return;
+    }
+    
+    console.log('[handleUpload] Starting upload for file:', {
+      name: file.name,
+      type: file.type,
+      size: file.size,
+    });
+    
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setError("File too large. Maximum size is 10MB.");
+      return;
+    }
+    
     setPhase("uploading");
     setError(null);
+    
     try {
+      console.log('[handleUpload] Calling startLeadImport...');
       const res = await startLeadImport(file);
-      // 202 — job started, begin polling
+      console.log('[handleUpload] Import started successfully:', res);
+      
+      if (!res.jobId) {
+        throw new Error('No jobId returned from server');
+      }
+      
       setJobId(res.jobId);
       setPhase("polling");
       pollJob(res.jobId);
     } catch (err: any) {
+      console.error('[handleUpload] Error details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+      });
+      
       const msg =
         err?.response?.data?.message ||
         err?.response?.data?.error ||
@@ -220,7 +260,8 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       a.download = `lead-import-errors-${jobId}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
+    } catch (err) {
+      console.error('[handleDownloadErrors] Error:', err);
       // swallow — error CSV may not exist
     } finally {
       setDownloadingErrors(false);
