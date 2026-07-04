@@ -9,6 +9,7 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import {
   getInvoices,
   updateInvoice,
@@ -67,6 +68,7 @@ function Toast({ toast, onClose }: { toast: ToastMessage; onClose: () => void })
 // ── Main Page Component ──────────────────────────────────
 
 export default function InvoicesPage() {
+  const router = useRouter();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,6 +80,10 @@ export default function InvoicesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+
+  const handlePayNow = (invoiceId: string) => {
+    router.push(`/payment/${invoiceId}`);
+  };
 
   const loadInvoices = useCallback(async () => {
     setLoading(true);
@@ -149,10 +155,10 @@ export default function InvoicesPage() {
     setToast({ type: "success", message: `Exported ${invoices.length} invoices successfully!` });
   };
 
-  const handleResetFilters = () => { 
-    setStatusFilter("ALL"); 
-    setSearchQuery(""); 
-    setCurrentPage(1); 
+  const handleResetFilters = () => {
+    setStatusFilter("ALL");
+    setSearchQuery("");
+    setCurrentPage(1);
   };
 
   return (
@@ -206,6 +212,7 @@ export default function InvoicesPage() {
           onCreateClick={() => setShowCreateModal(true)}
           onExportExcel={handleExportExcel}
           onPreviewInvoice={setPreviewInvoiceId}
+          onPayNow={handlePayNow}
         />
       </div>
 

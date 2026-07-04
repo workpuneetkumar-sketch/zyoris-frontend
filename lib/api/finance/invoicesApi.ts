@@ -4,6 +4,7 @@ import api from "../api";
 
 // ── Types ────────────────────────────────────────────────
 
+
 export interface InvoiceItem {
   description: string;
   quantity: number;
@@ -38,7 +39,7 @@ export interface CreateInvoiceData {
 export interface UpdateInvoiceData {
   clientName?: string;
   dueDate?: string;
-  status?: "DRAFT" | "SENT" | "PAID";
+  status?: "DRAFT" | "SENT" | "PAID" | "OVERDUE";
   items?: InvoiceItem[];
   notes?: string;
 }
