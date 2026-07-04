@@ -17,8 +17,6 @@ export type LeadSource =
     | "LinkedIn"
     | "Cold Call";
 
-
-
 export interface LeadsFilters {
     status: string;
     source: string;
@@ -72,6 +70,7 @@ export function computeLeadScore(lead: {
     email?: string;
     phone?: string;
     company?: string;
+    city?: string;
 }): number {
     // Fixed base: every lead starts at 35 pts
     const base = 35;
@@ -95,7 +94,7 @@ export function computeLeadScore(lead: {
         (lead.email   ? 2 : 0) +
         (lead.phone   ? 1 : 0) +
         (lead.company ? 1 : 0) +
-        ((lead as any).city ? 1 : 0) +
+        (lead.city    ? 1 : 0) +
         (lead.status  ? 1 : 0)
     );
 
@@ -106,42 +105,25 @@ export function computeLeadScore(lead: {
 
 export interface Lead {
     id: string;
-
     name: string;
-
-    company: string;
-
-    source: LeadSource;
-
-    owner: string;
-
-    ownerAvatar: string;
-
-    status: LeadStatus;
-
-    score: number;
-
-    createdAt: string;
-
+    company?: string;      // Made optional
+    source?: LeadSource | string;  // Made optional
+    owner?: string;        // Made optional
+    ownerAvatar?: string;  // Made optional
+    status?: LeadStatus | string;  // Made optional
+    score?: number;        // Made optional
+    createdAt?: string;    // Made optional
     email?: string;
-
     phone?: string;
-
     city?: string;
-
     estimatedValue?: number;
-
     assignedToId?: string | null;
-
     assignedTo?: {
         id: string;
         name: string;
         email?: string;
     };
-
     tags?: string[];
-
     note?: string;
-
     [key: string]: unknown;
 }

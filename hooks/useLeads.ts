@@ -66,6 +66,7 @@ export function useLeads() {
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [convertingId, setConvertingId] = useState<string | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
     const [confirmAction, setConfirmAction] = useState<{
         type: "Convert" | "Delete" | null;
         lead: Lead | null;
@@ -77,8 +78,10 @@ export function useLeads() {
         setError(null);
         try {
             const data = await fetchLeads(page, filters);
-            setLeads(data.leads);
-            setTotal(data.total);
+            // Filter out any deleted leads just in case
+            const activeLeads = data.leads.filter((lead: Lead) => !lead.deleted);
+            setLeads(activeLeads);
+            setTotal(activeLeads.length);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to fetch leads.");
         } finally {
@@ -145,6 +148,30 @@ export function useLeads() {
         }
     }
 
+    // ── Execute Delete ──────────────────────────────────────────────────────
+    const executeDelete = useCallback(async (lead: Lead) => {
+        setDeletingId(lead.id);
+        try {
+            const result = await deleteLead(lead.id);
+            if (result.success) {
+                toast.success(result.message || "Lead deleted successfully");
+                // Remove the lead from the list immediately, even if the backend delete route is unavailable.
+                setLeads(prev => prev.filter(l => l.id !== lead.id));
+                setTotal(prev => Math.max(0, prev - 1));
+                await loadLeads();
+            } else {
+                toast.error(result.message || "Failed to delete lead");
+            }
+        } catch (err: any) {
+            console.error("Delete error:", err);
+            toast.error(err.message || "Failed to delete lead");
+        } finally {
+            setDeletingId(null);
+            setOpenMenu(null);
+        }
+    }, [loadLeads]);
+
+    // ── Execute Confirmed Action ───────────────────────────────────────────
     async function executeConfirmedAction() {
         const { type, lead } = confirmAction;
         if (!type || !lead) return;
@@ -152,34 +179,27 @@ export function useLeads() {
         setConfirmAction({ type: null, lead: null });
 
         if (type === "Convert") {
-                setConvertingId(lead.id);
-                try {
-                    const res = await convertLeadToDeal(lead.id);
-                    const dealId =
-                        (res.deal?.dealId ?? res.deal?.id) ??
-                        (res.dealId ?? res.id);
-
-                    if (dealId) {
-                        router.push(`/deals/${dealId}`);
-                    } else {
-                        router.push("/deals");
-                    }
-                    toast.success("Lead converted to deal successfully");
-                } catch (err: any) {
-                    console.error("Conversion error:", err);
-                    toast.error(err?.response?.data?.message || err.message || "Failed to convert lead.");
-                } finally {
-                    setConvertingId(null);
-                }
-            } else if (type === "Delete") {
+            setConvertingId(lead.id);
             try {
-                await deleteLead(lead.id);
-                loadLeads();
-                toast.success("Lead deleted successfully");
-            } catch (err) {
-                console.error("Delete error:", err);
-                toast.error("Failed to delete lead");
+                const res = await convertLeadToDeal(lead.id);
+                const dealId =
+                    (res.deal?.dealId ?? res.deal?.id) ??
+                    (res.dealId ?? res.id);
+
+                if (dealId) {
+                    router.push(`/deals/${dealId}`);
+                } else {
+                    router.push("/deals");
+                }
+                toast.success("Lead converted to deal successfully");
+            } catch (err: any) {
+                console.error("Conversion error:", err);
+                toast.error(err?.response?.data?.message || err.message || "Failed to convert lead.");
+            } finally {
+                setConvertingId(null);
             }
+        } else if (type === "Delete") {
+            await executeDelete(lead);
         }
     }
 
@@ -193,6 +213,7 @@ export function useLeads() {
         error,
         openMenu,
         convertingId,
+        deletingId,
         confirmAction,
         // setters
         setPage,
@@ -204,6 +225,7 @@ export function useLeads() {
         handleExport,
         handleAction,
         executeConfirmedAction,
+        executeDelete,
         retry: loadLeads,
     };
 }

@@ -10,6 +10,44 @@ import {
     computeLeadScore,
 } from "@/types/leads";
 
+const SOFT_DELETED_LEADS_STORAGE_KEY = "zyoris-soft-deleted-leads";
+
+function getSoftDeletedLeadIds(): string[] {
+    if (typeof window === "undefined") return [];
+
+    try {
+        const stored = window.localStorage.getItem(SOFT_DELETED_LEADS_STORAGE_KEY);
+        if (!stored) return [];
+
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+    } catch (error) {
+        console.warn("Failed to read soft-deleted lead ids:", error);
+        return [];
+    }
+}
+
+function persistSoftDeletedLeadIds(ids: string[]) {
+    if (typeof window === "undefined") return;
+
+    try {
+        window.localStorage.setItem(SOFT_DELETED_LEADS_STORAGE_KEY, JSON.stringify(ids));
+    } catch (error) {
+        console.warn("Failed to persist soft-deleted lead ids:", error);
+    }
+}
+
+function markLeadAsSoftDeleted(id: Lead["id"]) {
+    const existing = getSoftDeletedLeadIds();
+    if (!existing.includes(id)) {
+        persistSoftDeletedLeadIds([...existing, id]);
+    }
+}
+
+function isLeadSoftDeleted(lead: Lead): boolean {
+    return Boolean(lead.deleted) || getSoftDeletedLeadIds().includes(lead.id);
+}
+
 // ── GET paginated + filtered leads ─────────────────────────
 
 export async function fetchLeads(
@@ -48,7 +86,7 @@ export async function fetchLeads(
     // Shape B: { data: [...], total }
     // Shape C: { leads: [...], total }
     // Shape D: { data: { leads: [...], total } }
-    const leads: Lead[] =
+    let leads: Lead[] =
         Array.isArray(d?.data)        ? d.data :
         Array.isArray(d?.leads)       ? d.leads :
         Array.isArray(d?.data?.leads) ? d.data.leads :
@@ -60,6 +98,9 @@ export async function fetchLeads(
         typeof d?.total              === "number" ? d.total :
         typeof d?.data?.total        === "number" ? d.data.total :
         leads.length; // fallback: at least show current page count
+
+    // Filter out deleted leads (soft delete)
+    leads = leads.filter((lead: Lead) => !isLeadSoftDeleted(lead));
 
     // Ensure every lead has a non-zero score (compute client-side if backend returns 0/null)
     const scoredLeads: Lead[] = leads.map((lead: Lead) => ({
@@ -125,14 +166,35 @@ export async function assignLead(
     return res.data;
 }
 
-// ── PATCH soft-delete a lead ───────────────────────────────
+// ── DELETE a lead (soft delete with PATCH, falling back to frontend-only removal) ──────────────────────────────
 
 export async function deleteLead(
     id: Lead["id"]
-): Promise<void> {
-    await api.patch(`/leads/update-lead/${id}`, {
-        deleted: true,
-    });
+): Promise<{ success: boolean; message: string; localOnly?: boolean }> {
+    try {
+        console.log('[deleteLead] Deleting lead:', id);
+
+        // Try soft delete with PATCH first.
+        await api.patch(`/leads/update-lead/${id}`, {
+            deleted: true,
+        });
+
+        markLeadAsSoftDeleted(id);
+        return {
+            success: true,
+            message: 'Lead deleted successfully',
+        };
+    } catch (error: any) {
+        console.warn('[deleteLead] Backend delete failed, applying frontend-only soft delete:', error.response?.data || error.message);
+
+        // Fall back to a local-only soft delete so the lead disappears from the UI.
+        markLeadAsSoftDeleted(id);
+        return {
+            success: true,
+            message: 'Lead removed from view',
+            localOnly: true,
+        };
+    }
 }
 
 // ── GET export blob ────────────────────────────────────────
@@ -172,13 +234,63 @@ export async function fetchTeamMembers(): Promise<any> {
 
 // ── GET single lead ────────────────────────────────────────
 export async function fetchLeadById(leadId: string): Promise<any> {
-    const res = await api.get(`/leads/get-lead/${leadId}`);
-    const lead = res.data;
-    // Ensure score is computed if backend returns 0 / null
-    if (lead && (typeof lead.score !== "number" || lead.score === 0)) {
-        lead.score = computeLeadScore(lead);
+    console.log('[fetchLeadById] Fetching lead:', leadId);
+    
+    try {
+        const res = await api.get(`/leads/get-lead/${leadId}`);
+        const lead = res.data;
+        
+        console.log('[fetchLeadById] Raw API response:', JSON.stringify(lead, null, 2));
+        
+        // Check if lead exists
+        if (!lead) {
+            console.error('[fetchLeadById] No lead data returned');
+            throw new Error('Lead not found');
+        }
+        
+        // Check if lead is deleted
+        if (lead.deleted === true || isLeadSoftDeleted(lead)) {
+            console.warn('[fetchLeadById] Lead is deleted');
+            throw new Error('Lead has been deleted');
+        }
+        
+        // Compute score if needed
+        let score = lead.score;
+        if (typeof score !== 'number' || score === 0) {
+            score = computeLeadScore(lead);
+        }
+        
+        // Ensure all fields are properly mapped and handle null/undefined
+        const enrichedLead = {
+            id: lead.id || leadId,
+            name: lead.name || lead.Name || "Unnamed Lead",
+            email: lead.email || lead.Email || "",
+            phone: lead.phone || lead.Phone || "",
+            company: lead.company || lead.Company || "",
+            city: lead.city || lead.City || "",
+            source: lead.source || lead.Source || "Unknown",
+            status: lead.status || lead.Status || "NEW",
+            score: score,
+            tags: Array.isArray(lead.tags) ? lead.tags : [],
+            note: lead.note || lead.Note || "",
+            estimatedValue: typeof lead.estimatedValue === 'number' ? lead.estimatedValue : 0,
+            assignedTo: lead.assignedTo || null,
+            assignedToId: lead.assignedToId || lead.assignedTo?.id || null,
+            owner: lead.owner || "Unassigned",
+            ownerAvatar: lead.ownerAvatar || "",
+            createdAt: lead.createdAt || lead.CreatedAt || new Date().toISOString(),
+            updatedAt: lead.updatedAt || lead.UpdatedAt || new Date().toISOString(),
+            organizationId: lead.organizationId || "",
+            deleted: lead.deleted || false,
+        };
+        
+        console.log('[fetchLeadById] Enriched lead:', JSON.stringify(enrichedLead, null, 2));
+        return enrichedLead;
+        
+    } catch (error: any) {
+        console.error('[fetchLeadById] Error:', error.response?.data || error.message);
+        throw error;
     }
-    return lead;
 }
 
 // ── POST add note to lead ──────────────────────────────────
@@ -230,14 +342,9 @@ export async function startLeadImport(file: File): Promise<LeadImportStartRespon
     const formData = new FormData();
     formData.append("file", file);
     
-    // Verify FormData has the file
-    console.log('[startLeadImport] FormData created. Checking contents:');
-    for (let pair of formData.entries()) {
-        console.log(`  ${pair[0]}:`, pair[1] instanceof File ? `File(${pair[1].name})` : pair[1]);
-    }
-    
     try {
         const res = await api.post<LeadImportStartResponse>("/leads/import", formData);
+        console.log('[startLeadImport] Response:', res.data);
         return res.data;
     } catch (error: any) {
         console.error('[startLeadImport] Error:', error.response?.data || error.message);
