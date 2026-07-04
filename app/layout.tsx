@@ -5,6 +5,8 @@ import { AuthProvider } from "../context/AuthContext";
 import { ZiiBot } from "../components/ZiiBot";
 import { Inter } from "next/font/google";
 import Script from "next/script";
+import { InvoiceProvider } from "@/context/InvoiceContext"; // new
+import { PaymentProvider } from "@/context/PaymentContext";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 export const metadata: Metadata = {
@@ -29,11 +31,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           strategy="beforeInteractive"
         />
         <AuthProvider>
-          {children}
-          <ZiiBot />
+          <InvoiceProvider>
+            <PaymentProvider>
+              {children}
+            </PaymentProvider>
+            <ZiiBot />
+          </InvoiceProvider>
         </AuthProvider>
       </body>
     </html>
   );
 }
-
