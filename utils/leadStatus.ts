@@ -1,3 +1,5 @@
+// utils/leadStatus.ts
+
 import { LeadStatus } from "@/types/leads";
 
 export interface LeadStatusInfo {
@@ -43,15 +45,17 @@ export function getLeadStatusInfo(status: string | null | undefined): LeadStatus
     return STATUS_INFO.NEW!;
   }
 
+  const statusUpper = status.toUpperCase();
+  
   // Check if it's a legacy status
-  const mappedStatus = LEGACY_STATUS_MAP[status.toUpperCase()];
+  const mappedStatus = LEGACY_STATUS_MAP[statusUpper];
   if (mappedStatus) {
     return STATUS_INFO[mappedStatus]!;
   }
 
   // Check if it's a new status (NEW, WARM, HOT, DEAD)
-  if (status in STATUS_INFO) {
-    return STATUS_INFO[status as keyof typeof STATUS_INFO]!;
+  if (statusUpper in STATUS_INFO) {
+    return STATUS_INFO[statusUpper as keyof typeof STATUS_INFO]!;
   }
 
   // Fallback to NEW for any unknown status

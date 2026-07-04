@@ -17,6 +17,9 @@ import {
     TrendingUp,
     TrendingDown,
     Minus,
+    User,
+    Calendar,
+    Globe,
 } from "lucide-react";
 import { Lead, computeLeadScore } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
@@ -25,6 +28,38 @@ import { updateDeal } from "@/lib/api/dealsApi";
 import { mapLeadStatusToDealStage } from "@/lib/dealStageMapper";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { toast } from "react-toastify";
+
+// Helper to format date safely
+function formatDate(dateString: string | undefined) {
+    if (!dateString) return "—";
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return "Invalid Date";
+        return date.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    } catch {
+        return dateString;
+    }
+}
+
+function safeString(value: any): string {
+    if (value === null || value === undefined || value === "") return "—";
+    return String(value);
+}
+
+function getInitials(name: string): string {
+    if (!name) return "NA";
+    return name
+        .split(" ")
+        .map((n) => n[0]?.toUpperCase() || "")
+        .join("")
+        .slice(0, 2);
+}
 
 export default function LeadDetailPage() {
     const params = useParams();
@@ -46,7 +81,31 @@ export default function LeadDetailPage() {
         setLoading(true);
         setError(null);
         fetchLeadById(leadId)
-            .then((data) => setLead(data))
+            .then((data) => {
+                // Ensure all fields exist with fallbacks
+                const enrichedLead: Lead = {
+                    ...data,
+                    id: data.id || leadId,
+                    name: data.name || "Unnamed Lead",
+                    company: data.company || "",
+                    source: data.source || "Unknown",
+                    status: data.status || "NEW",
+                    email: data.email || "",
+                    phone: data.phone || "",
+                    city: data.city || "",
+                    score: data.score ?? computeLeadScore(data),
+                    tags: data.tags || [],
+                    note: data.note || "",
+                    owner: data.owner || "Unassigned",
+                    ownerAvatar: data.ownerAvatar || "",
+                    assignedTo: data.assignedTo || null,
+                    assignedToId: data.assignedToId || null,
+                    estimatedValue: data.estimatedValue || 0,
+                    createdAt: data.createdAt || new Date().toISOString(),
+                    deleted: data.deleted || false,
+                };
+                setLead(enrichedLead);
+            })
             .catch((err) =>
                 setError(err instanceof Error ? err.message : "Failed to load lead.")
             )
@@ -60,91 +119,84 @@ export default function LeadDetailPage() {
     };
 
     const executeConvert = async () => {
-    setIsConfirmModalOpen(false);
-    setConverting(true);
-    setConvertError(null);
+        setIsConfirmModalOpen(false);
+        setConverting(true);
+        setConvertError(null);
 
-    try {
-        if (!lead) {
-            throw new Error("Lead data missing");
+        try {
+            if (!lead) {
+                throw new Error("Lead data missing");
+            }
+
+            // STEP 1 → Create deal from lead
+            const createdDeal = await convertLeadToDeal(leadId);
+
+            console.log("[Lead Convert] Response:", createdDeal);
+
+            // Backend returns flat deal object
+            const dealId =
+                createdDeal?.id ||
+                createdDeal?.deal?.id ||
+                createdDeal?.dealId;
+
+            if (!dealId) {
+                console.error("Deal creation response:", createdDeal);
+                throw new Error("Deal ID not returned");
+            }
+
+            // STEP 2 → Sync lead data into created deal
+            try {
+                const payload = {
+                    name: lead.name,
+                    amount: Number(lead.estimatedValue || 0),
+                    stage: "NEW",
+                    assignedToId: lead.assignedToId?.trim() || null,
+                    companyId: (lead as any).companyId || null,
+                    contactId: (lead as any).contactId || null,
+                };
+
+                console.log("[Lead Convert] Updating deal", {
+                    dealId,
+                    payload,
+                });
+
+                const updated = await updateDeal(dealId, payload);
+                console.log("[Lead Convert] Updated response", updated);
+
+            } catch (err: any) {
+                console.error(
+                    "[Lead Convert] updateDeal FULL ERROR",
+                    err?.response?.data || err
+                );
+
+                throw new Error(
+                    err?.response?.data?.message ||
+                    "Deal created but sync failed"
+                );
+            }
+
+            toast.success("Lead converted successfully");
+
+            // STEP 3 → Navigate immediately
+            router.replace(`/deals/${dealId}`);
+
+        } catch (err: any) {
+            console.error("[Lead Convert Error]", err);
+
+            const msg =
+                err?.response?.data?.error ||
+                err?.response?.data?.message ||
+                err?.message ||
+                "Conversion failed";
+
+            setConvertError(msg);
+            toast.error(msg);
+
+        } finally {
+            setConverting(false);
         }
+    };
 
-        // STEP 1 → Create deal from lead
-        const createdDeal = await convertLeadToDeal(leadId);
-
-        console.log("[Lead Convert] Response:", createdDeal);
-
-        // Backend returns flat deal object
-        const dealId =
-            createdDeal?.id ||
-            createdDeal?.deal?.id ||
-            createdDeal?.dealId;
-
-        if (!dealId) {
-            console.error("Deal creation response:", createdDeal);
-            throw new Error("Deal ID not returned");
-        }
-
-        // STEP 2 → Sync lead data into created deal
-try {
-    const payload = {
-    name: lead.name,
-    amount: Number(lead.estimatedValue || 0),
-
-    stage: "NEW", // temporary hardcode
-
-    assignedToId:
-        lead.assignedToId?.trim() || null,
-
-    companyId:
-        (lead as any).companyId || null,
-
-    contactId:
-        (lead as any).contactId || null,
-};
-
-    console.log("[Lead Convert] Updating deal", {
-        dealId,
-        payload,
-    });
-
-    const updated = await updateDeal(dealId, payload);
-
-    console.log("[Lead Convert] Updated response", updated);
-
-} catch (err: any) {
-    console.error(
-        "[Lead Convert] updateDeal FULL ERROR",
-        err?.response?.data || err
-    );
-
-    throw new Error(
-        err?.response?.data?.message ||
-        "Deal created but sync failed"
-    );
-}
-
-        toast.success("Lead converted successfully");
-
-        // STEP 3 → Navigate immediately
-        router.replace(`/deals/${dealId}`);
-
-    } catch (err: any) {
-        console.error("[Lead Convert Error]", err);
-
-        const msg =
-            err?.response?.data?.error ||
-            err?.response?.data?.message ||
-            err?.message ||
-            "Conversion failed";
-
-        setConvertError(msg);
-        toast.error(msg);
-
-    } finally {
-        setConverting(false);
-    }
-};
     // ── Loading ────────────────────────────────────────────────────────────────
     if (loading) {
         return (
@@ -180,6 +232,11 @@ try {
 
     const statusInfo = getLeadStatusInfo(lead.status);
 
+    // Check if lead has any contact info
+    const hasContactInfo = lead.email || lead.phone || lead.city || lead.company;
+    const hasTags = lead.tags && lead.tags.length > 0;
+    const hasNote = lead.note && lead.note.trim().length > 0;
+
     // ── Detail view ───────────────────────────────────────────────────────────
     return (
         <div className="space-y-5">
@@ -196,12 +253,12 @@ try {
                     </button>
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
-                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name}</h1>
+                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name || "Unnamed Lead"}</h1>
                             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
                                 {statusInfo.emoji} {statusInfo.label}
                             </span>
                         </div>
-                        <p className="text-sm text-gray-400">{lead.company || "No Company"}</p>
+                        <p className="text-sm text-gray-400">{safeString(lead.company)}</p>
                     </div>
                 </div>
 
@@ -210,21 +267,20 @@ try {
                     <button
                         onClick={handleConvert}
                         disabled={converting || lead.status === "DEAD"}
-                        className={`flex items-center gap-2 h-9 px-5 rounded-lg text-white text-[13px] font-semibold transition-colors shadow-sm ${
-                            lead.status === "DEAD" 
-                                ? "bg-gray-400 cursor-not-allowed" 
+                        className={`flex items-center gap-2 h-9 px-5 rounded-lg text-white text-[13px] font-semibold transition-colors shadow-sm ${lead.status === "DEAD"
+                                ? "bg-gray-400 cursor-not-allowed"
                                 : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 disabled:opacity-70"
-                        }`}
+                            }`}
                     >
                         {converting ? (
                             <Loader2 size={14} className="animate-spin" />
                         ) : (
                             <Briefcase size={14} />
                         )}
-                        {converting 
-                            ? "Converting..." 
-                            : lead.status === "DEAD" 
-                                ? "Cannot Convert Dead Lead" 
+                        {converting
+                            ? "Converting..."
+                            : lead.status === "DEAD"
+                                ? "Cannot Convert Dead Lead"
                                 : "Convert to Deal"}
                     </button>
                     {convertError && (
@@ -235,60 +291,68 @@ try {
                 </div>
             </div>
 
-            {/* Status / Source / Created row */}
-            <div className="flex gap-4 flex-wrap">
-                <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Status</p>
+            {/* Status / Source / Created row - Fixed Source display */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Globe size={14} className="text-blue-400" /> Status
+                    </p>
                     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
                         {statusInfo.emoji} {statusInfo.label}
                     </span>
                 </div>
-                <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Source</p>
-                    <span className="text-sm font-medium text-gray-700">{lead.source || "—"}</span>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <User size={14} className="text-green-400" /> Source
+                    </p>
+                    <span className="text-sm font-medium text-gray-700">{safeString(lead.source)}</span>
                 </div>
-                <div className="flex-1 min-w-[140px] bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
-                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5">Created At</p>
-                    <span className="text-sm font-medium text-gray-700">{lead.createdAt || "—"}</span>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Calendar size={14} className="text-purple-400" /> Created At
+                    </p>
+                    <span className="text-sm font-medium text-gray-700">{formatDate(lead.createdAt)}</span>
                 </div>
             </div>
 
-            {/* Contact Information */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
-                    <h3 className="text-sm font-semibold text-gray-700">Contact Information</h3>
+            {/* Contact Information - Only show if there's data */}
+            {hasContactInfo && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                        <h3 className="text-sm font-semibold text-gray-700">Contact Information</h3>
+                    </div>
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
+                        <div className="flex items-start gap-3">
+                            <Mail className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Email</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.email)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <Phone className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Phone</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.phone)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Location</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.city)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <Building2 className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Company</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.company)}</p>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
-                    <div className="flex items-start gap-3">
-                        <Mail className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-                        <div>
-                            <p className="text-xs text-gray-400 mb-0.5">Email</p>
-                            <p className="text-sm text-gray-800">{lead.email || "—"}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                        <Phone className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-                        <div>
-                            <p className="text-xs text-gray-400 mb-0.5">Phone</p>
-                            <p className="text-sm text-gray-800">{lead.phone || "—"}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                        <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-                        <div>
-                            <p className="text-xs text-gray-400 mb-0.5">Location</p>
-                            <p className="text-sm text-gray-800">{lead.city || "—"}</p>
-                        </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                        <Building2 className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
-                        <div>
-                            <p className="text-xs text-gray-400 mb-0.5">Company</p>
-                            <p className="text-sm text-gray-800">{lead.company || "—"}</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            )}
 
             {/* Ownership & Assignment */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -298,7 +362,7 @@ try {
                 <div className="p-5 flex items-center gap-4">
                     <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
                         {lead.assignedTo?.name
-                            ? lead.assignedTo.name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()
+                            ? getInitials(lead.assignedTo.name)
                             : "NA"}
                     </div>
                     <div>
@@ -330,11 +394,11 @@ try {
                         const SOURCE_SCORE: Record<string, number> = {
                             Referral: 12, LinkedIn: 10, Website: 8, "Cold Call": 6,
                         };
-                        const statusPts  = STATUS_SCORE[lead.status ?? ""] ?? 8;
-                        const val        = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
-                        const valuePts   = val > 0 ? Math.min(20, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 20)) : 0;
-                        const sourcePts  = SOURCE_SCORE[lead.source ?? ""] ?? 8;
-                        const completePts= Math.min(8,
+                        const statusPts = STATUS_SCORE[lead.status ?? ""] ?? 8;
+                        const val = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
+                        const valuePts = val > 0 ? Math.min(20, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 20)) : 0;
+                        const sourcePts = SOURCE_SCORE[lead.source ?? ""] ?? 8;
+                        const completePts = Math.min(8,
                             (lead.name ? 2 : 0) + (lead.email ? 2 : 0) +
                             (lead.phone ? 1 : 0) + (lead.company ? 1 : 0) +
                             ((lead as any).city ? 1 : 0) + (lead.status ? 1 : 0)
@@ -342,10 +406,10 @@ try {
                         const totalScore = lead.score ?? computeLeadScore(lead);
 
                         const dims = [
-                            { label: "Status",       pts: statusPts,   max: 25, color: "#3b82f6", desc: `${lead.status ?? "—"} = ${statusPts}/25 pts` },
-                            { label: "Est. Value",   pts: valuePts,    max: 20, color: "#8b5cf6", desc: val > 0 ? `$${val.toLocaleString()} → ${valuePts}/20 pts` : "No value set" },
-                            { label: "Lead Source",  pts: sourcePts,   max: 12, color: "#10b981", desc: `${lead.source ?? "—"} = ${sourcePts}/12 pts` },
-                            { label: "Completeness", pts: completePts, max: 8,  color: "#f59e0b", desc: `${completePts}/8 pts (name, email, phone, company, city, status)` },
+                            { label: "Status", pts: statusPts, max: 25, color: "#3b82f6", desc: `${lead.status ?? "—"} = ${statusPts}/25 pts` },
+                            { label: "Est. Value", pts: valuePts, max: 20, color: "#8b5cf6", desc: val > 0 ? `₹${val.toLocaleString()} → ${valuePts}/20 pts` : "No value set" },
+                            { label: "Lead Source", pts: sourcePts, max: 12, color: "#10b981", desc: `${safeString(lead.source)} = ${sourcePts}/12 pts` },
+                            { label: "Completeness", pts: completePts, max: 8, color: "#f59e0b", desc: `${completePts}/8 pts (name, email, phone, company, city, status)` },
                         ];
 
                         return (
@@ -355,7 +419,7 @@ try {
                                     className="relative w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-2xl"
                                     style={{
                                         borderColor: totalScore >= 70 ? "#10b981" : totalScore >= 40 ? "#f59e0b" : "#ef4444",
-                                        color:       totalScore >= 70 ? "#059669" : totalScore >= 40 ? "#d97706" : "#dc2626",
+                                        color: totalScore >= 70 ? "#059669" : totalScore >= 40 ? "#d97706" : "#dc2626",
                                     }}
                                 >
                                     {totalScore}
@@ -365,9 +429,9 @@ try {
                                     {/* Quality label + overall bar */}
                                     <div className="flex items-center gap-2">
                                         {totalScore >= 70
-                                            ? <TrendingUp  size={14} className="text-emerald-500" />
+                                            ? <TrendingUp size={14} className="text-emerald-500" />
                                             : totalScore >= 40
-                                                ? <Minus   size={14} className="text-amber-500" />
+                                                ? <Minus size={14} className="text-amber-500" />
                                                 : <TrendingDown size={14} className="text-red-500" />}
                                         <span className={`text-sm font-bold ${totalScore >= 70 ? "text-emerald-600" : totalScore >= 40 ? "text-amber-600" : "text-red-600"}`}>
                                             {totalScore >= 70 ? "High Quality Lead" : totalScore >= 40 ? "Moderate Potential" : "Low Priority Lead"}
@@ -412,31 +476,31 @@ try {
                 </div>
             </div>
 
-            {/* Tags & Notes */}
-            {((lead.tags && lead.tags.length > 0) || lead.note) && (
+            {/* Tags & Notes - Only show if they exist */}
+            {(hasTags || hasNote) && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
                         <h3 className="text-sm font-semibold text-gray-700">Additional Details</h3>
                     </div>
                     <div className="p-5 space-y-4">
-                        {lead.tags && lead.tags.length > 0 && (
+                        {hasTags && (
                             <div>
                                 <p className="text-xs text-gray-400 mb-2 flex items-center gap-1.5">
                                     <Tag className="w-3.5 h-3.5" /> Tags
                                 </p>
                                 <div className="flex flex-wrap gap-2">
-                                    {lead.tags.map((tag: any, idx: number) => (
+                                    {Array.isArray(lead.tags) && lead.tags.map((tag: any, idx: number) => (
                                         <span
                                             key={tag.id || idx}
-                                            className="px-2 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-medium border border-gray-200"
+                                            className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-medium border border-blue-100"
                                         >
-                                            {typeof tag === "string" ? tag : tag.label}
+                                            {typeof tag === "string" ? tag : tag.label || tag.name || tag}
                                         </span>
                                     ))}
                                 </div>
                             </div>
                         )}
-                        {lead.note && (
+                        {hasNote && (
                             <div>
                                 <p className="text-xs text-gray-400 mb-2 flex items-center gap-1.5">
                                     <FileText className="w-3.5 h-3.5" /> Note
@@ -447,6 +511,14 @@ try {
                             </div>
                         )}
                     </div>
+                </div>
+            )}
+
+            {/* Empty State - If no data at all */}
+            {!hasContactInfo && !hasTags && !hasNote && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                    <p className="text-gray-400 text-sm">No additional information available for this lead.</p>
+                    <p className="text-gray-300 text-xs mt-1">Contact details, tags, and notes will appear here once added.</p>
                 </div>
             )}
 

@@ -4,8 +4,9 @@ import { useState, useEffect } from "react";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
 import UploadLeadsModal from "./UploadLeadsModal";
-import { updateLead, assignLead, fetchTeamMembers } from "@/lib/api/leadsApi";
+import { updateLead, assignLead, fetchTeamMembers, deleteLead } from "@/lib/api/leadsApi";
 import { TeamMember } from "./AssignLeadModal";
+import { toast } from "react-toastify";
 
 import {
     Search,
@@ -16,6 +17,11 @@ import {
     ChevronLeft,
     ChevronRight,
     Upload,
+    Trash2,
+    Eye,
+    Edit,
+    UserPlus,
+    Briefcase,
 } from "lucide-react";
 
 import {
@@ -41,6 +47,7 @@ export interface LeadsTableProps {
     onAction: (action: string, lead: Lead) => void;
     setOpenMenu: (id: string | null) => void;
 }
+
 function Avatar({ initials }: { initials: string }) {
     return (
         <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[11px] font-bold flex items-center justify-center shrink-0">
@@ -119,6 +126,7 @@ export function LeadsTable({
     const [viewingLead, setViewingLead] = useState<Lead | null>(null);
     const [isViewOpen, setIsViewOpen] = useState(false);
     const [isUploadOpen, setIsUploadOpen] = useState(false);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     // States for inline vertical assignment submenu
     const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
@@ -152,6 +160,27 @@ export function LeadsTable({
                 m.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
                 m.role.toLowerCase().includes(assignSearch.toLowerCase())
         ) : [];
+
+    // ── Handle Delete ──────────────────────────────────────────
+    const handleDelete = async (leadId: string) => {
+        if (!confirm("Are you sure you want to delete this lead?")) return;
+        
+        setDeletingId(leadId);
+        try {
+            const result = await deleteLead(leadId);
+            if (result.success) {
+                toast.success(result.message || "Lead deleted successfully");
+                await onRefreshLeads();
+            }
+        } catch (error: any) {
+            console.error("Delete error:", error);
+            toast.error(error.message || "Failed to delete lead");
+        } finally {
+            setDeletingId(null);
+            setOpenMenu(null);
+            setMenuPos(null);
+        }
+    };
 
     return (
         <div className="min-h-full">
@@ -227,104 +256,111 @@ export function LeadsTable({
                 <div className="overflow-x-auto overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
-                    <tr className="border-b border-gray-100">
-                        {["Lead Name", "Company", "Owner", "Status", "Score", "Created At", "Actions"].map((h) => (
-                            <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
-                                {h}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody>
-                    {loading ? (
-                        Array.from({ length: perPage }).map((_, i) => (
-                            <tr key={i} className="border-b border-gray-50">
-                                {Array.from({ length: 7 }).map((_, j) => (
-                                    <td key={j} className="px-5 py-4">
-                                        <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
-                                    </td>
+                            <tr className="border-b border-gray-100">
+                                {["Lead Name", "Company", "Owner", "Status", "Score", "Created At", "Actions"].map((h) => (
+                                    <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                                        {h}
+                                    </th>
                                 ))}
                             </tr>
-                        ))
-                    ) : safeLeads.length === 0 ? (
-                        <tr>
-                            <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
-                                No leads found.
-                            </td>
-                        </tr>
-                    ) : (
-                        safeLeads.map((lead) => {
-                            const statusInfo = getLeadStatusInfo(lead.status);
-                            return (
-                            <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
-                                <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
-                                <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company}</td>
-                                {/* ✅ Owner — shows "NA" badge if unassigned */}
-
-                                <td className="px-5 py-3.5 whitespace-nowrap">
-                                    {lead.assignedTo ? (
-                                        <div className="flex items-center gap-2">
-                                            <Avatar
-                                                initials={
-                                                    lead.assignedTo.name
-                                                        .split(" ")
-                                                        .map((n) => n[0])
-                                                        .join("")
-                                                        .toUpperCase()
-                                                        .slice(0, 2)
-                                                }
-                                            />
-                                            <span className="text-gray-700">
-                                                {lead.assignedTo.name}
-                                            </span>
-                                        </div>
-                                    ) : (
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
-                                            NA
-                                        </span>
-                                    )}
-                                </td>
-
-                                <td className="px-5 py-3.5 whitespace-nowrap">
-                                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${statusInfo.style}`}>
-                                        {statusInfo.emoji} {statusInfo.label}
-                                    </span>
-                                </td>
-
-                                <td className="px-5 py-3.5 whitespace-nowrap">
-                                    <ScoreBadge score={lead.score} />
-                                </td>
-
-                                <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">{lead.createdAt}</td>
-
-                                        {/*  Actions — overflow-visible so dropdown isn't clipped */}
-                                        <td className="px-5 py-3.5 whitespace-nowrap">
-                                            {convertingId === lead.id ? (
-                                                <div className="w-8 h-8 flex items-center justify-center">
-                                                    <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-                                                </div>
-                                            ) : (
-                                                <button
-                                                    onClick={(e) => {
-                                                        if (openMenu === lead.id) {
-                                                            setOpenMenu(null);
-                                                            setMenuPos(null);
-                                                        } else {
-                                                            const rect = e.currentTarget.getBoundingClientRect();
-                                                            setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
-                                                            setOpenMenu(lead.id);
-                                                        }
-                                                    }}
-                                                    className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                                                >
-                                                    <MoreVertical size={16} />
-                                                </button>
-                                            )}
-                                        </td>
+                        </thead>
+                        <tbody>
+                            {loading ? (
+                                Array.from({ length: perPage }).map((_, i) => (
+                                    <tr key={i} className="border-b border-gray-50">
+                                        {Array.from({ length: 7 }).map((_, j) => (
+                                            <td key={j} className="px-5 py-4">
+                                                <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
+                                            </td>
+                                        ))}
                                     </tr>
-                            );
-                        })
-                    )}
+                                ))
+                            ) : safeLeads.length === 0 ? (
+                                <tr>
+                                    <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
+                                        No leads found.
+                                    </td>
+                                </tr>
+                            ) : (
+                                safeLeads.map((lead) => {
+                                    const statusInfo = getLeadStatusInfo(lead.status);
+                                    const isDeleting = deletingId === lead.id;
+                                    
+                                    return (
+                                        <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                            <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
+                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company || "—"}</td>
+                                            {/* Owner — shows "NA" badge if unassigned */}
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                {lead.assignedTo ? (
+                                                    <div className="flex items-center gap-2">
+                                                        <Avatar
+                                                            initials={
+                                                                lead.assignedTo.name
+                                                                    .split(" ")
+                                                                    .map((n) => n[0])
+                                                                    .join("")
+                                                                    .toUpperCase()
+                                                                    .slice(0, 2)
+                                                            }
+                                                        />
+                                                        <span className="text-gray-700">
+                                                            {lead.assignedTo.name}
+                                                        </span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[12px] font-medium bg-gray-100 text-gray-400 border border-gray-200">
+                                                        NA
+                                                    </span>
+                                                )}
+                                            </td>
+
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium ${statusInfo.style}`}>
+                                                    {statusInfo.emoji} {statusInfo.label}
+                                                </span>
+                                            </td>
+
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                <ScoreBadge score={lead.score} />
+                                            </td>
+
+                                            <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">
+                                                {lead.createdAt ? new Date(lead.createdAt).toLocaleDateString() : "—"}
+                                            </td>
+
+                                            {/* Actions — overflow-visible so dropdown isn't clipped */}
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                {convertingId === lead.id ? (
+                                                    <div className="w-8 h-8 flex items-center justify-center">
+                                                        <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
+                                                    </div>
+                                                ) : isDeleting ? (
+                                                    <div className="w-8 h-8 flex items-center justify-center">
+                                                        <span className="w-4 h-4 border-2 border-red-200 border-t-red-600 rounded-full animate-spin" />
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={(e) => {
+                                                            if (openMenu === lead.id) {
+                                                                setOpenMenu(null);
+                                                                setMenuPos(null);
+                                                            } else {
+                                                                const rect = e.currentTarget.getBoundingClientRect();
+                                                                setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
+                                                                setOpenMenu(lead.id);
+                                                            }
+                                                        }}
+                                                        className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                                    >
+                                                        <MoreVertical size={16} />
+                                                    </button>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
                         </tbody>
                     </table>
                 </div>
@@ -396,44 +432,85 @@ export function LeadsTable({
                             }}
                         >
                             {!isAssignSubmenuOpen ? (
-                                ["View", "Edit", "Convert to Deal", "Assign", "Delete"].map((action) => (
+                                <>
+                                    {/* View */}
                                     <button
-                                        key={action}
                                         onClick={() => {
                                             const lead = safeLeads.find((l) => l.id === openMenu);
                                             if (lead) {
-                                                if (action === "Edit") {
-                                                    setEditingLead(lead);
-                                                    setIsEditOpen(true);
-                                                    setOpenMenu(null);
-                                                    setMenuPos(null);
-                                                } else if (action === "View") {
-                                                    setViewingLead(lead);
-                                                    setIsViewOpen(true);
-                                                    setOpenMenu(null);
-                                                    setMenuPos(null);
-                                                } else if (action === "Assign") {
-                                                    setIsAssignSubmenuOpen(true);
-                                                } else if (action === "Convert to Deal") {
-                                                    onAction("Convert", lead);
-                                                    setOpenMenu(null);
-                                                    setMenuPos(null);
-                                                } else {
-                                                    onAction(action, lead);
-                                                    setOpenMenu(null);
-                                                    setMenuPos(null);
-                                                }
+                                                setViewingLead(lead);
+                                                setIsViewOpen(true);
+                                                setOpenMenu(null);
+                                                setMenuPos(null);
                                             }
                                         }}
-                                        className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center justify-between ${action === "Delete" ? "text-red-500" : "text-gray-700"
-                                            }`}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
                                     >
-                                        <span>{action}</span>
-                                        {action === "Assign" && (
-                                            <ChevronRight size={13} className="text-gray-400" />
-                                        )}
+                                        <Eye size={14} />
+                                        View
                                     </button>
-                                ))
+                                    
+                                    {/* Edit */}
+                                    <button
+                                        onClick={() => {
+                                            const lead = safeLeads.find((l) => l.id === openMenu);
+                                            if (lead) {
+                                                setEditingLead(lead);
+                                                setIsEditOpen(true);
+                                                setOpenMenu(null);
+                                                setMenuPos(null);
+                                            }
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                                    >
+                                        <Edit size={14} />
+                                        Edit
+                                    </button>
+                                    
+                                    {/* Convert to Deal */}
+                                    <button
+                                        onClick={() => {
+                                            const lead = safeLeads.find((l) => l.id === openMenu);
+                                            if (lead) {
+                                                onAction("Convert", lead);
+                                                setOpenMenu(null);
+                                                setMenuPos(null);
+                                            }
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                                    >
+                                        <Briefcase size={14} />
+                                        Convert to Deal
+                                    </button>
+                                    
+                                    {/* Assign */}
+                                    <button
+                                        onClick={() => {
+                                            setIsAssignSubmenuOpen(true);
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center justify-between text-gray-700"
+                                    >
+                                        <span className="flex items-center gap-2">
+                                            <UserPlus size={14} />
+                                            Assign
+                                        </span>
+                                        <ChevronRight size={13} className="text-gray-400" />
+                                    </button>
+                                    
+                                    {/* Delete */}
+                                    <button
+                                        onClick={() => {
+                                            const lead = safeLeads.find((l) => l.id === openMenu);
+                                            if (lead) {
+                                                handleDelete(lead.id);
+                                            }
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-red-500 border-t border-gray-100 mt-1 pt-1"
+                                    >
+                                        <Trash2 size={14} />
+                                        Delete
+                                    </button>
+                                </>
                             ) : (
                                 <div className="flex flex-col">
                                     {/* Submenu Header */}
@@ -498,8 +575,10 @@ export function LeadsTable({
                                                             try {
                                                                 await assignLead(lead.id, member.id);
                                                                 await onRefreshLeads();
+                                                                toast.success(`Lead assigned to ${member.name}`);
                                                             } catch (err) {
                                                                 console.error("Failed to assign lead", err);
+                                                                toast.error("Failed to assign lead");
                                                             }
                                                         }
 
@@ -561,9 +640,11 @@ export function LeadsTable({
                             await updateLead(editingLead.id, payload as unknown as Partial<Lead>);
                             setIsEditOpen(false);
                             setEditingLead(null);
-                            onFiltersChange({ ...filters });
+                            await onRefreshLeads();
+                            toast.success("Lead updated successfully");
                         } catch (error) {
                             console.error("Failed to update lead", error);
+                            toast.error("Failed to update lead");
                         }
                     }}
                 />
@@ -584,6 +665,7 @@ export function LeadsTable({
                     onClose={() => setIsUploadOpen(false)}
                     onSuccess={async () => {
                         await onRefreshLeads();
+                        toast.success("Leads imported successfully!");
                     }}
                 />
             )}
