@@ -2,6 +2,12 @@ import api from "@/lib/api/api";
 
 export type MeetingStatus = "SCHEDULED" | "COMPLETED" | "CANCELLED";
 
+export interface Attendee {
+    id?: string;
+    name: string;
+    email?: string;
+}
+
 export interface Meeting {
     id: string;
     title: string;
@@ -10,7 +16,8 @@ export interface Meeting {
     startTime: string; // ISO format
     endTime: string; // ISO format
     status?: MeetingStatus;
-    attendees?: { id: string; name: string; email?: string }[];
+    attendees?: Attendee[];
+    reminder?: string;
     location?: string;
     link?: string;
     meetingLink?: string;
@@ -28,6 +35,8 @@ export interface CreateMeetingPayload {
     status?: MeetingStatus;
     location?: string;
     link?: string;
+    attendees?: string[]; // <--- Backend expects array of strings
+    reminder?: string;
 }
 
 export interface UpdateMeetingPayload extends Partial<CreateMeetingPayload> {
