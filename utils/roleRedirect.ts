@@ -27,7 +27,7 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base",
     "/analytics", "/reports", "/settings", "/automation",
     "/ceo", "/cfo", "/sales", "/operations", "/admin",
-    "/payment", "/profile", "/portal",
+    "/payment", "/profile", "/portal", "/meetings"
   ],
   CEO: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
