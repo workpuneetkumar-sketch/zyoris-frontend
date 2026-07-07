@@ -6,38 +6,55 @@ import {
   RefreshCw,
   Plus,
   FolderKanban,
-  CalendarDays,
-  Users,
   BarChart3,
   Clock,
-  Trash2,
-  Edit,
-  X,
   CheckCircle,
   AlertCircle,
-  ListChecks,
   PauseCircle,
+  X,
+  LayoutGrid,
+  List,
+  GanttChart,
+  Flag,
 } from "lucide-react";
 import {
   getProjects,
   createProject,
   updateProject,
   deleteProject,
-  getEmployees,
   Project,
   CreateProjectPayload,
   UpdateProjectPayload,
 } from "@/lib/api/projectsApi";
 
-import { StatusBadge, Skeleton } from "@/components/projects/SharedComponents";
+import { Skeleton } from "@/components/projects/SharedComponents";
 import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import MilestonesModal from "@/components/projects/MilestonesModal";
 import TeamModal from "@/components/projects/TeamMembersModal";
+
+import KanbanView from "@/components/projects/KanbanView";
+import ListView from "@/components/projects/ListView";
+import TimelineView from "@/components/projects/TimelineView";
+import MilestonesView from "@/components/projects/MilestonesView";
+
+// ── View Types ──────────────────────────────────────────────
+
+type ViewKey = "kanban" | "list" | "timeline" | "milestones";
+
+const VIEW_TABS: { key: ViewKey; label: string; icon: React.ElementType }[] = [
+  { key: "kanban", label: "Kanban", icon: LayoutGrid },
+  { key: "list", label: "List", icon: List },
+  { key: "timeline", label: "Timeline", icon: GanttChart },
+  { key: "milestones", label: "Milestones", icon: Flag },
+];
+
+// ── Main Page ───────────────────────────────────────────────
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<ViewKey>("kanban");
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -54,6 +71,8 @@ export default function ProjectsPage() {
     type: "success" | "error";
     message: string;
   } | null>(null);
+
+  // ── Data Loading ──────────────────────────────────────────
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -76,6 +95,8 @@ export default function ProjectsPage() {
     setToast({ type, message });
     setTimeout(() => setToast(null), 4000);
   };
+
+  // ── CRUD Handlers ─────────────────────────────────────────
 
   const handleCreate = async (payload: CreateProjectPayload) => {
     try {
@@ -106,6 +127,23 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleUpdateStatus = async (
+    id: string,
+    payload: UpdateProjectPayload
+  ) => {
+    try {
+      const updated = await updateProject(id, payload);
+      setProjects((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
+      );
+      showToast("success", "Status updated");
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message || err.message || "Failed to update status";
+      showToast("error", message);
+    }
+  };
+
   const handleDelete = async () => {
     if (!selectedProject) return;
     try {
@@ -120,6 +158,30 @@ export default function ProjectsPage() {
       showToast("error", message);
     }
   };
+
+  // ── Shared action callbacks for views ─────────────────────
+
+  const openEdit = (project: Project) => {
+    setSelectedProject(project);
+    setShowEditModal(true);
+  };
+
+  const openDelete = (project: Project) => {
+    setSelectedProject(project);
+    setShowDeleteModal(true);
+  };
+
+  const openTeam = (project: Project) => {
+    setSelectedProject(project);
+    setShowTeamModal(true);
+  };
+
+  const openMilestones = (project: Project) => {
+    setSelectedProject(project);
+    setShowMilestonesModal(true);
+  };
+
+  // ── Filtering ─────────────────────────────────────────────
 
   const filteredProjects = projects.filter((p) => {
     const matchesSearch =
@@ -137,8 +199,11 @@ export default function ProjectsPage() {
     onHold: projects.filter((p) => p.status === "ON_HOLD").length,
   };
 
+  // ── Render ────────────────────────────────────────────────
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-slate-100 p-6">
+      {/* Toast */}
       {toast && (
         <div
           className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-in ${
@@ -153,19 +218,25 @@ export default function ProjectsPage() {
             <AlertCircle className="w-5 h-5" />
           )}
           {toast.message}
-          <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
+          <button
+            onClick={() => setToast(null)}
+            className="ml-2 hover:opacity-70"
+          >
             <X size={16} />
           </button>
         </div>
       )}
 
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
             <FolderKanban className="w-8 h-8 text-indigo-600" />
             Projects
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Manage all your projects and teams</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage all your projects and teams
+          </p>
         </div>
         <button
           onClick={() => setShowCreateModal(true)}
@@ -176,13 +247,39 @@ export default function ProjectsPage() {
         </button>
       </div>
 
+      {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {[
-          { label: "Total", value: stats.total, icon: FolderKanban, color: "text-indigo-600 bg-indigo-50" },
-          { label: "Active", value: stats.active, icon: BarChart3, color: "text-emerald-600 bg-emerald-50" },
-          { label: "Planning", value: stats.planning, icon: Clock, color: "text-purple-600 bg-purple-50" },
-          { label: "On Hold", value: stats.onHold, icon: PauseCircle, color: "text-amber-600 bg-amber-50" },
-          { label: "Completed", value: stats.completed, icon: CheckCircle, color: "text-blue-600 bg-blue-50" },
+          {
+            label: "Total",
+            value: stats.total,
+            icon: FolderKanban,
+            color: "text-indigo-600 bg-indigo-50",
+          },
+          {
+            label: "Active",
+            value: stats.active,
+            icon: BarChart3,
+            color: "text-emerald-600 bg-emerald-50",
+          },
+          {
+            label: "Planning",
+            value: stats.planning,
+            icon: Clock,
+            color: "text-purple-600 bg-purple-50",
+          },
+          {
+            label: "On Hold",
+            value: stats.onHold,
+            icon: PauseCircle,
+            color: "text-amber-600 bg-amber-50",
+          },
+          {
+            label: "Completed",
+            value: stats.completed,
+            icon: CheckCircle,
+            color: "text-blue-600 bg-blue-50",
+          },
         ].map((card) => (
           <div
             key={card.label}
@@ -199,37 +296,66 @@ export default function ProjectsPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-          <input
-            type="text"
-            placeholder="Search projects..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 text-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
-          />
+      {/* View Switcher + Filters */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+        {/* View Tabs */}
+        <div className="flex items-center bg-white rounded-xl border border-gray-200 p-1 shadow-sm">
+          {VIEW_TABS.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeView === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveView(tab.key)}
+                className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? "bg-indigo-600 text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                <Icon size={16} />
+                <span className="hidden sm:inline">{tab.label}</span>
+              </button>
+            );
+          })}
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2.5 border border-gray-200 rounded-xl text-gray-800 text-sm font-medium bg-white cursor-pointer"
-        >
-          <option value="ALL">All Status</option>
-          <option value="PLANNING">Planning</option>
-          <option value="ACTIVE">Active</option>
-          <option value="ON_HOLD">On Hold</option>
-          <option value="COMPLETED">Completed</option>
-        </select>
-        <button
-          onClick={loadProjects}
-          disabled={loading}
-          className="p-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+
+        {/* Search & Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative min-w-[200px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 text-gray-800 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2.5 border border-gray-200 rounded-xl text-gray-800 text-sm font-medium bg-white cursor-pointer"
+          >
+            <option value="ALL">All Status</option>
+            <option value="PLANNING">Planning</option>
+            <option value="ACTIVE">Active</option>
+            <option value="ON_HOLD">On Hold</option>
+            <option value="COMPLETED">Completed</option>
+          </select>
+          <button
+            onClick={loadProjects}
+            disabled={loading}
+            className="p-2.5 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
+            />
+          </button>
+        </div>
       </div>
 
+      {/* Content Area */}
       {loading ? (
         <div className="space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -240,185 +366,50 @@ export default function ProjectsPage() {
         <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
           <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
           <p className="text-red-600 font-medium">{error}</p>
-          <button onClick={loadProjects} className="mt-4 text-indigo-600 font-semibold">
+          <button
+            onClick={loadProjects}
+            className="mt-4 text-indigo-600 font-semibold"
+          >
             Try again
           </button>
         </div>
-      ) : filteredProjects.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
-          <FolderKanban className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-          <p className="text-gray-500 font-medium">No projects found</p>
-          <button
-            onClick={() => {
-              setSearchQuery("");
-              setStatusFilter("ALL");
-            }}
-            className="mt-2 text-indigo-600 font-semibold"
-          >
-            Clear filters
-          </button>
-        </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="hidden md:block overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-100">
-                  {["Project Name", "Client", "Status", "Start", "End", ""].map(
-                    (heading) => (
-                      <th
-                        key={heading}
-                        className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
-                      >
-                        {heading}
-                      </th>
-                    )
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-50">
-                {filteredProjects.map((project) => (
-                  <tr
-                    key={project.id}
-                    className="hover:bg-gray-50/50 transition-colors"
-                  >
-                    <td className="px-5 py-4">
-                      <p className="font-semibold text-gray-900">{project.name}</p>
-                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
-                        {project.description || "—"}
-                      </p>
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-700">
-                      {project.client?.name || project.clientId || "—"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <StatusBadge status={project.status} />
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {new Date(project.startDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-5 py-4 text-sm text-gray-600">
-                      {project.endDate
-                        ? new Date(project.endDate).toLocaleDateString()
-                        : "—"}
-                    </td>
-                    <td className="px-5 py-4">
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowTeamModal(true);
-                          }}
-                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                          title="Team"
-                        >
-                          <Users size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowMilestonesModal(true);
-                          }}
-                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                          title="Milestones"
-                        >
-                          <ListChecks size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowEditModal(true);
-                          }}
-                          className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                          title="Edit"
-                        >
-                          <Edit size={16} />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedProject(project);
-                            setShowDeleteModal(true);
-                          }}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="md:hidden divide-y divide-gray-100">
-            {filteredProjects.map((project) => (
-              <div key={project.id} className="p-4 flex flex-col gap-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-gray-900">{project.name}</p>
-                    <p className="text-xs text-gray-500">{project.client?.name || project.clientId || "—"}</p>
-                  </div>
-                  <StatusBadge status={project.status} />
-                </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <CalendarDays className="w-4 h-4 text-gray-400" />
-                  <span>
-                    {new Date(project.startDate).toLocaleDateString()}
-                    {project.endDate && ` – ${new Date(project.endDate).toLocaleDateString()}`}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500"></span>
-                  <div className="flex gap-1">
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowTeamModal(true);
-                      }}
-                      className="p-1.5 text-gray-500"
-                      title="Team"
-                    >
-                      <Users size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowMilestonesModal(true);
-                      }}
-                      className="p-1.5 text-gray-500"
-                      title="Milestones"
-                    >
-                      <ListChecks size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowEditModal(true);
-                      }}
-                      className="p-1.5 text-gray-500"
-                      title="Edit"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedProject(project);
-                        setShowDeleteModal(true);
-                      }}
-                      className="p-1.5 text-red-500"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <>
+          {activeView === "kanban" && (
+            <KanbanView
+              projects={filteredProjects}
+              onEdit={openEdit}
+              onDelete={openDelete}
+              onTeam={openTeam}
+              onMilestones={openMilestones}
+              onUpdateStatus={handleUpdateStatus}
+            />
+          )}
+          {activeView === "list" && (
+            <ListView
+              projects={filteredProjects}
+              onEdit={openEdit}
+              onDelete={openDelete}
+              onTeam={openTeam}
+              onMilestones={openMilestones}
+            />
+          )}
+          {activeView === "timeline" && (
+            <TimelineView
+              projects={filteredProjects}
+              onEdit={openEdit}
+            />
+          )}
+          {activeView === "milestones" && (
+            <MilestonesView
+              projects={filteredProjects}
+              onOpenMilestonesModal={openMilestones}
+            />
+          )}
+        </>
       )}
+
+      {/* ── Modals ──────────────────────────────────────────── */}
 
       {(showCreateModal || showEditModal) && (
         <ProjectFormModal
@@ -443,9 +434,12 @@ export default function ProjectsPage() {
       {showDeleteModal && selectedProject && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900">Delete Project</h3>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Delete Project
+            </h3>
             <p className="mt-2 text-sm text-gray-600">
-              Are you sure you want to delete “{selectedProject.name}”? This action cannot be undone.
+              Are you sure you want to delete &ldquo;{selectedProject.name}
+              &rdquo;? This action cannot be undone.
             </p>
             <div className="mt-6 flex justify-end gap-3">
               <button
@@ -486,7 +480,7 @@ export default function ProjectsPage() {
             setSelectedProject(null);
           }}
           showToast={showToast}
-          onMemberAdded={(newMember) => {
+          onMemberAdded={() => {
             // optional refresh
           }}
         />
