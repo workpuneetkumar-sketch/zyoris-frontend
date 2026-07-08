@@ -1,297 +1,244 @@
 "use client";
 
-// ─────────────────────────────────────────────────────────
-// AnalyticsPage.tsx
-// Clean TypeScript version (NO SIDEBAR)
-// ─────────────────────────────────────────────────────────
+// app/(dashboard)/analytics/page.tsx
+// Analytics Page combining both pipeline and additional analytics
 
-import { useState } from "react";
 import { useAnalytics } from "@/hooks/useAnalytics";
-
+import { PipelineAnalyticsDashboard } from "@/components/analytics/PipelineAnalyticsDashboard";
 import {
-    ForecastChart,
-    DemandChart,
-    SegmentList,
-    DriversList,
-    SourceDonut,
-    Card,
-    CardHeader,
-    EndpointBadge,
-    Spinner,
-    KpiRow,
-} from "@/components/analytics/AnalyticsComponents";
+  LineChart,
+  Line,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import { TrendingUp, Users, Briefcase } from "lucide-react";
 
-// ─────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface TopbarProps {
-    activeTab: string;
-    onTab: (tab: string) => void;
-    onRefetch: () => void;
-    dateRange: "7D" | "30D" | "90D" | "1Y";
-    setDateRange: (range: "7D" | "30D" | "90D" | "1Y") => void;
-    onExport: () => void;
+function fmt$(v: number): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  return `$${v.toLocaleString()}`;
 }
 
-// ─────────────────────────────────────────────────────────
-// Tabs
-// ─────────────────────────────────────────────────────────
+// ── Custom Tooltip ────────────────────────────────────────────────────────────
 
-const TABS: string[] = [
-    "Revenue Forecast",
-    "Demand Trends",
-    "Segments",
-    "Drivers",
-];
-
-// ─────────────────────────────────────────────────────────
-// Topbar
-// ─────────────────────────────────────────────────────────
-
-function Topbar({ activeTab, onTab, onRefetch, dateRange, setDateRange, onExport }: TopbarProps) {
-    const [showDateRange, setShowDateRange] = useState(false);
-    return (
-        <div className="bg-white border-b border-gray-200 px-4 sm:px-6 pt-4">
-
-            {/* Header */}
-            <div className="flex items-start justify-between mb-3.5 flex-wrap gap-3">
-                <div>
-                    <h1 className="text-xl font-bold text-gray-900">
-                        Dashboard
-                    </h1>
-
-                    <p className="text-xs text-gray-500 mt-0.5">
-                        Overview & Insights
-                    </p>
-                </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                    <div className="relative">
-                        <button
-                            onClick={() => setShowDateRange(!showDateRange)}
-                            className="flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-xs text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                        >
-                            {dateRange}
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </button>
-                        {showDateRange && (
-                            <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-50">
-                                {["7D", "30D", "90D", "1Y"].map(range => (
-                                    <button
-                                        key={range}
-                                        onClick={() => {
-                                            setDateRange(range as any);
-                                            setShowDateRange(false);
-                                        }}
-                                        className={`w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50 ${dateRange === range ? "text-blue-600 font-semibold" : "text-gray-700"}`}
-                                    >
-                                        {range}
-                                    </button>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-
-                    <button
-                        onClick={onExport}
-                        className="flex items-center gap-1.5 border border-gray-200 rounded-md px-3 py-1.5 text-xs text-gray-700 bg-white hover:bg-gray-50 transition-colors"
-                    >
-                        Export
-                    </button>
-                </div>
-            </div>
-
-            {/* Tabs */}
-            <div className="overflow-x-auto">
-                <div className="flex">
-                    {TABS.map((tab) => (
-                        <button
-                            key={tab}
-                            onClick={() => onTab(tab)}
-                            className={`px-4 py-2 text-[13px] border-b-2 mb-[-1px] transition-colors whitespace-nowrap ${activeTab === tab
-                                ? "border-blue-600 text-blue-600 font-semibold"
-                                : "border-transparent text-gray-500 hover:text-gray-800"
-                                }`}
-                        >
-                            {tab}
-                        </button>
-                    ))}
-                </div>
-            </div>
-        </div>
-    );
+function CustomTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color?: string }>; label?: string }) {
+  if (!active || !payload || payload.length === 0) return null;
+  return (
+    <div className="bg-white border border-gray-100 rounded-xl shadow-lg p-3 text-xs">
+      <p className="font-semibold text-gray-700 mb-1">{label}</p>
+      {payload.map((entry, index) => (
+        <p key={index} style={{ color: entry.color || "#374151" }}>
+          {entry.name}: {typeof entry.value === "number" && entry.value > 1000
+            ? fmt$(entry.value)
+            : entry.value}
+        </p>
+      ))}
+    </div>
+  );
 }
 
-// ─────────────────────────────────────────────────────────
-// Export helper
-// ─────────────────────────────────────────────────────────
+// ── Demand Trends Chart ───────────────────────────────────────────────────────
 
-function exportCSV(filename: string, headers: string[], rows: string[][]) {
-    const csvContent = [
-        headers.join(","),
-        ...rows.map(row => row.map(cell => `"${cell}"`).join(","))
-    ].join("\n");
+function DemandTrendsChart({ data }: { data: NonNullable<ReturnType<typeof useAnalytics>["demand"]> }) {
+  if (!data) return <div className="h-48 flex items-center justify-center text-xs text-gray-400">No demand data</div>;
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const chartData = data.months.map((month, index) => ({
+    month,
+    Demand: data.demand[index] ?? 0,
+    Inventory: data.inventory[index] ?? 0,
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+        <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt$(v)} width={55} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend iconType="circle" iconSize={6} wrapperStyle={{ fontSize: "11px" }} />
+        <Line type="monotone" dataKey="Demand" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} name="Demand" />
+        <Line type="monotone" dataKey="Inventory" stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} name="Inventory" />
+      </LineChart>
+    </ResponsiveContainer>
+  );
 }
 
-// ─────────────────────────────────────────────────────────
-// Main Page (NO SIDEBAR)
-// ─────────────────────────────────────────────────────────
+// ── Segments Chart ────────────────────────────────────────────────────────────
+
+const SEGMENT_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"];
+
+function SegmentsChart({ data }: { data: NonNullable<ReturnType<typeof useAnalytics>["segments"]> }) {
+  if (!data || data.length === 0) return <div className="h-48 flex items-center justify-center text-xs text-gray-400">No segments data</div>;
+
+  const chartData = data.map((seg) => ({
+    name: seg.name,
+    value: seg.share * 100,
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <PieChart>
+        <Pie
+          data={chartData}
+          cx="50%"
+          cy="50%"
+          innerRadius={55}
+          outerRadius={80}
+          paddingAngle={3}
+          dataKey="value"
+          nameKey="name"
+        >
+          {chartData.map((entry, idx) => (
+            <Cell key={idx} fill={SEGMENT_COLORS[idx % SEGMENT_COLORS.length]} />
+          ))}
+        </Pie>
+        <Tooltip
+          formatter={(value: number) => [`${value.toFixed(0)}%`, "Share"]}
+          contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
+        />
+        <Legend formatter={(value) => <span style={{ fontSize: 11, color: "#64748b" }}>{value}</span>} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── Revenue Drivers Chart ─────────────────────────────────────────────────────
+
+function RevenueDriversChart({ data }: { data: NonNullable<ReturnType<typeof useAnalytics>["drivers"]> }) {
+  if (!data) return <div className="h-48 flex items-center justify-center text-xs text-gray-400">No drivers data</div>;
+
+  const chartData = data.channels.map((drv) => ({
+    name: drv.name,
+    Revenue: drv.revenue,
+    Marketing: drv.marketing,
+  }));
+
+  return (
+    <ResponsiveContainer width="100%" height={200}>
+      <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }} barSize={28}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+        <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} />
+        <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} tickLine={false} axisLine={false} tickFormatter={(v) => fmt$(v)} width={55} />
+        <Tooltip content={<CustomTooltip />} />
+        <Legend iconType="rect" iconSize={6} wrapperStyle={{ fontSize: "11px" }} />
+        <Bar dataKey="Revenue" name="Revenue" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="Marketing" name="Marketing" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+// ── Main Page Component ───────────────────────────────────────────────────────
 
 export default function AnalyticsPage() {
-    const [activeTab, setActiveTab] = useState("Revenue Forecast");
+  const {
+    loading: analyticsLoading,
+    forecast,
+    demand,
+    segments,
+    drivers,
+    isForecastDemo,
+    isDemandDemo,
+    isSegmentsDemo,
+    isDriversDemo,
+  } = useAnalytics();
 
-    const {
-        loading,
-        error,
-        kpi,
-        forecast,
-        isForecastDemo,
-        demand,
-        isDemandDemo,
-        segments,
-        isSegmentsDemo,
-        drivers,
-        isDriversDemo,
-        dateRange,
-        setDateRange,
-        refetch,
-    } = useAnalytics();
-
-    const handleExport = () => {
-        const timestamp = new Date().toISOString().split('T')[0];
-        let filename = `analytics-${activeTab.toLowerCase().replace(/\s+/g, '-')}-${timestamp}.csv`;
-
-        if (activeTab === "Revenue Forecast" && forecast) {
-            exportCSV(
-                filename,
-                ["Date", "Forecast", "Upper Bound", "Lower Bound", "Data Source"],
-                forecast.datapoints.map(d => [
-                    d.label,
-                    d.forecast.toString(),
-                    d.upper.toString(),
-                    d.lower.toString(),
-                    isForecastDemo ? "Demo" : "Real"
-                ])
-            );
-        } else if (activeTab === "Demand Trends" && demand) {
-            exportCSV(
-                filename,
-                ["Month", "Demand", "Inventory", "Data Source"],
-                demand.months.map((month, i) => [
-                    month,
-                    demand.demand[i]?.toString() || "",
-                    demand.inventory[i]?.toString() || "",
-                    isDemandDemo ? "Demo" : "Real"
-                ])
-            );
-        } else if (activeTab === "Segments" && segments) {
-            exportCSV(
-                filename,
-                ["Segment Name", "Share", "Color", "Data Source"],
-                segments.map(s => [
-                    s.name,
-                    (s.share * 100).toFixed(0) + "%",
-                    s.color,
-                    isSegmentsDemo ? "Demo" : "Real"
-                ])
-            );
-        } else if (activeTab === "Drivers" && drivers) {
-            exportCSV(
-                filename,
-                ["Channel", "Revenue", "Marketing", "Expenses", "Data Source"],
-                drivers.channels.map(c => [
-                    c.name,
-                    c.revenue.toString(),
-                    c.marketing.toString(),
-                    c.expenses.toString(),
-                    isDriversDemo ? "Demo" : "Real"
-                ])
-            );
-        }
-    };
-
-    return (
-        <div className="h-screen overflow-hidden font-sans bg-gray-50 text-gray-900 text-[13px]">
-
-            {/* TOPBAR */}
-            <Topbar
-                activeTab={activeTab}
-                onTab={setActiveTab}
-                onRefetch={refetch}
-                dateRange={dateRange}
-                setDateRange={setDateRange}
-                onExport={handleExport}
-            />
-
-            {/* CONTENT */}
-            <main className="h-full overflow-y-auto px-4 sm:px-6 py-5 pb-10">
-
-                {/* ERROR */}
-                {error && (
-                    <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-md px-3.5 py-2.5 text-xs text-red-700 mb-4">
-                        <i className="fa-solid fa-circle-exclamation" />
-                        {error} — showing fallback data.
-                    </div>
-                )}
-
-                {/* KPI */}
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2.5">
-                    Key Metrics
+  return (
+    <div className="space-y-8 pb-8">
+      <PipelineAnalyticsDashboard />
+      
+      {/* Additional Analytics Sections */}
+      <div className="space-y-4">
+        <h2 className="text-lg font-bold text-gray-900">Additional Analytics</h2>
+        
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Demand & Inventory Trends */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <TrendingUp size={16} className="text-blue-600" />
+                  Demand & Inventory Trends
                 </p>
-                {kpi ? <KpiRow kpi={kpi} /> : <Spinner />}
-
-                {/* CHARTS BASED ON ACTIVE TAB */}
-                <div className="mt-6">
-                    {loading && <Spinner text="Loading analytics..." />}
-                    {!loading && activeTab === "Revenue Forecast" && forecast && (
-                        <Card>
-                            <CardHeader title="Revenue Forecast" isDemo={isForecastDemo} />
-                            <ForecastChart data={forecast} />
-                        </Card>
-                    )}
-
-                    {!loading && activeTab === "Demand Trends" && demand && (
-                        <Card>
-                            <CardHeader title="Demand Trends" isDemo={isDemandDemo} />
-                            <DemandChart data={demand} />
-                        </Card>
-                    )}
-
-                    {!loading && activeTab === "Segments" && segments && (
-                        <Card>
-                            <CardHeader title="Segments" isDemo={isSegmentsDemo} />
-                            <SegmentList data={segments} />
-                        </Card>
-                    )}
-
-                    {!loading && activeTab === "Drivers" && drivers && (
-                        <div className="space-y-4">
-                            <Card>
-                                <CardHeader title="Drivers" isDemo={isDriversDemo} />
-                                <DriversList data={drivers} />
-                            </Card>
-                            <Card>
-                                <CardHeader title="Revenue Sources" isDemo={isDriversDemo} />
-                                <SourceDonut data={drivers} />
-                            </Card>
-                        </div>
-                    )}
-                </div>
-
-            </main>
+                <p className="text-xs text-gray-400">Market demand vs stock levels</p>
+              </div>
+              {isDemandDemo && (
+                <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100">
+                  Demo
+                </span>
+              )}
+            </div>
+            {analyticsLoading ? (
+              <div className="h-48 animate-pulse bg-gray-100 rounded-xl" />
+            ) : demand ? (
+              <DemandTrendsChart data={demand} />
+            ) : (
+              <div className="h-48 flex items-center justify-center text-xs text-gray-400">No demand data available</div>
+            )}
+          </div>
+          
+          {/* Segment Clustering */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Users size={16} className="text-blue-600" />
+                  Segment Clustering
+                </p>
+                <p className="text-xs text-gray-400">Customer segment distribution</p>
+              </div>
+              {isSegmentsDemo && (
+                <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100">
+                  Demo
+                </span>
+              )}
+            </div>
+            {analyticsLoading ? (
+              <div className="h-48 animate-pulse bg-gray-100 rounded-xl" />
+            ) : segments ? (
+              <SegmentsChart data={segments} />
+            ) : (
+              <div className="h-48 flex items-center justify-center text-xs text-gray-400">No segments data available</div>
+            )}
+          </div>
+          
+          {/* Revenue Drivers & ROI */}
+          <div className="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm lg:col-span-2">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                  <Briefcase size={16} className="text-blue-600" />
+                  Revenue Drivers & ROI
+                </p>
+                <p className="text-xs text-gray-400">Revenue vs marketing spend by channel</p>
+              </div>
+              {isDriversDemo && (
+                <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-600 rounded-full border border-amber-100">
+                  Demo
+                </span>
+              )}
+            </div>
+            {analyticsLoading ? (
+              <div className="h-48 animate-pulse bg-gray-100 rounded-xl" />
+            ) : drivers ? (
+              <RevenueDriversChart data={drivers} />
+            ) : (
+              <div className="h-48 flex items-center justify-center text-xs text-gray-400">No drivers data available</div>
+            )}
+          </div>
         </div>
-    );
+      </div>
+    </div>
+  );
 }

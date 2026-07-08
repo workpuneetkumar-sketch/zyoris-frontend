@@ -37,6 +37,7 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
+import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
 
 type NavItem = {
   href: string;
@@ -249,6 +250,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [logoutCountdown, setLogoutCountdown] = useState(10);
   const logoutTriggeredRef = useRef(false);
 
+  // Real-time notifications (Task 6)
+  const {
+    notifications: realtimeNotifications,
+    markRead: markNotificationRead,
+    markAllRead: markAllNotificationsRead,
+  } = useRealtimeNotifications();
+
   const closeLogoutModal = useCallback(() => {
     setLogoutModalOpen(false);
     setLogoutCountdown(10);
@@ -430,7 +438,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Notification bell + logout */}
           <div className="flex items-center gap-1 shrink-0">
-            <NotificationBell />
+            <NotificationBell
+              notifications={realtimeNotifications}
+              onMarkRead={markNotificationRead}
+              onMarkAllRead={markAllNotificationsRead}
+            />
             <button
               onClick={openLogoutModal}
               className="p-1 rounded-lg hover:bg-red-50 transition-colors group"
@@ -548,12 +560,20 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           {/* Right side: notification bell (desktop) */}
           <div className="hidden md:block">
-            <NotificationBell />
+            <NotificationBell
+              notifications={realtimeNotifications}
+              onMarkRead={markNotificationRead}
+              onMarkAllRead={markAllNotificationsRead}
+            />
           </div>
 
           {/* Mobile notification bell */}
           <div className="md:hidden">
-            <NotificationBell />
+            <NotificationBell
+              notifications={realtimeNotifications}
+              onMarkRead={markNotificationRead}
+              onMarkAllRead={markAllNotificationsRead}
+            />
           </div>
         </header>
 

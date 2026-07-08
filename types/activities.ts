@@ -1,6 +1,6 @@
 // types/activities.ts
 
-export type ActivityType = "Task" | "Call" | "Meeting" | "Email" | "Note";
+export type ActivityType = "Task" | "Call" | "Meeting" | "Email" | "Note" | "WhatsApp";
 export type ActivityStatus = "Upcoming" | "Completed" | "Overdue";
 export type ActivityPriority = "High" | "Medium" | "Low";
 
@@ -17,6 +17,7 @@ export interface Activity {
     dueTime: string;
     status: ActivityStatus;
     priority: ActivityPriority;
+    createdAt?: string;
 }
 
 export interface ActivityStats {
