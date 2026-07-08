@@ -63,11 +63,28 @@ export default function MeetingsPage() {
     const handleOpenModal = (meeting?: Meeting) => {
         if (meeting) {
             setEditingMeeting(meeting);
+            
+            const getLocalDate = (dateStr: string) => {
+                if (!dateStr) return "";
+                if (!dateStr.includes("T")) return dateStr;
+                const d = new Date(dateStr);
+                if (isNaN(d.getTime())) return dateStr.split('T')[0];
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            };
+            
+            const getLocalTime = (timeStr: string) => {
+                if (!timeStr) return "";
+                if (!timeStr.includes("T")) return timeStr;
+                const d = new Date(timeStr);
+                if (isNaN(d.getTime())) return timeStr.split('T')[1].substring(0, 5);
+                return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+            };
+
             setFormData({
                 title: meeting.title,
-                date: meeting.date ? meeting.date.split('T')[0] : meeting.startTime.split('T')[0],
-                startTime: meeting.startTime.includes('T') ? meeting.startTime.split('T')[1].substring(0, 5) : meeting.startTime,
-                endTime: meeting.endTime.includes('T') ? meeting.endTime.split('T')[1].substring(0, 5) : meeting.endTime,
+                date: getLocalDate(meeting.date || meeting.startTime),
+                startTime: getLocalTime(meeting.startTime),
+                endTime: getLocalTime(meeting.endTime),
                 description: meeting.description || "",
                 location: meeting.location || "",
                 link: meeting.link || meeting.meetingLink || "",
@@ -102,12 +119,14 @@ export default function MeetingsPage() {
         e.preventDefault();
         setIsSubmitting(true);
         try {
-            // Format to proper ISO strings if needed by backend, assuming backend handles YYYY-MM-DD + HH:mm properly
+            const startDateTime = new Date(`${formData.date}T${formData.startTime}:00`);
+            const endDateTime = new Date(`${formData.date}T${formData.endTime}:00`);
+
             const payload = {
                 ...formData,
                 meetingLink: formData.link, // Send as meetingLink for backend
-                startTime: `${formData.date}T${formData.startTime}:00Z`,
-                endTime: `${formData.date}T${formData.endTime}:00Z`,
+                startTime: startDateTime.toISOString(),
+                endTime: endDateTime.toISOString(),
                 attendees: attendees.map(a => a.name) // <--- Convert to strings here!
             };
 
