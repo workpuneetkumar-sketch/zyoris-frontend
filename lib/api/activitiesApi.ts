@@ -40,12 +40,19 @@ interface NormalizedActivity extends Activity {
 function convertTimelineItemToActivity(item: any): NormalizedActivity {
   const typeMap: Record<string, Activity["type"]> = {
     call: "Call",
+    CALL: "Call",
     email: "Email",
+    EMAIL: "Email",
     meeting: "Meeting",
+    MEETING: "Meeting",
     task: "Task",
+    TASK: "Task",
     whatsapp: "WhatsApp",
+    WHATSAPP: "WhatsApp",
     note: "Note",
+    NOTE: "Note",
     activity: "Note",
+    ACTIVITY: "Note",
   };
   const type = typeMap[item.type] || "Note";
   const createdAt = item.timestamp || item.createdAt || new Date().toISOString();
@@ -53,17 +60,17 @@ function convertTimelineItemToActivity(item: any): NormalizedActivity {
 
   return {
     id: item.id,
-    title: item.title || "Activity",
-    description: item.description || "",
-    relatedTo: item.relatedTo || "Contact",
+    title: item.message || item.title || "Activity",
+    description: item.message || item.description || "",
+    relatedTo: item.metadata?.relatedTo || item.relatedTo || "Contact",
     relatedToCompany: item.metadata?.relatedCompany || "Company",
     type,
-    owner: item.owner || "User",
-    ownerAvatar: item.ownerAvatar || getInitials(item.owner || "User"),
+    owner: item.createdBy?.name || item.owner || "User",
+    ownerAvatar: item.ownerAvatar || getInitials(item.createdBy?.name || item.owner || "User"),
     dueDate: date.toLocaleDateString(),
-    dueTime: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    dueTime: item.metadata?.dueTime || date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     status: "Upcoming",
-    priority: "Medium",
+    priority: (item.metadata?.priority as Activity["priority"]) || "Medium",
     createdAt,
   };
 }
@@ -72,7 +79,7 @@ function convertCallToActivity(call: any): NormalizedActivity {
   const dateStr = call.date || call.scheduledAt || call.createdAt || new Date().toISOString();
   const date = new Date(dateStr);
   return {
-    id: `call-${call.id}`,
+    id: call.id,
     title: call.subject || "Call",
     description: call.notes || "",
     relatedTo: call.contactName || "Contact",
@@ -92,7 +99,7 @@ function convertEmailToActivity(email: any): NormalizedActivity {
   const dateStr = email.sentAt || email.createdAt || new Date().toISOString();
   const date = new Date(dateStr);
   return {
-    id: `email-${email.id}`,
+    id: email.id,
     title: email.subject || "Email",
     description: email.body || "",
     relatedTo: email.to || "Contact",
@@ -112,7 +119,7 @@ function convertMeetingToActivity(meeting: any): NormalizedActivity {
   const dateStr = meeting.startTime || meeting.date || meeting.createdAt || new Date().toISOString();
   const date = new Date(dateStr);
   return {
-    id: `meeting-${meeting.id}`,
+    id: meeting.id,
     title: meeting.title || "Meeting",
     description: meeting.agenda || meeting.description || "",
     relatedTo: meeting.contactName || (meeting.attendees?.[0]?.name) || "Contact",
@@ -143,7 +150,7 @@ function convertTaskToActivity(task: any): NormalizedActivity {
     HIGH: "High",
   };
   return {
-    id: `task-${task.id}`,
+    id: task.id,
     title: task.title || "Task",
     description: task.description || "",
     relatedTo: task.assignedTo?.name || "Contact",
@@ -164,7 +171,7 @@ function convertWhatsAppToActivity(whatsapp: any): NormalizedActivity {
   const dateStr = whatsapp.updatedAt || lastMessage?.timestamp || new Date().toISOString();
   const date = new Date(dateStr);
   return {
-    id: `whatsapp-${whatsapp.id}`,
+    id: whatsapp.id,
     title: `WhatsApp with ${whatsapp.contactName}`,
     description: lastMessage?.text || "No messages",
     relatedTo: whatsapp.contactName || "Contact",
@@ -183,60 +190,34 @@ function convertWhatsAppToActivity(whatsapp: any): NormalizedActivity {
 function convertActivityToActivity(activity: any): NormalizedActivity {
   const dateStr = activity.createdAt || new Date().toISOString();
   const date = new Date(dateStr);
-  const type = (activity.type?.charAt(0) + activity.type?.slice(1).toLowerCase()) as Activity["type"] || "Note";
+  // Convert uppercase type (like "NOTE") to UI type (like "Note")
+  const type = (() => {
+    const t = activity.type?.toUpperCase();
+    switch (t) {
+      case "NOTE": return "Note";
+      case "TASK": return "Task";
+      case "CALL": return "Call";
+      case "MEETING": return "Meeting";
+      case "EMAIL": return "Email";
+      case "WHATSAPP": return "WhatsApp";
+      default: return "Note";
+    }
+  })() as ActivityType;
   return {
-    id: `activity-${activity.id}`,
+    id: activity.id,
     title: activity.message || activity.title || "Activity",
     description: activity.message || activity.description || "",
     relatedTo: activity.metadata?.relatedTo || "Contact",
     relatedToCompany: activity.metadata?.relatedCompany || "Company",
-    type: type as ActivityType,
+    type,
     owner: activity.createdBy?.name || "User",
     ownerAvatar: getInitials(activity.createdBy?.name || "User"),
     dueDate: date.toLocaleDateString(),
     dueTime: activity.metadata?.dueTime || date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     status: "Upcoming",
-    priority: "Medium",
+    priority: (activity.metadata?.priority as Activity["priority"]) || "Medium",
     createdAt: dateStr,
   };
-}
-
-// ── Mock data generator ───────────────────────────────────────────────────────
-
-function generateMockStats(): ActivityStats {
-  return {
-    all: 15,
-    allChange: 12,
-    upcoming: 8,
-    upcomingChange: 5,
-    completed: 5,
-    completedChange: 8,
-    overdue: 2,
-    overdueChange: -15,
-  };
-}
-
-function generateMockOverdue(): OverdueActivity[] {
-  return [
-    {
-      id: "3",
-      title: "Send proposal",
-      company: "Global Industries",
-      dueDate: "Jul 07, 2025",
-      priority: "High",
-    },
-  ];
-}
-
-function generateMockBreakdown(): ActivityTypeBreakdown[] {
-  return [
-    { type: "Task", count: 5, percentage: 33 },
-    { type: "Call", count: 4, percentage: 27 },
-    { type: "Meeting", count: 3, percentage: 20 },
-    { type: "Email", count: 2, percentage: 13 },
-    { type: "Note", count: 1, percentage: 7 },
-    { type: "WhatsApp", count: 1, percentage: 0 },
-  ];
 }
 
 // ── GET paginated activities ──────────────────────────────────────────────────
@@ -259,6 +240,7 @@ export async function fetchActivities(
         : Array.isArray(data.items)
         ? data.items
         : [];
+      console.log("📊 /activities/timeline items:", items);
       if (items.length > 0) {
         items.forEach((item: any) => allActivities.push(convertTimelineItemToActivity(item)));
       }
@@ -267,86 +249,144 @@ export async function fetchActivities(
     console.log("Primary timeline endpoint failed, using fallback");
   }
 
-  // If primary didn't work or returned nothing, use fallback to fetch all endpoints in parallel
-  if (allActivities.length === 0) {
-    const [
-      activitiesRes,
-      callsRes,
-      emailsRes,
-      meetingsRes,
-      tasksRes,
-      whatsappRes,
-    ] = await Promise.allSettled([
-      api.get("/activities/get-activities").catch(() => null),
-      fetchCalls(1).catch(() => null),
-      fetchEmails().catch(() => null),
-      getMeetings().catch(() => null),
-      fetchTasks().catch(() => null),
-      fetchConversations().catch(() => null),
-    ]);
+  // Always fetch all individual endpoints as well, to ensure we get all data
+  const [
+    activitiesRes,
+    callsRes,
+    emailsRes,
+    meetingsRes,
+    tasksRes,
+    whatsappRes,
+  ] = await Promise.allSettled([
+    api.get("/activities/get-activities").catch(() => null),
+    fetchCalls(1).catch(() => null),
+    fetchEmails().catch(() => null),
+    getMeetings().catch(() => null),
+    fetchTasks().catch(() => null),
+    fetchConversations().catch(() => null),
+  ]);
 
-    // Process activities
-    if (activitiesRes.status === "fulfilled" && activitiesRes.value) {
-      const data = activitiesRes.value.data;
-      const activities = data.activities || data.data || [];
-      activities.forEach((a: any) => allActivities.push(convertActivityToActivity(a)));
-    } else if (activitiesRes.status === "rejected") {
-      toast.warning("Failed to load activities from /activities/get-activities");
-    }
+  // Process activities
+  if (activitiesRes.status === "fulfilled" && activitiesRes.value) {
+    const data = activitiesRes.value.data;
+    const activities = data.activities || data.data || [];
+    console.log("📋 /activities/get-activities data:", data);
+    console.log("📋 /activities/get-activities items:", activities);
+    activities.forEach((a: any) => {
+      const converted = convertActivityToActivity(a);
+      console.log("🔄 Converted activity:", converted);
+      allActivities.push(converted);
+    });
+  } else if (activitiesRes.status === "rejected") {
+    toast.warning("Failed to load activities from /activities/get-activities");
+  }
 
-    // Process calls
-    if (callsRes.status === "fulfilled" && callsRes.value) {
-      const calls = callsRes.value.calls || [];
-      calls.forEach((c: any) => allActivities.push(convertCallToActivity(c)));
-    } else if (callsRes.status === "rejected") {
-      toast.warning("Failed to load calls");
-    }
+  // Process calls
+  if (callsRes.status === "fulfilled" && callsRes.value) {
+    const calls = callsRes.value.calls || [];
+    calls.forEach((c: any) => allActivities.push(convertCallToActivity(c)));
+  } else if (callsRes.status === "rejected") {
+    toast.warning("Failed to load calls");
+  }
 
-    // Process emails
-    if (emailsRes.status === "fulfilled" && emailsRes.value) {
-      const emails = emailsRes.value.emails || [];
-      emails.forEach((e: any) => allActivities.push(convertEmailToActivity(e)));
-    } else if (emailsRes.status === "rejected") {
-      toast.warning("Failed to load emails");
-    }
+  // Process emails
+  if (emailsRes.status === "fulfilled" && emailsRes.value) {
+    const emails = emailsRes.value.emails || [];
+    emails.forEach((e: any) => allActivities.push(convertEmailToActivity(e)));
+  } else if (emailsRes.status === "rejected") {
+    toast.warning("Failed to load emails");
+  }
 
-    // Process meetings
-    if (meetingsRes.status === "fulfilled" && meetingsRes.value) {
-      const meetings = meetingsRes.value || [];
-      meetings.forEach((m: any) => allActivities.push(convertMeetingToActivity(m)));
-    } else if (meetingsRes.status === "rejected") {
-      toast.warning("Failed to load meetings");
-    }
+  // Process meetings
+  if (meetingsRes.status === "fulfilled" && meetingsRes.value) {
+    const meetings = meetingsRes.value || [];
+    meetings.forEach((m: any) => allActivities.push(convertMeetingToActivity(m)));
+  } else if (meetingsRes.status === "rejected") {
+    toast.warning("Failed to load meetings");
+  }
 
-    // Process tasks
-    if (tasksRes.status === "fulfilled" && tasksRes.value) {
-      const tasks = tasksRes.value.tasks || [];
-      tasks.forEach((t: any) => allActivities.push(convertTaskToActivity(t)));
-    } else if (tasksRes.status === "rejected") {
-      toast.warning("Failed to load tasks");
-    }
+  // Process tasks
+  if (tasksRes.status === "fulfilled" && tasksRes.value) {
+    const tasks = tasksRes.value.tasks || [];
+    tasks.forEach((t: any) => allActivities.push(convertTaskToActivity(t)));
+  } else if (tasksRes.status === "rejected") {
+    toast.warning("Failed to load tasks");
+  }
 
-    // Process WhatsApp
-    if (whatsappRes.status === "fulfilled" && whatsappRes.value) {
-      const whatsapp = whatsappRes.value || [];
-      whatsapp.forEach((w: any) => allActivities.push(convertWhatsAppToActivity(w)));
-    } else if (whatsappRes.status === "rejected") {
-      toast.warning("Failed to load WhatsApp conversations");
-    }
+  // Process WhatsApp
+  if (whatsappRes.status === "fulfilled" && whatsappRes.value) {
+    const whatsapp = whatsappRes.value || [];
+    whatsapp.forEach((w: any) => allActivities.push(convertWhatsAppToActivity(w)));
+  } else if (whatsappRes.status === "rejected") {
+    toast.warning("Failed to load WhatsApp conversations");
   }
 
   // Remove duplicates by id
   const uniqueActivities = Array.from(
     new Map(allActivities.map((a) => [a.id, a])).values()
   );
+  console.log("🆔 Unique activities:", uniqueActivities);
 
   // Sort descending by createdAt (newest first)
   uniqueActivities.sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
+  console.log("🔽 Sorted activities:", uniqueActivities);
+
+  // Calculate stats on all unique activities
+  const all = uniqueActivities.length;
+  const upcoming = uniqueActivities.filter(a => a.status === "Upcoming").length;
+  const completed = uniqueActivities.filter(a => a.status === "Completed").length;
+  const overdue = uniqueActivities.filter(a => a.status === "Overdue").length;
+  
+  const stats: ActivityStats = {
+    all,
+    allChange: 0,
+    upcoming,
+    upcomingChange: 0,
+    completed,
+    completedChange: 0,
+    overdue,
+    overdueChange: 0,
+  };
+  
+  const overdueActivities: OverdueActivity[] = uniqueActivities
+    .filter(a => a.status === "Overdue")
+    .slice(0, 5)
+    .map(a => ({
+      id: a.id,
+      title: a.title,
+      company: a.relatedToCompany,
+      dueDate: a.dueDate,
+      priority: a.priority,
+    }));
+  
+  const typeCounts: Record<ActivityType, number> = {
+    Task: 0,
+    Call: 0,
+    Meeting: 0,
+    Email: 0,
+    Note: 0,
+    WhatsApp: 0,
+  };
+  
+  uniqueActivities.forEach(a => {
+    if (typeCounts[a.type] !== undefined) {
+      typeCounts[a.type]++;
+    }
+  });
+  
+  const breakdown: ActivityTypeBreakdown[] = Object.entries(typeCounts)
+    .filter(([_, count]) => count > 0)
+    .map(([type, count]) => ({
+      type: type as ActivityType,
+      count,
+      percentage: all > 0 ? Math.round((count / all) * 100) : 0,
+    }));
 
   // Apply filters
   let filtered: NormalizedActivity[] = [...uniqueActivities];
+  console.log("🧹 Before filters, filtered length:", filtered.length, "filters:", filters);
   
   if (filters.search) {
     const searchLower = filters.search.toLowerCase();
@@ -359,8 +399,14 @@ export async function fetchActivities(
   }
   
   if (filters.tab && filters.tab !== "All Activities") {
-    filtered = filtered.filter((a) => a.type === filters.tab);
+    console.log("🔍 Filtering by tab:", filters.tab);
+    filtered = filtered.filter((a) => {
+      console.log(`   checking activity type: ${a.type} (matches? ${a.type === filters.tab})`);
+      return a.type === filters.tab;
+    });
   }
+  
+  console.log("✅ After filters, filtered length:", filtered.length, "filtered:", filtered);
   
   // Apply pagination
   const start = (page - 1) * PER_PAGE;
@@ -372,9 +418,9 @@ export async function fetchActivities(
   return {
     activities: finalPaginated,
     total: filtered.length,
-    stats: generateMockStats(),
-    overdue: generateMockOverdue(),
-    breakdown: generateMockBreakdown(),
+    stats,
+    overdue: overdueActivities,
+    breakdown,
   };
 }
 
@@ -385,34 +431,12 @@ export interface CreateActivityRequest {
   entityId: string;
   type: "NOTE" | "TASK" | "CALL" | "MEETING" | "EMAIL";
   message: string;
-  title?: string;
-  dueDate?: string;
-  priority?: "High" | "Medium" | "Low";
   metadata?: Record<string, unknown>;
 }
 
-export async function createActivity(data: CreateActivityRequest): Promise<{ success: boolean; data: Activity }> {
-  try {
-    const res = await api.post("/activities/create-activity", data);
-    return res.data;
-  } catch (error) {
-    console.log("Creating mock activity");
-    const mockActivity: Activity = {
-      id: Date.now().toString(),
-      title: data.title || data.message.substring(0, 50),
-      description: data.message,
-      relatedTo: "Contact",
-      relatedToCompany: "Company",
-      type: (data.type.charAt(0) + data.type.slice(1).toLowerCase()) as Activity["type"],
-      owner: "Current User",
-      ownerAvatar: "CU",
-      dueDate: data.dueDate || new Date().toLocaleDateString(),
-      dueTime: "12:00 PM",
-      status: "Upcoming",
-      priority: data.priority || "Medium",
-    };
-    return { success: true, data: mockActivity };
-  }
+export async function createActivity(data: CreateActivityRequest): Promise<{ success: boolean; data: any }> {
+  const res = await api.post("/activities/create-activity", data);
+  return res.data;
 }
 
 // ── DELETE activity (not in API spec, keeping for compatibility) ─────────────────

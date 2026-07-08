@@ -21,17 +21,16 @@ export default function ActivitiesPage() {
         overdue,
         breakdown,
         dateRange,
-        showAddModal,
+        openAddModal,
         setPage,
         setOpenMenu,
         setConfirmDelete,
-        setShowAddModal,
+        setOpenAddModal,
         handleFiltersChange,
         handleTabChange,
         handleNewActivity,
         handleAction,
         executeDelete,
-        handleActivityCreated,
         retry,
     } = useActivities();
 
@@ -71,12 +70,6 @@ export default function ActivitiesPage() {
                 setOpenMenu={setOpenMenu}
             />
 
-            <AddActivityModal
-                isOpen={showAddModal}
-                onClose={() => setShowAddModal(false)}
-                onSuccess={handleActivityCreated}
-            />
-
             <ConfirmationModal
                 isOpen={confirmDelete !== null}
                 title="Delete Activity"
@@ -85,6 +78,12 @@ export default function ActivitiesPage() {
                 confirmText="Delete"
                 onConfirm={executeDelete}
                 onCancel={() => setConfirmDelete(null)}
+            />
+
+            <AddActivityModal
+                isOpen={openAddModal}
+                onClose={() => setOpenAddModal(false)}
+                onSuccess={retry}
             />
         </>
     );

@@ -1,107 +1,73 @@
+
 "use client";
 
 import { useState } from "react";
-import { X, Calendar, Clock, AlertCircle, User, Building2, CheckCircle2 } from "lucide-react";
-import { CreateActivityRequest, createActivity } from "@/lib/api/activitiesApi";
+import { X, Send, Calendar, Clock } from "lucide-react";
 import { toast } from "react-toastify";
+import { createActivity } from "@/lib/api/activitiesApi";
 
 interface AddActivityModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess?: () => void;
+  onSuccess: () => void;
 }
 
-type ActivityType = "TASK" | "CALL" | "MEETING" | "EMAIL" | "NOTE";
-type Priority = "High" | "Medium" | "Low";
-type EntityType = "LEAD" | "DEAL" | "CONTACT" | "COMPANY";
-
-const activityTypes: { value: ActivityType; label: string; color: string }[] = [
-  { value: "TASK", label: "Task", color: "bg-blue-50 text-blue-600 border-blue-200" },
-  { value: "CALL", label: "Call", color: "bg-green-50 text-green-600 border-green-200" },
-  { value: "MEETING", label: "Meeting", color: "bg-purple-50 text-purple-600 border-purple-200" },
-  { value: "EMAIL", label: "Email", color: "bg-amber-50 text-amber-600 border-amber-200" },
-  { value: "NOTE", label: "Note", color: "bg-gray-50 text-gray-600 border-gray-200" },
-];
-
-const priorities: { value: Priority; label: string; color: string }[] = [
-  { value: "High", label: "High", color: "bg-red-50 text-red-600 border-red-200" },
-  { value: "Medium", label: "Medium", color: "bg-amber-50 text-amber-600 border-amber-200" },
-  { value: "Low", label: "Low", color: "bg-green-50 text-green-600 border-green-200" },
-];
-
-const entityTypes: { value: EntityType; label: string }[] = [
-  { value: "LEAD", label: "Lead" },
-  { value: "CONTACT", label: "Contact" },
-  { value: "COMPANY", label: "Company" },
-  { value: "DEAL", label: "Deal" },
-];
-
 export function AddActivityModal({ isOpen, onClose, onSuccess }: AddActivityModalProps) {
-  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
-    type: "TASK" as ActivityType,
-    title: "",
+    entityType: "COMPANY" as const,
+    entityId: "default",
+    type: "NOTE" as const,
     message: "",
-    entityType: "LEAD" as EntityType,
-    entityId: "",
+    priority: "Medium" as const,
     relatedTo: "",
     relatedCompany: "",
-    dueDate: new Date().toISOString().split("T")[0],
-    dueTime: "09:00",
-    priority: "Medium" as Priority,
+    dueDate: "",
+    dueTime: "",
   });
 
-  const resetForm = () => {
-    setFormData({
-      type: "TASK",
-      title: "",
-      message: "",
-      entityType: "LEAD",
-      entityId: "",
-      relatedTo: "",
-      relatedCompany: "",
-      dueDate: new Date().toISOString().split("T")[0],
-      dueTime: "09:00",
-      priority: "Medium",
-    });
-  };
-
-  const handleClose = () => {
-    resetForm();
-    onClose();
-  };
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!formData.title || !formData.message) {
-      toast.error("Please fill in all required fields");
+    if (!formData.message.trim()) {
+      toast.error("Please enter a message");
       return;
     }
-
     setLoading(true);
     try {
-      const request: CreateActivityRequest = {
-        type: formData.type,
-        title: formData.title,
-        message: formData.message,
-        entityType: formData.entityType,
-        entityId: formData.entityId || "default",
-        dueDate: formData.dueDate,
+      // Build metadata with all optional fields as per Swagger example
+      const metadata: Record<string, unknown> = {
         priority: formData.priority,
-        metadata: {
-          relatedTo: formData.relatedTo,
-          relatedCompany: formData.relatedCompany,
-          dueTime: formData.dueTime,
-        },
       };
-
-      await createActivity(request);
+      if (formData.relatedTo) metadata.relatedTo = formData.relatedTo;
+      if (formData.relatedCompany) metadata.relatedCompany = formData.relatedCompany;
+      if (formData.dueDate) metadata.dueDate = formData.dueDate;
+      if (formData.dueTime) metadata.dueTime = formData.dueTime;
+      
+      await createActivity({
+        entityType: formData.entityType,
+        entityId: formData.entityId,
+        type: formData.type,
+        message: formData.message,
+        metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+      });
       toast.success("Activity created successfully!");
-      handleClose();
-      onSuccess?.();
-    } catch (error) {
-      toast.error("Failed to create activity");
+      onSuccess();
+      onClose();
+      setFormData({
+        entityType: "COMPANY",
+        entityId: "default",
+        type: "NOTE",
+        message: "",
+        priority: "Medium",
+        relatedTo: "",
+        relatedCompany: "",
+        dueDate: "",
+        dueTime: "",
+      });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Failed to create activity");
     } finally {
       setLoading(false);
     }
@@ -111,208 +77,116 @@ export function AddActivityModal({ isOpen, onClose, onSuccess }: AddActivityModa
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={handleClose}
-      />
-      
-      {/* Modal */}
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">Add Activity</h2>
-            <p className="text-sm text-gray-500 mt-1">Create a new activity or task</p>
-          </div>
-          <button
-            onClick={handleClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-          >
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative z-10 w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <h2 className="text-lg font-semibold text-gray-900">Add New Activity</h2>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded-lg transition-colors">
             <X size={20} className="text-gray-500" />
           </button>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* Activity Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Activity Type
-            </label>
-            <div className="grid grid-cols-5 gap-2">
-              {activityTypes.map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, type: type.value }))}
-                  className={`p-3 rounded-xl border-2 text-center transition-all ${
-                    formData.type === type.value
-                      ? `${type.color} border-current`
-                      : "border-gray-200 hover:border-gray-300 text-gray-600"
-                  }`}
-                >
-                  <span className="text-xs font-medium">{type.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              value={formData.title}
-              onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
-              placeholder="Enter activity title"
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Description <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={formData.message}
-              onChange={(e) => setFormData(prev => ({ ...prev, message: e.target.value }))}
-              placeholder="Enter activity description"
-              rows={4}
-              className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all resize-none"
-            />
-          </div>
-
-          {/* Related To */}
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Related Entity Type
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
               <select
-                value={formData.entityType}
-                onChange={(e) => setFormData(prev => ({ ...prev, entityType: e.target.value as EntityType }))}
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                value={formData.type}
+                onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                {entityTypes.map((type) => (
-                  <option key={type.value} value={type.value}>{type.label}</option>
-                ))}
+                <option value="NOTE">Note</option>
+                <option value="TASK">Task</option>
+                <option value="CALL">Call</option>
+                <option value="MEETING">Meeting</option>
+                <option value="EMAIL">Email</option>
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Related To
-              </label>
-              <div className="relative">
-                <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="text"
-                  value={formData.relatedTo}
-                  onChange={(e) => setFormData(prev => ({ ...prev, relatedTo: e.target.value }))}
-                  placeholder="Contact name"
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                />
-              </div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Priority</label>
+              <select
+                value={formData.priority}
+                onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
             </div>
           </div>
-
-          {/* Company */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Company
-            </label>
-            <div className="relative">
-              <Building2 size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <label className="block text-xs font-medium text-gray-700 mb-1">Message</label>
+            <textarea
+              value={formData.message}
+              onChange={(e) => setFormData({ ...formData, message: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Enter your activity message"
+              rows={4}
+            />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Related To (optional)</label>
+              <input
+                type="text"
+                value={formData.relatedTo}
+                onChange={(e) => setFormData({ ...formData, relatedTo: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Contact name"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Related Company (optional)</label>
               <input
                 type="text"
                 value={formData.relatedCompany}
-                onChange={(e) => setFormData(prev => ({ ...prev, relatedCompany: e.target.value }))}
+                onChange={(e) => setFormData({ ...formData, relatedCompany: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Company name"
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               />
             </div>
           </div>
-
-          {/* Due Date & Time */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Due Date
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Due Date (optional)</label>
               <div className="relative">
-                <Calendar size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="date"
                   value={formData.dueDate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, dueDate: e.target.value }))}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+                  className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <Calendar size={16} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Due Time
-              </label>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Due Time (optional)</label>
               <div className="relative">
-                <Clock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="time"
                   value={formData.dueTime}
-                  onChange={(e) => setFormData(prev => ({ ...prev, dueTime: e.target.value }))}
-                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                  onChange={(e) => setFormData({ ...formData, dueTime: e.target.value })}
+                  className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <Clock size={16} className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400" />
               </div>
             </div>
           </div>
-
-          {/* Priority */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              Priority
-            </label>
-            <div className="grid grid-cols-3 gap-3">
-              {priorities.map((prio) => (
-                <button
-                  key={prio.value}
-                  type="button"
-                  onClick={() => setFormData(prev => ({ ...prev, priority: prio.value }))}
-                  className={`flex items-center justify-center gap-2 p-3 rounded-xl border-2 transition-all ${
-                    formData.priority === prio.value
-                      ? `${prio.color} border-current`
-                      : "border-gray-200 hover:border-gray-300 text-gray-600"
-                  }`}
-                >
-                  {prio.value === "High" && <AlertCircle size={16} />}
-                  {prio.value === "Medium" && <Clock size={16} />}
-                  {prio.value === "Low" && <CheckCircle2 size={16} />}
-                  <span className="text-sm font-medium">{prio.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-3 pt-4 border-t border-gray-100">
+          <div className="flex gap-3 pt-2">
             <button
               type="button"
-              onClick={handleClose}
-              className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+              onClick={onClose}
+              className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="flex-1 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : (
-                <CheckCircle2 size={18} />
-              )}
-              Create Activity
+              {loading ? <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send size={16} />}
+              {loading ? "Creating..." : "Create Activity"}
             </button>
           </div>
         </form>
