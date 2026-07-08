@@ -54,6 +54,7 @@ export function useTimeline() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | undefined>();
   const [filters, setFilters] = useState<TimelineFilters>(DEFAULT_TIMELINE_FILTERS);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -62,7 +63,7 @@ export function useTimeline() {
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const loadTimeline = useCallback(
-    async (pageNum: number, append: boolean = false) => {
+    async (pageNum: number, append: boolean = false, cursor?: string) => {
       if (pageNum === 1) {
         setLoading(true);
       } else {
@@ -71,7 +72,7 @@ export function useTimeline() {
       setError(null);
 
       try {
-        const result = await fetchTimeline(pageNum, filters);
+        const result = await fetchTimeline(pageNum, filters, cursor, "LEAD");
         if (append) {
           setAllItems((prev) => [...prev, ...result.items]);
         } else {
@@ -79,6 +80,7 @@ export function useTimeline() {
         }
         setTotal(result.total);
         setHasMore(result.hasMore);
+        setNextCursor(result.nextCursor);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load timeline.");
       } finally {
@@ -92,15 +94,17 @@ export function useTimeline() {
   useEffect(() => {
     setPage(1);
     setAllItems([]);
+    setNextCursor(undefined);
     loadTimeline(1, false);
-  }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filters]);
 
   const loadMore = useCallback(() => {
     if (!hasMore || loadingMore) return;
     const nextPage = page + 1;
     setPage(nextPage);
-    loadTimeline(nextPage, true);
-  }, [hasMore, loadingMore, page, loadTimeline]);
+    loadTimeline(nextPage, true, nextCursor);
+  }, [hasMore, loadingMore, page, nextCursor, loadTimeline]);
 
   const groupedItems = useMemo(() => groupByDate(allItems), [allItems]);
 

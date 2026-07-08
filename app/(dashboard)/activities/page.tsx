@@ -2,6 +2,7 @@
 "use client";
 
 import { ActivitiesTable } from "@/components/activities/ActivitiesUI";
+import { AddActivityModal } from "@/components/activities/AddActivityModal";
 import { useActivities } from "@/hooks/useActivities";
 import { PER_PAGE } from "@/types/activities";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -20,14 +21,17 @@ export default function ActivitiesPage() {
         overdue,
         breakdown,
         dateRange,
+        showAddModal,
         setPage,
         setOpenMenu,
         setConfirmDelete,
+        setShowAddModal,
         handleFiltersChange,
         handleTabChange,
         handleNewActivity,
         handleAction,
         executeDelete,
+        handleActivityCreated,
         retry,
     } = useActivities();
 
@@ -65,6 +69,12 @@ export default function ActivitiesPage() {
                 onNewActivity={handleNewActivity}
                 onAction={handleAction}
                 setOpenMenu={setOpenMenu}
+            />
+
+            <AddActivityModal
+                isOpen={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                onSuccess={handleActivityCreated}
             />
 
             <ConfirmationModal

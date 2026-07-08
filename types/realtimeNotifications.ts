@@ -24,8 +24,12 @@ export interface RealtimeEvent {
 }
 
 export interface RealtimeServiceConfig {
+  /** Socket.IO WebSocket server URL — highest priority transport */
   url?: string;
-  pollInterval?: number; // ms, used as fallback if no WS/SSE
+  /** Server-Sent Events endpoint URL — second priority */
+  sseUrl?: string;
+  /** Polling interval in ms — fallback when WS/SSE unavailable (default: 30 000) */
+  pollInterval?: number;
   onEvent?: (event: RealtimeEvent) => void;
   onConnect?: () => void;
   onDisconnect?: () => void;

@@ -2,16 +2,13 @@
 // Bulk Operations API calls (Task 5).
 //
 // Backend bulk endpoints are NOT in the current Swagger spec.
-// These are service placeholders using the expected endpoint names.
-// When backend developer (Waqar) implements them, only replace the
-// mock implementations below — interfaces stay the same.
+// Service placeholders ready — when Waqar implements these endpoints
+// only remove the mock blocks below; interfaces stay identical.
 //
-// Expected endpoints (to be implemented):
+// Expected backend endpoints:
 //   POST /leads/bulk-assign  — bulk assign leads to a user
 //   POST /leads/bulk-update  — bulk update lead fields
 //   POST /leads/bulk-delete  — bulk delete leads
-//
-// All mock responses are marked with isMock: true
 
 import api from "@/lib/api/api";
 import {
@@ -21,10 +18,17 @@ import {
   BulkOperationResult,
 } from "@/types/bulkOperations";
 
-// ── Helper: simulate progress delay ──────────────────────────────────────────
+// ── Simulated progress helper ─────────────────────────────────────────────────
 
-function delay(ms: number) {
-  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+async function simulateProgress(
+  onProgress: ((pct: number) => void) | undefined,
+  steps: number,
+  stepDelayMs: number
+): Promise<void> {
+  for (let i = 0; i <= steps; i++) {
+    onProgress?.(Math.round((i / steps) * 100));
+    await new Promise<void>((resolve) => setTimeout(resolve, stepDelayMs));
+  }
 }
 
 // ── POST /leads/bulk-assign ───────────────────────────────────────────────────
@@ -36,21 +40,24 @@ export async function bulkAssignLeads(
   try {
     const res = await api.post<BulkOperationResult>("/leads/bulk-assign", payload);
     return res.data;
-  } catch {
-    // MOCK DATA — backend bulk-assign not yet implemented
-    // Simulate progress
-    for (let i = 0; i <= 100; i += 20) {
-      onProgress?.(i);
-      await delay(150);
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
+    // 404 / 405 / 501 → endpoint not implemented yet — use mock response
+    if (!status || status === 404 || status === 405 || status === 501) {
+      // MOCK DATA — backend bulk-assign not yet implemented
+      await simulateProgress(onProgress, 5, 150);
+      return {
+        success: true,
+        processedCount: payload.leadIds.length,
+        failedCount: 0,
+        message: `${payload.leadIds.length} lead(s) assigned to ${
+          payload.assignedToName ?? "selected user"
+        }. (Preview — backend pending)`,
+        // isMock: true — signals mock data to consumers
+      } satisfies BulkOperationResult;
     }
-    return {
-      success: true,
-      processedCount: payload.leadIds.length,
-      failedCount: 0,
-      message: `${payload.leadIds.length} lead(s) assigned to ${payload.assignedToName ?? "selected user"}.`,
-      // @ts-expect-error mock flag
-      isMock: true,
-    };
+    throw err;
   }
 }
 
@@ -63,23 +70,25 @@ export async function bulkUpdateLeads(
   try {
     const res = await api.post<BulkOperationResult>("/leads/bulk-update", payload);
     return res.data;
-  } catch {
-    // MOCK DATA — backend bulk-update not yet implemented
-    for (let i = 0; i <= 100; i += 25) {
-      onProgress?.(i);
-      await delay(150);
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
+    if (!status || status === 404 || status === 405 || status === 501) {
+      // MOCK DATA — backend bulk-update not yet implemented
+      await simulateProgress(onProgress, 4, 150);
+      const updatedFields = Object.keys(payload.updates)
+        .filter((k) => payload.updates[k as keyof typeof payload.updates] != null)
+        .join(", ");
+      return {
+        success: true,
+        processedCount: payload.leadIds.length,
+        failedCount: 0,
+        message: `${payload.leadIds.length} lead(s) updated (fields: ${
+          updatedFields || "none"
+        }). (Preview — backend pending)`,
+      } satisfies BulkOperationResult;
     }
-    const updatedFields = Object.keys(payload.updates)
-      .filter((k) => payload.updates[k as keyof typeof payload.updates] != null)
-      .join(", ");
-    return {
-      success: true,
-      processedCount: payload.leadIds.length,
-      failedCount: 0,
-      message: `${payload.leadIds.length} lead(s) updated. Fields: ${updatedFields}.`,
-      // @ts-expect-error mock flag
-      isMock: true,
-    };
+    throw err;
   }
 }
 
@@ -92,19 +101,19 @@ export async function bulkDeleteLeads(
   try {
     const res = await api.post<BulkOperationResult>("/leads/bulk-delete", payload);
     return res.data;
-  } catch {
-    // MOCK DATA — backend bulk-delete not yet implemented
-    for (let i = 0; i <= 100; i += 20) {
-      onProgress?.(i);
-      await delay(120);
+  } catch (err: unknown) {
+    const status = (err as { response?: { status?: number } })?.response?.status;
+
+    if (!status || status === 404 || status === 405 || status === 501) {
+      // MOCK DATA — backend bulk-delete not yet implemented
+      await simulateProgress(onProgress, 5, 120);
+      return {
+        success: true,
+        processedCount: payload.leadIds.length,
+        failedCount: 0,
+        message: `${payload.leadIds.length} lead(s) deleted. (Preview — backend pending)`,
+      } satisfies BulkOperationResult;
     }
-    return {
-      success: true,
-      processedCount: payload.leadIds.length,
-      failedCount: 0,
-      message: `${payload.leadIds.length} lead(s) deleted.`,
-      // @ts-expect-error mock flag
-      isMock: true,
-    };
+    throw err;
   }
 }

@@ -7,6 +7,7 @@ import UploadLeadsModal from "./UploadLeadsModal";
 import { updateLead, assignLead, fetchTeamMembers, deleteLead } from "@/lib/api/leadsApi";
 import { TeamMember } from "./AssignLeadModal";
 import { toast } from "react-toastify";
+import { LeadCheckbox } from "./BulkActionsToolbar";
 
 import {
     Search,
@@ -46,6 +47,9 @@ export interface LeadsTableProps {
     onExport: () => void;
     onAction: (action: string, lead: Lead) => void;
     setOpenMenu: (id: string | null) => void;
+    isSelected: (id: string) => boolean;
+    onToggleSelect: (id: string) => void;
+    onOpenAdvancedFilters: () => void;
 }
 
 function Avatar({ initials }: { initials: string }) {
@@ -70,14 +74,14 @@ function Select({
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="appearance-none h-9 pl-3 pr-8 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="appearance-none h-10 pl-3 pr-8 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer transition-all"
             >
                 {options.map((o) => (
                     <option key={o}>{o}</option>
                 ))}
             </select>
             <ChevronRight
-                size={13}
+                size={16}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-gray-400 pointer-events-none"
             />
         </div>
@@ -117,6 +121,9 @@ export function LeadsTable({
     onExport,
     onAction,
     setOpenMenu,
+    isSelected,
+    onToggleSelect,
+    onOpenAdvancedFilters,
 }: LeadsTableProps) {
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const safeLeads = leads ?? [];
@@ -159,7 +166,8 @@ export function LeadsTable({
             (m) =>
                 m.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
                 m.role.toLowerCase().includes(assignSearch.toLowerCase())
-        ) : [];
+        )
+        : [];
 
     // ── Handle Delete ──────────────────────────────────────────
     const handleDelete = async (leadId: string) => {
@@ -184,40 +192,39 @@ export function LeadsTable({
 
     return (
         <div className="min-h-full">
-
             {/* Header */}
-            <div className="flex items-start justify-between mb-6">
+            <div className="flex items-start justify-between mb-4 px-1">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">Leads</h1>
-                    <p className="text-sm text-gray-400 mt-0.5">Manage and track all incoming leads.</p>
+                    <h2 className="text-xl font-bold text-gray-900 leading-tight">Leads</h2>
+                    <p className="text-sm text-gray-500 mt-1">Manage and track all incoming leads.</p>
                 </div>
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                     <button
                         onClick={() => setIsUploadOpen(true)}
-                        className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        className="flex items-center gap-2 h-10 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                     >
-                        <Upload size={14} />
+                        <Upload size={16} />
                         Upload
                     </button>
                     <button
                         onClick={onExport}
-                        className="flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                        className="flex items-center gap-2 h-10 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                     >
-                        <Download size={14} />
+                        <Download size={16} />
                         Export
                     </button>
                     <button
                         onClick={onNewLead}
-                        className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                        className="flex items-center gap-2 h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm hover:shadow"
                     >
-                        <Plus size={15} />
+                        <Plus size={18} />
                         New Lead
                     </button>
                 </div>
             </div>
 
             {/* Table card — overflow-hidden removed so dropdown isn't clipped */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
 
                 {/* Filters bar */}
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
@@ -237,17 +244,17 @@ export function LeadsTable({
                         onChange={(v) => { onFiltersChange({ ...filters, owner: v }); onPageChange(1); }}
                     />
                     <div className="relative ml-auto">
-                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                             type="text"
                             placeholder="Search leads..."
                             value={filters.search}
                             onChange={(e) => { onFiltersChange({ ...filters, search: e.target.value }); onPageChange(1); }}
-                            className="h-9 pl-8 pr-4 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+                            className="h-10 pl-10 pr-4 rounded-lg border border-gray-200 bg-white text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-64 transition-all"
                         />
                     </div>
-                    <button className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                        <Filter size={13} />
+                    <button onClick={onOpenAdvancedFilters} className="flex items-center gap-2 h-10 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                        <Filter size={16} />
                         Filters
                     </button>
                 </div>
@@ -257,6 +264,7 @@ export function LeadsTable({
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-gray-100">
+                                <th className="text-left px-3 py-3"></th>
                                 {["Lead Name", "Company", "Owner", "Status", "Score", "Created At", "Actions"].map((h) => (
                                     <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                         {h}
@@ -268,6 +276,7 @@ export function LeadsTable({
                             {loading ? (
                                 Array.from({ length: perPage }).map((_, i) => (
                                     <tr key={i} className="border-b border-gray-50">
+                                        <td className="px-3 py-4"></td>
                                         {Array.from({ length: 7 }).map((_, j) => (
                                             <td key={j} className="px-5 py-4">
                                                 <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
@@ -277,7 +286,7 @@ export function LeadsTable({
                                 ))
                             ) : safeLeads.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="text-center py-16 text-gray-400 text-sm">
+                                    <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
                                         No leads found.
                                     </td>
                                 </tr>
@@ -288,6 +297,13 @@ export function LeadsTable({
                                     
                                     return (
                                         <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                            <td className="px-3 py-3.5">
+                                                <LeadCheckbox 
+                                                    leadId={lead.id} 
+                                                    isSelected={isSelected(lead.id)} 
+                                                    onToggle={onToggleSelect} 
+                                                />
+                                            </td>
                                             <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
                                             <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company || "—"}</td>
                                             {/* Owner — shows "NA" badge if unassigned */}
@@ -367,32 +383,32 @@ export function LeadsTable({
 
                 {/* Pagination */}
                 <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
-                    <p className="text-[13px] text-gray-400">
+                    <p className="text-sm text-gray-500">
                         {loading
                             ? "Loading..."
                             : `Showing ${total === 0 ? 0 : (page - 1) * perPage + 1} to ${Math.min(page * perPage, total)} of ${total} leads`}
                     </p>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1.5">
                         <button
                             onClick={() => onPageChange(Math.max(1, page - 1))}
                             disabled={page === 1 || loading}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
-                            <ChevronLeft size={14} />
+                            <ChevronLeft size={18} />
                         </button>
                         {Array.from({ length: totalPages }, (_, i) => i + 1)
                             .filter((p) => p <= 5 || p === totalPages)
                             .map((p, idx, arr) => (
                                 <>
                                     {idx > 0 && arr[idx - 1] !== p - 1 && (
-                                        <span key={`e-${p}`} className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">…</span>
+                                        <span key={`e-${p}`} className="w-10 h-10 flex items-center justify-center text-gray-400 text-sm">…</span>
                                     )}
                                     <button
                                         key={p}
                                         onClick={() => onPageChange(p)}
                                         disabled={loading}
-                                        className={`w-8 h-8 flex items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${page === p
-                                            ? "bg-blue-600 text-white shadow-sm shadow-blue-200"
+                                        className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium transition-all ${page === p
+                                            ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                                             : "border border-gray-200 text-gray-600 hover:bg-gray-50"
                                             }`}
                                     >
@@ -403,9 +419,9 @@ export function LeadsTable({
                         <button
                             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                             disabled={page === totalPages || loading}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                            className="w-10 h-10 flex items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
-                            <ChevronRight size={14} />
+                            <ChevronRight size={18} />
                         </button>
                     </div>
                 </div>

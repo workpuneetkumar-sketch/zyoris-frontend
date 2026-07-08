@@ -29,7 +29,6 @@ const MOCK_LEADS_A: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 5).toISOString(),
     estimatedValue: 25000,
     tags: ["enterprise", "q2"],
-    // @ts-expect-error mock flag
     isMock: true,
   },
   {
@@ -46,7 +45,6 @@ const MOCK_LEADS_A: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 3).toISOString(),
     estimatedValue: 22000,
     tags: ["enterprise"],
-    // @ts-expect-error mock flag
     isMock: true,
   },
 ];
@@ -66,7 +64,6 @@ const MOCK_LEADS_B: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 10).toISOString(),
     estimatedValue: 15000,
     tags: ["smb"],
-    // @ts-expect-error mock flag
     isMock: true,
   },
   {
@@ -83,7 +80,6 @@ const MOCK_LEADS_B: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 7).toISOString(),
     estimatedValue: 14500,
     tags: [],
-    // @ts-expect-error mock flag
     isMock: true,
   },
   {
@@ -100,7 +96,6 @@ const MOCK_LEADS_B: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 2).toISOString(),
     estimatedValue: 0,
     tags: ["smb"],
-    // @ts-expect-error mock flag
     isMock: true,
   },
 ];
@@ -120,7 +115,6 @@ const MOCK_LEADS_C: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 14).toISOString(),
     estimatedValue: 45000,
     tags: ["enterprise", "priority"],
-    // @ts-expect-error mock flag
     isMock: true,
   },
   {
@@ -137,7 +131,6 @@ const MOCK_LEADS_C: Lead[] = [
     createdAt: new Date(Date.now() - 86400000 * 1).toISOString(),
     estimatedValue: 48000,
     tags: ["enterprise"],
-    // @ts-expect-error mock flag
     isMock: true,
   },
 ];
@@ -163,26 +156,35 @@ export async function fetchDuplicates(): Promise<DuplicatesResponse> {
       ? data.groups
       : [];
 
-    if (groups.length > 0) {
-      return { groups, total: groups.length };
-    }
-
-    // Empty or unexpected shape — fall back to mock
-    return { groups: MOCK_DUPLICATES, total: MOCK_DUPLICATES.length };
-  } catch {
-    // API unavailable — return mock data
-    return { groups: MOCK_DUPLICATES, total: MOCK_DUPLICATES.length };
+    return { groups, total: groups.length };
+  } catch (err) {
+    console.error("Failed to fetch duplicates:", err);
+    throw err;
   }
 }
 
 // ── POST /leads/merge ─────────────────────────────────────────────────────────
 
+interface BackendMergePayload {
+  primaryLeadId: string;
+  duplicateLeadId: string;
+  fieldResolutions?: Record<string, string>;
+}
+
 export async function mergeLeads(payload: MergePayload): Promise<MergeResponse> {
-  const res = await api.post<MergeResponse>("/leads/merge", payload);
-  const data = res.data;
+  // Send one merge request per duplicate lead (backend expects duplicateLeadId singular)
+  for (const duplicateId of payload.duplicateLeadIds) {
+    const backendPayload: BackendMergePayload = {
+      primaryLeadId: payload.primaryLeadId,
+      duplicateLeadId: duplicateId,
+      fieldResolutions: payload.fieldResolutions,
+    };
+    await api.post<MergeResponse>("/leads/merge", backendPayload);
+  }
+
   return {
-    success: data?.success ?? true,
-    mergedLead: data?.mergedLead ?? ({} as Lead),
-    message: data?.message ?? "Merge completed successfully",
+    success: true,
+    mergedLead: {} as Lead,
+    message: "Merge completed successfully",
   };
 }

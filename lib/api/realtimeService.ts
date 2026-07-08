@@ -1,13 +1,13 @@
 // lib/api/realtimeService.ts
-// Real-time CRM Notifications service (Task 6).
+// Real-time CRM Notifications — Task 6
 //
-// Strategy:
-//   1. Try to connect via Socket.IO (socket.io-client is already installed)
-//   2. If WS unavailable, fall back to polling
-//   3. Provides a unified abstraction compatible with both strategies
+// Transport abstraction supporting:
+//   1. WebSocket (via Socket.IO when backend WS URL is configured)
+//   2. Server-Sent Events (SSE) — when backend ships /notifications/stream
+//   3. Polling — unconditional fallback with configurable interval
 //
-// When backend WebSocket events are available, only configure the socket URL.
-// The interface stays the same — no component changes needed.
+// Switching transports requires zero UI changes — all components
+// consume only the RealtimeService interface.
 
 import {
   RealtimeEvent,
@@ -16,152 +16,86 @@ import {
   ConnectionStatus,
 } from "@/types/realtimeNotifications";
 
-// ── Mock event generator ──────────────────────────────────────────────────────
+// ── Transport interface ───────────────────────────────────────────────────────
 
-const MOCK_EVENT_TEMPLATES: Array<{
-  type: RealtimeEventType;
-  title: string;
-  message: string;
-}> = [
-  {
-    type: "lead_updated",
-    title: "Lead Updated",
-    message: "James Carter's status changed to HOT",
-  },
-  {
-    type: "lead_assigned",
-    title: "Lead Assigned",
-    message: "Sarah Mitchell has been assigned to you",
-  },
-  {
-    type: "deal_stage_changed",
-    title: "Deal Stage Changed",
-    message: "Acme Corp Enterprise moved to WON",
-  },
-  {
-    type: "activity_created",
-    title: "New Activity",
-    message: "Follow-up call scheduled with TechWave",
-  },
-  {
-    type: "analytics_refreshed",
-    title: "Analytics Updated",
-    message: "Pipeline data refreshed with latest figures",
-  },
-  {
-    type: "assignment_changed",
-    title: "Assignment Changed",
-    message: "CloudWave deal reassigned to Jordan Lee",
-  },
-];
-
-let mockEventIndex = 0;
-
-function generateMockEvent(): RealtimeEvent {
-  const template = MOCK_EVENT_TEMPLATES[mockEventIndex % MOCK_EVENT_TEMPLATES.length];
-  mockEventIndex++;
-  return {
-    id: `event-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    type: template.type,
-    title: template.title,
-    message: template.message,
-    timestamp: new Date().toISOString(),
-    read: false,
-  };
+interface Transport {
+  connect(): void;
+  disconnect(): void;
 }
 
-// ── Realtime Service Class ────────────────────────────────────────────────────
+// ── Mock event generator (development / fallback) ─────────────────────────────
 
-export class RealtimeService {
-  private config: RealtimeServiceConfig;
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+const MOCK_TEMPLATES: Array<{ type: RealtimeEventType; title: string; message: string }> = [
+  { type: "lead_updated",       title: "Lead Updated",        message: "James Carter's status changed to HOT"         },
+  { type: "lead_assigned",      title: "Lead Assigned",       message: "Sarah Mitchell has been assigned to you"       },
+  { type: "deal_stage_changed", title: "Deal Stage Changed",  message: "Acme Corp Enterprise moved to WON"             },
+  { type: "activity_created",   title: "New Activity",        message: "Follow-up call scheduled with TechWave"        },
+  { type: "analytics_refreshed",title: "Analytics Updated",   message: "Pipeline data refreshed with latest figures"   },
+  { type: "assignment_changed", title: "Assignment Changed",  message: "CloudWave deal reassigned to Jordan Lee"       },
+];
+
+let _mockIdx = 0;
+
+function makeMockEvent(): RealtimeEvent {
+  const tpl = MOCK_TEMPLATES[_mockIdx % MOCK_TEMPLATES.length];
+  _mockIdx++;
+  return {
+    id: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    ...tpl,
+    timestamp: new Date().toISOString(),
+    read: false,
+    // MOCK DATA
+  } as RealtimeEvent & { isMock: true };
+}
+
+// ── 1. WebSocket transport (Socket.IO) ────────────────────────────────────────
+
+class SocketTransport implements Transport {
   private socket: unknown = null;
-  private status: ConnectionStatus = "disconnected";
-  private statusListeners: Array<(s: ConnectionStatus) => void> = [];
-  private mockDemoTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(config: RealtimeServiceConfig = {}) {
-    this.config = {
-      pollInterval: 30_000, // 30s default polling interval
-      ...config,
-    };
-  }
-
-  getStatus(): ConnectionStatus {
-    return this.status;
-  }
-
-  onStatusChange(listener: (s: ConnectionStatus) => void) {
-    this.statusListeners.push(listener);
-    return () => {
-      this.statusListeners = this.statusListeners.filter((l) => l !== listener);
-    };
-  }
-
-  private setStatus(s: ConnectionStatus) {
-    this.status = s;
-    this.statusListeners.forEach((l) => l(s));
-  }
-
-  // ── Connect ─────────────────────────────────────────────────────────────────
+  constructor(
+    private url: string,
+    private onEvent: (e: RealtimeEvent) => void,
+    private onStatusChange: (s: ConnectionStatus) => void,
+    private onFallback: () => void,
+  ) {}
 
   connect() {
-    // Try Socket.IO first
-    if (typeof window !== "undefined" && this.config.url) {
-      this.connectSocket();
-    } else {
-      // Fall back to polling / mock demo
-      this.startMockDemo();
-    }
-  }
-
-  private connectSocket() {
-    try {
-      // Dynamically import socket.io-client to avoid SSR issues
-      // When backend WebSocket is ready, set config.url to ws server URL
-      import("socket.io-client").then(({ io }) => {
-        const socket = io(this.config.url!, {
+    this.onStatusChange("connecting");
+    import("socket.io-client")
+      .then(({ io }) => {
+        const socket = io(this.url, {
           transports: ["websocket", "polling"],
           reconnection: true,
           reconnectionDelay: 2000,
           reconnectionAttempts: 5,
+          timeout: 10000,
         });
-
         this.socket = socket;
-        this.setStatus("connecting");
 
-        socket.on("connect", () => {
-          this.setStatus("connected");
-          this.config.onConnect?.();
-        });
-
+        socket.on("connect", () => this.onStatusChange("connected"));
         socket.on("disconnect", () => {
-          this.setStatus("disconnected");
-          this.config.onDisconnect?.();
-          // Fall back to polling on disconnect
-          this.startPolling();
+          this.onStatusChange("disconnected");
+          this.onFallback();
+        });
+        socket.on("connect_error", () => {
+          socket.disconnect();
+          this.socket = null;
+          this.onFallback();
         });
 
-        socket.on("crm-event", (event: RealtimeEvent) => {
-          this.config.onEvent?.(event);
-        });
+        // Unified "crm-event" channel
+        socket.on("crm-event", (ev: RealtimeEvent) => this.onEvent(ev));
 
-        // Standard CRM event names
-        const eventTypes: RealtimeEventType[] = [
-          "lead_updated",
-          "lead_assigned",
-          "lead_merged",
-          "deal_stage_changed",
-          "activity_created",
-          "analytics_refreshed",
-          "dashboard_refreshed",
-          "assignment_changed",
-          "merge_completed",
+        // Individual event types
+        const types: RealtimeEventType[] = [
+          "lead_updated","lead_assigned","lead_merged","deal_stage_changed",
+          "activity_created","analytics_refreshed","dashboard_refreshed",
+          "assignment_changed","merge_completed",
         ];
-
-        eventTypes.forEach((type) => {
+        types.forEach((type) => {
           socket.on(type, (payload: Partial<RealtimeEvent>) => {
-            this.config.onEvent?.({
+            this.onEvent({
               id: `${type}-${Date.now()}`,
               type,
               title: payload.title ?? type.replace(/_/g, " "),
@@ -172,95 +106,226 @@ export class RealtimeService {
             });
           });
         });
+      })
+      .catch(() => this.onFallback());
+  }
 
-        socket.on("connect_error", () => {
-          // Socket failed — use polling instead
-          socket.disconnect();
-          this.socket = null;
-          this.startPolling();
-        });
-      }).catch(() => {
-        this.startPolling();
-      });
-    } catch {
-      this.startPolling();
+  disconnect() {
+    if (this.socket && typeof this.socket === "object") {
+      (this.socket as { disconnect?: () => void }).disconnect?.();
+      this.socket = null;
+    }
+  }
+}
+
+// ── 2. SSE transport ──────────────────────────────────────────────────────────
+
+class SseTransport implements Transport {
+  private es: EventSource | null = null;
+
+  constructor(
+    private url: string,
+    private onEvent: (e: RealtimeEvent) => void,
+    private onStatusChange: (s: ConnectionStatus) => void,
+    private onFallback: () => void,
+  ) {}
+
+  connect() {
+    if (typeof window === "undefined" || !("EventSource" in window)) {
+      this.onFallback();
+      return;
+    }
+    this.onStatusChange("connecting");
+    this.es = new EventSource(this.url, { withCredentials: true });
+
+    this.es.onopen = () => this.onStatusChange("connected");
+
+    this.es.onmessage = (ev) => {
+      try {
+        const data: RealtimeEvent = JSON.parse(ev.data);
+        this.onEvent(data);
+      } catch {
+        // malformed message — ignore
+      }
+    };
+
+    this.es.onerror = () => {
+      this.es?.close();
+      this.es = null;
+      this.onFallback();
+    };
+  }
+
+  disconnect() {
+    this.es?.close();
+    this.es = null;
+  }
+}
+
+// ── 3. Polling transport ──────────────────────────────────────────────────────
+
+class PollingTransport implements Transport {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private mockTimer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(
+    private interval: number,
+    private onEvent: (e: RealtimeEvent) => void,
+    private onStatusChange: (s: ConnectionStatus) => void,
+    private pollUrl?: string,
+  ) {}
+
+  connect() {
+    this.onStatusChange("polling");
+
+    if (this.pollUrl) {
+      // Real polling — backend endpoint not yet available, placeholder ready
+      this.timer = setInterval(async () => {
+        try {
+          // When backend ships GET /notifications/unread, uncomment:
+          // const { data } = await api.get<RealtimeEvent[]>("/notifications/unread");
+          // data.forEach((ev) => this.onEvent(ev));
+        } catch {
+          // polling error — keep trying silently
+        }
+      }, this.interval);
+    }
+
+    // MOCK DATA — demo event emitter while no real transport is available
+    // Emits one random event every ~45 s so the notification UI is testable
+    this.mockTimer = setInterval(() => {
+      if (Math.random() < 0.5) {
+        this.onEvent(makeMockEvent());
+      }
+    }, 45_000);
+  }
+
+  disconnect() {
+    if (this.timer)     { clearInterval(this.timer);     this.timer = null;     }
+    if (this.mockTimer) { clearInterval(this.mockTimer); this.mockTimer = null; }
+  }
+}
+
+// ── RealtimeService ───────────────────────────────────────────────────────────
+
+export class RealtimeService {
+  private transport: Transport | null = null;
+  private status: ConnectionStatus = "disconnected";
+  private statusListeners = new Set<(s: ConnectionStatus) => void>();
+  private readonly config: Required<RealtimeServiceConfig>;
+
+  constructor(config: RealtimeServiceConfig = {}) {
+    this.config = {
+      url:           config.url          ?? "",
+      sseUrl:        (config as { sseUrl?: string }).sseUrl ?? "",
+      pollInterval:  config.pollInterval ?? 30_000,
+      onEvent:       config.onEvent      ?? (() => undefined),
+      onConnect:     config.onConnect    ?? (() => undefined),
+      onDisconnect:  config.onDisconnect ?? (() => undefined),
+    } as Required<RealtimeServiceConfig> & { sseUrl: string };
+  }
+
+  // ── Status ──────────────────────────────────────────────────────────────────
+
+  getStatus(): ConnectionStatus { return this.status; }
+
+  onStatusChange(listener: (s: ConnectionStatus) => void): () => void {
+    this.statusListeners.add(listener);
+    return () => this.statusListeners.delete(listener);
+  }
+
+  private setStatus(s: ConnectionStatus) {
+    this.status = s;
+    this.statusListeners.forEach((l) => l(s));
+    if (s === "connected") this.config.onConnect();
+    if (s === "disconnected") this.config.onDisconnect();
+  }
+
+  private handleEvent(ev: RealtimeEvent) {
+    this.config.onEvent(ev);
+  }
+
+  // ── Connect: tries WS → SSE → Polling in order ───────────────────────────
+
+  connect() {
+    if (typeof window === "undefined") return;
+
+    const { url, sseUrl, pollInterval } = this.config as Required<RealtimeServiceConfig> & { sseUrl: string };
+
+    if (url) {
+      this.transport = new SocketTransport(
+        url,
+        (ev) => this.handleEvent(ev),
+        (s)  => this.setStatus(s),
+        ()   => this.fallbackToSseOrPoll(),
+      );
+    } else if (sseUrl) {
+      this.transport = new SseTransport(
+        sseUrl,
+        (ev) => this.handleEvent(ev),
+        (s)  => this.setStatus(s),
+        ()   => this.fallbackToPoll(),
+      );
+    } else {
+      this.transport = new PollingTransport(pollInterval, (ev) => this.handleEvent(ev), (s) => this.setStatus(s));
+    }
+
+    this.transport.connect();
+  }
+
+  private fallbackToSseOrPoll() {
+    this.transport?.disconnect();
+    const sseUrl = (this.config as Required<RealtimeServiceConfig> & { sseUrl: string }).sseUrl;
+    if (sseUrl) {
+      this.transport = new SseTransport(
+        sseUrl,
+        (ev) => this.handleEvent(ev),
+        (s)  => this.setStatus(s),
+        ()   => this.fallbackToPoll(),
+      );
+      this.transport.connect();
+    } else {
+      this.fallbackToPoll();
     }
   }
 
-  // ── Polling fallback ─────────────────────────────────────────────────────────
-
-  private startPolling() {
-    if (this.pollTimer) return;
-    this.setStatus("polling");
-
-    this.pollTimer = setInterval(async () => {
-      try {
-        // When backend notifications endpoint is ready, call it here:
-        // const { data } = await api.get("/notifications/unread");
-        // data.forEach((event: RealtimeEvent) => this.config.onEvent?.(event));
-
-        // MOCK DATA — emit periodic demo events while polling
-        const event = generateMockEvent();
-        // Only emit occasionally (30% chance per poll cycle) to avoid noise
-        if (Math.random() < 0.3) {
-          this.config.onEvent?.(event);
-        }
-      } catch {
-        // polling error — keep trying
-      }
-    }, this.config.pollInterval);
-  }
-
-  // ── Mock demo emitter ────────────────────────────────────────────────────────
-  // Emits demo events to show the notification UI working
-  // Remove this when backend events are available
-
-  private startMockDemo() {
-    this.setStatus("polling");
-
-    // Initial batch of demo notifications (delayed to show fresh ones)
-    this.mockDemoTimer = setInterval(() => {
-      // MOCK DATA — emit one event every 45 seconds for demo
-      if (Math.random() < 0.5) {
-        const event = generateMockEvent();
-        this.config.onEvent?.(event);
-      }
-    }, 45_000);
+  private fallbackToPoll() {
+    this.transport?.disconnect();
+    this.transport = new PollingTransport(
+      this.config.pollInterval,
+      (ev) => this.handleEvent(ev),
+      (s)  => this.setStatus(s),
+    );
+    this.transport.connect();
   }
 
   // ── Disconnect ───────────────────────────────────────────────────────────────
 
   disconnect() {
-    if (this.pollTimer) {
-      clearInterval(this.pollTimer);
-      this.pollTimer = null;
-    }
-    if (this.mockDemoTimer) {
-      clearInterval(this.mockDemoTimer);
-      this.mockDemoTimer = null;
-    }
-    if (this.socket && typeof this.socket === "object") {
-      const s = this.socket as { disconnect?: () => void };
-      s.disconnect?.();
-      this.socket = null;
-    }
+    this.transport?.disconnect();
+    this.transport = null;
     this.setStatus("disconnected");
-    this.config.onDisconnect?.();
+    this.statusListeners.clear();
   }
 }
 
-// ── Singleton instance ────────────────────────────────────────────────────────
+// ── Singleton ─────────────────────────────────────────────────────────────────
 
-let instance: RealtimeService | null = null;
+let _instance: RealtimeService | null = null;
 
 export function getRealtimeService(config?: RealtimeServiceConfig): RealtimeService {
-  if (!instance) {
-    instance = new RealtimeService(config);
+  if (!_instance) {
+    _instance = new RealtimeService({
+      // Set NEXT_PUBLIC_WS_URL for Socket.IO or NEXT_PUBLIC_SSE_URL for SSE
+      url:          process.env.NEXT_PUBLIC_WS_URL  ?? "",
+      pollInterval: 30_000,
+      ...config,
+    } as RealtimeServiceConfig & { sseUrl?: string });
   }
-  return instance;
+  return _instance;
 }
 
 export function destroyRealtimeService() {
-  instance?.disconnect();
-  instance = null;
+  _instance?.disconnect();
+  _instance = null;
 }

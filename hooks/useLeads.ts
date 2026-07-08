@@ -81,7 +81,7 @@ export function useLeads() {
             // Filter out any deleted leads just in case
             const activeLeads = data.leads.filter((lead: Lead) => !lead.deleted);
             setLeads(activeLeads);
-            setTotal(activeLeads.length);
+            setTotal(data.total);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to fetch leads.");
         } finally {

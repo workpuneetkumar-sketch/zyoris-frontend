@@ -466,3 +466,21 @@ export async function convertLeadToDeal(
         throw error;
     }
 }
+
+// ── GET lead score ─────────────────────────────────────────
+// Endpoint: GET /leads/get-lead-score/{leadId}
+export async function getLeadScore(leadId: string): Promise<{ score: number }> {
+    console.log(`[API] getLeadScore - leadId: ${leadId}`);
+    try {
+        const res = await api.get(`/leads/get-lead-score/${leadId}`);
+        console.log(`[API] getLeadScore - response data:`, res.data);
+        return res.data;
+    } catch (error: any) {
+        console.error(`[API] getLeadScore - error:`, {
+            message: error.message,
+            response: error.response?.data,
+            status: error.response?.status,
+        });
+        throw error;
+    }
+}

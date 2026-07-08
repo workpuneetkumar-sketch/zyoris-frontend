@@ -362,12 +362,23 @@ export function LeadCheckbox({
 // ── Main toolbar ──────────────────────────────────────────────────────────────
 
 export interface BulkActionsToolbarProps {
-  allLeads: Lead[];
-  onSuccess: (type: BulkOperationType) => void;
+    allLeads: Lead[];
+    selectedIds: Set<string>;
+    selectedCount: number;
+    isSelected: (id: string) => boolean;
+    toggleSelect: (id: string) => void;
+    selectAll: (ids: string[]) => void;
+    clearSelection: () => void;
+    bulkState: any;
+    openBulkAction: (type: BulkOperationType) => void;
+    closeBulkAction: () => void;
+    executeBulkAssign: (assignedToId: string, assignedToName?: string) => Promise<void>;
+    executeBulkUpdate: (updates: { status?: string; source?: string; tags?: string[]; owner?: string }) => Promise<void>;
+    executeBulkDelete: () => Promise<void>;
 }
 
-export function BulkActionsToolbar({ allLeads, onSuccess }: BulkActionsToolbarProps) {
-  const {
+export function BulkActionsToolbar({
+    allLeads,
     selectedIds,
     selectedCount,
     isSelected,
@@ -380,10 +391,9 @@ export function BulkActionsToolbar({ allLeads, onSuccess }: BulkActionsToolbarPr
     executeBulkAssign,
     executeBulkUpdate,
     executeBulkDelete,
-  } = useBulkOperations(onSuccess);
-
-  const allSelected = allLeads.length > 0 && allLeads.every((l) => isSelected(l.id));
-  const someSelected = selectedCount > 0;
+}: BulkActionsToolbarProps) {
+    const allSelected = allLeads.length > 0 && allLeads.every((l) => isSelected(l.id));
+    const someSelected = selectedCount > 0;
 
   return (
     <>
