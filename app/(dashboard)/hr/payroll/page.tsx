@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback } from "react";
 import { ArrowLeft, Banknote, CalendarRange } from "lucide-react";
 import Link from "next/link";
 
-import DemoDataToggle from "@/components/hr/payroll/DemoDataToggle";
 import PayrollStatsCards from "@/components/hr/payroll/PayrollStatsCards";
 import PayrollTable from "@/components/hr/payroll/PayrollTable";
 import SalaryHistoryPanel from "@/components/hr/payroll/SalaryHistoryPanel";
@@ -14,19 +13,15 @@ import {
   type PayrollRecord,
   type Payslip,
   type SalaryHistoryEntry,
-  getDemoPayrollRecords,
-  getDemoSalaryHistory,
-  getDemoPayslip,
-  fetchPayrollRecords,
-  fetchSalaryHistory,
+  fetchPayslips,
   fetchPayslipById,
+  downloadPayslipPdf,
+  deriveSalaryHistory,
 } from "@/lib/api/payrollApi";
 
 export default function PayrollPage() {
   // ── State ──────────────────────────────────────────────
-  const [isDemo, setIsDemo] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [switchLoading, setSwitchLoading] = useState(false);
   const [records, setRecords] = useState<PayrollRecord[]>([]);
 
   // Filters
@@ -48,88 +43,52 @@ export default function PayrollPage() {
   const [salaryHistory, setSalaryHistory] = useState<SalaryHistoryEntry[]>([]);
 
   // ── Load Data ──────────────────────────────────────────
-  const loadData = useCallback(async (useDemoMode: boolean) => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      if (useDemoMode) {
-        // Simulate slight loading delay for demo
-        await new Promise((r) => setTimeout(r, 400));
-        setRecords(getDemoPayrollRecords());
-      } else {
-        const data = await fetchPayrollRecords();
-        setRecords(data);
-      }
+      const data = await fetchPayslips();
+      setRecords(data);
     } catch (error) {
       console.error("Failed to load payroll data:", error);
-      // If real API fails, fall back to demo
-      if (!useDemoMode) {
-        setRecords(getDemoPayrollRecords());
-        setIsDemo(true);
-      }
+      setRecords([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadData(isDemo);
+    loadData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Toggle Demo/Real ──────────────────────────────────
-  const handleToggle = async () => {
-    const newMode = !isDemo;
-    setSwitchLoading(true);
-    setIsDemo(newMode);
-
-    try {
-      await loadData(newMode);
-    } catch {
-      // Already handled in loadData
-    } finally {
-      setSwitchLoading(false);
-    }
-  };
 
   // ── Payslip Preview ───────────────────────────────────
   const handleViewPayslip = async (record: PayrollRecord) => {
-    if (isDemo) {
-      setActivePayslip(getDemoPayslip(record));
-    } else {
-      try {
-        const payslip = await fetchPayslipById(record.id);
-        setActivePayslip(payslip);
-      } catch {
-        // Fallback to demo payslip
-        setActivePayslip(getDemoPayslip(record));
-      }
+    try {
+      const payslip = await fetchPayslipById(record.id);
+      setActivePayslip(payslip);
+    } catch (error) {
+      console.error("Failed to load payslip:", error);
     }
     setPayslipModalOpen(true);
   };
 
-  // ── Download PDF (opens preview then auto-triggers download) ──
+  // ── Download PDF ──────────────────────────────────────
   const handleDownloadPayslip = async (record: PayrollRecord) => {
-    // Opens preview first, user clicks download inside
-    handleViewPayslip(record);
+    try {
+      const fileName = `Payslip_${record.employeeName.replace(/\s+/g, "_")}_${record.month}.pdf`;
+      await downloadPayslipPdf(record.id, fileName, record.pdfUrl);
+    } catch (error) {
+      console.error("Failed to download payslip:", error);
+    }
   };
 
   // ── Salary History ────────────────────────────────────
-  const handleViewHistory = async (record: PayrollRecord) => {
+  const handleViewHistory = (record: PayrollRecord) => {
     setHistoryEmployee({
       name: record.employeeName,
       designation: record.designation,
       department: record.department,
     });
-
-    if (isDemo) {
-      setSalaryHistory(getDemoSalaryHistory(record.employeeId));
-    } else {
-      try {
-        const history = await fetchSalaryHistory(record.employeeId);
-        setSalaryHistory(history);
-      } catch {
-        setSalaryHistory(getDemoSalaryHistory(record.employeeId));
-      }
-    }
+    setSalaryHistory(deriveSalaryHistory(records, record.employeeId));
     setHistoryPanelOpen(true);
   };
 
@@ -183,30 +142,8 @@ export default function PayrollPage() {
               <CalendarRange size={15} className="text-gray-400" />
               <span className="font-medium">July 2026</span>
             </div>
-            {/* Demo Toggle */}
-            <DemoDataToggle
-              isDemo={isDemo}
-              onToggle={handleToggle}
-              loading={switchLoading}
-            />
           </div>
         </div>
-
-        {/* Demo Mode Banner */}
-        {isDemo && (
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center gap-3">
-            <span className="text-lg">🧪</span>
-            <div>
-              <p className="text-sm font-semibold text-amber-800">
-                Demo Mode Active
-              </p>
-              <p className="text-xs text-amber-600">
-                Showing sample payroll data. Click the toggle button above to
-                switch to real API data when backend is ready.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* Stats Cards */}
         <PayrollStatsCards

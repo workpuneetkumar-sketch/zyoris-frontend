@@ -1,6 +1,7 @@
 // lib/api/payrollApi.ts
 
 import api from "@/lib/api/api";
+import { getEmployees, type Employee } from "@/lib/api/hrApi";
 
 // ── Types ────────────────────────────────────────────────
 
@@ -41,6 +42,7 @@ export interface PayrollRecord {
   paymentStatus: "PAID" | "PENDING" | "PROCESSING";
   paymentDate?: string;
   bankAccount?: string;
+  pdfUrl?: string;
   createdAt: string;
 }
 
@@ -65,210 +67,280 @@ export interface SalaryHistoryEntry {
   incrementPercentage?: number;
 }
 
-// ── Demo Data ────────────────────────────────────────────
-
-const DEMO_EMPLOYEES = [
-  { id: "emp-001", name: "Aarav Sharma", email: "aarav.sharma@zyoris.com", designation: "Senior Developer", department: "Engineering" },
-  { id: "emp-002", name: "Priya Patel", email: "priya.patel@zyoris.com", designation: "Product Manager", department: "Product" },
-  { id: "emp-003", name: "Rohan Gupta", email: "rohan.gupta@zyoris.com", designation: "UI/UX Designer", department: "Design" },
-  { id: "emp-004", name: "Ananya Singh", email: "ananya.singh@zyoris.com", designation: "HR Manager", department: "Human Resources" },
-  { id: "emp-005", name: "Vikram Reddy", email: "vikram.reddy@zyoris.com", designation: "DevOps Engineer", department: "Engineering" },
-  { id: "emp-006", name: "Sneha Joshi", email: "sneha.joshi@zyoris.com", designation: "Marketing Lead", department: "Marketing" },
-  { id: "emp-007", name: "Arjun Nair", email: "arjun.nair@zyoris.com", designation: "Backend Developer", department: "Engineering" },
-  { id: "emp-008", name: "Kavya Iyer", email: "kavya.iyer@zyoris.com", designation: "QA Engineer", department: "Engineering" },
-  { id: "emp-009", name: "Rahul Mehta", email: "rahul.mehta@zyoris.com", designation: "Sales Executive", department: "Sales" },
-  { id: "emp-010", name: "Diya Kapoor", email: "diya.kapoor@zyoris.com", designation: "Finance Analyst", department: "Finance" },
-  { id: "emp-011", name: "Karthik Menon", email: "karthik.menon@zyoris.com", designation: "Tech Lead", department: "Engineering" },
-  { id: "emp-012", name: "Meera Choudhary", email: "meera.choudhary@zyoris.com", designation: "Content Writer", department: "Marketing" },
-];
-
-const BASE_SALARIES: Record<string, number> = {
-  "emp-001": 95000,
-  "emp-002": 110000,
-  "emp-003": 72000,
-  "emp-004": 85000,
-  "emp-005": 88000,
-  "emp-006": 78000,
-  "emp-007": 75000,
-  "emp-008": 62000,
-  "emp-009": 55000,
-  "emp-010": 68000,
-  "emp-011": 120000,
-  "emp-012": 48000,
-};
-
-function generateEarnings(basic: number): PayrollEarnings {
-  return {
-    basic,
-    hra: Math.round(basic * 0.4),
-    da: Math.round(basic * 0.12),
-    specialAllowance: Math.round(basic * 0.15),
-    conveyance: 1600,
-    medicalAllowance: 1250,
-    otherAllowances: Math.round(basic * 0.05),
-  };
+/**
+ * Raw payslip shape returned by the backend `/hr/payslips` endpoints.
+ * The model is intentionally flat — richer UI fields are derived in
+ * `normalizePayslip` / `toPayslip`.
+ */
+export interface BackendPayslip {
+  id: string;
+  employeeId: string;
+  month: number;        // 1-12
+  year: number;
+  basicSalary: number;
+  hra: number;
+  allowances: number;
+  bonus: number;
+  deductions: number;   // single lump sum
+  netSalary: number;
+  pdfUrl?: string;
+  // Optional employee details if the backend joins them in.
+  employee?: Partial<Employee> & { name?: string; designation?: string };
+  employeeName?: string;
+  designation?: string;
+  department?: string;
+  createdAt?: string;
 }
 
-function generateDeductions(basic: number): PayrollDeductions {
-  return {
-    pf: Math.round(basic * 0.12),
-    esi: Math.round(basic * 0.0075),
-    tds: Math.round(basic * 0.1),
-    professionalTax: 200,
+// ── Constants ────────────────────────────────────────────
+
+const COMPANY_NAME = "Zyoris Technologies Pvt. Ltd.";
+const COMPANY_ADDRESS =
+  "123 Tech Park, Sector 62, Noida, Uttar Pradesh - 201309";
+
+// ── Normalization ────────────────────────────────────────
+
+function toMonthString(month: number, year: number): string {
+  const m = Math.min(Math.max(month || 1, 1), 12);
+  return `${year}-${String(m).padStart(2, "0")}`;
+}
+
+/**
+ * Convert a flat backend payslip into the rich `PayrollRecord` the UI
+ * consumes. Employee name/designation/department are resolved from the
+ * provided employee map (built from `/hr/employees`) with a fallback to any
+ * details the payslip itself carries.
+ */
+export function normalizePayslip(
+  raw: BackendPayslip,
+  empMap?: Map<string, Employee>
+): PayrollRecord {
+  const emp = empMap?.get(raw.employeeId);
+  const nested = raw.employee;
+
+  const employeeName =
+    emp?.name || nested?.name || raw.employeeName || raw.employeeId;
+  const designation =
+    emp?.role || nested?.designation || nested?.role || raw.designation || "—";
+  const department =
+    emp?.department || nested?.department || raw.department || "—";
+  const employeeEmail = emp?.email || nested?.email || "";
+
+  const basicSalary = raw.basicSalary || 0;
+  const hra = raw.hra || 0;
+  const allowances = raw.allowances || 0;
+  const bonus = raw.bonus || 0;
+  const totalDeductions = raw.deductions || 0;
+  const grossEarnings = basicSalary + hra + allowances + bonus;
+
+  const earnings: PayrollEarnings = {
+    basic: basicSalary,
+    hra,
+    da: 0,
+    specialAllowance: allowances,
+    conveyance: 0,
+    medicalAllowance: 0,
+    otherAllowances: bonus,
+  };
+
+  const deductions: PayrollDeductions = {
+    pf: 0,
+    esi: 0,
+    tds: 0,
+    professionalTax: 0,
     loanRecovery: 0,
-    otherDeductions: Math.round(basic * 0.02),
+    otherDeductions: totalDeductions,
+  };
+
+  const month = toMonthString(raw.month, raw.year);
+
+  return {
+    id: raw.id,
+    employeeId: raw.employeeId,
+    employeeName,
+    employeeEmail,
+    designation,
+    department,
+    avatar: emp?.avatar,
+    month,
+    basicSalary,
+    earnings,
+    deductions,
+    grossEarnings,
+    totalDeductions,
+    netPay: raw.netSalary ?? grossEarnings - totalDeductions,
+    // Backend has no explicit status — a generated PDF implies it's processed.
+    paymentStatus: raw.pdfUrl ? "PAID" : "PENDING",
+    pdfUrl: raw.pdfUrl,
+    createdAt: raw.createdAt || `${month}-01T00:00:00Z`,
   };
 }
 
-function sumEarnings(e: PayrollEarnings): number {
-  return e.basic + e.hra + e.da + e.specialAllowance + e.conveyance + e.medicalAllowance + e.otherAllowances;
-}
-
-function sumDeductions(d: PayrollDeductions): number {
-  return d.pf + d.esi + d.tds + d.professionalTax + d.loanRecovery + d.otherDeductions;
-}
-
-const MONTHS = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05", "2026-06", "2026-07"];
-
-function generateDemoPayroll(): PayrollRecord[] {
-  const records: PayrollRecord[] = [];
-  const currentMonth = "2026-07";
-
-  for (const emp of DEMO_EMPLOYEES) {
-    const basic = BASE_SALARIES[emp.id] || 60000;
-    const earnings = generateEarnings(basic);
-    const deductions = generateDeductions(basic);
-    const gross = sumEarnings(earnings);
-    const totalDed = sumDeductions(deductions);
-
-    const status: PayrollRecord["paymentStatus"] =
-      currentMonth === "2026-07"
-        ? Math.random() > 0.3 ? "PENDING" : "PROCESSING"
-        : "PAID";
-
-    records.push({
-      id: `pay-${emp.id}-${currentMonth}`,
-      employeeId: emp.id,
-      employeeName: emp.name,
-      employeeEmail: emp.email,
-      designation: emp.designation,
-      department: emp.department,
-      month: currentMonth,
-      basicSalary: basic,
-      earnings,
-      deductions,
-      grossEarnings: gross,
-      totalDeductions: totalDed,
-      netPay: gross - totalDed,
-      paymentStatus: status,
-      paymentDate: status === "PAID" ? `${currentMonth}-28T10:00:00Z` : undefined,
-      bankAccount: `XXXX${Math.floor(1000 + Math.random() * 9000)}`,
-      createdAt: `${currentMonth}-01T00:00:00Z`,
-    });
-  }
-
-  return records;
-}
-
-function generateDemoSalaryHistory(employeeId: string): SalaryHistoryEntry[] {
-  const basic = BASE_SALARIES[employeeId] || 60000;
-  const history: SalaryHistoryEntry[] = [];
-
-  for (let i = 0; i < MONTHS.length; i++) {
-    const month = MONTHS[i];
-    // Simulate a small salary increment in April (annual review)
-    const monthBasic = month >= "2026-04" ? Math.round(basic * 1.08) : basic;
-    const earnings = generateEarnings(monthBasic);
-    const deductions = generateDeductions(monthBasic);
-    const gross = sumEarnings(earnings);
-    const totalDed = sumDeductions(deductions);
-
-    const incrementPct = month === "2026-04" ? 8.0 : undefined;
-
-    history.push({
-      month,
-      basicSalary: monthBasic,
-      grossEarnings: gross,
-      totalDeductions: totalDed,
-      netPay: gross - totalDed,
-      paymentStatus: month === "2026-07" ? "PENDING" : "PAID",
-      incrementPercentage: incrementPct,
-    });
-  }
-
-  return history;
-}
-
-function generateDemoPayslip(payrollRecord: PayrollRecord): Payslip {
+/** Expand a `PayrollRecord` into a full `Payslip` with company defaults. */
+export function toPayslip(record: PayrollRecord): Payslip {
   return {
-    ...payrollRecord,
-    payslipNumber: `ZYR/${payrollRecord.month.replace("-", "")}/${payrollRecord.employeeId.replace("emp-", "").toUpperCase()}`,
-    companyName: "Zyoris Technologies Pvt. Ltd.",
-    companyAddress: "123 Tech Park, Sector 62, Noida, Uttar Pradesh - 201309",
-    panNumber: `ABCDE${Math.floor(1000 + Math.random() * 9000)}F`,
-    uanNumber: `1001${Math.floor(10000000 + Math.random() * 90000000)}`,
+    ...record,
+    payslipNumber: `ZYR/${record.month.replace("-", "")}/${record.employeeId
+      .replace("emp-", "")
+      .slice(-6)
+      .toUpperCase()}`,
+    companyName: COMPANY_NAME,
+    companyAddress: COMPANY_ADDRESS,
+    panNumber: "—",
+    uanNumber: "—",
     paidDays: 30,
     lopDays: 0,
     totalDays: 30,
   };
 }
 
-// ── Exported Demo Data Generators ────────────────────────
+/**
+ * Derive per-employee salary history client-side from the full set of loaded
+ * payroll records — the backend exposes no dedicated salary-history endpoint.
+ */
+export function deriveSalaryHistory(
+  records: PayrollRecord[],
+  employeeId: string
+): SalaryHistoryEntry[] {
+  const entries = records
+    .filter((r) => r.employeeId === employeeId)
+    .sort((a, b) => a.month.localeCompare(b.month));
 
-export function getDemoPayrollRecords(): PayrollRecord[] {
-  return generateDemoPayroll();
+  return entries.map((r, idx) => {
+    const prev = entries[idx - 1];
+    const incrementPercentage =
+      prev && prev.basicSalary > 0 && r.basicSalary > prev.basicSalary
+        ? Number(
+            (
+              ((r.basicSalary - prev.basicSalary) / prev.basicSalary) *
+              100
+            ).toFixed(1)
+          )
+        : undefined;
+
+    return {
+      month: r.month,
+      basicSalary: r.basicSalary,
+      grossEarnings: r.grossEarnings,
+      totalDeductions: r.totalDeductions,
+      netPay: r.netPay,
+      paymentStatus: r.paymentStatus,
+      incrementPercentage,
+    };
+  });
 }
 
-export function getDemoSalaryHistory(employeeId: string): SalaryHistoryEntry[] {
-  return generateDemoSalaryHistory(employeeId);
-}
+// ── API Functions ────────────────────────────────────────
 
-export function getDemoPayslip(payrollRecord: PayrollRecord): Payslip {
-  return generateDemoPayslip(payrollRecord);
-}
-
-// ── Real API Functions ───────────────────────────────────
-
-export async function fetchPayrollRecords(month?: string): Promise<PayrollRecord[]> {
+async function buildEmployeeMap(): Promise<Map<string, Employee>> {
   try {
-    const params: Record<string, string> = {};
-    if (month) params.month = month;
-    const res = await api.get("/hr/payroll/records", { params });
-    const data = res.data?.data || res.data;
-    return Array.isArray(data) ? data : [];
-  } catch (error: any) {
-    console.error("Error fetching payroll records:", error);
-    throw new Error(error.response?.data?.message || "Failed to fetch payroll records");
+    const employees = await getEmployees();
+    return new Map(employees.map((e) => [e.id, e]));
+  } catch (error) {
+    console.error("Error loading employees for payslip enrichment:", error);
+    return new Map();
   }
 }
 
-export async function fetchPayslipById(payrollId: string): Promise<Payslip> {
+export async function fetchPayslips(): Promise<PayrollRecord[]> {
   try {
-    const res = await api.get(`/hr/payroll/payslip/${payrollId}`);
-    return res.data?.data || res.data;
+    const [res, empMap] = await Promise.all([
+      api.get("/hr/payslips"),
+      buildEmployeeMap(),
+    ]);
+    const data = res.data?.data ?? res.data;
+    const list: BackendPayslip[] = Array.isArray(data) ? data : [];
+    return list.map((p) => normalizePayslip(p, empMap));
+  } catch (error: any) {
+    console.error("Error fetching payslips:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch payslips"
+    );
+  }
+}
+
+export async function fetchPayslipById(id: string): Promise<Payslip> {
+  try {
+    const [res, empMap] = await Promise.all([
+      api.get(`/hr/payslips/${id}`),
+      buildEmployeeMap(),
+    ]);
+    const data = res.data?.data ?? res.data;
+    return toPayslip(normalizePayslip(data as BackendPayslip, empMap));
   } catch (error: any) {
     console.error("Error fetching payslip:", error);
-    throw new Error(error.response?.data?.message || "Failed to fetch payslip");
+    throw new Error(
+      error.response?.data?.message || "Failed to fetch payslip"
+    );
   }
 }
 
-export async function fetchSalaryHistory(employeeId: string): Promise<SalaryHistoryEntry[]> {
+/**
+ * Download a payslip PDF. Fetches the file as a blob and triggers a browser
+ * download; falls back to opening `pdfUrl` directly if the blob call fails.
+ */
+export async function downloadPayslipPdf(
+  id: string,
+  fileName?: string,
+  pdfUrl?: string
+): Promise<void> {
   try {
-    const res = await api.get(`/hr/payroll/salary-history/${employeeId}`);
-    const data = res.data?.data || res.data;
-    return Array.isArray(data) ? data : [];
+    const response = await api.get(`/hr/payslips/${id}/download`, {
+      responseType: "blob",
+    });
+    const blob = response.data;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName || `Payslip_${id}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 100);
   } catch (error: any) {
-    console.error("Error fetching salary history:", error);
-    throw new Error(error.response?.data?.message || "Failed to fetch salary history");
+    console.error("PDF download failed:", error);
+    if (pdfUrl) {
+      const base =
+        process.env.NEXT_PUBLIC_BACKEND_URL || "https://zyoris.onrender.com";
+      const href = pdfUrl.startsWith("http") ? pdfUrl : `${base}${pdfUrl}`;
+      window.open(href, "_blank");
+      return;
+    }
+    throw new Error(
+      error.response?.data?.message || "Failed to download payslip"
+    );
   }
 }
 
-export async function generatePayslipApi(employeeId: string, month: string): Promise<Payslip> {
+export async function generatePayslip(
+  employeeId: string,
+  month: number,
+  year: number
+): Promise<PayrollRecord> {
   try {
-    const res = await api.post("/hr/payroll/generate-payslip", { employeeId, month });
-    return res.data?.data || res.data;
+    const res = await api.post("/hr/payslips/generate", {
+      employeeId,
+      month,
+      year,
+    });
+    const data = res.data?.data ?? res.data;
+    const empMap = await buildEmployeeMap();
+    return normalizePayslip(data as BackendPayslip, empMap);
   } catch (error: any) {
     console.error("Error generating payslip:", error);
-    throw new Error(error.response?.data?.message || "Failed to generate payslip");
+    throw new Error(
+      error.response?.data?.message || "Failed to generate payslip"
+    );
+  }
+}
+
+export async function deletePayslip(id: string): Promise<void> {
+  try {
+    await api.delete(`/hr/payslips/${id}`);
+  } catch (error: any) {
+    console.error("Error deleting payslip:", error);
+    throw new Error(
+      error.response?.data?.message || "Failed to delete payslip"
+    );
   }
 }

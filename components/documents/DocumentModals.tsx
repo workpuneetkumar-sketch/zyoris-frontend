@@ -14,9 +14,12 @@ import {
   Eye,
 } from "lucide-react";
 import { Document, getDocumentDownloadUrl } from "@/lib/api/documentsApi";
+import { DocumentPermissions } from "@/utils/documentPermissions";
 
 // ─── Props ──────────────────────────────────────────────────────────────
 interface DocumentModalsProps {
+  perms: DocumentPermissions;
+  handlePreview: (doc: Document) => void;
   showUploadModal: boolean;
   setShowUploadModal: (show: boolean) => void;
   showDetailModal: boolean;
@@ -79,6 +82,8 @@ const useDocumentPreview = (doc: Document | null) => {
 
 // ─── मुख्य कंपोनेंट ─────────────────────────────────────────────────────
 export default function DocumentModals({
+  perms,
+  handlePreview,
   showUploadModal,
   setShowUploadModal,
   showDetailModal,
@@ -248,59 +253,63 @@ export default function DocumentModals({
 
               {/* ─── Action Buttons ─── */}
               <div className="flex flex-wrap gap-2 pt-2">
+                {/* Full Preview (image / pdf / text) */}
+                {perms.canPreview && (
+                  <button
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      handlePreview(selectedDoc);
+                    }}
+                    className="flex items-center gap-1 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
+                  >
+                    <Eye size={16} />
+                    Preview
+                  </button>
+                )}
+
                 {/* Download */}
-                <button
-                  onClick={() => handleDownload(selectedDoc)}
-                  className="flex items-center gap-1 px-3 py-2 bg-indigo-50 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-100"
-                >
-                  <Download size={16} />
-                  Download
-                </button>
+                {perms.canDownload && (
+                  <button
+                    onClick={() => handleDownload(selectedDoc)}
+                    className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+                  >
+                    <Download size={16} />
+                    Download
+                  </button>
+                )}
 
                 {/* Copy URL (presigned URL) */}
-                <button
-                  onClick={async () => {
-                    try {
-                      const url = await getDocumentDownloadUrl(selectedDoc.id);
-                      await navigator.clipboard.writeText(url);
-                      showToast("success", "Image URL copied to clipboard");
-                    } catch {
-                      showToast("error", "Failed to get URL");
-                    }
-                  }}
-                  className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
-                >
-                  <Copy size={16} />
-                  Copy URL
-                </button>
-
-                {/* View (new tab) */}
-                <button
-                  onClick={async () => {
-                    try {
-                      const url = await getDocumentDownloadUrl(selectedDoc.id);
-                      window.open(url, "_blank");
-                    } catch {
-                      showToast("error", "Failed to open image");
-                    }
-                  }}
-                  className="flex items-center gap-1 px-3 py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-100"
-                >
-                  <Eye size={16} />
-                  View
-                </button>
+                {perms.canDownload && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const url = await getDocumentDownloadUrl(selectedDoc.id);
+                        await navigator.clipboard.writeText(url);
+                        showToast("success", "URL copied to clipboard");
+                      } catch {
+                        showToast("error", "Failed to get URL");
+                      }
+                    }}
+                    className="flex items-center gap-1 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200"
+                  >
+                    <Copy size={16} />
+                    Copy URL
+                  </button>
+                )}
 
                 {/* Link to Entity */}
-                <button
-                  onClick={() => {
-                    setShowDetailModal(false);
-                    setShowLinkModal(true);
-                  }}
-                  className="flex items-center gap-1 px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100"
-                >
-                  <Link size={16} />
-                  Link
-                </button>
+                {perms.canLink && (
+                  <button
+                    onClick={() => {
+                      setShowDetailModal(false);
+                      setShowLinkModal(true);
+                    }}
+                    className="flex items-center gap-1 px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-100"
+                  >
+                    <Link size={16} />
+                    Link
+                  </button>
+                )}
               </div>
             </div>
           </div>

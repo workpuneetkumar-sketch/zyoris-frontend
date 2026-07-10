@@ -19,6 +19,9 @@ import {
 } from "@/lib/api/documentsApi";
 import DocumentListSection from "@/components/documents/DocumentListSection";
 import DocumentModals from "@/components/documents/DocumentModals";
+import DocumentPreviewModal from "@/components/documents/DocumentPreviewModal";
+import { useAuth } from "@/context/AuthContext";
+import { getDocumentPermissions } from "@/utils/documentPermissions";
 
 // Helpers
 const formatBytes = (bytes: number): string => {
@@ -78,15 +81,22 @@ const Skeleton = ({ className }: { className?: string }) => (
 );
 
 export default function DocumentsPage() {
+  const { user } = useAuth();
+  const perms = getDocumentPermissions(user?.role);
+
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [layout, setLayout] = useState<"flat" | "folder">("flat");
   const [searchQuery, setSearchQuery] = useState("");
   const [fileTypeFilter, setFileTypeFilter] = useState<string>("ALL");
+  const [dateFilter, setDateFilter] = useState<string>("ALL");
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
+  const [previewDoc, setPreviewDoc] = useState<Document | null>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -130,7 +140,22 @@ export default function DocumentsPage() {
       (fileTypeFilter ===
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" &&
         doc.fileType.includes("spreadsheet"));
-    return matchesSearch && matchesType;
+
+    let matchesDate = true;
+    if (dateFilter !== "ALL") {
+      const created = new Date(doc.createdAt).getTime();
+      const now = Date.now();
+      if (dateFilter === "TODAY") {
+        matchesDate =
+          new Date(doc.createdAt).toDateString() === new Date().toDateString();
+      } else if (dateFilter === "7D") {
+        matchesDate = now - created <= 7 * 24 * 60 * 60 * 1000;
+      } else if (dateFilter === "30D") {
+        matchesDate = now - created <= 30 * 24 * 60 * 60 * 1000;
+      }
+    }
+
+    return matchesSearch && matchesType && matchesDate;
   });
 
   const totalDocs = documents.length;
@@ -143,6 +168,10 @@ export default function DocumentsPage() {
   const totalStorage = documents.reduce((sum, d) => sum + d.fileSize, 0);
 
   const handleUpload = async (file: File, onProgress?: (p: number) => void) => {
+    if (!perms.canUpload) {
+      showToast("error", "You don't have permission to upload documents");
+      return;
+    }
     try {
       const newDoc = await uploadDocument(file, onProgress);
       setDocuments((prev) => [newDoc, ...prev]);
@@ -155,6 +184,10 @@ export default function DocumentsPage() {
 
   const handleDelete = async () => {
     if (!selectedDoc) return;
+    if (!perms.canDelete) {
+      showToast("error", "You don't have permission to delete documents");
+      return;
+    }
     try {
       await deleteDocument(selectedDoc.id);
       setDocuments((prev) => prev.filter((d) => d.id !== selectedDoc.id));
@@ -191,12 +224,25 @@ export default function DocumentsPage() {
   };
 
   const handleDownload = async (doc: Document) => {
+    if (!perms.canDownload) {
+      showToast("error", "You don't have permission to download this document");
+      return;
+    }
     try {
       await downloadDocument(doc.id, doc.fileName);
       showToast("success", "Download started");
     } catch (err: any) {
       showToast("error", err.message);
     }
+  };
+
+  const handlePreview = (doc: Document) => {
+    if (!perms.canPreview) {
+      showToast("error", "You don't have permission to preview this document");
+      return;
+    }
+    setPreviewDoc(doc);
+    setShowPreviewModal(true);
   };
 
   const handleViewDetail = async (doc: Document) => {
@@ -242,13 +288,15 @@ export default function DocumentsPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-1">Manage all your uploaded files and documents</p>
         </div>
-        <button
-          onClick={() => setShowUploadModal(true)}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition"
-        >
-          <Upload size={18} />
-          Upload File
-        </button>
+        {perms.canUpload && (
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition"
+          >
+            <Upload size={18} />
+            Upload File
+          </button>
+        )}
       </div>
 
       {/* Document List Section */}
@@ -258,21 +306,27 @@ export default function DocumentsPage() {
         error={error}
         viewMode={viewMode}
         setViewMode={setViewMode}
+        layout={layout}
+        setLayout={setLayout}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
         fileTypeFilter={fileTypeFilter}
         setFileTypeFilter={setFileTypeFilter}
+        dateFilter={dateFilter}
+        setDateFilter={setDateFilter}
         loadDocuments={loadDocuments}
         filteredDocs={filteredDocs}
         totalDocs={totalDocs}
         uploadedToday={uploadedToday}
         linkedDocs={linkedDocs}
         totalStorage={totalStorage}
+        perms={perms}
         formatBytes={formatBytes}
         fileCategory={fileCategory}
         getFileIcon={getFileIcon}
         StatusBadge={StatusBadge}
         Skeleton={Skeleton}
+        handlePreview={handlePreview}
         handleViewDetail={handleViewDetail}
         handleDownload={handleDownload}
         setSelectedDoc={setSelectedDoc}
@@ -282,6 +336,8 @@ export default function DocumentsPage() {
 
       {/* Modals */}
       <DocumentModals
+        perms={perms}
+        handlePreview={handlePreview}
         showUploadModal={showUploadModal}
         setShowUploadModal={setShowUploadModal}
         showDetailModal={showDetailModal}
@@ -302,6 +358,20 @@ export default function DocumentsPage() {
         fileCategory={fileCategory}
         getFileIcon={getFileIcon}
         StatusBadge={StatusBadge}
+      />
+
+      {/* Preview Modal */}
+      <DocumentPreviewModal
+        doc={previewDoc}
+        isOpen={showPreviewModal}
+        onClose={() => {
+          setShowPreviewModal(false);
+          setPreviewDoc(null);
+        }}
+        canDownload={perms.canDownload}
+        onDownload={handleDownload}
+        formatBytes={formatBytes}
+        fileCategory={fileCategory}
       />
     </div>
   );
