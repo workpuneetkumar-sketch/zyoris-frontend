@@ -1,9 +1,12 @@
+"use client";
+
 import React from "react";
 import {
   Search,
   RefreshCw,
   Grid,
   List,
+  FolderTree,
   Files,
   Clock,
   Link,
@@ -11,11 +14,14 @@ import {
   AlertCircle,
   Eye,
   Download,
-  MoreVertical,
+  Info,
   File,
   Trash2,
 } from "lucide-react";
 import { Document } from "@/lib/api/documentsApi";
+import { DocumentPermissions } from "@/utils/documentPermissions";
+import DocumentCard from "./DocumentCard";
+import DocumentFolderView from "./DocumentFolderView";
 
 interface DocumentListSectionProps {
   documents: Document[];
@@ -23,21 +29,27 @@ interface DocumentListSectionProps {
   error: string | null;
   viewMode: "grid" | "list";
   setViewMode: (mode: "grid" | "list") => void;
+  layout: "flat" | "folder";
+  setLayout: (layout: "flat" | "folder") => void;
   searchQuery: string;
   setSearchQuery: (q: string) => void;
   fileTypeFilter: string;
   setFileTypeFilter: (f: string) => void;
+  dateFilter: string;
+  setDateFilter: (d: string) => void;
   loadDocuments: () => void;
   filteredDocs: Document[];
   totalDocs: number;
   uploadedToday: number;
   linkedDocs: number;
   totalStorage: number;
+  perms: DocumentPermissions;
   formatBytes: (bytes: number) => string;
   fileCategory: (fileType: string) => string;
   getFileIcon: (fileType: string) => React.ComponentType<any>;
   StatusBadge: React.FC<{ status: string }>;
   Skeleton: React.FC<{ className?: string }>;
+  handlePreview: (doc: Document) => void;
   handleViewDetail: (doc: Document) => void;
   handleDownload: (doc: Document) => void;
   setSelectedDoc: (doc: Document) => void;
@@ -47,32 +59,42 @@ interface DocumentListSectionProps {
 
 export default function DocumentListSection(props: DocumentListSectionProps) {
   const {
-    documents,
     loading,
     error,
     viewMode,
     setViewMode,
+    layout,
+    setLayout,
     searchQuery,
     setSearchQuery,
     fileTypeFilter,
     setFileTypeFilter,
+    dateFilter,
+    setDateFilter,
     loadDocuments,
     filteredDocs,
     totalDocs,
     uploadedToday,
     linkedDocs,
     totalStorage,
+    perms,
     formatBytes,
     fileCategory,
     getFileIcon,
     StatusBadge,
     Skeleton,
+    handlePreview,
     handleViewDetail,
     handleDownload,
     setSelectedDoc,
     setShowLinkModal,
     setShowDeleteModal,
   } = props;
+
+  const requestDelete = (doc: Document) => {
+    setSelectedDoc(doc);
+    setShowDeleteModal(true);
+  };
 
   return (
     <>
@@ -125,20 +147,58 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
           <option value="application/pdf">PDFs</option>
           <option value="OTHER">Other</option>
         </select>
+        <select
+          value={dateFilter}
+          onChange={(e) => setDateFilter(e.target.value)}
+          className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium bg-white cursor-pointer"
+        >
+          <option value="ALL">Any Date</option>
+          <option value="TODAY">Today</option>
+          <option value="7D">Last 7 days</option>
+          <option value="30D">Last 30 days</option>
+        </select>
+
+        {/* Layout: Folders vs Flat */}
         <div className="flex items-center gap-1 border border-gray-200 rounded-xl p-1 bg-white">
           <button
-            onClick={() => setViewMode("grid")}
-            className={`p-2 rounded-lg ${viewMode === "grid" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"}`}
+            onClick={() => setLayout("folder")}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium ${
+              layout === "folder" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"
+            }`}
+            title="Folder view"
           >
-            <Grid size={18} />
+            <FolderTree size={16} />
+            <span className="hidden sm:inline">Folders</span>
           </button>
           <button
-            onClick={() => setViewMode("list")}
-            className={`p-2 rounded-lg ${viewMode === "list" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"}`}
+            onClick={() => setLayout("flat")}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium ${
+              layout === "flat" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"
+            }`}
+            title="All documents"
           >
-            <List size={18} />
+            <Files size={16} />
+            <span className="hidden sm:inline">All</span>
           </button>
         </div>
+
+        {/* Grid / List (only meaningful in flat layout) */}
+        {layout === "flat" && (
+          <div className="flex items-center gap-1 border border-gray-200 rounded-xl p-1 bg-white">
+            <button
+              onClick={() => setViewMode("grid")}
+              className={`p-2 rounded-lg ${viewMode === "grid" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"}`}
+            >
+              <Grid size={18} />
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={`p-2 rounded-lg ${viewMode === "list" ? "bg-indigo-100 text-indigo-600" : "text-gray-500"}`}
+            >
+              <List size={18} />
+            </button>
+          </div>
+        )}
         <button
           onClick={loadDocuments}
           disabled={loading}
@@ -148,7 +208,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
         </button>
       </div>
 
-      {/* Document List / Grid */}
+      {/* Document List / Grid / Folders */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[...Array(8)].map((_, i) => (
@@ -163,6 +223,19 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
             Try again
           </button>
         </div>
+      ) : layout === "folder" ? (
+        <DocumentFolderView
+          documents={filteredDocs}
+          perms={perms}
+          formatBytes={formatBytes}
+          fileCategory={fileCategory}
+          getFileIcon={getFileIcon}
+          StatusBadge={StatusBadge}
+          handlePreview={handlePreview}
+          handleViewDetail={handleViewDetail}
+          handleDownload={handleDownload}
+          onDeleteRequest={requestDelete}
+        />
       ) : filteredDocs.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-2xl border border-gray-200">
           <File className="w-12 h-12 mx-auto text-gray-300 mb-4" />
@@ -171,6 +244,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
             onClick={() => {
               setSearchQuery("");
               setFileTypeFilter("ALL");
+              setDateFilter("ALL");
             }}
             className="mt-2 text-indigo-600 font-semibold"
           >
@@ -179,58 +253,21 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
         </div>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-          {filteredDocs.map((doc) => {
-            const Icon = getFileIcon(doc.fileType);
-            return (
-              <div
-                key={doc.id}
-                className="bg-white rounded-2xl border border-gray-200 p-4 hover:shadow-md transition-shadow group"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="p-2 bg-gray-50 rounded-lg">
-                    <Icon className="w-8 h-8 text-indigo-500" />
-                  </div>
-                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => handleViewDetail(doc)}
-                      className="p-1.5 hover:bg-gray-100 rounded-lg"
-                      title="View Details"
-                    >
-                      <Eye size={15} />
-                    </button>
-                    <button
-                      onClick={() => handleDownload(doc)}
-                      className="p-1.5 hover:bg-gray-100 rounded-lg"
-                      title="Download"
-                    >
-                      <Download size={15} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedDoc(doc);
-                      }}
-                      className="p-1.5 hover:bg-gray-100 rounded-lg"
-                    >
-                      <MoreVertical size={15} />
-                    </button>
-                  </div>
-                </div>
-                <h3 className="font-medium text-gray-900 text-sm truncate" title={doc.fileName}>
-                  {doc.fileName}
-                </h3>
-                <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
-                  <span>{fileCategory(doc.fileType)}</span>
-                  <span>•</span>
-                  <span>{formatBytes(doc.fileSize)}</span>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <StatusBadge status={doc.status} />
-                  <span className="text-xs text-gray-400">{new Date(doc.createdAt).toLocaleDateString()}</span>
-                </div>
-              </div>
-            );
-          })}
+          {filteredDocs.map((doc) => (
+            <DocumentCard
+              key={doc.id}
+              doc={doc}
+              perms={perms}
+              formatBytes={formatBytes}
+              fileCategory={fileCategory}
+              getFileIcon={getFileIcon}
+              StatusBadge={StatusBadge}
+              handlePreview={handlePreview}
+              handleViewDetail={handleViewDetail}
+              handleDownload={handleDownload}
+              onDeleteRequest={requestDelete}
+            />
+          ))}
         </div>
       ) : (
         <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
@@ -239,7 +276,7 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 border-b border-gray-100">
-                  {["File Name", "Type", "Size", "Status", "Uploaded", "Entity", ""].map((heading) => (
+                  {["File Name", "Type", "Size", "Status", "Uploaded", "Uploaded By", ""].map((heading) => (
                     <th
                       key={heading}
                       className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
@@ -272,50 +309,56 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                         {new Date(doc.createdAt).toLocaleDateString()}
                       </td>
                       <td className="px-5 py-4 text-sm text-gray-600">
-                        {doc.entityType ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full text-xs">
-                            <Link size={12} /> {doc.entityType}
-                          </span>
-                        ) : (
-                          "—"
-                        )}
+                        {doc.uploadedBy?.name || "—"}
                       </td>
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-1">
+                          {perms.canPreview && (
+                            <button
+                              onClick={() => handlePreview(doc)}
+                              className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
+                              title="Preview"
+                            >
+                              <Eye size={16} />
+                            </button>
+                          )}
+                          {perms.canDownload && (
+                            <button
+                              onClick={() => handleDownload(doc)}
+                              className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
+                              title="Download"
+                            >
+                              <Download size={16} />
+                            </button>
+                          )}
                           <button
                             onClick={() => handleViewDetail(doc)}
                             className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
-                            title="View"
+                            title="Details"
                           >
-                            <Eye size={16} />
+                            <Info size={16} />
                           </button>
-                          <button
-                            onClick={() => handleDownload(doc)}
-                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
-                            title="Download"
-                          >
-                            <Download size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedDoc(doc);
-                              setShowLinkModal(true);
-                            }}
-                            className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
-                            title="Link to Entity"
-                          >
-                            <Link size={16} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setSelectedDoc(doc);
-                              setShowDeleteModal(true);
-                            }}
-                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
-                            title="Delete"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {perms.canLink && (
+                            <button
+                              onClick={() => {
+                                setSelectedDoc(doc);
+                                setShowLinkModal(true);
+                              }}
+                              className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg"
+                              title="Link to Entity"
+                            >
+                              <Link size={16} />
+                            </button>
+                          )}
+                          {perms.canDelete && (
+                            <button
+                              onClick={() => requestDelete(doc)}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                              title="Delete"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -343,30 +386,24 @@ export default function DocumentListSection(props: DocumentListSectionProps) {
                     </div>
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleViewDetail(doc)} className="p-1.5 text-gray-500">
-                      <Eye size={16} />
-                    </button>
-                    <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-500">
-                      <Download size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedDoc(doc);
-                        setShowLinkModal(true);
-                      }}
-                      className="p-1.5 text-gray-500"
-                    >
-                      <Link size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setSelectedDoc(doc);
-                        setShowDeleteModal(true);
-                      }}
-                      className="p-1.5 text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {perms.canPreview && (
+                      <button onClick={() => handlePreview(doc)} className="p-1.5 text-gray-500">
+                        <Eye size={16} />
+                      </button>
+                    )}
+                    {perms.canDownload && (
+                      <button onClick={() => handleDownload(doc)} className="p-1.5 text-gray-500">
+                        <Download size={16} />
+                      </button>
+                    )}
+                    {perms.canDelete && (
+                      <button
+                        onClick={() => requestDelete(doc)}
+                        className="p-1.5 text-red-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 </div>
               );
