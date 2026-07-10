@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { toast } from "sonner";
+import { createRazorpayOrder, verifyRazorpayPayment } from "@/lib/api/paymentService";
+import { openRazorpayCheckout } from "@/utils/razorpay";
 import {
   X,
   Shield,
@@ -23,6 +26,10 @@ export interface MockPaymentResult {
   amount: number;
   status: "COMPLETED";
   transactionId: string;
+  /** Real Razorpay fields — present when paid via SDK */
+  razorpay_payment_id?: string;
+  razorpay_order_id?: string;
+  razorpay_signature?: string;
 }
 
 export interface RazorpayModalProps {
@@ -32,6 +39,10 @@ export interface RazorpayModalProps {
   invoiceNumber: string;
   clientName: string;
   amount: number;
+  /** Invoice ID — required for the real backend flow */
+  invoiceId?: string;
+  /** Client email for Razorpay prefill */
+  clientEmail?: string;
 }
 
 // ── Helpers ────────────────────────────────────────────────
@@ -94,6 +105,8 @@ export default function RazorpayModal({
   invoiceNumber,
   clientName,
   amount,
+  invoiceId,
+  clientEmail,
 }: RazorpayModalProps) {
   const [activeTab, setActiveTab]         = useState<PaymentTab>("upi");
   const [processing, setProcessing]       = useState(false);
@@ -147,22 +160,98 @@ export default function RazorpayModal({
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
-  // ── Mock payment processing ──────────────────────────────
+  // ── Real Razorpay payment flow ───────────────────────────
   const processPayment = useCallback(async (method: string) => {
     setProcessing(true);
-    await new Promise((r) => setTimeout(r, 1500 + Math.random() * 1000));
-    setProcessing(false);
-    setSuccess(true);
-    setTimeout(() => {
-      onSuccess({
-        paymentId: generatePaymentId(),
-        method,
-        amount,
-        status: "COMPLETED",
-        transactionId: `TXN${Date.now()}`,
-      });
-    }, 1200);
-  }, [amount, onSuccess]);
+
+    try {
+      // ── If we have an invoiceId, use the real Razorpay SDK ──
+      if (invoiceId) {
+        // 1. Create order on backend
+        const order = await createRazorpayOrder(invoiceId, amount);
+
+        const keyId =
+          order.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "";
+
+        if (!keyId) {
+          throw new Error(
+            "Razorpay Key ID is not configured. Please contact support."
+          );
+        }
+
+        setProcessing(false);
+
+        // 2. Open Razorpay Checkout (real SDK)
+        const paymentResult = await openRazorpayCheckout({
+          keyId,
+          amountInPaise: order.amount,
+          currency: order.currency,
+          orderId: order.orderId,
+          invoiceId,
+          invoiceNumber,
+          clientName,
+          clientEmail,
+        });
+
+        setProcessing(true);
+
+        // 3. Verify payment on backend
+        await verifyRazorpayPayment({
+          razorpay_order_id: paymentResult.razorpay_order_id,
+          razorpay_payment_id: paymentResult.razorpay_payment_id,
+          razorpay_signature: paymentResult.razorpay_signature,
+          invoiceId,
+        });
+
+        setProcessing(false);
+        setSuccess(true);
+
+        setTimeout(() => {
+          onSuccess({
+            paymentId: paymentResult.razorpay_payment_id,
+            method,
+            amount,
+            status: "COMPLETED",
+            transactionId: paymentResult.razorpay_payment_id,
+            razorpay_payment_id: paymentResult.razorpay_payment_id,
+            razorpay_order_id: paymentResult.razorpay_order_id,
+            razorpay_signature: paymentResult.razorpay_signature,
+          });
+        }, 1200);
+
+      } else {
+        // ── Fallback: simulate for environments without a backend ──
+        await new Promise((r) => setTimeout(r, 1500 + Math.random() * 500));
+        setProcessing(false);
+        setSuccess(true);
+        setTimeout(() => {
+          onSuccess({
+            paymentId: generatePaymentId(),
+            method,
+            amount,
+            status: "COMPLETED",
+            transactionId: `TXN${Date.now()}`,
+          });
+        }, 1200);
+      }
+    } catch (err: any) {
+      setProcessing(false);
+      const msg: string = err?.message ?? "Payment failed";
+      const isCancelled = msg === "PAYMENT_CANCELLED";
+
+      if (isCancelled) {
+        toast.info("Payment cancelled.", {
+          description: "You closed the checkout. No amount was charged.",
+        });
+        onClose();
+      } else {
+        toast.error("Payment Failed", {
+          description: msg,
+          duration: 5000,
+        });
+      }
+    }
+  }, [amount, invoiceId, invoiceNumber, clientName, clientEmail, onSuccess, onClose]);
 
   // ── Validate & trigger payment ───────────────────────────
   const handlePay = () => {

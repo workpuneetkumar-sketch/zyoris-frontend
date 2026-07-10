@@ -15,7 +15,6 @@ import {
   Loader2,
   Banknote,
   FileText,
-  Zap,
 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +23,7 @@ import { toast } from "sonner";
 import { usePayment, PaymentRecord } from "@/context/PaymentContext";
 import { getInvoiceById, Invoice } from "@/lib/api/finance/invoicesApi";
 import RazorpayModal, { MockPaymentResult } from "@/components/payment/RazorpayModal";
+import PaymentButton, { PaymentSuccessResult } from "@/components/payment/PaymentButton";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -150,7 +150,38 @@ export default function PaymentPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [showRazorpay, setShowRazorpay] = useState(false);
 
-  // ── Online Payment Handler ───────────────────────────────
+  // ── Refresh invoice from API ───────────────────────────────
+  const refreshInvoice = useCallback(async () => {
+    if (!invoiceId) return;
+    try {
+      const updated = await getInvoiceById(invoiceId);
+      setInvoice(updated);
+    } catch {
+      // silently ignore refresh failures; the page already has data
+    }
+  }, [invoiceId]);
+
+  // ── PaymentButton success handler (real Razorpay flow) ────────
+  const handleRazorpaySuccess = useCallback(
+    async (result: PaymentSuccessResult) => {
+      // Refresh invoice from the backend so status reflects PAID
+      await refreshInvoice();
+
+      // Optimistically mark as PAID in local state
+      setInvoice((prev) =>
+        prev ? { ...prev, status: "PAID" as const } : prev
+      );
+
+      setPaymentSuccess(true);
+
+      setTimeout(() => {
+        router.push("/payment/invoices");
+      }, 1800);
+    },
+    [refreshInvoice, router]
+  );
+
+  // ── RazorpayModal success handler (inline modal flow) ────────
   const handleOnlinePaymentSuccess = useCallback(
     (result: MockPaymentResult) => {
       addPayment(invoiceId, {
@@ -164,13 +195,15 @@ export default function PaymentPage() {
 
       setShowRazorpay(false);
       setPaymentSuccess(true);
-      toast.success("Online payment completed successfully!");
+
+      // Refresh invoice status from backend
+      refreshInvoice();
 
       setTimeout(() => {
-        router.push("/finance/invoices");
+        router.push("/payment/invoices");
       }, 1500);
     },
-    [addPayment, invoiceId, router]
+    [addPayment, invoiceId, refreshInvoice, router]
   );
 
   // ── Fetch Invoice ────────────────────────────────────────
@@ -395,15 +428,23 @@ export default function PaymentPage() {
                 </div>
               </div>
 
-              {/* Pay Online — quick-access button in header */}
-              <button
-                type="button"
-                onClick={() => setShowRazorpay(true)}
-                className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-              >
-                <Zap size={15} />
-                Pay Online
-              </button>
+              {/* PaymentButton — real Razorpay flow */}
+              <PaymentButton
+                invoice={{
+                  id: invoice.id,
+                  invoiceNumber: invoice.invoiceNumber,
+                  clientName: invoice.clientName,
+                  clientEmail: invoice.clientEmail,
+                  totalAmount: remaining,
+                  status: invoice.status,
+                }}
+                onSuccess={handleRazorpaySuccess}
+                onError={(err) => {
+                  // toast already shown inside PaymentButton
+                  console.error("Razorpay error:", err.message);
+                }}
+                label="Pay Now"
+              />
             </div>
 
             {/* Divider with label */}
@@ -506,18 +547,27 @@ export default function PaymentPage() {
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowRazorpay(true)}
-                  className="inline-flex items-center gap-2 px-6 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-xl shadow-sm transition-all"
-                >
-                  <Zap size={16} />
-                  Pay Online
-                </button>
+                {/* Pay Now — real Razorpay button inside the form row */}
+                <PaymentButton
+                  invoice={{
+                    id: invoice.id,
+                    invoiceNumber: invoice.invoiceNumber,
+                    clientName: invoice.clientName,
+                    clientEmail: invoice.clientEmail,
+                    totalAmount: remaining,
+                    status: invoice.status,
+                  }}
+                  onSuccess={handleRazorpaySuccess}
+                  onError={(err) => {
+                    console.error("Razorpay error:", err.message);
+                  }}
+                  label="Pay Online"
+                  disabled={isSubmitting}
+                />
 
                 <button
                   type="button"
-                  onClick={() => router.push("/finance/invoices")}
+                  onClick={() => router.push("/payment/invoices")}
                   className="px-5 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-all"
                 >
                   Cancel
@@ -598,13 +648,15 @@ export default function PaymentPage() {
         </div>
       </div>
 
-      {/* ── Razorpay-Style Online Payment Modal ─────────────── */}
+      {/* ── RazorpayModal (inline tab-based checkout) ──────────── */}
       <RazorpayModal
         isOpen={showRazorpay}
         onClose={() => setShowRazorpay(false)}
         onSuccess={handleOnlinePaymentSuccess}
         invoiceNumber={invoice.invoiceNumber}
         clientName={invoice.clientName}
+        clientEmail={invoice.clientEmail}
+        invoiceId={invoice.id}
         amount={remaining}
       />
     </>
