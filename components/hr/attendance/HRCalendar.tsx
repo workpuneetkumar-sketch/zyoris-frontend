@@ -107,34 +107,6 @@ export default function HRCalendar({
 
   // ── Date Status Logic ─────────────────────────────────
 
-  function getDateStatus(date: Date): CalendarDay["status"] {
-    const dateStr = formatDate(date);
-
-    // Future dates
-    if (date > today) return "future";
-
-    // Check approved leaves
-    if (leaveDates.has(dateStr)) return "leave";
-
-    // Check attendance records
-    const record = monthAttendance.find((r) => {
-      if (!r.attendanceDate) return false;
-      const recordDate = new Date(r.attendanceDate);
-      return isSameDay(recordDate, date);
-    });
-
-    if (record) {
-      if (record.status === "Absent") return "absent";
-      if (record.checkIn) return "present";
-    }
-
-    // Past dates without record are considered absent
-    if (date < today) return "absent";
-
-    // Today without record
-    return "no-record";
-  }
-
   function getStatusColor(status: CalendarDay["status"]): string {
     switch (status) {
       case "present":
@@ -167,6 +139,34 @@ export default function HRCalendar({
   // ── Calendar Grid ──────────────────────────────────────
 
   const calendarDays: (CalendarDay | null)[] = useMemo(() => {
+    const getDateStatus = (date: Date): CalendarDay["status"] => {
+      const dateStr = formatDate(date);
+
+      // Future dates
+      if (date > today) return "future";
+
+      // Check approved leaves
+      if (leaveDates.has(dateStr)) return "leave";
+
+      // Check attendance records
+      const record = monthAttendance.find((r) => {
+        if (!r.attendanceDate) return false;
+        const recordDate = new Date(r.attendanceDate);
+        return isSameDay(recordDate, date);
+      });
+
+      if (record) {
+        if (record.status === "Absent") return "absent";
+        if (record.checkIn) return "present";
+      }
+
+      // Past dates without record are considered absent
+      if (date < today) return "absent";
+
+      // Today without record
+      return "no-record";
+    };
+
     const days: (CalendarDay | null)[] = [];
     const daysInMonth = getDaysInMonth(year, month);
     const startDay = getStartDayOfMonth(year, month);

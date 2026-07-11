@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { X, Plus, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import {
   getMilestones,
@@ -56,7 +56,7 @@ export default function MilestonesModal({
   const [dueDate, setDueDate] = useState("");
   const [status, setStatus] = useState("PENDING");
 
-  const loadMilestones = async () => {
+  const loadMilestones = useCallback(async () => {
     try {
       const data = await getMilestones(projectId);
       setMilestones(data);
@@ -65,11 +65,11 @@ export default function MilestonesModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [projectId, showToast]);
 
   useEffect(() => {
     loadMilestones();
-  }, [projectId]);
+  }, [loadMilestones]);
 
   const resetForm = () => {
     setTitle("");

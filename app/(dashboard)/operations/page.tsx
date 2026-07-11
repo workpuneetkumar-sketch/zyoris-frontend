@@ -186,13 +186,19 @@ export default function OperationsDashboardPage() {
   }, []);
 
   const usingDemoData = dataLoaded && isOperationsDataEmpty(ops);
-  const finalOps = usingDemoData
-    ? OPERATIONS_MOCK_DATA
-    : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [], optimizationSuggestions: [] });
+  
+  const finalOps = useMemo(() => {
+    return usingDemoData
+      ? OPERATIONS_MOCK_DATA
+      : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [], optimizationSuggestions: [] });
+  }, [usingDemoData, ops]);
 
-  const alerts = finalOps.inventoryRiskAlerts ?? [];
-  const suggestions = finalOps.optimizationSuggestions ?? [];
-  const hasRiskLevels = alerts.some((a) => a.risk);
+  const { alerts, suggestions, hasRiskLevels } = useMemo(() => {
+    const a = finalOps.inventoryRiskAlerts ?? [];
+    const s = finalOps.optimizationSuggestions ?? [];
+    const h = a.some((alert) => alert.risk);
+    return { alerts: a, suggestions: s, hasRiskLevels: h };
+  }, [finalOps]);
 
   const inventoryOverview = useMemo(() => {
     return {

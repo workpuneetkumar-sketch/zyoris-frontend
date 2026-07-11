@@ -102,13 +102,23 @@ export async function fetchLeads(
     // Filter out deleted leads (soft delete)
     leads = leads.filter((lead: Lead) => !isLeadSoftDeleted(lead));
 
-    // Ensure every lead has a non-zero score (compute client-side if backend returns 0/null)
-    const scoredLeads: Lead[] = leads.map((lead: Lead) => ({
-        ...lead,
-        score: (typeof lead.score === "number" && lead.score > 0)
-            ? lead.score
-            : computeLeadScore(lead),
-    }));
+    // Fetch real lead scores from API for each lead
+    const scoredLeads: Lead[] = await Promise.all(
+        leads.map(async (lead: Lead) => {
+            let score: number;
+            try {
+                const scoreResponse = await getLeadScore(lead.id);
+                score = scoreResponse.score;
+            } catch (error) {
+                console.warn(`Failed to fetch score for lead ${lead.id}, falling back to computed`, error);
+                score = computeLeadScore(lead);
+            }
+            return {
+                ...lead,
+                score,
+            };
+        })
+    );
 
     return { leads: scoredLeads, total };
 }
@@ -470,17 +480,33 @@ export async function convertLeadToDeal(
 // ── GET lead score ─────────────────────────────────────────
 // Endpoint: GET /leads/get-lead-score/{leadId}
 export async function getLeadScore(leadId: string): Promise<{ score: number }> {
-    console.log(`[API] getLeadScore - leadId: ${leadId}`);
-    try {
-        const res = await api.get(`/leads/get-lead-score/${leadId}`);
-        console.log(`[API] getLeadScore - response data:`, res.data);
-        return res.data;
-    } catch (error: any) {
-        console.error(`[API] getLeadScore - error:`, {
-            message: error.message,
-            response: error.response?.data,
-            status: error.response?.status,
-        });
-        throw error;
+  console.log(`[API] getLeadScore - leadId: ${leadId}`);
+  try {
+    const res = await api.get(`/leads/get-lead-score/${leadId}`);
+    console.log(`[API] getLeadScore - full response:`, res);
+    console.log(`[API] getLeadScore - response data:`, res.data);
+    // Handle various possible response shapes
+    let score: number;
+    if (typeof res.data === 'number') {
+      score = res.data;
+    } else if (typeof res.data?.score === 'number') {
+      score = res.data.score;
+    } else if (typeof res.data?.data?.score === 'number') {
+      score = res.data.data.score;
+    } else {
+      // Fallback to computed score if API doesn't return it
+      console.warn('[API] getLeadScore - unexpected response shape, falling back to computeLeadScore');
+      // We need to fetch the lead to compute the score
+      const lead = await fetchLeadById(leadId);
+      return { score: lead.score };
     }
+    return { score };
+  } catch (error: any) {
+    console.error(`[API] getLeadScore - error:`, {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+    });
+    throw error;
+  }
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, notFound } from 'next/navigation';
 import { 
@@ -63,7 +63,7 @@ export default function EmployeeDetailPage() {
   const [editForm, setEditForm] = useState<EditFormData>({});
 
   // Data Fetching
-  const fetchEmployeeData = async () => {
+  const fetchEmployeeData = useCallback(async () => {
     if (!employeeId) {
       console.warn('[DEBUG] No employee ID provided in params');
       setError('No employee ID provided');
@@ -112,11 +112,11 @@ export default function EmployeeDetailPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [employeeId]);
 
   useEffect(() => {
     fetchEmployeeData();
-  }, [employeeId]);
+  }, [fetchEmployeeData]);
 
   // Edit Modal Handlers
   const handleEditClick = () => {

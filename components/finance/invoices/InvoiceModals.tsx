@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   X,
   Plus,
@@ -321,15 +321,15 @@ export function InvoiceDetailModal({
   const [loading, setLoading] = useState(true);
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
-  useEffect(() => { loadInvoice(); }, [invoiceId]);
-
-  const loadInvoice = async () => {
+  const loadInvoice = useCallback(async () => {
     setLoading(true);
     try {
       const data = await getInvoiceById(invoiceId);
       setInvoice(data);
     } catch (err) { console.error(err); } finally { setLoading(false); }
-  };
+  }, [invoiceId]);
+
+  useEffect(() => { loadInvoice(); }, [loadInvoice]);
 
   const handleStatusUpdate = async (newStatus: "SENT" | "PAID") => {
     setUpdatingStatus(true);

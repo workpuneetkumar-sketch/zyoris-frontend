@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter, notFound } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { fetchDealById } from "@/lib/api/dealsApi";
 import { Deal } from "@/types/deals";
 import { DealDetail } from "@/components/deals/DealDetail";
@@ -16,7 +16,7 @@ export default function DealDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const loadDeal = async () => {
+  const loadDeal = useCallback(async () => {
     if (!dealId) return;
 
     setLoading(true);
@@ -31,11 +31,11 @@ export default function DealDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [dealId]);
 
   useEffect(() => {
     loadDeal();
-  }, [dealId]);
+  }, [loadDeal]);
 
   if (loading) {
     return (
