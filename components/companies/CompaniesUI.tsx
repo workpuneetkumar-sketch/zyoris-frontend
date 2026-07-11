@@ -24,6 +24,18 @@ import {
     updateCompany,
 } from "@/lib/api/companiesApi";
 import type { Contact } from "@/lib/api/contactsApi";
+import {
+    bulkUpdateCompanies,
+    bulkDeleteCompanies,
+} from "@/lib/api/bulkOperationsApi";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import {
+    BulkActionsBar,
+    BulkCheckbox,
+    BulkSelectAllRow,
+    BulkUpdateDialog,
+    BulkDeleteDialog,
+} from "@/components/ui/BulkActionsBar";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -85,7 +97,6 @@ function StatusBadge({ status }: { status?: string }) {
 interface CompanyFormData {
     name: string;
     industry: string;
-    website: string;
     email: string;
     phone: string;
     city: string;
@@ -98,7 +109,6 @@ interface CompanyFormData {
 const EMPTY_FORM: CompanyFormData = {
     name: "",
     industry: "",
-    website: "",
     email: "",
     phone: "",
     city: "",
@@ -225,16 +235,6 @@ function CompanyModal({ mode, initial, onClose, onSave }: CompanyModalProps) {
                                     value={form.phone}
                                     onChange={handleChange}
                                     placeholder="+1 555 000 0000"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Website</label>
-                                <input
-                                    name="website"
-                                    value={form.website}
-                                    onChange={handleChange}
-                                    placeholder="https://acme.com"
                                     className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
@@ -536,6 +536,31 @@ export function CompaniesUI({
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
+    // ── Bulk state ────────────────────────────────────────────────────────────
+    const [bulkUpdateIndustry, setBulkUpdateIndustry] = useState("");
+
+    const bulk = useBulkSelection(() => onReload());
+
+    const handleBulkUpdate = () => {
+        void bulk.executeBulkCall("update", (onProgress) =>
+            bulkUpdateCompanies(
+                {
+                    ids: Array.from(bulk.selectedIds),
+                    data: {
+                        ...(bulkUpdateIndustry && { industry: bulkUpdateIndustry }),
+                    },
+                },
+                onProgress
+            )
+        );
+    };
+
+    const handleBulkDelete = () => {
+        void bulk.executeBulkCall("delete", (onProgress) =>
+            bulkDeleteCompanies({ ids: Array.from(bulk.selectedIds) }, onProgress)
+        );
+    };
+
     const handleCreate = async (data: CompanyFormData) => {
         await createCompany(data);
         onReload();
@@ -615,11 +640,34 @@ export function CompaniesUI({
                         </button>
                     </div>
 
+                    {/* Bulk select-all row */}
+                    <BulkSelectAllRow
+                        allIds={safeCompanies.map((c) => c.id)}
+                        selectedCount={bulk.selectedCount}
+                        totalCount={safeCompanies.length}
+                        isSelected={bulk.isSelected}
+                        onSelectAll={bulk.selectAll}
+                        onClear={bulk.clearSelection}
+                    />
+
+                    {/* Bulk action toolbar */}
+                    <BulkActionsBar
+                        selectedCount={bulk.selectedCount}
+                        entityLabel={bulk.selectedCount === 1 ? "company" : "companies"}
+                        showAssign={false}
+                        onUpdate={() => bulk.openBulkAction("update")}
+                        onDelete={() => bulk.openBulkAction("delete")}
+                        onClear={bulk.clearSelection}
+                        bulkState={bulk.bulkState}
+                        onDismissResult={bulk.closeBulkAction}
+                    />
+
                     {/* Table */}
                     <div className="overflow-x-auto overflow-y-visible w-full">
                         <table className="min-w-[900px] text-sm">
                             <thead>
                                 <tr className="border-b border-gray-100">
+                                    <th className="text-left px-3 py-3 w-8"></th>
                                     {["Company", "Industry", "Email", "Phone", "City", "Status", "Created", "Actions"].map((h) => (
                                         <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                             {h}
@@ -631,6 +679,7 @@ export function CompaniesUI({
                                 {loading ? (
                                     Array.from({ length: perPage }).map((_, i) => (
                                         <tr key={i} className="border-b border-gray-50">
+                                            <td className="px-3 py-4"></td>
                                             {Array.from({ length: 8 }).map((_, j) => (
                                                 <td key={j} className="px-5 py-4">
                                                     <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
@@ -640,7 +689,7 @@ export function CompaniesUI({
                                     ))
                                 ) : safeCompanies.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
+                                        <td colSpan={9} className="text-center py-16 text-gray-400 text-sm">
                                             No companies found.
                                         </td>
                                     </tr>
@@ -652,9 +701,22 @@ export function CompaniesUI({
                                             className={`border-b border-gray-50 cursor-pointer transition-colors ${
                                                 selectedCompany?.id === company.id
                                                     ? "bg-blue-50/60"
+                                                    : bulk.isSelected(company.id)
+                                                    ? "bg-blue-50/30"
                                                     : "hover:bg-gray-50/60"
                                             }`}
                                         >
+                                            <td
+                                                className="px-3 py-3.5"
+                                                onClick={(e) => e.stopPropagation()}
+                                            >
+                                                <BulkCheckbox
+                                                    id={company.id}
+                                                    isSelected={bulk.isSelected(company.id)}
+                                                    onToggle={bulk.toggleSelect}
+                                                    label={`Select ${company.name}`}
+                                                />
+                                            </td>
                                             <td className="px-5 py-3.5 whitespace-nowrap">
                                                 <div className="flex items-center gap-2.5">
                                                     <CompanyAvatar name={company.name} />
@@ -669,10 +731,43 @@ export function CompaniesUI({
                                                 </div>
                                             </td>
                                             <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{company.industry || "—"}</td>
-                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{company.email || "—"}</td>
-                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{company.phone || "—"}</td>
-                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
-                                                {[company.city, company.country].filter(Boolean).join(", ") || "—"}
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                {company.email ? (
+                                                    <a
+                                                        href={`mailto:${company.email}`}
+                                                        className="text-[13px] text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <Mail size={13} />
+                                                        <span className="truncate max-w-[160px]">{company.email}</span>
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-400 text-[13px]">—</span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                {company.phone ? (
+                                                    <a
+                                                        href={`tel:${company.phone}`}
+                                                        className="text-[13px] text-green-600 hover:text-green-700 hover:underline flex items-center gap-1.5"
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <Phone size={13} />
+                                                        <span>{company.phone}</span>
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-400 text-[13px]">—</span>
+                                                )}
+                                            </td>
+                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                {company.city || company.country ? (
+                                                    <div className="flex items-center gap-1.5 text-[13px] text-gray-600">
+                                                        <MapPin size={13} />
+                                                        <span>{[company.city, company.country].filter(Boolean).join(", ")}</span>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 text-[13px]">—</span>
+                                                )}
                                             </td>
                                             <td className="px-5 py-3.5 whitespace-nowrap">
                                                 <StatusBadge status={company.status} />
@@ -826,7 +921,6 @@ export function CompaniesUI({
                     initial={{
                         name: editingCompany.name ?? "",
                         industry: (editingCompany.industry as string) ?? "",
-                        website: (editingCompany.website as string) ?? "",
                         email: (editingCompany.email as string) ?? "",
                         phone: (editingCompany.phone as string) ?? "",
                         city: (editingCompany.city as string) ?? "",
@@ -837,6 +931,48 @@ export function CompaniesUI({
                     }}
                     onClose={() => setEditingCompany(null)}
                     onSave={handleEdit}
+                />
+            )}
+
+            {/* Bulk Update Dialog */}
+            {bulk.bulkState.isOpen && bulk.bulkState.type === "update" && (
+                <BulkUpdateDialog
+                    count={bulk.selectedCount}
+                    entityLabel={bulk.selectedCount === 1 ? "company" : "companies"}
+                    fields={
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Industry</label>
+                                <select
+                                    value={bulkUpdateIndustry}
+                                    onChange={(e) => setBulkUpdateIndustry(e.target.value)}
+                                    disabled={bulk.bulkState.isProcessing}
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                                >
+                                    <option value="">— keep existing —</option>
+                                    {INDUSTRY_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    }
+                    onConfirm={handleBulkUpdate}
+                    onCancel={bulk.closeBulkAction}
+                    isProcessing={bulk.bulkState.isProcessing}
+                    progress={bulk.bulkState.progress}
+                    error={bulk.bulkState.error}
+                />
+            )}
+
+            {/* Bulk Delete Dialog */}
+            {bulk.bulkState.isOpen && bulk.bulkState.type === "delete" && (
+                <BulkDeleteDialog
+                    count={bulk.selectedCount}
+                    entityLabel={bulk.selectedCount === 1 ? "company" : "companies"}
+                    onConfirm={handleBulkDelete}
+                    onCancel={bulk.closeBulkAction}
+                    isProcessing={bulk.bulkState.isProcessing}
+                    progress={bulk.bulkState.progress}
+                    error={bulk.bulkState.error}
                 />
             )}
         </div>

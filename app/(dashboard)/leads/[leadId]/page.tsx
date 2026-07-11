@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { Lead, computeLeadScore } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
-import { convertLeadToDeal, fetchLeadById } from "@/lib/api/leadsApi";
+import { convertLeadToDeal, fetchLeadById, getLeadScore } from "@/lib/api/leadsApi";
 import { updateDeal } from "@/lib/api/dealsApi";
 import { mapLeadStatusToDealStage } from "@/lib/dealStageMapper";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -80,8 +80,20 @@ export default function LeadDetailPage() {
         if (!leadId) return;
         setLoading(true);
         setError(null);
-        fetchLeadById(leadId)
-            .then((data) => {
+        
+        const loadLeadData = async () => {
+            try {
+                const data = await fetchLeadById(leadId);
+                let leadScore = data.score;
+                
+                // Try to fetch the real score from the API
+                try {
+                    const scoreResponse = await getLeadScore(leadId);
+                    leadScore = scoreResponse.score;
+                } catch (scoreErr) {
+                    console.warn("Failed to fetch lead score, falling back to computed:", scoreErr);
+                }
+                
                 // Ensure all fields exist with fallbacks
                 const enrichedLead: Lead = {
                     ...data,
@@ -93,7 +105,7 @@ export default function LeadDetailPage() {
                     email: data.email || "",
                     phone: data.phone || "",
                     city: data.city || "",
-                    score: data.score ?? computeLeadScore(data),
+                    score: leadScore ?? computeLeadScore(data),
                     tags: data.tags || [],
                     note: data.note || "",
                     owner: data.owner || "Unassigned",
@@ -105,11 +117,14 @@ export default function LeadDetailPage() {
                     deleted: data.deleted || false,
                 };
                 setLead(enrichedLead);
-            })
-            .catch((err) =>
-                setError(err instanceof Error ? err.message : "Failed to load lead.")
-            )
-            .finally(() => setLoading(false));
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to load lead.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        loadLeadData();
     }, [leadId]);
 
     // ── Convert to deal ───────────────────────────────────────────────────────

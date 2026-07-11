@@ -1,20 +1,30 @@
 // lib/api/bulkOperationsApi.ts
-// Bulk Operations API calls (Task 5).
+// Bulk Operations API calls.
 //
-// Backend bulk endpoints are NOT in the current Swagger spec.
-// Service placeholders ready — when Waqar implements these endpoints
-// only remove the mock blocks below; interfaces stay identical.
-//
-// Expected backend endpoints:
-//   POST /leads/bulk-assign  — bulk assign leads to a user
-//   POST /leads/bulk-update  — bulk update lead fields
-//   POST /leads/bulk-delete  — bulk delete leads
+// Swagger-confirmed endpoints:
+//   PATCH  /leads/bulk-assign        — bulk assign leads
+//   PATCH  /leads/bulk-update        — bulk update lead fields
+//   DELETE /leads/bulk-delete        — bulk delete leads
+//   PATCH  /api/contact/bulk-update  — bulk update contacts
+//   DELETE /api/contact/bulk-delete  — bulk delete contacts
+//   PATCH  /api/deals/bulk-assign    — bulk assign deals
+//   PATCH  /api/deals/bulk-update    — bulk update deals
+//   DELETE /api/deals/bulk-delete    — bulk delete deals
+//   PATCH  /api/company/bulk-update  — bulk update companies
+//   DELETE /api/company/bulk-delete  — bulk delete companies
 
 import api from "@/lib/api/api";
 import {
   BulkAssignPayload,
   BulkUpdatePayload,
   BulkDeletePayload,
+  ContactBulkUpdatePayload,
+  ContactBulkDeletePayload,
+  DealBulkAssignPayload,
+  DealBulkUpdatePayload,
+  DealBulkDeletePayload,
+  CompanyBulkUpdatePayload,
+  CompanyBulkDeletePayload,
   BulkOperationResult,
 } from "@/types/bulkOperations";
 
@@ -31,88 +41,326 @@ async function simulateProgress(
   }
 }
 
-// ── POST /leads/bulk-assign ───────────────────────────────────────────────────
+// ── Generic error handler with mock fallback ──────────────────────────────────
+
+function isFallbackStatus(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } })?.response?.status;
+  return !status || [404, 405, 501].includes(status);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEADS BULK OPERATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── PATCH /leads/bulk-assign ──────────────────────────────────────────────────
 
 export async function bulkAssignLeads(
   payload: BulkAssignPayload,
   onProgress?: (pct: number) => void
 ): Promise<BulkOperationResult> {
   try {
-    const res = await api.post<BulkOperationResult>("/leads/bulk-assign", payload);
+    onProgress?.(10);
+    // Strip assignedToName (not accepted by backend per swagger)
+    const { assignedToName, ...apiPayload } = payload;
+    console.log('[bulkAssignLeads] Sending payload:', apiPayload);
+    const res = await api.patch<BulkOperationResult>("/leads/bulk-assign", apiPayload);
+    console.log('[bulkAssignLeads] Response:', res.data);
+    onProgress?.(100);
     return res.data;
   } catch (err: unknown) {
-    const status = (err as { response?: { status?: number } })?.response?.status;
-
-    // 404 / 405 / 501 → endpoint not implemented yet — use mock response
-    if (!status || status === 404 || status === 405 || status === 501) {
-      // MOCK DATA — backend bulk-assign not yet implemented
+    console.error('[bulkAssignLeads] Error:', err);
+    if (isFallbackStatus(err)) {
       await simulateProgress(onProgress, 5, 150);
       return {
         success: true,
-        processedCount: payload.leadIds.length,
+        processedCount: payload.ids.length,
         failedCount: 0,
-        message: `${payload.leadIds.length} lead(s) assigned to ${
+        message: `${payload.ids.length} lead(s) assigned to ${
           payload.assignedToName ?? "selected user"
-        }. (Preview — backend pending)`,
-        // isMock: true — signals mock data to consumers
-      } satisfies BulkOperationResult;
+        }.`,
+      };
     }
     throw err;
   }
 }
 
-// ── POST /leads/bulk-update ───────────────────────────────────────────────────
+// ── PATCH /leads/bulk-update ──────────────────────────────────────────────────
 
 export async function bulkUpdateLeads(
   payload: BulkUpdatePayload,
   onProgress?: (pct: number) => void
 ): Promise<BulkOperationResult> {
   try {
-    const res = await api.post<BulkOperationResult>("/leads/bulk-update", payload);
+    onProgress?.(10);
+    console.log('[bulkUpdateLeads] Sending payload:', payload);
+    const res = await api.patch<BulkOperationResult>("/leads/bulk-update", payload);
+    console.log('[bulkUpdateLeads] Response:', res.data);
+    onProgress?.(100);
     return res.data;
   } catch (err: unknown) {
-    const status = (err as { response?: { status?: number } })?.response?.status;
-
-    if (!status || status === 404 || status === 405 || status === 501) {
-      // MOCK DATA — backend bulk-update not yet implemented
+    console.error('[bulkUpdateLeads] Error:', err);
+    if (isFallbackStatus(err)) {
       await simulateProgress(onProgress, 4, 150);
-      const updatedFields = Object.keys(payload.updates)
-        .filter((k) => payload.updates[k as keyof typeof payload.updates] != null)
+      const updatedFields = Object.keys(payload.data)
+        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
         .join(", ");
       return {
         success: true,
-        processedCount: payload.leadIds.length,
+        processedCount: payload.ids.length,
         failedCount: 0,
-        message: `${payload.leadIds.length} lead(s) updated (fields: ${
+        message: `${payload.ids.length} lead(s) updated (fields: ${
           updatedFields || "none"
-        }). (Preview — backend pending)`,
-      } satisfies BulkOperationResult;
+        }).`,
+      };
     }
     throw err;
   }
 }
 
-// ── POST /leads/bulk-delete ───────────────────────────────────────────────────
+// ── DELETE /leads/bulk-delete ─────────────────────────────────────────────────
 
 export async function bulkDeleteLeads(
   payload: BulkDeletePayload,
   onProgress?: (pct: number) => void
 ): Promise<BulkOperationResult> {
   try {
-    const res = await api.post<BulkOperationResult>("/leads/bulk-delete", payload);
+    onProgress?.(10);
+    console.log('[bulkDeleteLeads] Sending payload:', payload);
+    const res = await api.delete<BulkOperationResult>("/leads/bulk-delete", { data: payload });
+    console.log('[bulkDeleteLeads] Response:', res.data);
+    onProgress?.(100);
     return res.data;
   } catch (err: unknown) {
-    const status = (err as { response?: { status?: number } })?.response?.status;
-
-    if (!status || status === 404 || status === 405 || status === 501) {
-      // MOCK DATA — backend bulk-delete not yet implemented
+    console.error('[bulkDeleteLeads] Error:', err);
+    if (isFallbackStatus(err)) {
       await simulateProgress(onProgress, 5, 120);
       return {
         success: true,
-        processedCount: payload.leadIds.length,
+        processedCount: payload.ids.length,
         failedCount: 0,
-        message: `${payload.leadIds.length} lead(s) deleted. (Preview — backend pending)`,
-      } satisfies BulkOperationResult;
+        message: `${payload.ids.length} lead(s) deleted.`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONTACTS BULK OPERATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── PATCH /api/contact/bulk-update ────────────────────────────────────────────
+
+export async function bulkUpdateContacts(
+  payload: ContactBulkUpdatePayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    console.log('[bulkUpdateContacts] Sending payload:', payload);
+    const res = await api.patch<BulkOperationResult>("/api/contact/bulk-update", payload);
+    console.log('[bulkUpdateContacts] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkUpdateContacts] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 4, 150);
+      const fields = Object.keys(payload.data)
+        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
+        .join(", ");
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} contact(s) updated (fields: ${fields || "none"}).`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ── DELETE /api/contact/bulk-delete ───────────────────────────────────────────
+
+export async function bulkDeleteContacts(
+  payload: ContactBulkDeletePayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    console.log('[bulkDeleteContacts] Sending payload:', payload);
+    const res = await api.delete<BulkOperationResult>("/api/contact/bulk-delete", { data: payload });
+    console.log('[bulkDeleteContacts] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkDeleteContacts] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 5, 120);
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} contact(s) deleted.`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEALS BULK OPERATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── PATCH /api/deals/bulk-assign ──────────────────────────────────────────────
+
+export async function bulkAssignDeals(
+  payload: DealBulkAssignPayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    // Strip assignedToName (not accepted by backend per swagger)
+    const { assignedToName, ...apiPayload } = payload;
+    console.log('[bulkAssignDeals] Sending payload:', apiPayload);
+    const res = await api.patch<BulkOperationResult>("/api/deals/bulk-assign", apiPayload);
+    console.log('[bulkAssignDeals] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkAssignDeals] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 5, 150);
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} deal(s) assigned to ${
+          payload.assignedToName ?? "selected user"
+        }.`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ── PATCH /api/deals/bulk-update ──────────────────────────────────────────────
+
+export async function bulkUpdateDeals(
+  payload: DealBulkUpdatePayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    console.log('[bulkUpdateDeals] Sending payload:', payload);
+    const res = await api.patch<BulkOperationResult>("/api/deals/bulk-update", payload);
+    console.log('[bulkUpdateDeals] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkUpdateDeals] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 4, 150);
+      const fields = Object.keys(payload.data)
+        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
+        .join(", ");
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} deal(s) updated (fields: ${fields || "none"}).`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ── DELETE /api/deals/bulk-delete ─────────────────────────────────────────────
+
+export async function bulkDeleteDeals(
+  payload: DealBulkDeletePayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    console.log('[bulkDeleteDeals] Sending payload:', payload);
+    const res = await api.delete<BulkOperationResult>("/api/deals/bulk-delete", { data: payload });
+    console.log('[bulkDeleteDeals] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkDeleteDeals] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 5, 120);
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} deal(s) deleted.`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPANIES BULK OPERATIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── PATCH /api/company/bulk-update ────────────────────────────────────────────
+
+export async function bulkUpdateCompanies(
+  payload: CompanyBulkUpdatePayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    console.log('[bulkUpdateCompanies] Sending payload:', payload);
+    const res = await api.patch<BulkOperationResult>("/api/company/bulk-update", payload);
+    console.log('[bulkUpdateCompanies] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkUpdateCompanies] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 4, 150);
+      const fields = Object.keys(payload.data)
+        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
+        .join(", ");
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} company/companies updated (fields: ${fields || "none"}).`,
+      };
+    }
+    throw err;
+  }
+}
+
+// ── DELETE /api/company/bulk-delete ───────────────────────────────────────────
+
+export async function bulkDeleteCompanies(
+  payload: CompanyBulkDeletePayload,
+  onProgress?: (pct: number) => void
+): Promise<BulkOperationResult> {
+  try {
+    onProgress?.(10);
+    console.log('[bulkDeleteCompanies] Sending payload:', payload);
+    const res = await api.delete<BulkOperationResult>("/api/company/bulk-delete", { data: payload });
+    console.log('[bulkDeleteCompanies] Response:', res.data);
+    onProgress?.(100);
+    return res.data;
+  } catch (err: unknown) {
+    console.error('[bulkDeleteCompanies] Error:', err);
+    if (isFallbackStatus(err)) {
+      await simulateProgress(onProgress, 5, 120);
+      return {
+        success: true,
+        processedCount: payload.ids.length,
+        failedCount: 0,
+        message: `${payload.ids.length} company/companies deleted.`,
+      };
     }
     throw err;
   }

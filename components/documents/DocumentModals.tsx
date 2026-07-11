@@ -75,7 +75,7 @@ const useDocumentPreview = (doc: Document | null) => {
     };
 
     fetchPreview();
-  }, [doc?.id, doc?.fileType]);
+  }, [doc]);
 
   return { previewUrl, loading, error };
 };

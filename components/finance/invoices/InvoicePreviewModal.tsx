@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   X,
   Loader2,
@@ -31,11 +31,7 @@ export function InvoicePreviewModal({
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
 
-  useEffect(() => {
-    loadInvoice();
-  }, [invoiceId]);
-
-  const loadInvoice = async () => {
+  const loadInvoice = useCallback(async () => {
     setLoading(true);
     setError(null);
     setIframeLoaded(false);
@@ -47,7 +43,11 @@ export function InvoicePreviewModal({
     } finally {
       setLoading(false);
     }
-  };
+  }, [invoiceId]);
+
+  useEffect(() => {
+    loadInvoice();
+  }, [loadInvoice]);
 
   const handlePrint = () => {
     if (iframeRef.current?.contentWindow) {

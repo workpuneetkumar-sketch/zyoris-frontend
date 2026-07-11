@@ -107,6 +107,25 @@ export function CrmSearch() {
     };
   }, []);
 
+  const navigateToResult = useCallback((result: SearchResult) => {
+    switch (result.type) {
+      case "Lead":
+        router.push(`/leads/${result.id}`);
+        break;
+      case "Deal":
+        router.push(`/deals/${result.id}`);
+        break;
+      case "Contact":
+        router.push("/contacts");
+        break;
+      case "Company":
+        router.push("/companies");
+        break;
+    }
+    setIsOpen(false);
+    setQuery("");
+  }, [router]);
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       switch (e.key) {
@@ -134,27 +153,8 @@ export function CrmSearch() {
           break;
       }
     },
-    [results, selectedIndex]
+    [results, selectedIndex, navigateToResult]
   );
-
-  const navigateToResult = (result: SearchResult) => {
-    switch (result.type) {
-      case "Lead":
-        router.push(`/leads/${result.id}`);
-        break;
-      case "Deal":
-        router.push(`/deals/${result.id}`);
-        break;
-      case "Contact":
-        router.push("/contacts");
-        break;
-      case "Company":
-        router.push("/companies");
-        break;
-    }
-    setIsOpen(false);
-    setQuery("");
-  };
 
   return (
     <div className="relative" ref={dropdownRef}>

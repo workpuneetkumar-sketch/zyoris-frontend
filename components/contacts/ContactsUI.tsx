@@ -20,6 +20,18 @@ import {
     createContact,
     updateContact,
 } from "@/lib/api/contactsApi";
+import {
+    bulkUpdateContacts,
+    bulkDeleteContacts,
+} from "@/lib/api/bulkOperationsApi";
+import { useBulkSelection } from "@/hooks/useBulkSelection";
+import {
+    BulkActionsBar,
+    BulkCheckbox,
+    BulkSelectAllRow,
+    BulkUpdateDialog,
+    BulkDeleteDialog,
+} from "@/components/ui/BulkActionsBar";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -407,6 +419,31 @@ export function ContactsUI({
     const [viewingContact, setViewingContact] = useState<Contact | null>(null);
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
+    // ── Bulk update form state ────────────────────────────────────────────────
+    const [bulkUpdateCompanyId, setBulkUpdateCompanyId] = useState("");
+
+    const bulk = useBulkSelection(() => onReload());
+
+    const handleBulkUpdate = () => {
+        void bulk.executeBulkCall("update", (onProgress) =>
+            bulkUpdateContacts(
+                {
+                    ids: Array.from(bulk.selectedIds),
+                    data: {
+                        companyId: bulkUpdateCompanyId,
+                    },
+                },
+                onProgress
+            )
+        );
+    };
+
+    const handleBulkDelete = () => {
+        void bulk.executeBulkCall("delete", (onProgress) =>
+            bulkDeleteContacts({ ids: Array.from(bulk.selectedIds) }, onProgress)
+        );
+    };
+
     const handleCreate = async (data: ContactFormData) => {
         await createContact(data);
         onReload();
@@ -477,11 +514,34 @@ export function ContactsUI({
                     </button>
                 </div>
 
+                {/* Bulk select-all row */}
+                <BulkSelectAllRow
+                    allIds={safeContacts.map((c) => c.id)}
+                    selectedCount={bulk.selectedCount}
+                    totalCount={safeContacts.length}
+                    isSelected={bulk.isSelected}
+                    onSelectAll={bulk.selectAll}
+                    onClear={bulk.clearSelection}
+                />
+
+                {/* Bulk action toolbar */}
+                <BulkActionsBar
+                    selectedCount={bulk.selectedCount}
+                    entityLabel={bulk.selectedCount === 1 ? "contact" : "contacts"}
+                    showAssign={false}
+                    onUpdate={() => bulk.openBulkAction("update")}
+                    onDelete={() => bulk.openBulkAction("delete")}
+                    onClear={bulk.clearSelection}
+                    bulkState={bulk.bulkState}
+                    onDismissResult={bulk.closeBulkAction}
+                />
+
                 {/* Table */}
                 <div className="overflow-x-auto overflow-y-visible rounded-b-2xl">
                     <table className="w-full text-sm">
                         <thead>
                             <tr className="border-b border-gray-100">
+                                <th className="text-left px-3 py-3 w-8"></th>
                                 {["Name", "Company", "Email", "Phone", "City", "Source", "Status", "Created At", "Actions"].map((h) => (
                                     <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                         {h}
@@ -493,6 +553,7 @@ export function ContactsUI({
                             {loading ? (
                                 Array.from({ length: perPage }).map((_, i) => (
                                     <tr key={i} className="border-b border-gray-50">
+                                        <td className="px-3 py-4"></td>
                                         {Array.from({ length: 9 }).map((_, j) => (
                                             <td key={j} className="px-5 py-4">
                                                 <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
@@ -502,13 +563,21 @@ export function ContactsUI({
                                 ))
                             ) : safeContacts.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="text-center py-16 text-gray-400 text-sm">
+                                    <td colSpan={10} className="text-center py-16 text-gray-400 text-sm">
                                         No contacts found.
                                     </td>
                                 </tr>
                             ) : (
                                 safeContacts.map((contact) => (
-                                    <tr key={contact.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                    <tr key={contact.id} className={`border-b border-gray-50 hover:bg-gray-50/60 transition-colors ${bulk.isSelected(contact.id) ? "bg-blue-50/40" : ""}`}>
+                                        <td className="px-3 py-3.5">
+                                            <BulkCheckbox
+                                                id={contact.id}
+                                                isSelected={bulk.isSelected(contact.id)}
+                                                onToggle={bulk.toggleSelect}
+                                                label={`Select ${contact.name}`}
+                                            />
+                                        </td>
                                         <td className="px-5 py-3.5 whitespace-nowrap">
                                             <div className="flex items-center gap-2.5">
                                                 <Avatar name={contact.name} />
@@ -670,6 +739,47 @@ export function ContactsUI({
                 <ViewContactModal
                     contact={viewingContact}
                     onClose={() => setViewingContact(null)}
+                />
+            )}
+
+            {/* Bulk Update Dialog */}
+            {bulk.bulkState.isOpen && bulk.bulkState.type === "update" && (
+                <BulkUpdateDialog
+                    count={bulk.selectedCount}
+                    entityLabel={bulk.selectedCount === 1 ? "contact" : "contacts"}
+                    fields={
+                        <div className="space-y-3">
+                            <div>
+                                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Company ID</label>
+                                <input
+                                    type="text"
+                                    value={bulkUpdateCompanyId}
+                                    onChange={(e) => setBulkUpdateCompanyId(e.target.value)}
+                                    disabled={bulk.bulkState.isProcessing}
+                                    placeholder="Enter company ID"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                                />
+                            </div>
+                        </div>
+                    }
+                    onConfirm={handleBulkUpdate}
+                    onCancel={bulk.closeBulkAction}
+                    isProcessing={bulk.bulkState.isProcessing}
+                    progress={bulk.bulkState.progress}
+                    error={bulk.bulkState.error}
+                />
+            )}
+
+            {/* Bulk Delete Dialog */}
+            {bulk.bulkState.isOpen && bulk.bulkState.type === "delete" && (
+                <BulkDeleteDialog
+                    count={bulk.selectedCount}
+                    entityLabel={bulk.selectedCount === 1 ? "contact" : "contacts"}
+                    onConfirm={handleBulkDelete}
+                    onCancel={bulk.closeBulkAction}
+                    isProcessing={bulk.bulkState.isProcessing}
+                    progress={bulk.bulkState.progress}
+                    error={bulk.bulkState.error}
                 />
             )}
         </div>

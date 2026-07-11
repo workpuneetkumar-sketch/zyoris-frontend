@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { X, Search, UserPlus } from "lucide-react";
 import {
   addProjectMember,
@@ -39,49 +39,51 @@ export default function TeamMembersModal({
   const [employeeMap, setEmployeeMap] = useState<Record<string, { name: string; email: string }>>({});
 
   // Load employees & build map
-  useEffect(() => {
-    async function loadEmployees() {
-      try {
-        const emps = await getEmployees();
-        setEmployees(emps);
-        const map: Record<string, { name: string; email: string }> = {};
-        emps.forEach((emp: any) => {
-          if (emp.user) {
-            map[emp.userId] = { name: emp.user.name, email: emp.user.email };
-          }
-        });
-        setEmployeeMap(map);
-      } catch (err) {
-        showToast("error", "Failed to load employees");
-      } finally {
-        setLoadingEmployees(false);
-      }
+  const loadEmployees = useCallback(async () => {
+    try {
+      const emps = await getEmployees();
+      setEmployees(emps);
+      const map: Record<string, { name: string; email: string }> = {};
+      emps.forEach((emp: any) => {
+        if (emp.user) {
+          map[emp.userId] = { name: emp.user.name, email: emp.user.email };
+        }
+      });
+      setEmployeeMap(map);
+    } catch (err) {
+      showToast("error", "Failed to load employees");
+    } finally {
+      setLoadingEmployees(false);
     }
+  }, [showToast]);
+
+  useEffect(() => {
     loadEmployees();
-  }, []);
+  }, [loadEmployees]);
 
   // Fetch project members from GET /projects/{id}
-  useEffect(() => {
-    async function loadMembers() {
-      try {
-        const project = await getProjectById(projectId);
-        const members: ProjectMember[] = project.members || [];
-        const enriched: MemberDisplay[] = members.map((m) => ({
-          id: m.userId,
-          name: employeeMap[m.userId]?.name || "Loading...",
-          email: employeeMap[m.userId]?.email || "",
-        }));
-        setCurrentMembers(enriched);
-      } catch (err) {
-        showToast("error", "Failed to load project members");
-      } finally {
-        setLoadingMembers(false);
-      }
+  const loadMembers = useCallback(async () => {
+    try {
+      const project = await getProjectById(projectId);
+      const members: ProjectMember[] = project.members || [];
+      const enriched: MemberDisplay[] = members.map((m) => ({
+        id: m.userId,
+        name: employeeMap[m.userId]?.name || "Loading...",
+        email: employeeMap[m.userId]?.email || "",
+      }));
+      setCurrentMembers(enriched);
+    } catch (err) {
+      showToast("error", "Failed to load project members");
+    } finally {
+      setLoadingMembers(false);
     }
+  }, [projectId, employeeMap, showToast]);
+
+  useEffect(() => {
     if (Object.keys(employeeMap).length > 0) {
       loadMembers();
     }
-  }, [projectId, employeeMap]);
+  }, [employeeMap, loadMembers]);
 
   const availableEmployees = employees.filter(
     (emp) => !currentMembers.some((m) => m.id === emp.userId)

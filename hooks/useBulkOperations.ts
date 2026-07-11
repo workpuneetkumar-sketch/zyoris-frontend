@@ -72,7 +72,7 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
 
       try {
         const result = await bulkAssignLeads(
-          { leadIds: ids, assignedToId, assignedToName },
+          { ids, assignedToId, assignedToName },
           (pct) => setBulkState((prev) => ({ ...prev, progress: pct }))
         );
         setUndoStack((prev) => [...prev, { type: "assign", ids }]);
@@ -95,11 +95,16 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
   );
 
   const executeBulkUpdate = useCallback(
-    async (updates: {
+    async (data: {
+      name?: string;
+      phone?: string | null;
+      email?: string | null;
+      company?: string | null;
+      city?: string | null;
+      source?: string | null;
       status?: string;
-      source?: string;
+      assignedToId?: string | null;
       tags?: string[];
-      owner?: string;
     }) => {
       const ids = Array.from(selectedIds);
       if (ids.length === 0) return;
@@ -108,7 +113,7 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
 
       try {
         const result = await bulkUpdateLeads(
-          { leadIds: ids, updates },
+          { ids, data },
           (pct) => setBulkState((prev) => ({ ...prev, progress: pct }))
         );
         setUndoStack((prev) => [...prev, { type: "update", ids }]);
@@ -138,7 +143,7 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
 
     try {
       const result = await bulkDeleteLeads(
-        { leadIds: ids },
+        { ids },
         (pct) => setBulkState((prev) => ({ ...prev, progress: pct }))
       );
       setUndoStack((prev) => [...prev, { type: "delete", ids }]);
