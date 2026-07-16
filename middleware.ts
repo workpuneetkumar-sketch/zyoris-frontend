@@ -13,6 +13,11 @@ import type { NextRequest } from "next/server";
 const COOKIE_NAME = "zyoris-token";
 
 export function middleware(request: NextRequest) {
+    // Serve favicon.ico from the public SVG icon
+    if (request.nextUrl.pathname === "/favicon.ico") {
+        return NextResponse.redirect(new URL("/icon.svg", request.url), { status: 301 });
+    }
+
     const token = request.cookies.get(COOKIE_NAME)?.value;
 
     if (!token) {
@@ -29,6 +34,7 @@ export const config = {
     // Protect every route under the (dashboard) layout.
     // Excludes /login, /register, API routes, and static assets.
     matcher: [
+        "/favicon.ico",
         "/((?!login|register|api|_next/static|_next/image|favicon.ico).*)",
     ],
 };
