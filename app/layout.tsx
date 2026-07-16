@@ -25,6 +25,9 @@ export const metadata: Metadata = {
     title: "Zyoris - Central Intelligence Layer",
     description: "Advanced Autonomous Business Intelligence Platform.",
   },
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
