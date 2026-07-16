@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Dashboard from "@/components/dashboard/dashboard";
+
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api/api";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
@@ -231,7 +231,6 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
-      <Dashboard />
     </div>
   );
 }
