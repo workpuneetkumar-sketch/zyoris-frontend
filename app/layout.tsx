@@ -11,7 +11,7 @@ import { PaymentProvider } from "@/context/PaymentContext";
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 export const metadata: Metadata = {
   title: "Zyoris - Central Intelligence Layer",
-  description: "Autonomous Business Intelligence Platform",
+  description: "Zyoris is an advanced Autonomous Business Intelligence Platform designed to streamline operations, enhance CRM, and provide real-time AI-driven insights for modern enterprises. Optimize your workflow, manage leads efficiently, and make data-backed decisions with our comprehensive suite of business tools.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

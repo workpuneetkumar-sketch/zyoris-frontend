@@ -86,7 +86,7 @@ export function CEOOverviewSection({ token }: { token: string }) {
                 <div key={card.title} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="flex justify-between items-start mb-4">
                         <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{card.title}</p>
-                        <div className={`p-2 rounded-xl bg-${card.color}-50 group-hover:scale-110 transition-transform`}>
+                        <div className={`p-2 rounded-xl bg-${card.color}-50 border border-${card.color}-100 group-hover:scale-110 transition-transform`}>
                             <card.icon size={16} className={`text-${card.color}-600`} />
                         </div>
                     </div>
@@ -100,8 +100,8 @@ export function CEOOverviewSection({ token }: { token: string }) {
                     </div>
                     <div className="mt-4 flex items-center gap-2">
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Healthy" || card.status === "Growth" || card.status === "Strong"
-                                ? "bg-emerald-50 text-emerald-600"
-                                : "bg-blue-50 text-blue-600"
+                                ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                : "bg-blue-50 text-blue-600 border border-blue-100"
                             }`}>
                             {card.status}
                         </span>

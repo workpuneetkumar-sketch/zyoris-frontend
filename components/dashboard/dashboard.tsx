@@ -19,27 +19,6 @@ export default function Dashboard() {
 
     return (
         <div>
-            {/* ── Search & Actions ── */}
-            <div className="flex items-center justify-end mb-8">
-                <div className="flex items-center gap-3">
-                    <div className="hidden md:flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 w-64 shadow-sm">
-                        <Search size={14} className="text-gray-400 shrink-0" />
-                        <input
-                            type="text"
-                            placeholder="Search insights..."
-                            className="bg-transparent text-sm text-gray-600 outline-none w-full"
-                        />
-                    </div>
-                    <button className="relative p-2.5 rounded-xl bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700">
-                        <Bell size={17} />
-                        <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full ring-1 ring-white" />
-                    </button>
-                    <button className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm">
-                        <Plus size={15} />
-                        New Project
-                    </button>
-                </div>
-            </div>
 
             {/* ── Dashboard Sections ── */}
             <div className="space-y-8">

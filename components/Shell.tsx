@@ -37,6 +37,7 @@ import {
   UserCog,
   FileSearch,
   Brain,
+  Layers,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -551,19 +552,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           small ? "w-6 h-6" : "w-8 h-8"
         )}
       >
-        <svg
-          viewBox="0 0 20 20"
-          className={small ? "w-3 h-3" : "w-4 h-4"}
-        >
-          <path
-            d="M10 2L2 7l8 5 8-5-8-5zM2 13l8 5 8-5M2 10l8 5 8-5"
-            stroke="white"
-            strokeWidth="1.8"
-            fill="none"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <Layers className={small ? "w-3.5 h-3.5 text-white" : "w-5 h-5 text-white"} strokeWidth={2.5} />
       </div>
       <span
         className={classNames(
