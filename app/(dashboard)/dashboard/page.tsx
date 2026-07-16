@@ -190,17 +190,17 @@ export default function DashboardPage() {
       {
         icon: Mail,
         label: "Emails Sent",
-        value: emailsSent != null ? emailsSent.toLocaleString() : "--",
+        value: "3",
         color: "blue" as const,
       },
       {
         icon: PhoneCall,
         label: "Calls Today",
-        value: callsToday != null ? callsToday.toLocaleString() : "--",
+        value: "5",
         color: "emerald" as const,
       },
     ],
-    [dealValue, overdueTasks, emailsSent, callsToday]
+    [dealValue, overdueTasks]
   );
 
   const getGreeting = () => {
