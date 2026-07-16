@@ -60,8 +60,62 @@ let isRedirecting = false;
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 api.interceptors.response.use(
-    (response) => response,
-
+    (response) => {
+        // --- Auto Notification Generation for Mutations ---
+        if (typeof window !== "undefined" && response.config && response.status >= 200 && response.status < 300) {
+            const method = response.config.method?.toUpperCase() || "";
+            const url = response.config.url || "";
+            
+            // Only act on state-changing methods, exclude notifications API and auth endpoints
+            if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !url.includes("/api/notifications") && !url.includes("/auth")) {
+                try {
+                    const raw = localStorage.getItem("zyoris-auth");
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        const token = parsed?.token;
+                        if (token) {
+                            // Decode JWT to get userId
+                            const payloadBase64 = token.split(".")[1];
+                            const decoded = JSON.parse(atob(payloadBase64));
+                            const userId = decoded?.userId || decoded?.id;
+                            
+                            if (userId) {
+                                let action = "Updated";
+                                if (method === "POST") action = "Created";
+                                if (method === "DELETE") action = "Deleted";
+                                
+                                let entityName = "Item";
+                                const match = url.match(/\/api\/([a-zA-Z0-9_-]+)/);
+                                if (match && match[1]) {
+                                    let str = match[1];
+                                    if (str.endsWith("s")) str = str.slice(0, -1);
+                                    entityName = str.charAt(0).toUpperCase() + str.slice(1);
+                                }
+                                
+                                // Fire and forget
+                                axios.post(`${BASE_URL}/api/notifications`, {
+                                    userId,
+                                    title: `${entityName} ${action}`,
+                                    message: `A ${entityName.toLowerCase()} was successfully ${action.toLowerCase()}.`,
+                                    type: method === "DELETE" ? "WARNING" : "SUCCESS",
+                                    entityType: entityName.toUpperCase()
+                                }, {
+                                    headers: { Authorization: `Bearer ${token}` }
+                                }).then((res) => {
+                                    if (typeof window !== "undefined") {
+                                        window.dispatchEvent(new CustomEvent('zyoris:notification-created', { detail: res.data }));
+                                    }
+                                }).catch(() => {});
+                            }
+                        }
+                    }
+                } catch (e) {
+                    // Ignore background parsing/notification errors
+                }
+            }
+        }
+        return response;
+    },
     async (error: AxiosError<any>) => {
         const originalRequest: any = error.config;
         

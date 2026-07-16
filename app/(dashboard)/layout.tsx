@@ -5,6 +5,7 @@ import { isPathAllowedForRole, getDashboardForRole } from "@/utils/roleRedirect"
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { NotificationProvider } from "@/hooks/useNotifications";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, isInitializing } = useAuth();
@@ -37,5 +38,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated) return null;
 
-  return <AppShell>{children}</AppShell>;
+  return (
+    <NotificationProvider>
+      <AppShell>{children}</AppShell>
+    </NotificationProvider>
+  );
 }

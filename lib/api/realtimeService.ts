@@ -23,30 +23,7 @@ interface Transport {
   disconnect(): void;
 }
 
-// ── Mock event generator (development / fallback) ─────────────────────────────
 
-const MOCK_TEMPLATES: Array<{ type: RealtimeEventType; title: string; message: string }> = [
-  { type: "lead_updated",       title: "Lead Updated",        message: "James Carter's status changed to HOT"         },
-  { type: "lead_assigned",      title: "Lead Assigned",       message: "Sarah Mitchell has been assigned to you"       },
-  { type: "deal_stage_changed", title: "Deal Stage Changed",  message: "Acme Corp Enterprise moved to WON"             },
-  { type: "activity_created",   title: "New Activity",        message: "Follow-up call scheduled with TechWave"        },
-  { type: "analytics_refreshed",title: "Analytics Updated",   message: "Pipeline data refreshed with latest figures"   },
-  { type: "assignment_changed", title: "Assignment Changed",  message: "CloudWave deal reassigned to Jordan Lee"       },
-];
-
-let _mockIdx = 0;
-
-function makeMockEvent(): RealtimeEvent {
-  const tpl = MOCK_TEMPLATES[_mockIdx % MOCK_TEMPLATES.length];
-  _mockIdx++;
-  return {
-    id: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-    ...tpl,
-    timestamp: new Date().toISOString(),
-    read: false,
-    // MOCK DATA
-  } as RealtimeEvent & { isMock: true };
-}
 
 // ── 1. WebSocket transport (Socket.IO) ────────────────────────────────────────
 
@@ -166,7 +143,6 @@ class SseTransport implements Transport {
 
 class PollingTransport implements Transport {
   private timer: ReturnType<typeof setInterval> | null = null;
-  private mockTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private interval: number,
@@ -191,18 +167,10 @@ class PollingTransport implements Transport {
       }, this.interval);
     }
 
-    // MOCK DATA — demo event emitter while no real transport is available
-    // Emits one random event every ~45 s so the notification UI is testable
-    this.mockTimer = setInterval(() => {
-      if (Math.random() < 0.5) {
-        this.onEvent(makeMockEvent());
-      }
-    }, 45_000);
   }
 
   disconnect() {
     if (this.timer)     { clearInterval(this.timer);     this.timer = null;     }
-    if (this.mockTimer) { clearInterval(this.mockTimer); this.mockTimer = null; }
   }
 }
 

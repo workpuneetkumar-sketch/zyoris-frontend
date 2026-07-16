@@ -37,7 +37,7 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
-import { useRealtimeNotifications } from "@/hooks/useRealtimeNotifications";
+import { useNotifications } from "@/hooks/useNotifications";
 
 type NavItem = {
   href: string;
@@ -255,7 +255,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     notifications: realtimeNotifications,
     markRead: markNotificationRead,
     markAllRead: markAllNotificationsRead,
-  } = useRealtimeNotifications();
+  } = useNotifications();
 
   const closeLogoutModal = useCallback(() => {
     setLogoutModalOpen(false);
