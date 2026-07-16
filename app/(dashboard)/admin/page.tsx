@@ -19,8 +19,13 @@ import {
   Zap,
   BarChart2,
   Globe,
+  KeyRound,
+  UserCog,
+  FileSearch,
+  ChevronRight,
 } from "lucide-react";
 import { toast } from "react-toastify";
+
 
 interface AdminOverview {
   totalUsers?: number;
@@ -488,28 +493,66 @@ export default function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* System Health Banner */}
-      <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-5 flex flex-col md:flex-row items-center justify-between gap-4 text-white shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center">
-            <CheckCircle2 size={22} className="text-white" />
-          </div>
-          <div>
-            <p className="text-sm font-bold">Platform Status: Operational</p>
-            <p className="text-xs text-blue-200 mt-0.5">
-              All services are running. Backend:{" "}
-              <span className="font-semibold text-white">https://zyoris.onrender.com</span>
-            </p>
-          </div>
+      {/* RBAC Management Quick-Links */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <Shield size={16} className="text-blue-600" />
+          <h3 className="text-sm font-bold text-gray-800">Access Control (RBAC)</h3>
+          <span className="ml-auto text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100 uppercase tracking-wider">
+            Admin Only
+          </span>
         </div>
-        <button
-          onClick={() => router.push("/ingestion")}
-          className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/20 transition-all"
-        >
-          <Database size={15} />
-          Data Ingestion
-        </button>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {[
+            {
+              href: "/admin/roles",
+              icon: KeyRound,
+              title: "Roles",
+              desc: "Create, edit, delete roles and manage their permissions",
+              color: "blue",
+            },
+            {
+              href: "/admin/user-roles",
+              icon: UserCog,
+              title: "User Roles",
+              desc: "Assign roles to team members and inspect effective permissions",
+              color: "purple",
+            },
+            {
+              href: "/admin/audit",
+              icon: FileSearch,
+              title: "Audit Logs",
+              desc: "Browse paginated system event logs and inspect action details",
+              color: "emerald",
+            },
+          ].map(({ href, icon: Icon, title, desc, color }) => {
+            const colorMap: Record<string, { bg: string; text: string; hover: string }> = {
+              blue: { bg: "bg-blue-50", text: "text-blue-600", hover: "hover:border-blue-300 hover:bg-blue-50/40" },
+              purple: { bg: "bg-purple-50", text: "text-purple-600", hover: "hover:border-purple-300 hover:bg-purple-50/40" },
+              emerald: { bg: "bg-emerald-50", text: "text-emerald-600", hover: "hover:border-emerald-300 hover:bg-emerald-50/40" },
+            };
+            const c = colorMap[color];
+            return (
+              <button
+                key={href}
+                onClick={() => router.push(href)}
+                className={`flex items-center gap-3 text-left p-4 rounded-xl border border-gray-100 transition-all group ${c.hover}`}
+              >
+                <div className={`w-9 h-9 ${c.bg} rounded-lg flex items-center justify-center shrink-0`}>
+                  <Icon size={18} className={c.text} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-gray-900">{title}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{desc}</p>
+                </div>
+                <ChevronRight size={14} className="text-gray-300 group-hover:text-gray-500 shrink-0 transition-colors" />
+              </button>
+            );
+          })}
+        </div>
       </div>
+
     </div>
   );
 }
+

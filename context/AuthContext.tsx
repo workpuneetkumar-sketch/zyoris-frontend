@@ -1,6 +1,8 @@
 "use client";
 
 import { loginApi, registerApi, AuthResponse, logoutApi, getMeApi } from "@/lib/api/authApi";
+import { getRbacMe } from "@/lib/api/rbacApi";
+import { getFrontendPermissions, SidebarItem, DashboardItem } from "@/lib/api/frontendApi";
 import React, {
   createContext,
   useCallback,
@@ -14,7 +16,7 @@ import "react-toastify/dist/ReactToastify.css";
 
 import { useRouter } from "next/navigation";
 
-type Role = "ADMIN" | "CEO" | "CFO" | "SALES_HEAD" | "OPERATIONS_HEAD";
+export type Role = string;
 
 export interface User {
   id: string;
@@ -29,6 +31,11 @@ export interface User {
 interface AuthContextValue {
     user: User | null;
     token: string | null;
+    userPermissions: Record<string, boolean>;
+    sidebarItems: SidebarItem[];
+    visibleDashboards: DashboardItem[];
+    visibleModules: string[];
+    hasPermission: (permission: string) => boolean;
     login: (
         email: string,
         password: string
@@ -74,10 +81,18 @@ function clearAuthState() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [userPermissions, setUserPermissions] = useState<Record<string, boolean>>({});
+  const [sidebarItems, setSidebarItems] = useState<SidebarItem[]>([]);
+  const [visibleDashboards, setVisibleDashboards] = useState<DashboardItem[]>([]);
+  const [visibleModules, setVisibleModules] = useState<string[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+
+  const hasPermission = useCallback((permission: string): boolean => {
+    return userPermissions[permission] === true;
+  }, [userPermissions]);
 
   // Restore session
   useEffect(() => {
@@ -99,6 +114,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         // Validate token by fetching current user
         const userData = await getMeApi();
+        
+        // Fetch RBAC & Frontend permissions
+        try {
+          const [rbacMe, frontendPerms] = await Promise.all([
+            getRbacMe(),
+            getFrontendPermissions(),
+          ]);
+          setUserPermissions(rbacMe.permissions || {});
+          setSidebarItems(frontendPerms.sidebar || []);
+          setVisibleDashboards(frontendPerms.dashboards || []);
+          setVisibleModules(frontendPerms.modules || []);
+          if (rbacMe.role?.name) {
+            userData.role = rbacMe.role.name;
+          }
+        } catch (permError) {
+          console.error("Failed to load permissions during session restore:", permError);
+        }
+
         setUser(userData);
         setIsAuthenticated(true);
       } catch {
@@ -106,6 +139,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearAuthState();
         setUser(null);
         setToken(null);
+        setUserPermissions({});
+        setSidebarItems([]);
+        setVisibleDashboards([]);
+        setVisibleModules([]);
         setIsAuthenticated(false);
       } finally {
         setIsInitializing(false);
@@ -121,9 +158,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const res = await loginApi(email, password);
 
-    setUser(res.user);
+    // Temp set user and token so interceptors can use them for next requests
     setToken(res.token);
-    setIsAuthenticated(true);
+    setTokenCookie(res.token);
 
     localStorage.setItem(
       STORAGE_KEY,
@@ -134,8 +171,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     );
 
-    // Set cookie so middleware can verify authentication on navigation
-    setTokenCookie(res.token);
+    // Fetch RBAC & Frontend permissions
+    try {
+      const [rbacMe, frontendPerms] = await Promise.all([
+        getRbacMe(),
+        getFrontendPermissions(),
+      ]);
+      setUserPermissions(rbacMe.permissions || {});
+      setSidebarItems(frontendPerms.sidebar || []);
+      setVisibleDashboards(frontendPerms.dashboards || []);
+      setVisibleModules(frontendPerms.modules || []);
+      if (rbacMe.role?.name) {
+        res.user.role = rbacMe.role.name;
+      }
+    } catch (permError) {
+      console.error("Failed to load permissions during login:", permError);
+    }
+
+    setUser(res.user);
+    setIsAuthenticated(true);
 
     return res;
   }, []);
@@ -152,9 +206,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const res = await registerApi(data);
 
-    setUser(res.user);
+    // Temp set token
     setToken(res.token);
-    setIsAuthenticated(true);
+    setTokenCookie(res.token);
 
     localStorage.setItem(
       STORAGE_KEY,
@@ -165,7 +219,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
     );
 
-    setTokenCookie(res.token);
+    // Fetch RBAC & Frontend permissions
+    try {
+      const [rbacMe, frontendPerms] = await Promise.all([
+        getRbacMe(),
+        getFrontendPermissions(),
+      ]);
+      setUserPermissions(rbacMe.permissions || {});
+      setSidebarItems(frontendPerms.sidebar || []);
+      setVisibleDashboards(frontendPerms.dashboards || []);
+      setVisibleModules(frontendPerms.modules || []);
+      if (rbacMe.role?.name) {
+        res.user.role = rbacMe.role.name;
+      }
+    } catch (permError) {
+      console.error("Failed to load permissions during register:", permError);
+    }
+
+    setUser(res.user);
+    setIsAuthenticated(true);
 
     return res.user;
   }, []);
@@ -183,6 +255,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setToken(null);
+      setUserPermissions({});
+      setSidebarItems([]);
+      setVisibleDashboards([]);
+      setVisibleModules([]);
       setIsAuthenticated(false);
       clearAuthState();
       router.push("/login");
@@ -195,6 +271,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             value={{ 
                 user, 
                 token, 
+                userPermissions,
+                sidebarItems,
+                visibleDashboards,
+                visibleModules,
+                hasPermission,
                 login, 
                 register, 
                 logout, 
