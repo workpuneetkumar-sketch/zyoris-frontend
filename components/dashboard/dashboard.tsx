@@ -19,15 +19,8 @@ export default function Dashboard() {
 
     return (
         <div>
-            {/* ── Topbar ── */}
-            <div className="flex items-center justify-between mb-8">
-                <div>
-                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
-                    <p className="text-sm text-gray-400 mt-0.5">
-                        Welcome back, <span className="text-gray-600 font-medium">{user.name?.split(" ")[0]}</span>!
-                    </p>
-                </div>
-
+            {/* ── Search & Actions ── */}
+            <div className="flex items-center justify-end mb-8">
                 <div className="flex items-center gap-3">
                     <div className="hidden md:flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 w-64 shadow-sm">
                         <Search size={14} className="text-gray-400 shrink-0" />
@@ -57,9 +50,6 @@ export default function Dashboard() {
                 )}
 
                 <div className="flex flex-col gap-8">
-                    <div className="">
-                        <DataIngestionSection token={token!} />
-                    </div>
                     <div className="">
                         <RecommendationsSection token={token!} />
                     </div>

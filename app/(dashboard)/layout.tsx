@@ -1,14 +1,14 @@
 "use client";
 
 import { AppShell } from "@/components/Shell";
-import { isPathAllowedForRole, getDashboardForRole } from "@/utils/roleRedirect";
+import { isPathAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { NotificationProvider } from "@/hooks/useNotifications";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, isInitializing } = useAuth();
+  const { user, isAuthenticated, isInitializing, sidebarItems, visibleDashboards } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -20,13 +20,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     if (isInitializing || !isAuthenticated || !user) return;
 
-    const allowed = isPathAllowedForRole(window.location.pathname, user.role);
+    const allowed = isPathAllowed(window.location.pathname, sidebarItems, visibleDashboards);
 
     if (!allowed) {
-      const fallback = getDashboardForRole(user.role as any);
+      const fallback = visibleDashboards.find((d) => d.visible)?.route || "/dashboard";
       router.replace(fallback);
     }
-  }, [isInitializing, isAuthenticated, router, user]);
+  }, [isInitializing, isAuthenticated, router, user, sidebarItems, visibleDashboards]);
 
   if (isInitializing) {
     return (

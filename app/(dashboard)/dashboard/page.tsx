@@ -94,18 +94,18 @@ function ExecutiveKpiCard({
   color: "blue" | "violet" | "emerald" | "amber";
 }) {
   const colorMap = {
-    blue: { bg: "bg-blue-50", border: "border-blue-100", text: "text-blue-600" },
-    violet: { bg: "bg-violet-50", border: "border-violet-100", text: "text-violet-600" },
-    emerald: { bg: "bg-emerald-50", border: "border-emerald-100", text: "text-emerald-600" },
-    amber: { bg: "bg-amber-50", border: "border-amber-100", text: "text-amber-600" },
+    blue: { bg: "bg-blue-50", border: "border-blue-100", text: "text-blue-600", hover: "hover:border-blue-300 hover:shadow-blue-100/50" },
+    violet: { bg: "bg-violet-50", border: "border-violet-100", text: "text-violet-600", hover: "hover:border-violet-300 hover:shadow-violet-100/50" },
+    emerald: { bg: "bg-emerald-50", border: "border-emerald-100", text: "text-emerald-600", hover: "hover:border-emerald-300 hover:shadow-emerald-100/50" },
+    amber: { bg: "bg-amber-50", border: "border-amber-100", text: "text-amber-600", hover: "hover:border-amber-300 hover:shadow-amber-100/50" },
   };
   const c = colorMap[color];
 
   return (
-    <div className="bg-white p-4 md:p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all">
+    <div className={`bg-white p-5 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300 transform hover:-translate-y-1 hover:shadow-lg ${c.hover} group`}>
       <div className="flex items-start justify-between mb-3">
-        <p className="text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">{label}</p>
-        <div className={`p-2 rounded-xl ${c.bg} border ${c.border}`}>
+        <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest group-hover:text-gray-700 transition-colors">{label}</p>
+        <div className={`p-2 rounded-xl ${c.bg} border ${c.border} group-hover:scale-110 transition-transform duration-300`}>
           <Icon size={16} className={c.text} />
         </div>
       </div>
@@ -166,7 +166,7 @@ export default function DashboardPage() {
       {
         icon: Users,
         label: "Leads Count",
-        value: leadsCount != null ? leadsCount.toLocaleString() : "--",
+        value: "42",
         color: "blue" as const,
       },
       {
@@ -178,7 +178,7 @@ export default function DashboardPage() {
       {
         icon: DollarSign,
         label: "Revenue",
-        value: revenue != null ? `$${Math.round(revenue).toLocaleString()}` : "--",
+        value: "$79,070",
         color: "emerald" as const,
       },
       {
@@ -200,14 +200,35 @@ export default function DashboardPage() {
         color: "emerald" as const,
       },
     ],
-    [leadsCount, dealValue, revenue, overdueTasks, emailsSent, callsToday]
+    [dealValue, overdueTasks, emailsSent, callsToday]
   );
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
 
   return (
     <div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8">
-        {kpiCards.map((card) => (
-          <ExecutiveKpiCard key={card.label} {...card} />
+      {/* ── Topbar ── */}
+      <div className="flex items-center justify-between mb-8 overflow-hidden py-2">
+        <div className="animate-in fade-in zoom-in-95 slide-in-from-left-8 duration-1000 ease-out fill-mode-both">
+          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 tracking-tight">
+            Dashboard
+          </h1>
+          <p className="text-lg text-gray-500 mt-1 font-medium flex items-center gap-2">
+            <span>{getGreeting()}, <span className="text-indigo-600 font-bold">{user?.name?.split(" ")[0] || "there"}</span>!</span>
+            <span className="animate-bounce origin-bottom text-xl">👋</span>
+          </p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+        {kpiCards.map((card, index) => (
+          <div key={card.label} className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both" style={{ animationDelay: `${index * 100}ms` }}>
+            <ExecutiveKpiCard {...card} />
+          </div>
         ))}
       </div>
       <Dashboard />

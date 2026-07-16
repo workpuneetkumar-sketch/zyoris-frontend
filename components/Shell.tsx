@@ -33,6 +33,10 @@ import {
   Crown,
   Cog,
   Shield,
+  KeyRound,
+  UserCog,
+  FileSearch,
+  Brain,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -59,6 +63,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/dashboard",
         label: "Dashboard",
         icon: LayoutDashboard,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/ai-insights",
+        label: "AI Insights",
+        icon: Brain,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
@@ -239,12 +249,35 @@ const NAV_GROUPS: NavGroup[] = [
       },
     ],
   },
+  {
+    label: "Admin Tools",
+    items: [
+      {
+        href: "/admin/roles",
+        label: "Roles",
+        icon: KeyRound,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/admin/user-roles",
+        label: "User Roles",
+        icon: UserCog,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/admin/audit",
+        label: "Audit Logs",
+        icon: FileSearch,
+        roles: ["ADMIN"],
+      },
+    ],
+  },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, sidebarItems } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
@@ -345,13 +378,65 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? user.name
       : user?.email?.split("@")[0] || "User";
 
-  const visibleNavGroups = NAV_GROUPS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) =>
-      user ? item.roles.includes(user.role) : item.href === "/dashboard"
-    ),
-  }))
-    .filter((group) => group.items.length > 0);
+  // Use dynamic RBAC sidebar when available; fall back to static role-based filtering
+  const visibleNavGroups = (() => {
+    if (sidebarItems && sidebarItems.length > 0) {
+      // Group dynamic sidebar items by their key prefix (before the first dot or slash)
+      // For now, render them as a single "Navigation" group
+      const iconMap: Record<string, LucideIcon> = {
+        dashboard: LayoutDashboard,
+        leads: Users,
+        deals: Briefcase,
+        contacts: Users,
+        companies: Building2,
+        activities: CheckSquare,
+        email: Mail,
+        whatsapp: MessageSquare,
+        calls: Phone,
+        tasks: ListTodo,
+        calendar: Calendar,
+        messages: MessageSquare,
+        hr: UsersRound,
+        finance: DollarSign,
+        marketing: Megaphone,
+        projects: Folder,
+        documents: FileText,
+        "knowledge-base": BookOpen,
+        analytics: BarChart2,
+        reports: FileText,
+        settings: Settings,
+        automation: Zap,
+        ceo: Crown,
+        cfo: DollarSign,
+        sales: TrendingUp,
+        operations: Cog,
+        admin: Shield,
+        roles: KeyRound,
+        "user-roles": UserCog,
+        audit: FileSearch,
+      };
+      const dynamicItems = sidebarItems
+        .filter((item) => item.visible)
+        .map((item) => {
+          const keySlug = item.key?.toLowerCase().replace(/[^a-z0-9-]/g, "-");
+          return {
+            href: item.route,
+            label: item.label,
+            icon: iconMap[keySlug] ?? iconMap[item.route?.split("/").pop() ?? ""] ?? Settings,
+          };
+        });
+      if (dynamicItems.length > 0) {
+        return [{ label: "Navigation", items: dynamicItems }];
+      }
+    }
+    // Fallback: static role-based filtering
+    return NAV_GROUPS.map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        user ? item.roles.includes(user.role) : item.href === "/dashboard"
+      ),
+    })).filter((group) => group.items.length > 0);
+  })();
 
   const NavLinks = () => (
     <>

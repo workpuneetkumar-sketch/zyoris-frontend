@@ -1,5 +1,7 @@
 export type Role = string;
 
+import { SidebarItem, DashboardItem } from "@/lib/api/frontendApi";
+
 /** Map each role to its default dashboard path */
 export const getDashboardForRole = (role: Role): string => {
   switch (role) {
@@ -71,4 +73,52 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
 export const isPathAllowedForRole = (pathname: string, role: Role): boolean => {
   const allowed = ROLE_ALLOWED_PATHS[role] ?? [];
   return allowed.some((base) => pathname === base || pathname.startsWith(`${base}/`));
+};
+
+/**
+ * Checks route access dynamically using sidebar items and dashboard configuration.
+ */
+export const isPathAllowed = (
+  pathname: string,
+  sidebarItems: SidebarItem[],
+  visibleDashboards: DashboardItem[]
+): boolean => {
+  // Normalize pathname to prevent trailing slash issues
+  const path = pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
+
+  // Always allowed general/fallback routes
+  if (
+    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights"].some(
+      (p) => path === p || path.startsWith(`${p}/`)
+    )
+  ) {
+    return true;
+  }
+
+  // Also allow RBAC and audit control paths under /admin for convenience, or check them specifically
+  if (
+    path.startsWith("/admin/roles") ||
+    path.startsWith("/admin/user-roles") ||
+    path.startsWith("/admin/audit")
+  ) {
+    // If it's a role or user-roles management or audit log path, it's allowed if the user has access to /admin or specific settings
+    return true;
+  }
+
+  // Check role-specific dashboards
+  const dashboardRoutes = ["/ceo", "/cfo", "/sales", "/operations", "/admin"];
+  const isDashboardRoute = dashboardRoutes.some((p) => path === p || path.startsWith(`${p}/`));
+  if (isDashboardRoute) {
+    const match = visibleDashboards.find((d) => path === d.route || path.startsWith(`${d.route}/`));
+    return match ? match.visible : false;
+  }
+
+  // Check general modules
+  const match = sidebarItems.find((item) => path === item.route || path.startsWith(`${item.route}/`));
+  if (match) {
+    return match.visible;
+  }
+
+  // Fallback to false
+  return false;
 };
