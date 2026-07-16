@@ -25,20 +25,12 @@ export const metadata: Metadata = {
     title: "Zyoris - Central Intelligence Layer",
     description: "Advanced Autonomous Business Intelligence Platform.",
   },
-  icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-    ],
-    shortcut: "/icon.svg",
-    apple: "/icon.svg",
-  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className="light">
       <head>
-        <link rel="icon" type="image/svg+xml" href="/icon.svg" />
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
