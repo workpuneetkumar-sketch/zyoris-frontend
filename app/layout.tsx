@@ -12,6 +12,19 @@ const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] }
 export const metadata: Metadata = {
   title: "Zyoris - Central Intelligence Layer",
   description: "Zyoris is an advanced Autonomous Business Intelligence Platform designed to streamline operations, enhance CRM, and provide real-time AI-driven insights for modern enterprises. Optimize your workflow, manage leads efficiently, and make data-backed decisions with our comprehensive suite of business tools.",
+  keywords: ["Business Intelligence", "CRM", "Autonomous AI", "Analytics", "Enterprise Software", "Zyoris", "Dashboard", "Management", "SaaS", "B2B"],
+  authors: [{ name: "Zyoris Team" }],
+  openGraph: {
+    title: "Zyoris - Central Intelligence Layer",
+    description: "Advanced Autonomous Business Intelligence Platform for modern enterprises. Streamline operations and enhance CRM with AI.",
+    type: "website",
+    siteName: "Zyoris",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Zyoris - Central Intelligence Layer",
+    description: "Advanced Autonomous Business Intelligence Platform.",
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

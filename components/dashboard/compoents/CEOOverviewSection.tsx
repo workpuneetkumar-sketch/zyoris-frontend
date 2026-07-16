@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api/api";
-import { DollarSign, BarChart2, Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { DollarSign, BarChart2, Activity, TrendingUp, TrendingDown, Minus, Search, Bell, Plus } from "lucide-react";
 
 export function CEOOverviewSection({ token }: { token: string }) {
     const [data, setData] = useState<any>(null);
@@ -81,7 +81,30 @@ export function CEOOverviewSection({ token }: { token: string }) {
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-8">
+            {/* ── Search & Actions ── */}
+            <div className="flex items-center justify-end">
+                <div className="flex items-center gap-3">
+                    <div className="hidden md:flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 w-64 shadow-sm">
+                        <Search size={14} className="text-gray-400 shrink-0" />
+                        <input
+                            type="text"
+                            placeholder="Search insights..."
+                            className="bg-transparent text-sm text-gray-600 outline-none w-full"
+                        />
+                    </div>
+                    <button className="relative p-2.5 rounded-xl bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700">
+                        <Bell size={17} />
+                        <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full ring-1 ring-white" />
+                    </button>
+                    <button className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-all shadow-sm">
+                        <Plus size={15} />
+                        New Project
+                    </button>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {cards.map((card) => (
                 <div key={card.title} className="bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group">
                     <div className="flex justify-between items-start mb-4">
@@ -108,6 +131,7 @@ export function CEOOverviewSection({ token }: { token: string }) {
                     </div>
                 </div>
             ))}
+            </div>
         </div>
     );
 }
