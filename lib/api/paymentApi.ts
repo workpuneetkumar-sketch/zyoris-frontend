@@ -1,4 +1,7 @@
 // lib/api/paymentApi.ts
+// Central type definitions for the payment module.
+// Re-exports service functions for single-import convenience.
+
 export type PaymentMethod = "CASH" | "CARD" | "UPI" | "BANK_TRANSFER" | "NET_BANKING";
 
 export interface Payment {
@@ -24,21 +27,18 @@ export interface CreatePaymentData {
 
 // ── Razorpay-specific types ───────────────────────────────────
 
-/** Payload sent to POST /payments/create-order */
 export interface RazorpayCreateOrderPayload {
   invoiceId: string;
   amount: number;
 }
 
-/** Response from POST /payments/create-order */
 export interface RazorpayOrderResponse {
   orderId: string;
-  amount: number;   // amount in paise
+  amount: number;
   currency: string;
-  key?: string;     // Razorpay Key ID (some backends include this)
+  key?: string;
 }
 
-/** Payload sent to POST /payments/verify */
 export interface RazorpayVerifyPayload {
   razorpay_order_id: string;
   razorpay_payment_id: string;
@@ -46,12 +46,28 @@ export interface RazorpayVerifyPayload {
   invoiceId: string;
 }
 
-/** Response from POST /payments/verify */
 export interface RazorpayVerifyResponse {
   success: boolean;
   message?: string;
   invoiceId?: string;
 }
 
-// Re-export service functions for consumers who prefer a single import path
-export { createRazorpayOrder, verifyRazorpayPayment } from "./paymentService";
+// Re-export service functions
+export {
+  createRazorpayOrder,
+  verifyRazorpayPayment,
+  getPaymentStatus,
+  downloadCsvBlob,
+} from "./paymentService";
+
+export type {
+  PaymentStatus,
+  PaymentMethodType,
+  PaymentRecord,
+  PaymentEvent,
+  CreateOrderRequest,
+  CreateOrderResponse,
+  VerifyPaymentRequest,
+  VerifyPaymentResponse,
+  PaymentStatusResponse,
+} from "./paymentService";

@@ -1,22 +1,25 @@
+"use client";
+
 import React from 'react';
+import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 
-export default function UpcomingEvents() {
-  const events = [
-    { month: 'MAY', day: '22', title: 'Team Outing', time: 'May 22, 2024 • 10:00 AM' },
-    { month: 'MAY', day: '25', title: 'Performance Review Cycle', time: 'May 25 - Jun 05, 2024' },
-    { month: 'MAY', day: '31', title: 'Payroll Processing', time: 'May 31, 2024 • 09:00 AM' },
-  ];
+const DEMO_EVENTS = [
+  { month: 'JUL', day: '22', title: 'Team Outing', time: 'Wed, Jul 22, 2026 • 10:00 AM' },
+  { month: 'JUL', day: '25', title: 'All-Hands Meeting', time: 'Sat, Jul 25, 2026 • 09:30 AM' },
+  { month: 'JUL', day: '30', title: 'Quarterly Review', time: 'Thu, Jul 30, 2026 • 02:00 PM' },
+];
 
+export default function UpcomingEvents() {
   return (
     <div className="bg-white border border-slate-100 rounded-xl p-4 sm:p-6 flex flex-col h-full shadow-sm">
       <div className="flex justify-between items-center mb-4 sm:mb-6">
         <h2 className="text-sm sm:text-base font-semibold text-slate-800">Upcoming Events</h2>
-        <span className="text-[10px] sm:text-xs font-medium text-blue-600 cursor-pointer hover:text-blue-700">View Calendar</span>
+        <Link href="/events" className="text-[10px] sm:text-xs font-medium text-blue-600 cursor-pointer hover:text-blue-700">View Calendar</Link>
       </div>
 
       <div className="flex-1 flex flex-col gap-3 sm:gap-4">
-        {events.map((event, index) => (
+        {DEMO_EVENTS.map((event, index) => (
           <div key={index} className="flex items-center justify-between border border-slate-100 rounded-lg p-2.5 sm:p-3 hover:bg-slate-50 transition-colors gap-2">
             <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
               <div className="flex flex-col items-center justify-center bg-indigo-50/50 rounded-lg min-w-[42px] sm:min-w-[50px] py-1 sm:py-1.5 border border-indigo-50 shrink-0">
@@ -35,12 +38,14 @@ export default function UpcomingEvents() {
         ))}
       </div>
 
+      <Link href="/events">
       <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-slate-100 flex justify-between items-center cursor-pointer group">
         <span className="text-xs sm:text-sm font-medium text-blue-600 group-hover:text-blue-700 transition-colors">
           View All Events
         </span>
         <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600 group-hover:text-blue-700 group-hover:translate-x-1 transition-all" />
       </div>
+      </Link>
     </div>
   );
 }

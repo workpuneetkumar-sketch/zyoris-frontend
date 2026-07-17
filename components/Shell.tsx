@@ -25,6 +25,7 @@ import {
   ListTodo,
   Building2,
   DollarSign,
+  CreditCard,
   Megaphone,
   Folder,
   BookOpen,
@@ -147,6 +148,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/finance",
         label: "Finance",
         icon: DollarSign,
+        roles: ["ADMIN", "CEO", "CFO"],
+      },
+      {
+        href: "/payment/invoices",
+        label: "Payments",
+        icon: CreditCard,
         roles: ["ADMIN", "CEO", "CFO"],
       },
       {
