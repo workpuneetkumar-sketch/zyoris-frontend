@@ -1,10 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { X, CheckCheck, XCircle, Loader2 } from "lucide-react";
 import { applyLeave } from "@/lib/api/hrApi";
-
-const HARDCODED_EMPLOYEE_ID = "cmq0vv9qj04gtf66zrxc37mq3";
 
 interface ApplyLeaveModalProps {
   onClose: () => void;
@@ -12,6 +10,17 @@ interface ApplyLeaveModalProps {
 }
 
 export default function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalProps) {
+  // Get employee ID from localStorage dynamically
+  const employeeId = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      const user = JSON.parse(localStorage.getItem("user") || "{}");
+      return user?.employeeId || user?.id || "";
+    } catch {
+      return "";
+    }
+  }, []);
+
   const [form, setForm] = useState({
     type: "CASUAL" as "SICK" | "CASUAL" | "EARNED",
     startDate: "",
@@ -34,8 +43,12 @@ export default function ApplyLeaveModal({ onClose, onSuccess }: ApplyLeaveModalP
     }
     setLoading(true);
     try {
+      if (!employeeId) {
+        setError("Employee ID not found. Please log in again.");
+        return;
+      }
       await applyLeave({
-        employeeId: HARDCODED_EMPLOYEE_ID,
+        employeeId,
         startDate: form.startDate,
         endDate: form.endDate,
         type: form.type,
