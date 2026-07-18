@@ -243,7 +243,7 @@ function RbacMatrix() {
 /* ─── Main Page ────────────────────────────────────────────────────────── */
 
 export default function RolesPage() {
-  const { user } = useAuth();
+  const { user, isInitializing } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("manage");
@@ -275,12 +275,12 @@ export default function RolesPage() {
   const [permSaving, setPermSaving] = useState(false);
   const [selectedPerms, setSelectedPerms] = useState<Set<string>>(new Set());
 
-  // Guard: ADMIN only
+  // Guard: ADMIN only — wait for initialization
   useEffect(() => {
-    if (user && user.role !== "ADMIN") {
+    if (!isInitializing && user && user.role !== "ADMIN") {
       router.push("/admin");
     }
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   /* ── Fetch Roles (GET /rbac/roles) ───────────────────────────────────── */
 

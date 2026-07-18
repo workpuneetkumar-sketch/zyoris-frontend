@@ -260,7 +260,7 @@ function UserPermissionsPanel({
 /* ─── Main Page ──────────────────────────────────────────────────────── */
 
 export default function UserRolesPage() {
-  const { user } = useAuth();
+  const { user, isInitializing } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("users");
@@ -278,12 +278,12 @@ export default function UserRolesPage() {
   // Permissions panel
   const [permUser, setPermUser] = useState<{ id: string; name: string } | null>(null);
 
-  // Guard: ADMIN only
+  // Guard: ADMIN only — wait for initialization
   useEffect(() => {
-    if (user && user.role !== "ADMIN") {
+    if (!isInitializing && user && user.role !== "ADMIN") {
       router.push("/admin");
     }
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   /* ── Fetch all users + roles ──────────────────────────────────────── */
 
@@ -340,10 +340,19 @@ export default function UserRolesPage() {
       teamUsers.forEach(async (u) => {
         try {
           const roleData = await getUserRole(u.id);
+          const role = roleData.role;
           setEntries((prev) =>
             prev.map((e) =>
               e.user.id === u.id
-                ? { ...e, assignedRole: roleData.role, loadingRole: false }
+                ? { 
+                    ...e, 
+                    assignedRole: {
+                      id: role?.id,
+                      name: role?.name,
+                      description: role?.description
+                    }, 
+                    loadingRole: false 
+                  }
                 : e
             )
           );

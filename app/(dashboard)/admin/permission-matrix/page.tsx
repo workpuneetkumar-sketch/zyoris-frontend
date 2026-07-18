@@ -80,18 +80,18 @@ function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => vo
 }
 
 export default function PermissionMatrixPage() {
-  const { user } = useAuth();
+  const { user, isInitializing } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("matrix");
   const [error, setError] = useState<string | null>(null);
 
-  // Guard: ADMIN only
+  // Guard: ADMIN only — wait for initialization
   useEffect(() => {
-    if (user && user.role !== "ADMIN") {
+    if (!isInitializing && user && user.role !== "ADMIN") {
       router.push("/admin");
     }
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   // -- Data State --
   const [roles, setRoles] = useState<RoleMatrix[]>([]);

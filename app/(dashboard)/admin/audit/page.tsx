@@ -47,7 +47,7 @@ function ActionBadge({ action }: { action: string }) {
 }
 
 export default function AuditPage() {
-  const { user } = useAuth();
+  const { user, isInitializing } = useAuth();
   const router = useRouter();
 
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -61,12 +61,12 @@ export default function AuditPage() {
   const [detailLog, setDetailLog] = useState<AuditLog | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Guard: ADMIN only
+  // Guard: ADMIN only — wait for initialization
   useEffect(() => {
-    if (user && user.role !== "ADMIN") {
+    if (!isInitializing && user && user.role !== "ADMIN") {
       router.push("/admin");
     }
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   const fetchLogs = useCallback(async (p: number) => {
     setLoading(true);
