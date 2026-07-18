@@ -63,12 +63,14 @@ const TOKEN_COOKIE = "zyoris-token";
 // ── Cookie helpers (client-side only) ────────────────────────────────────────
 
 function setTokenCookie(token: string) {
-  // Max-age: 7 days — aligns with typical JWT expiry; SameSite=Strict for CSRF protection.
-  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
+  // Max-age: 7 days — aligns with typical JWT expiry; SameSite=Lax for better compatibility
+  const isSecure = window.location.protocol === 'https:';
+  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${isSecure ? '; Secure' : ''}`;
 }
 
 function clearTokenCookie() {
-  document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+  const isSecure = window.location.protocol === 'https:';
+  document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax${isSecure ? '; Secure' : ''}`;
 }
 
 function clearAuthState() {
