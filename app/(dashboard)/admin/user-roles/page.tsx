@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { getUserRole, assignUserRole, getUsersByRole, UserByRoleItem } from "@/lib/api/userRolesApi";
+import { getUserRole, assignUserRole, getUsersByRole, getRoleName, UserByRoleItem } from "@/lib/api/userRolesApi";
 import { getRbacUserPermissions, getRbacRoles } from "@/lib/api/rbacApi";
 import { RbacRoleMatrixItem } from "@/lib/api/rbacApi";
 import { toast } from "react-toastify";
@@ -153,7 +153,7 @@ function UsersByRoleView({ roles }: { roles: RbacRoleMatrixItem[] }) {
                 <p className="text-xs text-gray-400 truncate">{u.email}</p>
               </div>
               <span className="text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full shrink-0">
-                {u.role}
+                {getRoleName(u.role)}
               </span>
             </div>
           ))}
@@ -318,7 +318,7 @@ export default function UserRolesPage() {
                 id: u.id,
                 name: u.name,
                 email: u.email,
-                role: u.role,
+                role: getRoleName(u.role),
               });
             }
           });

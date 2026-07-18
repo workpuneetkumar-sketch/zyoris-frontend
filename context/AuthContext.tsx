@@ -63,14 +63,13 @@ const TOKEN_COOKIE = "zyoris-token";
 // ── Cookie helpers (client-side only) ────────────────────────────────────────
 
 function setTokenCookie(token: string) {
-  // Max-age: 7 days — aligns with typical JWT expiry; SameSite=Lax for better compatibility
-  const isSecure = window.location.protocol === 'https:';
-  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+  // Max-age: 7 days. SameSite=Lax works for both HTTP and HTTPS.
+  // Not HttpOnly so client-side JS can refresh it on token rotation.
+  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 }
 
 function clearTokenCookie() {
-  const isSecure = window.location.protocol === 'https:';
-  document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax${isSecure ? '; Secure' : ''}`;
+  document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
 }
 
 function clearAuthState() {
@@ -105,18 +104,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      let parsed: any;
       try {
-        const parsed = JSON.parse(raw);
-        if (!parsed.token) {
-          throw new Error("No token found");
-        }
-        
-        setToken(parsed.token);
-        setTokenCookie(parsed.token);
-        
-        // Validate token by fetching current user
+        parsed = JSON.parse(raw);
+      } catch {
+        clearAuthState();
+        setIsInitializing(false);
+        return;
+      }
+
+      if (!parsed?.token) {
+        clearAuthState();
+        setIsInitializing(false);
+        return;
+      }
+
+      // ── Optimistic restore ───────────────────────────────────────────────
+      // Immediately mark as authenticated using the cached user from localStorage.
+      // This prevents the layout from redirecting to /login while API calls are
+      // in-flight on a hard refresh. The session will be invalidated below if the
+      // token turns out to be expired.
+      const cachedUser: User | null = parsed.user ?? null;
+      setToken(parsed.token);
+      setTokenCookie(parsed.token);
+
+      if (cachedUser) {
+        setUser(cachedUser);
+        setIsAuthenticated(true);
+        setIsInitializing(false); // ← unblock the UI immediately
+      }
+      // ────────────────────────────────────────────────────────────────────
+
+      try {
+        // Validate token + load fresh profile in the background
         const userData = await getMeApi();
-        
+
         // Fetch RBAC & Frontend permissions
         try {
           const [rbacMe, frontendPerms] = await Promise.all([
@@ -134,10 +156,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error("Failed to load permissions during session restore:", permError);
         }
 
+        // Update with fresh server data (may differ from cached user)
         setUser(userData);
         setIsAuthenticated(true);
       } catch {
-        // If token is invalid, clear everything
+        // Token is genuinely invalid — clear everything and send to login
         clearAuthState();
         setUser(null);
         setToken(null);
@@ -146,7 +169,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setVisibleDashboards([]);
         setVisibleModules([]);
         setIsAuthenticated(false);
+        // Only push to login if we didn't already finish initializing above
+        // (i.e., no cached user was available to show the page)
+        if (!cachedUser) {
+          // Router not available here synchronously; the layout's own
+          // useEffect will handle the redirect once isAuthenticated=false.
+        }
       } finally {
+        // Always make sure initializing is cleared (in case no cached user was set above)
         setIsInitializing(false);
       }
     };
