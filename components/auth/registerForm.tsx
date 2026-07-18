@@ -6,8 +6,25 @@ import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
 
 const ROLES = [
-    { value: "CEO", label: "CEO" },
-    { value: "CFO", label: "CFO" },
+    { value: "ADMIN",                   label: "Administrator" },
+    { value: "CEO",                     label: "CEO – Chief Executive Officer" },
+    { value: "CFO",                     label: "CFO – Chief Financial Officer" },
+    { value: "CLIENT_SUCCESS_MANAGER",  label: "Client Success Manager" },
+    { value: "FINANCE_EXECUTIVE",       label: "Finance Executive" },
+    { value: "FINANCE_MANAGER",         label: "Finance Manager" },
+    { value: "HR_EXECUTIVE",            label: "HR Executive" },
+    { value: "HR_MANAGER",              label: "HR Manager" },
+    { value: "MANAGER",                 label: "Manager" },
+    { value: "MARKETING_EXECUTIVE",     label: "Marketing Executive" },
+    { value: "MARKETING_MANAGER",       label: "Marketing Manager" },
+    { value: "OPERATIONS_HEAD",         label: "Operations Head" },
+    { value: "PROJECT_MANAGER",         label: "Project Manager" },
+    { value: "SALES_EXECUTIVE",         label: "Sales Executive" },
+    { value: "SALES_HEAD",              label: "Sales Head" },
+    { value: "SALES_USER",              label: "Sales User" },
+    { value: "SUPPORT_EXECUTIVE",       label: "Support Executive" },
+    { value: "USER",                    label: "Regular User" },
+    { value: "VIEWER",                  label: "Viewer – Read Only" },
 ];
 
 const BUSINESS_TYPES = [
@@ -29,7 +46,7 @@ export default function RegisterForm() {
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
-    const [role, setRole] = useState("CEO");
+    const [role, setRole] = useState(ROLES[0].value);
     const [designation, setDesignation] = useState("");
     const [showPw, setShowPw] = useState(false);
     const [showConfirmPw, setShowConfirmPw] = useState(false);

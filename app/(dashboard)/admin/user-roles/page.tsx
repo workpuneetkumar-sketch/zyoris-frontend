@@ -7,7 +7,6 @@ import { getUserRole, assignUserRole, getUsersByRole, UserByRoleItem } from "@/l
 import { getRbacUserPermissions } from "@/lib/api/rbacApi";
 import { getRoles } from "@/lib/api/rolesApi";
 import { RbacRoleMatrixItem } from "@/lib/api/rbacApi";
-import api from "@/lib/api/api";
 import { toast } from "react-toastify";
 import {
   UserCog,
@@ -273,18 +272,39 @@ export default function UserRolesPage() {
     setLoading(true);
     setError(null);
     try {
-      const [teamRes, rolesRes] = await Promise.all([
-        api.get<TeamUser[]>("/team"),
-        getRoles(),
-      ]);
-
-      const teamUsers: TeamUser[] = Array.isArray(teamRes.data) ? teamRes.data : [];
-      const allRoles: RbacRoleMatrixItem[] = Array.isArray(rolesRes) ? rolesRes : [];
-
+      // 1. Load all roles
+      const allRoles: RbacRoleMatrixItem[] = await getRoles().then((d) =>
+        Array.isArray(d) ? d : []
+      );
       setRoles(allRoles);
+
+      // 2. Fan-out: fetch users for every role concurrently, then deduplicate
+      const results = await Promise.allSettled(
+        allRoles.map((r) => getUsersByRole(r.id))
+      );
+
+      const seen = new Set<string>();
+      const teamUsers: TeamUser[] = [];
+      results.forEach((res) => {
+        if (res.status === "fulfilled" && Array.isArray(res.value)) {
+          res.value.forEach((u: UserByRoleItem) => {
+            if (!seen.has(u.id)) {
+              seen.add(u.id);
+              teamUsers.push({
+                id: u.id,
+                name: u.name,
+                email: u.email,
+                role: u.role,
+              });
+            }
+          });
+        }
+      });
+
       setUsers(teamUsers);
 
-      // Skeleton entries first
+      // 3. Build entries — we already know the role from the fan-out payload
+      //    but we'll fetch per-user role detail for the richest data.
       const initial: UserRoleEntry[] = teamUsers.map((u) => ({
         user: u,
         assignedRole: null,
@@ -292,7 +312,7 @@ export default function UserRolesPage() {
       }));
       setEntries(initial);
 
-      // Load each user's role via GET /user-roles/:userId (non-blocking)
+      // Non-blocking individual role fetch
       teamUsers.forEach(async (u) => {
         try {
           const roleData = await getUserRole(u.id);

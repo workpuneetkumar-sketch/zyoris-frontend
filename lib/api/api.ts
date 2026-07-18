@@ -22,7 +22,9 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        if (typeof window !== "undefined") {
+        // Skip auth headers for auth endpoints
+        const isAuthEndpoint = config.url?.includes("/auth") || false;
+        if (typeof window !== "undefined" && !isAuthEndpoint) {
             const raw = localStorage.getItem("zyoris-auth");
 
             if (raw) {
@@ -143,8 +145,10 @@ api.interceptors.response.use(
             return api(originalRequest);
         }
 
-        // Prevent infinite retry loop for 401
+        // Prevent infinite retry loop for 401, skip auth endpoints
+        const isAuthEndpoint = originalRequest?.url?.includes("/auth") || false;
         if (
+            !isAuthEndpoint &&
             error.response?.status === 401 &&
             !originalRequest?._retry
         ) {

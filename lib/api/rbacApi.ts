@@ -63,10 +63,21 @@ export const getRbacRoleDetails = async (roleId: string): Promise<RbacRoleMatrix
 };
 
 export const getRbacUserPermissions = async (userId: string): Promise<string[]> => {
-  const res = await api.get<string[]>("/rbac/users/permissions", {
+  const res = await api.get<{
+    userId: string;
+    permissions: Record<string, boolean>;
+  }>("/rbac/users/permissions", {
     params: { userId },
   });
-  return res.data;
+  // Backend returns { permissions: { "key": true|false } } — extract granted keys
+  const perms = res.data?.permissions;
+  if (perms && typeof perms === "object" && !Array.isArray(perms)) {
+    return Object.entries(perms)
+      .filter(([, granted]) => granted === true)
+      .map(([key]) => key);
+  }
+  // Fallback: if it's already an array, return as-is
+  return Array.isArray(res.data) ? (res.data as unknown as string[]) : [];
 };
 
 export const getRbacHealth = async (): Promise<RbacHealthResponse> => {

@@ -39,6 +39,7 @@ import {
   FileSearch,
   Brain,
   Layers,
+  Grid3X3,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -264,6 +265,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/admin/roles",
         label: "Roles",
         icon: KeyRound,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/admin/permission-matrix",
+        label: "Permission Matrix",
+        icon: Grid3X3,
         roles: ["ADMIN"],
       },
       {
