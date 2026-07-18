@@ -553,13 +553,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </button>
 
-          {/* Notification bell + logout */}
+          {/* Logout button only */}
           <div className="flex items-center gap-1 shrink-0">
-            <NotificationBell
-              notifications={realtimeNotifications}
-              onMarkRead={markNotificationRead}
-              onMarkAllRead={markAllNotificationsRead}
-            />
             <button
               onClick={openLogoutModal}
               className="p-1 rounded-lg hover:bg-red-50 transition-colors group"

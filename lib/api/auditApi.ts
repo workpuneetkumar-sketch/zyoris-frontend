@@ -25,10 +25,30 @@ export interface AuditLogsResponse {
 }
 
 export const getAuditLogs = async (page = 1, limit = 20): Promise<AuditLogsResponse> => {
-  const res = await api.get<AuditLogsResponse>("/audit", {
+  const res = await api.get<any>("/audit", {
     params: { page, limit },
   });
-  return res.data;
+  const data = res.data;
+  if (Array.isArray(data)) {
+    return {
+      logs: data,
+      pagination: {
+        page,
+        limit,
+        total: data.length,
+        totalPages: 1
+      }
+    };
+  }
+  return {
+    logs: data.logs || [],
+    pagination: data.pagination || {
+      page,
+      limit,
+      total: 0,
+      totalPages: 1
+    }
+  };
 };
 
 export const getAuditLog = async (auditLogId: string): Promise<AuditLog> => {
