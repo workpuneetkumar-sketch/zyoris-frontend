@@ -85,10 +85,17 @@ api.interceptors.response.use(
                                 if (method === "DELETE") action = "Deleted";
                                 
                                 let entityName = "Item";
-                                const match = url.match(/\/api\/([a-zA-Z0-9_-]+)/);
-                                if (match && match[1]) {
-                                    let str = match[1];
-                                    if (str.endsWith("s")) str = str.slice(0, -1);
+                                let path = url.replace(/^https?:\/\/[^\/]+/, '');
+                                if (path.startsWith('/api/')) path = path.substring(4);
+                                if (path.startsWith('/')) path = path.substring(1);
+                                const segment = path.split('/')[0];
+                                if (segment) {
+                                    let str = segment;
+                                    if (str.endsWith("ies")) {
+                                        str = str.slice(0, -3) + "y";
+                                    } else if (str.endsWith("s")) {
+                                        str = str.slice(0, -1);
+                                    }
                                     entityName = str.charAt(0).toUpperCase() + str.slice(1);
                                 }
                                 
