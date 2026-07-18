@@ -45,6 +45,24 @@ const emptyForm: RoleFormData = { name: "", description: "" };
 
 type Tab = "manage" | "matrix";
 
+interface PermissionObject {
+  id?: string;
+  key?: string;
+  name?: string;
+  description?: string;
+  module?: string;
+  action?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+// Helper to extract permission key from object or string
+const getPermissionKey = (perm: string | PermissionObject): string => {
+  if (typeof perm === "string") return perm;
+  return perm.key || perm.name || String(perm);
+};
+
 /* ─── Helper ─────────────────────────────────────────────────────────── */
 
 function ErrorBanner({
@@ -88,7 +106,13 @@ function RbacMatrix() {
     setError(null);
     try {
       const data = await getRbacRoles();
-      setRbacRoles(Array.isArray(data) ? data : []);
+      const rolesData = Array.isArray(data) ? data : [];
+      // Process permissions to extract keys
+      const processedRoles = rolesData.map((role) => ({
+        ...role,
+        permissions: (role.permissions || []).map(getPermissionKey)
+      }));
+      setRbacRoles(processedRoles);
     } catch (err: any) {
       setError(err?.response?.data?.message || "Failed to load RBAC role matrix.");
     } finally {
@@ -111,7 +135,12 @@ function RbacMatrix() {
     setDetailLoading(roleId);
     try {
       const detail = await getRbacRoleDetails(roleId);
-      setDetailData((prev) => ({ ...prev, [roleId]: detail }));
+      // Process detail permissions
+      const processedDetail = {
+        ...detail,
+        permissions: (detail.permissions || []).map(getPermissionKey)
+      };
+      setDetailData((prev) => ({ ...prev, [roleId]: processedDetail }));
     } catch {
       // fallback: use list data
     } finally {
@@ -262,7 +291,13 @@ export default function RolesPage() {
     setError(null);
     try {
       const data = await getRoles();
-      setRoles(Array.isArray(data) ? data : []);
+      const rolesData = Array.isArray(data) ? data : [];
+      // Process permissions to extract keys
+      const processedRoles = rolesData.map((role) => ({
+        ...role,
+        permissions: (role.permissions || []).map(getPermissionKey)
+      }));
+      setRoles(processedRoles);
     } catch (err: any) {
       setError(err?.response?.data?.message || "Failed to load roles.");
     } finally {
@@ -294,7 +329,12 @@ export default function RolesPage() {
     setViewLoading(true);
     try {
       const detail = await getRole(role.id);
-      setViewRole(detail);
+      // Process detail permissions
+      const processedDetail = {
+        ...detail,
+        permissions: (detail.permissions || []).map(getPermissionKey)
+      };
+      setViewRole(processedDetail);
     } catch {
       // fallback to list data
     } finally {
@@ -352,10 +392,16 @@ export default function RolesPage() {
         getRbacModules(),
         getRolePermissions(role.id),
       ]);
-      setAllModules(Array.isArray(modules) ? modules : []);
-      const permArray = Array.isArray(perms) ? perms : [];
-      setRolePerms(permArray);
-      setSelectedPerms(new Set(permArray));
+      // Process modules to extract keys if they are objects
+      const processedModules = (Array.isArray(modules) ? modules : []).map(mod => {
+        const m = mod as any;
+        return typeof m === "string" ? m : m.key || m.name || String(m);
+      });
+      setAllModules(processedModules);
+      // Process permissions to extract keys
+      const processedPerms = (Array.isArray(perms) ? perms : []).map(getPermissionKey);
+      setRolePerms(processedPerms);
+      setSelectedPerms(new Set(processedPerms));
     } catch (err: any) {
       toast.error("Failed to load permissions: " + (err?.response?.data?.message || ""));
     } finally {

@@ -35,13 +35,31 @@ import {
 } from "@/lib/api/permissionMatrixApi";
 
 // Using the same types from API
+interface PermissionObject {
+  id?: string;
+  key?: string;
+  name?: string;
+  description?: string;
+  module?: string;
+  action?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
 interface RoleMatrix {
   id: string;
   name: string;
   description?: string;
-  permissions?: string[];
+  permissions?: (string | PermissionObject)[];
   [key: string]: any;
 }
+
+// Helper to extract permission key from object or string
+const getPermissionKey = (perm: string | PermissionObject): string => {
+  if (typeof perm === "string") return perm;
+  return perm.key || perm.name || String(perm);
+};
 
 type Tab = "matrix" | "templates" | "bulk" | "clone";
 
@@ -85,7 +103,13 @@ export default function PermissionMatrixPage() {
     setError(null);
     try {
       const data = await getPermissionMatrix();
-      setRoles(Array.isArray(data) ? data : data?.roles ? data.roles : []);
+      const rolesData = Array.isArray(data) ? data : data?.roles ? data.roles : [];
+      // Process permissions to extract keys
+      const processedRoles = rolesData.map((role: RoleMatrix) => ({
+        ...role,
+        permissions: (role.permissions || []).map(getPermissionKey)
+      }));
+      setRoles(processedRoles);
     } catch (err: any) {
       setError(err?.response?.data?.message || err?.response?.data?.error || "Failed to load permission matrix.");
     } finally {
@@ -113,7 +137,7 @@ export default function PermissionMatrixPage() {
   // Fake modules for UI since we don't know the exact ones. 
   // We'll collect all distinct permissions from the matrix.
   const allPermissions = Array.from(new Set(
-    roles.flatMap(r => r.permissions || [])
+    roles.flatMap(r => (r.permissions || []).map(getPermissionKey))
   )).sort();
 
   async function toggleExpand(roleId: string) {
@@ -127,7 +151,12 @@ export default function PermissionMatrixPage() {
     setDetailLoading(roleId);
     try {
       const detail = await getRolePermissionMatrix(roleId);
-      setRoleDetailData(prev => ({ ...prev, [roleId]: detail }));
+      // Process detail permissions
+      const processedDetail = {
+        ...detail,
+        permissions: (detail.permissions || []).map(getPermissionKey)
+      };
+      setRoleDetailData(prev => ({ ...prev, [roleId]: processedDetail }));
     } catch {
       // Fallback
     } finally {
@@ -138,7 +167,9 @@ export default function PermissionMatrixPage() {
   function openEdit(role: RoleMatrix) {
     const detail = roleDetailData[role.id] || role;
     setEditRole(role);
-    setEditPerms(new Set(detail.permissions || []));
+    // Process permissions to extract keys
+    const processedPerms = (detail.permissions || []).map(getPermissionKey);
+    setEditPerms(new Set(processedPerms));
   }
 
   function toggleEditPerm(perm: string) {
@@ -357,7 +388,7 @@ export default function PermissionMatrixPage() {
               {filteredRoles.map(role => {
                 const isExpanded = expandedRole === role.id;
                 const detail = roleDetailData[role.id];
-                const permList = detail?.permissions ?? role.permissions ?? [];
+                const permList = (detail?.permissions ?? role.permissions ?? []).map(getPermissionKey);
 
                 return (
                   <div key={role.id} className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden transition-all hover:border-indigo-200">

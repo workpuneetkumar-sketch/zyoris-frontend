@@ -39,6 +39,24 @@ interface UserRoleEntry {
 
 type Tab = "users" | "byRole";
 
+interface PermissionObject {
+  id?: string;
+  key?: string;
+  name?: string;
+  description?: string;
+  module?: string;
+  action?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+// Helper to extract permission key from object or string
+const getPermissionKey = (perm: string | PermissionObject): string => {
+  if (typeof perm === "string") return perm;
+  return perm.key || perm.name || String(perm);
+};
+
 /* ─── Helpers ────────────────────────────────────────────────────────── */
 
 function ErrorBanner({ message }: { message: string }) {
@@ -168,7 +186,9 @@ function UserPermissionsPanel({
       setError(null);
       try {
         const data = await getRbacUserPermissions(userId);
-        if (!cancelled) setPermissions(Array.isArray(data) ? data : []);
+        // Process permissions to extract keys
+        const processedPerms = (Array.isArray(data) ? data : []).map(getPermissionKey);
+        if (!cancelled) setPermissions(processedPerms);
       } catch (err: any) {
         if (!cancelled)
           setError(err?.response?.data?.message || "Failed to load permissions.");
@@ -276,7 +296,12 @@ export default function UserRolesPage() {
       const allRoles: RbacRoleMatrixItem[] = await getRoles().then((d) =>
         Array.isArray(d) ? d : []
       );
-      setRoles(allRoles);
+      // Process permissions to extract keys
+      const processedRoles = allRoles.map((role) => ({
+        ...role,
+        permissions: (role.permissions || []).map(getPermissionKey)
+      }));
+      setRoles(processedRoles);
 
       // 2. Fan-out: fetch users for every role concurrently, then deduplicate
       const results = await Promise.allSettled(
