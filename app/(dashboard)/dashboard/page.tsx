@@ -8,6 +8,7 @@ import { fetchTasks, Task } from "@/lib/api/tasksApi";
 import { fetchEmails } from "@/lib/api/emailApi";
 import { fetchCalls } from "@/lib/api/callsApi";
 import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon } from "lucide-react";
+import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
 
 interface LeadsStatsResponse {
   total?: number;
@@ -230,6 +231,10 @@ export default function DashboardPage() {
             <ExecutiveKpiCard {...card} />
           </div>
         ))}
+      </div>
+
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
+        <DashboardAiInsightsBox />
       </div>
     </div>
   );
