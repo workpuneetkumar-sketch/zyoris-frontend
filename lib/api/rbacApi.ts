@@ -1,5 +1,22 @@
 import api from "./api";
 
+interface PermissionObject {
+  id?: string;
+  key?: string;
+  name?: string;
+  description?: string;
+  module?: string;
+  action?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+const getPermissionKey = (perm: string | PermissionObject): string => {
+  if (typeof perm === "string") return perm;
+  return perm.key || perm.name || String(perm);
+};
+
 export interface RbacRole {
   id: string;
   name: string;
@@ -63,21 +80,38 @@ export const getRbacRoleDetails = async (roleId: string): Promise<RbacRoleMatrix
 };
 
 export const getRbacUserPermissions = async (userId: string): Promise<string[]> => {
-  const res = await api.get<{
-    userId: string;
-    permissions: Record<string, boolean>;
-  }>("/rbac/users/permissions", {
-    params: { userId },
-  });
-  // Backend returns { permissions: { "key": true|false } } — extract granted keys
-  const perms = res.data?.permissions;
-  if (perms && typeof perms === "object" && !Array.isArray(perms)) {
-    return Object.entries(perms)
-      .filter(([, granted]) => granted === true)
-      .map(([key]) => key);
+  try {
+    const res = await api.get<{
+      userId: string;
+      permissions: Record<string, boolean>;
+    }>("/rbac/users/permissions", {
+      params: { userId },
+    });
+    // Backend returns { permissions: { "key": true|false } } — extract granted keys
+    const data = res.data;
+    if (!data) return [];
+    
+    // Check if data is an array
+    if (Array.isArray(data)) {
+      return data.map(getPermissionKey);
+    }
+    
+    const perms = data.permissions;
+    if (perms && typeof perms === "object" && !Array.isArray(perms)) {
+      return Object.entries(perms)
+        .filter(([, granted]) => granted === true)
+        .map(([key]) => key);
+    }
+    
+    // Check if data itself is permissions array
+    if (Array.isArray(data.permissions)) {
+      return data.permissions.map(getPermissionKey);
+    }
+    return [];
+  } catch (err) {
+    console.error("Error fetching user permissions:", err);
+    return [];
   }
-  // Fallback: if it's already an array, return as-is
-  return Array.isArray(res.data) ? (res.data as unknown as string[]) : [];
 };
 
 export const getRbacHealth = async (): Promise<RbacHealthResponse> => {

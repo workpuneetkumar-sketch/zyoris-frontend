@@ -4,8 +4,6 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import {
-  getRoles,
-  getRole,
   createRole,
   updateRole,
   deleteRole,
@@ -284,13 +282,13 @@ export default function RolesPage() {
     }
   }, [user, router]);
 
-  /* ── Fetch Roles (GET /roles) ───────────────────────────────────────── */
+  /* ── Fetch Roles (GET /rbac/roles) ───────────────────────────────────── */
 
   const fetchRoles = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getRoles();
+      const data = await getRbacRoles();
       const rolesData = Array.isArray(data) ? data : [];
       // Process permissions to extract keys
       const processedRoles = rolesData.map((role) => ({
@@ -323,12 +321,12 @@ export default function RolesPage() {
     setShowForm(true);
   }
 
-  /* GET /roles/:roleId — detail view */
+  /* GET /rbac/roles/:roleId — detail view */
   async function openDetail(role: RbacRoleMatrixItem) {
     setViewRole(role);
     setViewLoading(true);
     try {
-      const detail = await getRole(role.id);
+      const detail = await getRbacRoleDetails(role.id);
       // Process detail permissions
       const processedDetail = {
         ...detail,

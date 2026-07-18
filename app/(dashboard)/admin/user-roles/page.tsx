@@ -4,8 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { getUserRole, assignUserRole, getUsersByRole, UserByRoleItem } from "@/lib/api/userRolesApi";
-import { getRbacUserPermissions } from "@/lib/api/rbacApi";
-import { getRoles } from "@/lib/api/rolesApi";
+import { getRbacUserPermissions, getRbacRoles } from "@/lib/api/rbacApi";
 import { RbacRoleMatrixItem } from "@/lib/api/rbacApi";
 import { toast } from "react-toastify";
 import {
@@ -293,7 +292,7 @@ export default function UserRolesPage() {
     setError(null);
     try {
       // 1. Load all roles
-      const allRoles: RbacRoleMatrixItem[] = await getRoles().then((d) =>
+      const allRoles: RbacRoleMatrixItem[] = await getRbacRoles().then((d) =>
         Array.isArray(d) ? d : []
       );
       // Process permissions to extract keys
@@ -544,7 +543,7 @@ export default function UserRolesPage() {
                     )}
 
                     {openDropdown === entry.user.id && (
-                      <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-20 py-1">
+                      <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-100 rounded-xl shadow-xl z-20 py-1 max-h-64 overflow-y-auto">
                         {roles.length === 0 ? (
                           <p className="text-xs text-gray-400 px-4 py-3">No roles available</p>
                         ) : (
