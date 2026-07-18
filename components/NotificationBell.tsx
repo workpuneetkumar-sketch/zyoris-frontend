@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Bell, Check, CheckCheck, Info, BellRing, ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import classNames from "classnames";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -113,6 +114,7 @@ export function NotificationBell({
     onMarkRead,
     onMarkAllRead,
 }: NotificationBellProps) {
+    const router = useRouter();
     const [localNotifications, setLocalNotifications] = useState<AppNotification[]>([]);
     const [open, setOpen] = useState(false);
     const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
@@ -201,14 +203,11 @@ export function NotificationBell({
             {/* Bell button */}
             <button
                 ref={buttonRef}
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => router.push("/notifications")}
                 className={classNames(
-                    "relative w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200",
-                    open ? "bg-blue-50 text-blue-600" : "hover:bg-gray-100 text-gray-500 hover:text-gray-900"
+                    "relative w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-200 hover:bg-gray-100 text-gray-500 hover:text-gray-900"
                 )}
                 aria-label="Notifications"
-                aria-haspopup="true"
-                aria-expanded={open}
             >
                 {unreadCount > 0 ? (
                     <BellRing size={20} strokeWidth={2} className="animate-bounce" />

@@ -297,6 +297,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
   const logoutTriggeredRef = useRef(false);
+  const sidebarNavRef = useRef<HTMLDivElement>(null);
+  const SIDEBAR_SCROLL_KEY = "sidebar-scroll-position";
 
   // Real-time notifications (Task 6)
   const {
@@ -304,6 +306,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     markRead: markNotificationRead,
     markAllRead: markAllNotificationsRead,
   } = useNotifications();
+
+  // Save sidebar scroll position when scrolling
+  const handleSidebarScroll = () => {
+    if (sidebarNavRef.current) {
+      localStorage.setItem(SIDEBAR_SCROLL_KEY, sidebarNavRef.current.scrollTop.toString());
+    }
+  };
+
+  // Restore sidebar scroll position on mount or path change
+  useEffect(() => {
+    const savedScrollTop = localStorage.getItem(SIDEBAR_SCROLL_KEY);
+    if (sidebarNavRef.current && savedScrollTop) {
+      sidebarNavRef.current.scrollTop = parseInt(savedScrollTop, 10);
+    }
+  }, [pathname]);
 
   const closeLogoutModal = useCallback(() => {
     setLogoutModalOpen(false);
@@ -588,7 +605,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-5 pt-6 pb-5">
           <LogoMark />
         </div>
-        <nav className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto">
+        <nav 
+          ref={sidebarNavRef}
+          onScroll={handleSidebarScroll}
+          className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto"
+        >
           <NavLinks />
         </nav>
         <UserFooter />
