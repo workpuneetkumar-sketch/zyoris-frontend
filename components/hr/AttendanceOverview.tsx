@@ -1,18 +1,53 @@
-import React from 'react';
+"use client";
+
+import React, { useEffect, useState } from 'react';
 import Link from "next/link";
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { fetchTodaySummary } from '@/lib/api/hrApi';
 
 export default function AttendanceOverview() {
-  const attendanceData = [
-    { label: 'Present', value: 198, percentage: 77.3, colorClass: 'bg-emerald-500', hex: '#10b981' },
-    { label: 'Absent', value: 28, percentage: 10.9, colorClass: 'bg-rose-500', hex: '#f43f5e' },
-    { label: 'Late', value: 18, percentage: 7.0, colorClass: 'bg-amber-400', hex: '#fbbf24' },
-    { label: 'Half Day', value: 12, percentage: 4.8, colorClass: 'bg-blue-400', hex: '#60a5fa' },
-  ];
+  const [attendanceData, setAttendanceData] = useState([
+    { label: 'Present', value: 0, percentage: 0, colorClass: 'bg-emerald-500', hex: '#10b981' },
+    { label: 'Absent', value: 0, percentage: 0, colorClass: 'bg-rose-500', hex: '#f43f5e' },
+    { label: 'Late', value: 0, percentage: 0, colorClass: 'bg-amber-400', hex: '#fbbf24' },
+    { label: 'Half Day', value: 0, percentage: 0, colorClass: 'bg-blue-400', hex: '#60a5fa' },
+  ]);
+  const [loading, setLoading] = useState(true);
+  const [avgAttendance, setAvgAttendance] = useState(0);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const summary = await fetchTodaySummary();
+
+        const total = summary?.totalEmployees || 1;
+        const present = summary?.checkedIn || summary?.presentToday || 0;
+        const absent = summary?.absent || 0;
+        const late = summary?.late || 0;
+        const checkedOut = summary?.checkedOut || 0;
+        const halfDay = Math.max(0, total - present - absent - late - checkedOut);
+        const avgPct = total > 0 ? Math.round((present / total) * 1000) / 10 : 0;
+
+        setAttendanceData([
+          { label: 'Present', value: present, percentage: total > 0 ? Math.round((present / total) * 1000) / 10 : 0, colorClass: 'bg-emerald-500', hex: '#10b981' },
+          { label: 'Absent', value: absent, percentage: total > 0 ? Math.round((absent / total) * 1000) / 10 : 0, colorClass: 'bg-rose-500', hex: '#f43f5e' },
+          { label: 'Late', value: late, percentage: total > 0 ? Math.round((late / total) * 1000) / 10 : 0, colorClass: 'bg-amber-400', hex: '#fbbf24' },
+          { label: 'Half Day', value: halfDay, percentage: total > 0 ? Math.round((halfDay / total) * 1000) / 10 : 0, colorClass: 'bg-blue-400', hex: '#60a5fa' },
+        ]);
+        setAvgAttendance(avgPct);
+      } catch (err) {
+        console.error("Failed to load attendance overview:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   return (
     <div className="bg-white border border-slate-100 rounded-xl p-4 sm:p-6 flex flex-col h-full shadow-sm">
-      
+
       {/* Header */}
       <div className="flex justify-between items-center mb-4 sm:mb-6">
         <h2 className="text-sm sm:text-base font-semibold text-slate-800">Attendance Overview</h2>
@@ -24,31 +59,39 @@ export default function AttendanceOverview() {
 
       {/* Main Content (Chart & Legend) */}
       <div className="flex flex-col items-center gap-5 sm:gap-6 flex-1">
-        
+
         {/* Donut Chart - Centered on mobile */}
         <div className="relative w-36 h-36 sm:w-40 sm:h-40 shrink-0 mx-auto">
           <svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90 drop-shadow-sm">
-            {/* Present */}
-            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={attendanceData[0].hex} strokeWidth="6" 
-              strokeDasharray="76.3 23.7" strokeDashoffset="0" className="transition-all duration-1000 ease-out" />
-            
-            {/* Absent */}
-            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={attendanceData[1].hex} strokeWidth="6" 
-              strokeDasharray="9.9 90.1" strokeDashoffset="-77.3" />
-            
-            {/* Late */}
-            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={attendanceData[2].hex} strokeWidth="6" 
-              strokeDasharray="6 94" strokeDashoffset="-88.2" />
-            
-            {/* Half Day */}
-            <circle cx="21" cy="21" r="15.91549430918954" fill="transparent" stroke={attendanceData[3].hex} strokeWidth="6" 
-              strokeDasharray="4.8 95.2" strokeDashoffset="-95.2" />
+            {attendanceData.map((item, index) => {
+              const offset = attendanceData
+                .slice(0, index)
+                .reduce((sum, d) => sum + d.percentage, 0);
+              return (
+                <circle
+                  key={item.label}
+                  cx="21" cy="21" r="15.91549430918954"
+                  fill="transparent"
+                  stroke={item.hex}
+                  strokeWidth="6"
+                  strokeDasharray={`${item.percentage} ${100 - item.percentage}`}
+                  strokeDashoffset={-offset}
+                  className="transition-all duration-1000 ease-out"
+                />
+              );
+            })}
           </svg>
 
           {/* Center Text */}
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-xl sm:text-2xl font-bold text-slate-800">77.3%</span>
-            <span className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5 text-center px-1 leading-tight">Average Attendance</span>
+            {loading ? (
+              <Loader2 className="w-6 h-6 text-slate-400 animate-spin" />
+            ) : (
+              <>
+                <span className="text-xl sm:text-2xl font-bold text-slate-800">{avgAttendance}%</span>
+                <span className="text-[10px] sm:text-xs text-slate-500 font-medium mt-0.5 text-center px-1 leading-tight">Average Attendance</span>
+              </>
+            )}
           </div>
         </div>
 

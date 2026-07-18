@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from 'react';
-import { Users, CalendarCheck, UserPlus, Clock } from 'lucide-react';
+import { Users, CalendarCheck, UserPlus, Clock, UserCheck } from 'lucide-react';
 import { fetchTodaySummary, getEmployees, fetchLeaves } from '@/lib/api/hrApi';
 
 interface StatsData {
@@ -9,6 +9,7 @@ interface StatsData {
   presentToday: number;
   onLeave: number;
   newHires: number;
+  activeEmployees: number;
 }
 
 export default function HrStatsCards() {
@@ -17,6 +18,7 @@ export default function HrStatsCards() {
     presentToday: 0,
     onLeave: 0,
     newHires: 0,
+    activeEmployees: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +37,7 @@ export default function HrStatsCards() {
 
         let presentToday = 0;
         if (todaySummary) {
-          presentToday = 
+          presentToday =
             (todaySummary as any).presentToday ||
             (todaySummary as any).checkedIn ||
             (todaySummary as any).present ||
@@ -43,6 +45,7 @@ export default function HrStatsCards() {
         }
 
         const totalEmployees = employees.length;
+        const activeEmployees = employees.filter(e => e.status === 'ACTIVE').length;
 
         const today = new Date().toISOString().split('T')[0];
         const onLeaveToday = approvedLeaves.filter((leave) => {
@@ -51,7 +54,7 @@ export default function HrStatsCards() {
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
+
         const newHires = employees.filter((emp) => {
           if (!emp.joinDate) return false;
           const joinDate = new Date(emp.joinDate);
@@ -60,20 +63,21 @@ export default function HrStatsCards() {
 
         setStats({
           totalEmployees,
-          presentToday,
+          presentToday: Math.min(presentToday, totalEmployees),
           onLeave: onLeaveToday,
           newHires,
+          activeEmployees,
         });
 
       } catch (error) {
         console.error('Failed to fetch HR stats:', error);
         setError('Failed to load statistics');
-        
         setStats({
           totalEmployees: 0,
           presentToday: 0,
           onLeave: 0,
           newHires: 0,
+          activeEmployees: 0,
         });
       } finally {
         setLoading(false);
@@ -87,7 +91,7 @@ export default function HrStatsCards() {
     {
       title: 'Total Employees',
       value: stats.totalEmployees.toLocaleString(),
-      subtitle: loading ? 'Loading...' : 'Current headcount',
+      subtitle: loading ? 'Loading...' : `${stats.activeEmployees} active`,
       subtitleColor: 'text-blue-600',
       icon: Users,
       iconBg: 'bg-blue-50',
@@ -96,8 +100,8 @@ export default function HrStatsCards() {
     {
       title: 'Present Today',
       value: stats.presentToday.toLocaleString(),
-      subtitle: stats.totalEmployees > 0 
-        ? `${((stats.presentToday / stats.totalEmployees) * 100).toFixed(1)}% attendance` 
+      subtitle: stats.totalEmployees > 0
+        ? `${((stats.presentToday / stats.totalEmployees) * 100).toFixed(1)}% attendance`
         : '0% attendance',
       subtitleColor: 'text-emerald-600',
       icon: CalendarCheck,
@@ -107,8 +111,8 @@ export default function HrStatsCards() {
     {
       title: 'On Leave',
       value: stats.onLeave.toLocaleString(),
-      subtitle: stats.totalEmployees > 0 
-        ? `${((stats.onLeave / stats.totalEmployees) * 100).toFixed(1)}% of total` 
+      subtitle: stats.totalEmployees > 0
+        ? `${((stats.onLeave / stats.totalEmployees) * 100).toFixed(1)}% of total`
         : '0% of total',
       subtitleColor: 'text-amber-600',
       icon: Clock,
@@ -130,10 +134,10 @@ export default function HrStatsCards() {
     <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
       {statsConfig.map((stat, index) => {
         const Icon = stat.icon;
-        
+
         return (
-          <div 
-            key={index} 
+          <div
+            key={index}
             className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 flex items-center gap-3 sm:gap-4 shadow-sm hover:shadow-md transition-all duration-200"
           >
             <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${stat.iconBg}`}>

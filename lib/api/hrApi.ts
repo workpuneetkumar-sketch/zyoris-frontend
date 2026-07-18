@@ -327,6 +327,29 @@ export async function fetchAttendance(filters?: {
 }
 
 /**
+ * Export attendance as CSV
+ */
+export async function exportAttendance(filters?: {
+  startDate?: string;
+  endDate?: string;
+}): Promise<Blob> {
+  try {
+    const params: Record<string, string> = {};
+    if (filters?.startDate) params.startDate = filters.startDate;
+    if (filters?.endDate) params.endDate = filters.endDate;
+
+    const res = await api.get("/hr/attendance/export", {
+      params,
+      responseType: "blob",
+    });
+    return res.data;
+  } catch (error: any) {
+    console.error('Error exporting attendance:', error);
+    throw new Error(error.response?.data?.message || 'Failed to export attendance');
+  }
+}
+
+/**
  * Fetch today's attendance summary
  */
 export async function fetchTodaySummary(): Promise<HRStats> {

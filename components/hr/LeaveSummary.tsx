@@ -1,46 +1,47 @@
-import React from 'react';
+"use client";
+
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ChevronDown, ChevronRight, UserCheck, UserMinus, Briefcase, Baby } from 'lucide-react';
+import { ChevronDown, ChevronRight, UserCheck, UserMinus, Briefcase, Baby, Loader2 } from 'lucide-react';
+import { fetchLeaves } from '@/lib/api/hrApi';
 
 export default function LeaveSummary() {
-  const leaveData = [
-    {
-      title: 'Annual Leave',
-      count: 45,
-      status: 'Available',
-      icon: UserCheck,
-      iconColor: 'text-emerald-600',
-      iconBg: 'bg-emerald-50',
-    },
-    {
-      title: 'Sick Leave',
-      count: 12,
-      status: 'Available',
-      icon: UserMinus,
-      iconColor: 'text-rose-500',
-      iconBg: 'bg-rose-50',
-    },
-    {
-      title: 'Casual Leave',
-      count: 8,
-      status: 'Available',
-      icon: Briefcase,
-      iconColor: 'text-indigo-500',
-      iconBg: 'bg-indigo-50',
-    },
-    {
-      title: 'Maternity Leave',
-      count: 2,
-      status: 'Available',
-      icon: Baby,
-      iconColor: 'text-rose-400',
-      iconBg: 'bg-rose-50',
-    },
-  ];
+  const [leaveData, setLeaveData] = useState([
+    { title: 'Annual Leave', count: 0, status: 'Available', icon: UserCheck, iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50' },
+    { title: 'Sick Leave', count: 0, status: 'Available', icon: UserMinus, iconColor: 'text-rose-500', iconBg: 'bg-rose-50' },
+    { title: 'Casual Leave', count: 0, status: 'Available', icon: Briefcase, iconColor: 'text-indigo-500', iconBg: 'bg-indigo-50' },
+    { title: 'Maternity Leave', count: 0, status: 'Available', icon: Baby, iconColor: 'text-rose-400', iconBg: 'bg-rose-50' },
+  ]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const leaves = await fetchLeaves();
+
+        const sickLeaves = leaves.filter(l => l.type === 'SICK' && l.status === 'APPROVED').length;
+        const casualLeaves = leaves.filter(l => l.type === 'CASUAL' && l.status === 'APPROVED').length;
+        const earnedLeaves = leaves.filter(l => l.type === 'EARNED' && l.status === 'APPROVED').length;
+
+        setLeaveData([
+          { title: 'Annual Leave', count: earnedLeaves, status: 'Available', icon: UserCheck, iconColor: 'text-emerald-600', iconBg: 'bg-emerald-50' },
+          { title: 'Sick Leave', count: sickLeaves, status: 'Available', icon: UserMinus, iconColor: 'text-rose-500', iconBg: 'bg-rose-50' },
+          { title: 'Casual Leave', count: casualLeaves, status: 'Available', icon: Briefcase, iconColor: 'text-indigo-500', iconBg: 'bg-indigo-50' },
+          { title: 'Maternity Leave', count: 0, status: 'Available', icon: Baby, iconColor: 'text-rose-400', iconBg: 'bg-rose-50' },
+        ]);
+      } catch (err) {
+        console.error("Failed to load leave summary:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   return (
     <div className="bg-white border border-slate-100 rounded-xl p-4 sm:p-6 flex flex-col h-full shadow-sm">
-      
+
       {/* Header */}
       <div className="flex justify-between items-center mb-3 sm:mb-4">
         <h2 className="text-sm sm:text-base font-semibold text-slate-800">Leave Summary</h2>
@@ -67,11 +68,15 @@ export default function LeaveSummary() {
                     {item.title}
                   </span>
                 </div>
-                
+
                 <div className="flex items-center gap-6 sm:gap-10">
                   {/* Count */}
                   <span className="text-xs sm:text-sm font-bold text-slate-800 w-4 text-center">
-                    {item.count}
+                    {loading ? (
+                      <Loader2 className="w-4 h-4 text-slate-400 animate-spin mx-auto" />
+                    ) : (
+                      item.count
+                    )}
                   </span>
                   {/* Status */}
                   <span className="text-[11px] sm:text-[13px] font-medium text-emerald-600 w-14 sm:w-16 text-right">
