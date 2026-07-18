@@ -22,9 +22,15 @@ const api = axios.create({
 
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        // Skip auth headers for auth endpoints
-        const isAuthEndpoint = config.url?.includes("/auth") || false;
-        if (typeof window !== "undefined" && !isAuthEndpoint) {
+        // Always attach the token for every request — including /auth/me, /rbac/me etc.
+        // Only skip for login/register/refresh endpoints that don't need a Bearer token.
+        const url = config.url || "";
+        const isUnauthenticatedEndpoint =
+            url.includes("/auth/login") ||
+            url.includes("/auth/register") ||
+            url.includes("/auth/refresh");
+
+        if (typeof window !== "undefined" && !isUnauthenticatedEndpoint) {
             const raw = localStorage.getItem("zyoris-auth");
 
             if (raw) {
@@ -145,10 +151,15 @@ api.interceptors.response.use(
             return api(originalRequest);
         }
 
-        // Prevent infinite retry loop for 401, skip auth endpoints
-        const isAuthEndpoint = originalRequest?.url?.includes("/auth") || false;
+        // Prevent infinite retry loop for 401, skip unauthenticated endpoints
+        const reqUrl = originalRequest?.url || "";
+        const isUnauthenticatedEndpoint =
+            reqUrl.includes("/auth/login") ||
+            reqUrl.includes("/auth/register") ||
+            reqUrl.includes("/auth/refresh");
+
         if (
-            !isAuthEndpoint &&
+            !isUnauthenticatedEndpoint &&
             error.response?.status === 401 &&
             !originalRequest?._retry
         ) {

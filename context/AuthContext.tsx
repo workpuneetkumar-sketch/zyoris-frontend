@@ -159,24 +159,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Update with fresh server data (may differ from cached user)
         setUser(userData);
         setIsAuthenticated(true);
-      } catch {
-        // Token is genuinely invalid — clear everything and send to login
-        clearAuthState();
-        setUser(null);
-        setToken(null);
-        setUserPermissions({});
-        setSidebarItems([]);
-        setVisibleDashboards([]);
-        setVisibleModules([]);
-        setIsAuthenticated(false);
-        // Only push to login if we didn't already finish initializing above
-        // (i.e., no cached user was available to show the page)
-        if (!cachedUser) {
-          // Router not available here synchronously; the layout's own
-          // useEffect will handle the redirect once isAuthenticated=false.
+      } catch (err: any) {
+        // Only clear the session on a definitive 401 Unauthorized.
+        // Network errors, timeouts, 5xx backend errors, etc. should NOT
+        // log the user out — keep the optimistic session alive.
+        const status = err?.response?.status;
+        const isDefinitelyUnauthorized = status === 401;
+
+        if (isDefinitelyUnauthorized) {
+          // Token is genuinely expired/invalid — clear and let layout redirect
+          clearAuthState();
+          setUser(null);
+          setToken(null);
+          setUserPermissions({});
+          setSidebarItems([]);
+          setVisibleDashboards([]);
+          setVisibleModules([]);
+          setIsAuthenticated(false);
+        } else {
+          // Network/server error — keep the optimistic session; user stays logged in
+          console.warn("Session validation failed (non-auth error), keeping session:", err?.message || err);
         }
       } finally {
-        // Always make sure initializing is cleared (in case no cached user was set above)
+        // Always clear the initializing flag
         setIsInitializing(false);
       }
     };
