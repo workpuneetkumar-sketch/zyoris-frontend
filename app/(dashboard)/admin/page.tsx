@@ -502,8 +502,15 @@ export default function AdminDashboardPage() {
             Admin Only
           </span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {[
+            {
+              href: "/admin/rbac",
+              icon: Shield,
+              title: "RBAC Console",
+              desc: "Unified user role assignment, role overview, and RBAC metrics",
+              color: "slate",
+            },
             {
               href: "/admin/roles",
               icon: KeyRound,
@@ -528,6 +535,7 @@ export default function AdminDashboardPage() {
           ].map(({ href, icon: Icon, title, desc, color }) => {
             const colorMap: Record<string, { bg: string; text: string; hover: string }> = {
               blue: { bg: "bg-blue-50", text: "text-blue-600", hover: "hover:border-blue-300 hover:bg-blue-50/40" },
+              slate: { bg: "bg-slate-50", text: "text-slate-700", hover: "hover:border-slate-300 hover:bg-slate-50/80" },
               purple: { bg: "bg-purple-50", text: "text-purple-600", hover: "hover:border-purple-300 hover:bg-purple-50/40" },
               emerald: { bg: "bg-emerald-50", text: "text-emerald-600", hover: "hover:border-emerald-300 hover:bg-emerald-50/40" },
             };
