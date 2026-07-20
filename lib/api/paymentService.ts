@@ -1,6 +1,6 @@
 // lib/api/paymentService.ts
 // Central service for Razorpay payment API calls.
-// Backend endpoints: create-order, verify, status, webhook.
+// All 8 payment endpoints: create-order, verify, status, history, health, analytics, retry, status/:orderId
 
 import api from "./api";
 
@@ -68,6 +68,7 @@ export interface CreateOrderResponse {
   amount: number;
   currency: string;
   key?: string;
+  paymentId?: string;
 }
 
 // ── Verify Payment ──────────────────────────────────────────
@@ -83,6 +84,7 @@ export interface VerifyPaymentResponse {
   success: boolean;
   message?: string;
   invoiceId?: string;
+  paymentId?: string;
 }
 
 // ── Payment Status ──────────────────────────────────────────
@@ -99,13 +101,100 @@ export interface PaymentStatusResponse {
   updatedAt: string;
 }
 
+// ── Health ──────────────────────────────────────────────────
+
+export interface SchedulerStatus {
+  configured: boolean;
+  lastRun: string;
+  expiredProcessed: number;
+  reconciled: number;
+  stuck: number;
+  failed: number;
+}
+
+export interface PaymentHealthResponse {
+  database: string;
+  razorpay: string;
+  webhookSecret: boolean;
+  scheduler: SchedulerStatus;
+}
+
+// ── Analytics ───────────────────────────────────────────────
+
+export interface PaymentAnalyticsResponse {
+  totalPayments: number;
+  successfulPayments: number;
+  failedPayments: number;
+  refundedPayments: number;
+  totalRevenue: number;
+  failedRevenue: number;
+  successRate: number;
+  statusDistribution: { status: string; count: number }[];
+  recentPayments: {
+    id: string;
+    invoiceId: string;
+    amount: number;
+    paidAt?: string;
+    method?: string | null;
+  }[];
+}
+
+// ── Retry ───────────────────────────────────────────────────
+
+export interface RetryPaymentResponse {
+  orderId: string;
+  amount: number;
+  currency: string;
+  key?: string;
+  paymentId?: string;
+}
+
 // ════════════════════════════════════════════════════════════════
-// API FUNCTIONS (only working backend endpoints)
+// API FUNCTIONS
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Step 1 – Create a Razorpay order on the backend.
+ * CHECK PAYMENT SUBSYSTEM HEALTH
+ * GET /payments/health
+ */
+export async function getPaymentHealth(): Promise<PaymentHealthResponse> {
+  try {
+    const res = await api.get("/payments/health");
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to check payment health";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * GET PAYMENT EVENT HISTORY
+ * GET /payments/:paymentId/history
+ */
+export async function getPaymentHistory(
+  paymentId: string
+): Promise<PaymentEvent[]> {
+  try {
+    const res = await api.get(`/payments/${paymentId}/history`);
+    const data = res.data?.data ?? res.data;
+    return Array.isArray(data) ? data : [];
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to fetch payment history";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * CREATE RAZORPAY ORDER
  * POST /payments/create-order
+ * Step 1 – Create a Razorpay order on the backend.
  * Returns the order details needed to open the Razorpay checkout.
  */
 export async function createRazorpayOrder(
@@ -127,6 +216,7 @@ export async function createRazorpayOrder(
       amount: data.amount ?? amount,
       currency: data.currency ?? "INR",
       key: data.key,
+      paymentId: data.paymentId,
     };
   } catch (error: any) {
     const msg =
@@ -138,8 +228,9 @@ export async function createRazorpayOrder(
 }
 
 /**
- * Step 2 – Verify the payment signature on the backend.
+ * VERIFY RAZORPAY PAYMENT
  * POST /payments/verify
+ * Step 2 – Verify the payment signature on the backend.
  * Must be called after the Razorpay checkout completes successfully.
  * The backend validates the HMAC signature and marks the invoice as PAID.
  */
@@ -154,6 +245,7 @@ export async function verifyRazorpayPayment(
       success: data?.success ?? true,
       message: data?.message,
       invoiceId: data?.invoiceId ?? payload.invoiceId,
+      paymentId: data?.paymentId,
     };
   } catch (error: any) {
     const msg =
@@ -165,7 +257,7 @@ export async function verifyRazorpayPayment(
 }
 
 /**
- * Get the latest status of a specific payment.
+ * GET LATEST PAYMENT STATUS (by payment DB ID)
  * GET /payments/:paymentId/status
  */
 export async function getPaymentStatus(
@@ -180,6 +272,90 @@ export async function getPaymentStatus(
       error?.response?.data?.message ||
       error?.message ||
       "Failed to fetch payment status";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * GET PAYMENT STATUS BY RAZORPAY ORDER ID
+ * GET /payments/status/:orderId
+ */
+export async function getPaymentStatusByOrderId(
+  orderId: string
+): Promise<PaymentStatusResponse> {
+  try {
+    const res = await api.get(`/payments/status/${orderId}`);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to fetch payment status by order";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * GET PAYMENT ANALYTICS
+ * GET /payments/analytics
+ */
+export async function getPaymentAnalytics(): Promise<PaymentAnalyticsResponse> {
+  try {
+    const res = await api.get("/payments/analytics");
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to fetch payment analytics";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * RETRY PAYMENT FOR AN INVOICE
+ * POST /payments/retry/:invoiceId
+ */
+export async function retryPayment(
+  invoiceId: string
+): Promise<RetryPaymentResponse> {
+  try {
+    const res = await api.post(`/payments/retry/${invoiceId}`);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to retry payment";
+    throw new Error(msg);
+  }
+}
+
+/**
+ * LIST ALL PAYMENTS
+ * GET /payments
+ * Returns all payments for the current organization with optional filters.
+ */
+export async function listPayments(filters?: {
+  status?: string;
+  invoiceId?: string;
+}): Promise<PaymentRecord[]> {
+  try {
+    const params: Record<string, string> = {};
+    if (filters?.status) params.status = filters.status;
+    if (filters?.invoiceId) params.invoiceId = filters.invoiceId;
+
+    const res = await api.get("/payments", { params });
+    const data = res.data?.data ?? res.data;
+    return Array.isArray(data) ? data : [];
+  } catch (error: any) {
+    const msg =
+      error?.response?.data?.message ||
+      error?.message ||
+      "Failed to list payments";
     throw new Error(msg);
   }
 }

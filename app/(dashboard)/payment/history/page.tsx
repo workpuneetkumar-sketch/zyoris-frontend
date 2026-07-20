@@ -18,7 +18,9 @@ import {
   getInvoices,
   Invoice,
 } from "@/lib/api/finance/invoicesApi";
-import { usePayment, PaymentRecord } from "@/context/PaymentContext";
+import { listPayments } from "@/lib/api/paymentService";
+import type { PaymentRecord } from "@/lib/api/paymentService";
+import { usePayment, PaymentRecord as ContextPaymentRecord } from "@/context/PaymentContext";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -47,18 +49,23 @@ const PAGE_SIZE = 10;
 
 export default function PaymentHistoryPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const { getPayments } = usePayment();
 
-  const loadInvoices = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getInvoices();
-      setInvoices(data);
+      const [invData, paymentData] = await Promise.all([
+        getInvoices(),
+        listPayments(),
+      ]);
+      setInvoices(invData);
+      setPayments(paymentData);
     } catch (err: any) {
       setError(err.message || "Failed to load payments");
     } finally {
@@ -67,26 +74,54 @@ export default function PaymentHistoryPage() {
   }, []);
 
   useEffect(() => {
-    loadInvoices();
-  }, [loadInvoices]);
+    loadData();
+  }, [loadData]);
 
   // Build flat list of all payments across invoices
   const allPayments = useMemo(() => {
-    const payments: (PaymentRecord & { invoiceNumber: string; clientName: string })[] = [];
+    const pMap: Record<string, { invoiceNumber: string; clientName: string }> = {};
+    invoices.forEach((inv) => {
+      pMap[inv.id] = { invoiceNumber: inv.invoiceNumber, clientName: inv.clientName };
+    });
+
+    const result: (PaymentRecord & { invoiceNumber: string; clientName: string })[] = [];
+
+    // Add real API payments
+    payments.forEach((p) => {
+      const invInfo = pMap[p.invoiceId] || { invoiceNumber: p.invoiceId.slice(0, 12), clientName: "" };
+      result.push({
+        ...p,
+        invoiceNumber: invInfo.invoiceNumber,
+        clientName: invInfo.clientName,
+      });
+    });
+
+    // Add local context payments (for backward compat)
     invoices.forEach((inv) => {
       const invPayments = getPayments(inv.id);
-      invPayments.forEach((p) => {
-        payments.push({
-          ...p,
+      invPayments.forEach((cp) => {
+        result.push({
+          id: cp.id,
+          invoiceId: inv.id,
+          orderId: cp.transactionId,
+          amount: cp.amount,
+          currency: "INR",
+          method: cp.method as any,
+          status: cp.status === "COMPLETED" ? "PAID" : cp.status as any,
+          retryCount: 0,
           invoiceNumber: inv.invoiceNumber,
           clientName: inv.clientName,
+          createdAt: cp.date,
+          updatedAt: cp.date,
+          paidAt: cp.date,
         });
       });
     });
+
     // Sort by date, newest first
-    payments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    return payments;
-  }, [invoices, getPayments]);
+    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    return result;
+  }, [invoices, payments, getPayments]);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return allPayments;
@@ -95,7 +130,7 @@ export default function PaymentHistoryPage() {
       (p) =>
         p.invoiceNumber.toLowerCase().includes(q) ||
         p.clientName.toLowerCase().includes(q) ||
-        p.transactionId?.toLowerCase().includes(q)
+        (p.razorpayPaymentId || p.orderId || "").toLowerCase().includes(q)
     );
   }, [allPayments, searchQuery]);
 
@@ -117,7 +152,7 @@ export default function PaymentHistoryPage() {
             </p>
           </div>
           <button
-            onClick={loadInvoices}
+            onClick={loadData}
             disabled={loading}
             className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-700 rounded-xl transition-all shadow-sm"
           >
@@ -164,7 +199,7 @@ export default function PaymentHistoryPage() {
             <div className="flex flex-col items-center justify-center py-16">
               <AlertCircle size={32} className="text-red-400 mb-3" />
               <p className="text-sm text-gray-900 mb-4">{error}</p>
-              <button onClick={loadInvoices} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl">
+              <button onClick={loadData} className="px-4 py-2 bg-blue-600 text-white text-sm rounded-xl">
                 <RefreshCw size={14} className="inline mr-1" /> Retry
               </button>
             </div>
@@ -198,7 +233,7 @@ export default function PaymentHistoryPage() {
                   <tbody className="divide-y divide-gray-50">
                     {paginatedPayments.map((p) => (
                       <tr key={p.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-5 py-3.5 text-sm text-gray-600">{formatDate(p.date)}</td>
+                        <td className="px-5 py-3.5 text-sm text-gray-600">{formatDate(p.createdAt || p.paidAt || "")}</td>
                         <td className="px-4 py-3.5 text-sm font-medium text-gray-800">{p.invoiceNumber}</td>
                         <td className="px-4 py-3.5 text-sm text-gray-600">{p.clientName}</td>
                         <td className="px-4 py-3.5 text-center">
@@ -207,7 +242,7 @@ export default function PaymentHistoryPage() {
                           </span>
                         </td>
                         <td className="px-4 py-3.5 text-right text-sm font-semibold text-gray-900">{formatCurrency(p.amount)}</td>
-                        <td className="px-4 py-3.5 text-xs font-mono text-gray-500">{p.transactionId || "—"}</td>
+                        <td className="px-4 py-3.5 text-xs font-mono text-gray-500">{p.razorpayPaymentId || p.orderId || "—"}</td>
                         <td className="px-4 py-3.5 text-center">
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <CheckCircle2 size={10} /> {p.status}

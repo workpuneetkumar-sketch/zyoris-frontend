@@ -27,7 +27,10 @@ import {
   getInvoices,
   Invoice,
 } from "@/lib/api/finance/invoicesApi";
+import { getPaymentAnalytics } from "@/lib/api/paymentService";
+import type { PaymentAnalyticsResponse } from "@/lib/api/paymentService";
 import { usePayment } from "@/context/PaymentContext";
+import PaymentErrorBoundary from "@/components/payment/ErrorBoundary";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -51,18 +54,31 @@ const STATUS_COLORS: Record<string, string> = {
 // COMPONENT
 // ═══════════════════════════════════════════════════════════════
 
-export default function PaymentAnalyticsPage() {
+export default function PaymentAnalyticsPageWrapper() {
+  return (
+    <PaymentErrorBoundary pageName="Payment Analytics">
+      <PaymentAnalyticsPage />
+    </PaymentErrorBoundary>
+  );
+}
+
+function PaymentAnalyticsPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [paymentAnalytics, setPaymentAnalytics] = useState<PaymentAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { getPayments } = usePayment();
 
-  const loadInvoices = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getInvoices();
-      setInvoices(data);
+      const [invData, analyticsData] = await Promise.all([
+        getInvoices(),
+        getPaymentAnalytics(),
+      ]);
+      setInvoices(invData);
+      setPaymentAnalytics(analyticsData);
     } catch (err: any) {
       setError(err.message || "Failed to load analytics");
     } finally {
@@ -71,8 +87,8 @@ export default function PaymentAnalyticsPage() {
   }, []);
 
   useEffect(() => {
-    loadInvoices();
-  }, [loadInvoices]);
+    loadData();
+  }, [loadData]);
 
   // ── Loading ───────────────────────────────────────────────
   if (loading) {
@@ -100,7 +116,7 @@ export default function PaymentAnalyticsPage() {
           <h2 className="text-xl font-bold text-gray-900 mb-2">Failed to load analytics</h2>
           <p className="text-sm text-gray-500 mb-6">{error}</p>
           <button
-            onClick={loadInvoices}
+            onClick={loadData}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm"
           >
             <RefreshCw size={16} /> Try Again
@@ -115,12 +131,44 @@ export default function PaymentAnalyticsPage() {
   const totalRevenue = invoices
     .filter((i) => i.status === "PAID")
     .reduce((sum, i) => sum + i.totalAmount, 0);
-  const successRate =
+  const invoiceSuccessRate =
     totalInvoices > 0
       ? Math.round(
           (invoices.filter((i) => i.status === "PAID").length / totalInvoices) * 100
         )
       : 0;
+
+  // KPI Cards (mix of invoice and payment analytics)
+  const kpis = [
+    {
+      label: "Total Invoices",
+      value: totalInvoices.toLocaleString("en-IN"),
+      icon: Activity,
+      iconBg: "bg-blue-50",
+      iconColor: "text-blue-600",
+    },
+    {
+      label: "Total Revenue",
+      value: formatCurrency(totalRevenue),
+      icon: IndianRupee,
+      iconBg: "bg-emerald-50",
+      iconColor: "text-emerald-600",
+    },
+    {
+      label: "Payment Success",
+      value: `${paymentAnalytics?.successRate ?? invoiceSuccessRate}%`,
+      icon: TrendingUp,
+      iconBg: "bg-violet-50",
+      iconColor: "text-violet-600",
+    },
+    {
+      label: "Failed Payments",
+      value: (paymentAnalytics?.failedPayments ?? 0).toString(),
+      icon: BarChart3,
+      iconBg: "bg-amber-50",
+      iconColor: "text-amber-600",
+    },
+  ];
 
   // Status breakdown for pie chart
   const statusMap: Record<string, number> = {};
@@ -155,38 +203,6 @@ export default function PaymentAnalyticsPage() {
     .sort((a, b) => b[1].total - a[1].total)
     .slice(0, 5);
 
-  // KPI Cards
-  const kpis = [
-    {
-      label: "Total Invoices",
-      value: totalInvoices.toLocaleString("en-IN"),
-      icon: Activity,
-      iconBg: "bg-blue-50",
-      iconColor: "text-blue-600",
-    },
-    {
-      label: "Total Revenue",
-      value: formatCurrency(totalRevenue),
-      icon: IndianRupee,
-      iconBg: "bg-emerald-50",
-      iconColor: "text-emerald-600",
-    },
-    {
-      label: "Success Rate",
-      value: `${successRate}%`,
-      icon: TrendingUp,
-      iconBg: "bg-violet-50",
-      iconColor: "text-violet-600",
-    },
-    {
-      label: "Avg Invoice",
-      value: totalInvoices > 0 ? formatCurrency(Math.round(totalRevenue / invoices.filter(i => i.status === "PAID").length || 0)) : "₹0",
-      icon: BarChart3,
-      iconBg: "bg-amber-50",
-      iconColor: "text-amber-600",
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gray-50 px-4 md:px-6 py-6 max-w-[1400px] mx-auto">
       {/* Header */}
@@ -198,7 +214,7 @@ export default function PaymentAnalyticsPage() {
           </p>
         </div>
         <button
-          onClick={loadInvoices}
+          onClick={loadData}
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-700 rounded-xl transition-all shadow-sm"
         >
@@ -308,6 +324,84 @@ export default function PaymentAnalyticsPage() {
           )}
         </div>
       </div>
+
+      {/* ── Payment Analytics Section ──────────────────────── */}
+      {paymentAnalytics && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+          {/* Payment Status Distribution */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-9 h-9 rounded-xl bg-violet-50 flex items-center justify-center">
+                <CreditCard size={16} className="text-violet-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Payment Status Distribution</h3>
+                <p className="text-[11px] text-gray-400">All payment records</p>
+              </div>
+            </div>
+            {paymentAnalytics.statusDistribution?.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-sm text-gray-400">No data</div>
+            ) : (
+              <div className="space-y-3">
+                {paymentAnalytics.statusDistribution?.map((s) => {
+                  const total = paymentAnalytics.totalPayments || 1;
+                  const pct = Math.round((s.count / total) * 100);
+                  return (
+                    <div key={s.status}>
+                      <div className="flex justify-between text-xs mb-1">
+                        <span className="font-medium text-gray-700">{s.status}</span>
+                        <span className="text-gray-500">{s.count} ({pct}%)</span>
+                      </div>
+                      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${pct}%`,
+                            backgroundColor: STATUS_COLORS[s.status] || "#94a3b8",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Recent Payments */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center">
+                <TrendingUp size={16} className="text-emerald-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">Recent Payments</h3>
+                <p className="text-[11px] text-gray-400">Last 10 successful payments</p>
+              </div>
+            </div>
+            {paymentAnalytics.recentPayments?.length === 0 ? (
+              <div className="h-48 flex items-center justify-center text-sm text-gray-400">No payments yet</div>
+            ) : (
+              <div className="space-y-2">
+                {paymentAnalytics.recentPayments?.map((p) => (
+                  <div key={p.id} className="flex items-center justify-between p-2.5 bg-gray-50 rounded-xl">
+                    <div>
+                      <p className="text-xs font-medium text-gray-700">
+                        {p.invoiceId.length > 20 ? p.invoiceId.slice(0, 20) + "…" : p.invoiceId}
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {p.paidAt ? new Date(p.paidAt).toLocaleDateString() : "—"}
+                        {p.method ? ` • ${p.method}` : ""}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-emerald-600">{formatCurrency(p.amount)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Top Clients Table ───────────────────────────────── */}
       {topClients.length > 0 && (

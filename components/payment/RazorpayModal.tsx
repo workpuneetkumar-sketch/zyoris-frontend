@@ -171,7 +171,7 @@ export default function RazorpayModal({
         const order = await createRazorpayOrder(invoiceId, amount);
 
         const keyId =
-          order.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "";
+          order.key || process.env.KEY_ID || "";
 
         if (!keyId) {
           throw new Error(

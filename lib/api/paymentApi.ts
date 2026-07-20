@@ -57,6 +57,12 @@ export {
   createRazorpayOrder,
   verifyRazorpayPayment,
   getPaymentStatus,
+  getPaymentStatusByOrderId,
+  getPaymentHistory,
+  getPaymentHealth,
+  getPaymentAnalytics,
+  retryPayment,
+  listPayments,
   downloadCsvBlob,
 } from "./paymentService";
 
@@ -70,4 +76,7 @@ export type {
   VerifyPaymentRequest,
   VerifyPaymentResponse,
   PaymentStatusResponse,
+  PaymentHealthResponse,
+  PaymentAnalyticsResponse,
+  RetryPaymentResponse,
 } from "./paymentService";
