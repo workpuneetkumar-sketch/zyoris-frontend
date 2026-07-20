@@ -15,6 +15,8 @@ import {
   getInvoices,
   Invoice,
 } from "@/lib/api/finance/invoicesApi";
+import { getPaymentAnalytics } from "@/lib/api/paymentService";
+import type { PaymentAnalyticsResponse } from "@/lib/api/paymentService";
 import { usePayment } from "@/context/PaymentContext";
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -34,16 +36,21 @@ function formatCurrency(amount: number): string {
 
 export default function PaymentDashboardPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [paymentAnalytics, setPaymentAnalytics] = useState<PaymentAnalyticsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { getPayments } = usePayment();
 
-  const loadInvoices = useCallback(async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await getInvoices();
-      setInvoices(data);
+      const [invData, analyticsData] = await Promise.all([
+        getInvoices(),
+        getPaymentAnalytics(),
+      ]);
+      setInvoices(invData);
+      setPaymentAnalytics(analyticsData);
     } catch (err: any) {
       setError(err.message || "Failed to load data");
     } finally {
@@ -52,8 +59,8 @@ export default function PaymentDashboardPage() {
   }, []);
 
   useEffect(() => {
-    loadInvoices();
-  }, [loadInvoices]);
+    loadData();
+  }, [loadData]);
 
   // ── Loading Skeleton ──────────────────────────────────────
   if (loading) {
@@ -81,7 +88,7 @@ export default function PaymentDashboardPage() {
           <h2 className="text-xl font-bold text-gray-900 mb-2">Failed to load dashboard</h2>
           <p className="text-sm text-gray-500 mb-6">{error}</p>
           <button
-            onClick={loadInvoices}
+            onClick={loadData}
             className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-all shadow-sm"
           >
             <RefreshCw size={16} /> Try Again
@@ -106,12 +113,15 @@ export default function PaymentDashboardPage() {
   const outstandingAmount = invoices
     .filter((i) => i.status !== "PAID")
     .reduce((sum, i) => sum + i.totalAmount, 0);
-  const successRate =
+  const invoiceSuccessRate =
     invoices.length > 0
       ? Math.round((paidInvoices.length / invoices.length) * 100)
       : 0;
 
-  // KPI Cards
+  const totalPayments = paymentAnalytics?.totalPayments ?? 0;
+  const paymentSuccessRate = paymentAnalytics?.successRate ?? invoiceSuccessRate;
+
+  // KPI Cards — mix of invoice and payment analytics data
   const kpiCards = [
     {
       label: "Total Invoices",
@@ -121,25 +131,25 @@ export default function PaymentDashboardPage() {
       iconColor: "text-blue-600",
     },
     {
-      label: "Paid",
+      label: "Paid Invoices",
       value: paidInvoices.length.toString(),
       icon: CheckCircle2,
       iconBg: "bg-emerald-50",
       iconColor: "text-emerald-600",
     },
     {
-      label: "Pending",
-      value: pendingInvoices.length.toString(),
-      icon: Clock,
-      iconBg: "bg-amber-50",
-      iconColor: "text-amber-600",
+      label: "Total Payments",
+      value: totalPayments.toString(),
+      icon: CreditCard,
+      iconBg: "bg-violet-50",
+      iconColor: "text-violet-600",
     },
     {
-      label: "Overdue",
-      value: overdueInvoices.length.toString(),
-      icon: AlertCircle,
-      iconBg: "bg-red-50",
-      iconColor: "text-red-600",
+      label: "Success Rate",
+      value: `${paymentSuccessRate}%`,
+      icon: TrendingUp,
+      iconBg: "bg-amber-50",
+      iconColor: "text-amber-600",
     },
   ];
 
@@ -154,7 +164,7 @@ export default function PaymentDashboardPage() {
           </p>
         </div>
         <button
-          onClick={loadInvoices}
+          onClick={loadData}
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-700 rounded-xl transition-all shadow-sm"
         >
@@ -205,9 +215,43 @@ export default function PaymentDashboardPage() {
             <CreditCard size={14} className="text-blue-500" />
             <span className="text-xs font-medium text-gray-500">Success Rate</span>
           </div>
-          <p className="text-xl font-bold text-blue-600">{successRate}%</p>
+          <p className="text-xl font-bold text-blue-600">{paymentSuccessRate}%</p>
         </div>
       </div>
+
+      {/* ── Payment Summary (from payment analytics) ────────── */}
+      {paymentAnalytics && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <CreditCard size={14} className="text-violet-500" />
+              <span className="text-xs font-medium text-gray-500">Success</span>
+            </div>
+            <p className="text-xl font-bold text-emerald-600">{paymentAnalytics.successfulPayments}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <Clock size={14} className="text-amber-500" />
+              <span className="text-xs font-medium text-gray-500">Failed</span>
+            </div>
+            <p className="text-xl font-bold text-red-500">{paymentAnalytics.failedPayments}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <IndianRupee size={14} className="text-emerald-500" />
+              <span className="text-xs font-medium text-gray-500">Revenue</span>
+            </div>
+            <p className="text-xl font-bold text-emerald-600">{formatCurrency(paymentAnalytics.totalRevenue)}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertCircle size={14} className="text-red-500" />
+              <span className="text-xs font-medium text-gray-500">Failed Rev.</span>
+            </div>
+            <p className="text-xl font-bold text-red-500">{formatCurrency(paymentAnalytics.failedRevenue)}</p>
+          </div>
+        </div>
+      )}
 
       {/* ── Recent Invoices ────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">

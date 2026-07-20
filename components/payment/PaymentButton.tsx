@@ -56,7 +56,7 @@ function formatCurrency(amount: number): string {
 }
 
 function getRazorpayKeyId(): string {
-  const key = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? "";
+  const key = process.env.KEY_ID ?? "";
   return key;
 }
 
