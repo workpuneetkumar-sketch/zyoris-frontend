@@ -73,10 +73,17 @@ export interface CreateOrderResponse {
 
 // ── Verify Payment ──────────────────────────────────────────
 
+/**
+ * Backend expects exactly these field names:
+ * orderId, paymentId, signature, invoiceId
+ */
 export interface VerifyPaymentRequest {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
+  /** Razorpay order ID — mapped from razorpay_order_id */
+  orderId: string;
+  /** Razorpay payment ID — mapped from razorpay_payment_id */
+  paymentId: string;
+  /** Razorpay HMAC signature — mapped from razorpay_signature */
+  signature: string;
   invoiceId: string;
 }
 
@@ -199,12 +206,21 @@ export async function getPaymentHistory(
  */
 export async function createRazorpayOrder(
   invoiceId: string,
-  amount: number
+  amount: number,
+  /** Optional idempotency key — pass the same key on retries to avoid duplicate orders */
+  idempotencyKey?: string
 ): Promise<CreateOrderResponse> {
   const payload: CreateOrderRequest = { invoiceId, amount };
 
   try {
-    const res = await api.post("/payments/create-order", payload);
+    const headers: Record<string, string> = {};
+    if (idempotencyKey) {
+      headers["Idempotency-Key"] = idempotencyKey;
+    }
+
+    const res = await api.post("/payments/create-order", payload, {
+      headers,
+    });
     const data = res.data?.data ?? res.data;
 
     if (!data?.orderId) {
@@ -238,7 +254,16 @@ export async function verifyRazorpayPayment(
   payload: VerifyPaymentRequest
 ): Promise<VerifyPaymentResponse> {
   try {
-    const res = await api.post("/payments/verify", payload);
+    // Send exactly the field names the backend expects:
+    // { invoiceId, orderId, paymentId, signature }
+    const body = {
+      invoiceId: payload.invoiceId,
+      orderId: payload.orderId,
+      paymentId: payload.paymentId,
+      signature: payload.signature,
+    };
+
+    const res = await api.post("/payments/verify", body);
     const data = res.data?.data ?? res.data;
 
     return {
@@ -248,10 +273,27 @@ export async function verifyRazorpayPayment(
       paymentId: data?.paymentId,
     };
   } catch (error: any) {
-    const msg =
-      error?.response?.data?.message ||
-      error?.message ||
-      "Payment verification failed";
+    const status = (error as any)?.response?.status;
+    let msg: string;
+    switch (status) {
+      case 400:
+        msg = "Payment verification failed. Please try again.";
+        break;
+      case 404:
+        msg = "Payment record could not be found.";
+        break;
+      case 409:
+        msg = "This payment has already been processed.";
+        break;
+      case 500:
+        msg = "Something went wrong while processing the payment.";
+        break;
+      default:
+        msg =
+          error?.response?.data?.message ||
+          error?.message ||
+          "Payment verification failed";
+    }
     throw new Error(msg);
   }
 }
