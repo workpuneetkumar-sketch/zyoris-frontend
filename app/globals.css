@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+    font-family: 'Neuropol X Free';
+    font-style: normal;
+    font-weight: 400;
+    src: url('/fonts/neuropol-x.woff') format('woff');
+}
+
 *,
 *::before,
 *::after {
