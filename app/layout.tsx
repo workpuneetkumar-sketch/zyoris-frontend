@@ -2,10 +2,13 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { ReactNode } from "react";
 import { AuthProvider } from "../context/AuthContext";
+import { ThemeProvider } from "../context/ThemeContext";
+import { ToastProvider } from "../components/ui/Toast";
+import { NotificationProvider } from "../hooks/useNotifications";
 import { ZiiBot } from "../components/ZiiBot";
 import { Inter } from "next/font/google";
 import Script from "next/script";
-import { InvoiceProvider } from "@/context/InvoiceContext"; // new
+import { InvoiceProvider } from "@/context/InvoiceContext";
 import { PaymentProvider } from "@/context/PaymentContext";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
@@ -30,7 +33,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className="light">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link
           rel="stylesheet"
@@ -44,14 +47,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           src="https://cdn.jsdelivr.net/npm/chart.js"
           strategy="beforeInteractive"
         />
-        <AuthProvider>
-          <InvoiceProvider>
-            <PaymentProvider>
-              {children}
-            </PaymentProvider>
-            <ZiiBot />
-          </InvoiceProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <ToastProvider>
+            <AuthProvider>
+              <NotificationProvider>
+                <InvoiceProvider>
+                  <PaymentProvider>
+                    {children}
+                  </PaymentProvider>
+                </InvoiceProvider>
+              </NotificationProvider>
+              <ZiiBot />
+            </AuthProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );
