@@ -62,12 +62,8 @@ export default function PaymentLayout({
               const Icon = item.icon;
               const isActive =
                 pathname === item.href ||
-                (item.href === "/payment/invoices" &&
-                  pathname?.startsWith("/payment/") &&
-                  !pathname.includes("/dashboard") &&
-                  !pathname.includes("/history") &&
-                  !pathname.includes("/analytics") &&
-                  !pathname.includes("/health"));
+                // Mark Invoices tab active only on exact /payment/invoices path
+                (item.href === "/payment/invoices" && pathname === "/payment/invoices");
 
               return (
                 <Link

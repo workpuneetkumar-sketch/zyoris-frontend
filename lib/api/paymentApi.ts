@@ -40,9 +40,12 @@ export interface RazorpayOrderResponse {
 }
 
 export interface RazorpayVerifyPayload {
-  razorpay_order_id: string;
-  razorpay_payment_id: string;
-  razorpay_signature: string;
+  /** Maps to razorpay_order_id from Razorpay checkout response */
+  orderId: string;
+  /** Maps to razorpay_payment_id from Razorpay checkout response */
+  paymentId: string;
+  /** Maps to razorpay_signature from Razorpay checkout response */
+  signature: string;
   invoiceId: string;
 }
 

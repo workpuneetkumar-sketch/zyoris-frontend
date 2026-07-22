@@ -123,9 +123,9 @@ export default function PaymentButton({
       toast.loading("Verifying payment…", { id: "rzp-verify" });
 
       await verifyRazorpayPayment({
-        razorpay_order_id: paymentResult.razorpay_order_id,
-        razorpay_payment_id: paymentResult.razorpay_payment_id,
-        razorpay_signature: paymentResult.razorpay_signature,
+        orderId:   paymentResult.razorpay_order_id,
+        paymentId: paymentResult.razorpay_payment_id,
+        signature: paymentResult.razorpay_signature,
         invoiceId: invoice.id,
       });
 

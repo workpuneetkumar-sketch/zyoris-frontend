@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Plus,
   FileSpreadsheet,
@@ -69,6 +70,7 @@ function Toast({ toast, onClose }: { toast: ToastMessage; onClose: () => void })
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +106,15 @@ export default function InvoicesPage() {
   useEffect(() => {
     loadInvoices();
   }, [loadInvoices]);
+
+  // Refresh when returning from a successful payment (?refresh=1)
+  useEffect(() => {
+    if (searchParams?.get("refresh") === "1") {
+      loadInvoices();
+      // Remove the query param without re-triggering the effect
+      router.replace("/finance/invoices", { scroll: false });
+    }
+  }, [searchParams, loadInvoices, router]);
 
   const handleCreateSuccess = (newInvoice: Invoice) => { 
     setInvoices(prev => [newInvoice, ...prev]); 
