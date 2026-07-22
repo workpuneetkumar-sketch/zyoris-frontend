@@ -26,7 +26,7 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
   ADMIN: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base",
+    "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base", "/notes",
     "/analytics", "/reports", "/settings", "/automation",
     "/ceo", "/cfo", "/sales", "/operations", "/admin",
     "/payment", "/profile", "/portal", "/meetings", "/communications",
@@ -34,28 +34,28 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
   CEO: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base",
+    "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base", "/notes",
     "/analytics", "/reports", "/settings", "/automation",
     "/ceo", "/payment", "/profile", "/portal",
   ],
   CFO: [
     "/dashboard", "/deals", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/finance", "/documents", "/knowledge-base",
+    "/finance", "/documents", "/knowledge-base", "/notes",
     "/analytics", "/reports", "/settings",
     "/cfo", "/payment", "/profile",
   ],
   SALES_HEAD: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/documents", "/knowledge-base",
+    "/documents", "/knowledge-base", "/notes",
     "/reports", "/settings",
     "/sales", "/profile",
   ],
   OPERATIONS_HEAD: [
     "/dashboard", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/projects", "/documents", "/knowledge-base",
+    "/projects", "/documents", "/knowledge-base", "/notes",
     "/reports", "/settings",
     "/operations", "/profile",
   ],
@@ -88,7 +88,7 @@ export const isPathAllowed = (
 
   // Always allowed general/fallback routes
   if (
-    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights"].some(
+    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights", "/notes"].some(
       (p) => path === p || path.startsWith(`${p}/`)
     )
   ) {
