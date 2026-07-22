@@ -13,18 +13,81 @@ body {
   padding: 0;
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background-color: #050816;
-  color: #2e2e2e;
 }
 
 body {
   min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-text);
 }
 
 a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Light theme variables (unchanged) */
+:root, .light {
+  --color-background: #f8fafc;
+  --color-background-secondary: #f1f5f9;
+  --color-background-tertiary: #e2e8f0;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f8fafc;
+  --color-surface-active: #f1f5f9;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+  --color-primary: #2563eb;
+  --color-primary-light: #3b82f6;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-foreground: #ffffff;
+  --color-success: #16a34a;
+  --color-success-light: #dcfce7;
+  --color-success-foreground: #16a34a;
+  --color-warning: #d97706;
+  --color-warning-light: #fef3c7;
+  --color-warning-foreground: #d97706;
+  --color-error: #dc2626;
+  --color-error-light: #fee2e2;
+  --color-error-foreground: #dc2626;
+  --color-info: #2563eb;
+  --color-info-light: #dbeafe;
+  --color-info-foreground: #2563eb;
+}
+
+/* Dark theme variables - Production quality, user requested */
+.dark {
+  --color-background: #050816;
+  --color-background-secondary: #0b1120;
+  --color-background-tertiary: #111827;
+  --color-surface: #111827;
+  --color-surface-hover: #1e293b;
+  --color-surface-active: #1e3a8a;
+  --color-text: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-border: #334155;
+  --color-border-light: #1e293b;
+  --color-primary: #3b82f6;
+  --color-primary-light: #60a5fa;
+  --color-primary-dark: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-success: #22c55e;
+  --color-success-light: #14532d;
+  --color-success-foreground: #22c55e;
+  --color-warning: #f59e0b;
+  --color-warning-light: #713f12;
+  --color-warning-foreground: #f59e0b;
+  --color-error: #ef4444;
+  --color-error-light: #7f1d1d;
+  --color-error-foreground: #ef4444;
+  --color-info: #3b82f6;
+  --color-info-light: #1e3a8a;
+  --color-info-foreground: #3b82f6;
+}
+
 
 .app-shell {
   display: grid;

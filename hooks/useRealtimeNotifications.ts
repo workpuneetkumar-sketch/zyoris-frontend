@@ -4,14 +4,14 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getRealtimeService, destroyRealtimeService } from "@/lib/api/realtimeService";
 import { RealtimeEvent, ConnectionStatus } from "@/types/realtimeNotifications";
-import { AppNotification } from "@/components/NotificationBell";
+import type { Notification, NotificationType } from "@/types/notifications";
 
 const MAX_NOTIFICATIONS = 50;
 
-function realtimeEventToNotification(event: RealtimeEvent): AppNotification {
-  const typeMap: Record<string, AppNotification["type"]> = {
+function realtimeEventToNotification(event: RealtimeEvent): Notification {
+  const typeMap: Record<string, NotificationType> = {
     lead_updated: "info",
-    lead_assigned: "info",
+    lead_assigned: "lead_assigned",
     lead_merged: "success",
     deal_stage_changed: "success",
     activity_created: "info",
@@ -28,11 +28,12 @@ function realtimeEventToNotification(event: RealtimeEvent): AppNotification {
     read: false,
     createdAt: event.timestamp,
     type: typeMap[event.type] ?? "info",
+    priority: "medium",
   };
 }
 
 export function useRealtimeNotifications() {
-  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [status, setStatus] = useState<ConnectionStatus>("disconnected");
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const serviceRef = useRef<ReturnType<typeof getRealtimeService> | null>(null);

@@ -44,7 +44,7 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
-import { useNotifications } from "@/hooks/useNotifications";
+import { ThemeToggle } from "./ThemeToggle";
 
 type NavItem = {
   href: string;
@@ -300,13 +300,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const sidebarNavRef = useRef<HTMLDivElement>(null);
   const SIDEBAR_SCROLL_KEY = "sidebar-scroll-position";
 
-  // Real-time notifications (Task 6)
-  const {
-    notifications: realtimeNotifications,
-    markRead: markNotificationRead,
-    markAllRead: markAllNotificationsRead,
-  } = useNotifications();
-
   // Save sidebar scroll position when scrolling
   const handleSidebarScroll = () => {
     if (sidebarNavRef.current) {
@@ -474,7 +467,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
       {visibleNavGroups.map((group) => (
         <div key={group.label} className="space-y-2">
-          <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-gray-400">
+          <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
             {group.label}
           </p>
           <div className="space-y-1">
@@ -491,14 +484,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                   className={classNames(
                     "flex items-center gap-3 px-3 py-[9px] rounded-lg text-[13.5px] font-medium transition-all duration-150 select-none",
                     isActive
-                      ? "bg-blue-600 text-white"
-                      : "text-[#1a237e] hover:bg-blue-50"
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-text-secondary hover:bg-surface-hover"
                   )}
                 >
                   <Icon
                     size={17}
                     strokeWidth={isActive ? 2 : 1.75}
-                    className={isActive ? "text-white" : "text-[#1a237e]"}
+                    className={isActive ? "text-primary-foreground" : "text-text-secondary"}
                   />
                   <span>{item.label}</span>
                 </Link>
@@ -512,7 +505,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const UserFooter = () =>
     user ? (
-      <div className="px-4 py-4 mt-2 border-t border-gray-100">
+      <div className="px-4 py-4 mt-2 border-t border-border">
         <div className="w-full flex items-center gap-3 rounded-xl px-1 py-1">
           {/* Left: avatar + name → goes to profile */}
           <button
@@ -520,18 +513,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               router.push("/profile");
               setDrawerOpen(false);
             }}
-            className="flex items-center gap-3 flex-1 min-w-0 hover:bg-gray-50 rounded-xl transition-colors"
+            className="flex items-center gap-3 flex-1 min-w-0 hover:bg-surface-hover rounded-xl transition-colors"
           >
             {user.avatarUrl ? (
               <img
                 src={user.avatarUrl}
                 alt={displayName}
-                className="w-10 h-10 rounded-full object-cover shrink-0 border border-gray-200"
+                className="w-10 h-10 rounded-full object-cover shrink-0 border border-border"
               />
             ) : (
               <div
-                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 border border-blue-100"
-                style={{ background: "#e8eaf6", color: "#1a237e" }}
+                className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 border border-primary-light bg-primary-light/20"
               >
                 {displayName
                   .split(" ")
@@ -542,12 +534,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
             <div className="flex-1 min-w-0 text-left">
               <p
-                className="text-[13px] font-semibold truncate"
-                style={{ color: "#1a237e" }}
+                className="text-[13px] font-semibold truncate text-text"
               >
                 {displayName}
               </p>
-              <p className="text-[11.5px] text-gray-400 truncate">
+              <p className="text-[11.5px] text-text-muted truncate">
                 {user?.email || ""}
               </p>
             </div>
@@ -557,12 +548,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={openLogoutModal}
-              className="p-1 rounded-lg hover:bg-red-50 transition-colors group"
+              className="p-1 rounded-lg hover:bg-error-light/20 transition-colors group"
               title="Logout"
             >
               <ChevronRight
                 size={15}
-                className="text-gray-400 group-hover:text-red-500 transition-colors"
+                className="text-text-muted group-hover:text-error transition-colors"
               />
             </button>
           </div>
@@ -574,7 +565,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex items-center gap-2.5">
       <div
         className={classNames(
-          "bg-blue-600 rounded-lg flex items-center justify-center shrink-0",
+          "bg-primary rounded-lg flex items-center justify-center shrink-0",
           small ? "w-6 h-6" : "w-8 h-8"
         )}
       >
@@ -585,7 +576,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           "font-extrabold tracking-tight",
           small ? "text-base" : "text-[1.25rem]"
         )}
-        style={{ color: "#1a237e" }}
+        style={{ color: "var(--color-text)" }}
       >
         zyoris
       </span>
@@ -593,10 +584,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="flex h-screen bg-gray-50 font-sans overflow-hidden">
+    <div className="flex h-screen bg-background font-sans overflow-hidden">
 
       {/* ── Desktop Sidebar (md and above) ── */}
-      <aside className="hidden md:flex w-[220px] flex-col bg-white border-r border-gray-100 shrink-0">
+      <aside className="hidden md:flex w-[220px] flex-col bg-surface border-r border-border shrink-0">
         <div className="px-5 pt-6 pb-5">
           <LogoMark />
         </div>
@@ -615,19 +606,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="fixed inset-0 z-40 md:hidden">
           {/* Backdrop with smooth animation */}
           <div
-            className="absolute inset-0 bg-black/40 transition-opacity duration-300"
+            className="absolute inset-0 bg-black/50 transition-opacity duration-300"
             onClick={() => setDrawerOpen(false)}
           />
           {/* Drawer panel with smooth slide animation */}
-          <aside className="absolute top-0 left-0 bottom-0 w-[280px] bg-white flex flex-col shadow-2xl z-50 transition-transform duration-300 ease-out">
+          <aside className="absolute top-0 left-0 bottom-0 w-[280px] bg-surface flex flex-col shadow-2xl z-50 transition-transform duration-300 ease-out border-r border-border">
             <div className="flex items-center justify-between px-5 pt-5 pb-4">
               <LogoMark />
               <button
                 onClick={() => setDrawerOpen(false)}
-                className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+                className="p-1 rounded-lg hover:bg-surface-hover transition-colors"
                 aria-label="Close menu"
               >
-                <X size={18} className="text-gray-500" />
+                <X size={18} className="text-text-secondary" />
               </button>
             </div>
             <nav className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto">
@@ -642,44 +633,39 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Top bar (desktop + mobile) */}
-        <header className="flex items-center gap-4 px-4 md:px-6 py-3 bg-white border-b border-gray-100 shrink-0">
-          {/* Mobile menu button */}
-          <button
-            onClick={() => setDrawerOpen(true)}
-            className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-            aria-label="Open menu"
-          >
-            <Menu size={20} className="text-[#1a237e]" />
-          </button>
+      <header className="flex items-center gap-4 px-4 md:px-6 py-3 bg-surface border-b border-border shrink-0">
+        {/* Mobile menu button */}
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="md:hidden p-1.5 rounded-xl hover:bg-surface-hover transition-colors"
+          aria-label="Open menu"
+        >
+          <Menu size={20} className="text-text" />
+        </button>
 
-          {/* Mobile logo */}
-          <div className="md:hidden">
-            <LogoMark small />
-          </div>
+        {/* Mobile logo */}
+        <div className="md:hidden">
+          <LogoMark small />
+        </div>
 
-          {/* Search component */}
-          <div className="flex-1 flex justify-start">
-            <CrmSearch />
-          </div>
+        {/* Search component */}
+        <div className="flex-1 flex justify-start">
+          <CrmSearch />
+        </div>
 
-          {/* Right side: notification bell (desktop) */}
+        {/* Theme toggle */}
+        <ThemeToggle />
+
+        {/* Right side: notification bell (desktop) */}
           <div className="hidden md:block">
-            <NotificationBell
-              notifications={realtimeNotifications}
-              onMarkRead={markNotificationRead}
-              onMarkAllRead={markAllNotificationsRead}
-            />
+            <NotificationBell />
           </div>
 
           {/* Mobile notification bell */}
           <div className="md:hidden">
-            <NotificationBell
-              notifications={realtimeNotifications}
-              onMarkRead={markNotificationRead}
-              onMarkAllRead={markAllNotificationsRead}
-            />
+            <NotificationBell />
           </div>
-        </header>
+      </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>

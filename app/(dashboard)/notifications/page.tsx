@@ -1,169 +1,302 @@
 "use client";
 
 import { useNotifications } from "@/hooks/useNotifications";
-import { Bell, CheckCheck, Info, Trash2, Check, BellRing } from "lucide-react";
+import { Bell, Check, CheckCheck, Trash2, Search } from "lucide-react";
 import classNames from "classnames";
-import Link from "next/link";
+import { useState, useMemo } from "react";
+import { Avatar } from "@/components/ui/Avatar";
+import { PriorityTag } from "@/components/ui/PriorityTag";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { Skeleton } from "@/components/ui/Skeleton";
+import type { Notification, NotificationType } from "@/types/notifications";
+
+// Helper functions (reused from NotificationBell)
+function formatRelativeTime(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+
+  if (diffInSeconds < 60) return "Just now";
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function getTypeStyles(type: NotificationType) {
+  switch (type) {
+    case "success":
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
+    case "warning":
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400";
+    case "error":
+      return "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400";
+    case "info":
+    case "system_reminder":
+    case "lead_assigned":
+    case "lead_shared":
+    case "task_assigned":
+    case "mention":
+    default:
+      return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+  }
+}
+
+type FilterOption = "all" | "unread" | "mentions" | "assignments" | "system";
+
+function NotificationPageItem({
+  notification,
+  onMarkRead,
+  onDelete,
+}: {
+  notification: Notification;
+  onMarkRead: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  return (
+    <div
+      className={classNames(
+        "group relative flex flex-col sm:flex-row items-start gap-4 p-5 transition-all duration-200 rounded-xl",
+        !notification.read
+          ? "bg-primary/5 dark:bg-primary/10"
+          : "hover:bg-surface-hover dark:hover:bg-surface-hover"
+      )}
+    >
+      {/* Unread indicator */}
+      {!notification.read && (
+        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary rounded-r-full" />
+      )}
+
+      {/* Avatar / Icon */}
+      <div className="shrink-0">
+        {notification.actor ? (
+          <Avatar
+            src={notification.actor.avatarUrl}
+            alt={notification.actor.name}
+            fallback={notification.actor.name.charAt(0).toUpperCase()}
+            size="lg"
+          />
+        ) : (
+          <div className={classNames("w-12 h-12 rounded-full flex items-center justify-center", getTypeStyles(notification.type))}>
+            <Bell size={20} />
+          </div>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h3 className={classNames("font-bold text-base truncate", notification.read ? "text-text-secondary" : "text-text")}>
+              {notification.title}
+            </h3>
+            {!notification.read && <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <PriorityTag priority={notification.priority} />
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {!notification.read && (
+                <button
+                  onClick={() => onMarkRead(notification.id)}
+                  className="p-2 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
+                  title="Mark as read"
+                >
+                  <Check size={16} />
+                </button>
+              )}
+              <button
+                onClick={() => onDelete(notification.id)}
+                className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
+                title="Delete"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className={classNames("text-base mt-2 leading-relaxed", notification.read ? "text-text-muted" : "text-text-secondary")}>
+          {notification.message}
+        </p>
+        <div className="flex items-center mt-3">
+          <span className="text-sm text-text-muted">{formatRelativeTime(notification.createdAt)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function NotificationsPage() {
-  const {
-    notifications,
-    loading,
-    error,
-    unreadCount,
-    markRead,
-    markAllRead,
-    removeNotification,
-  } = useNotifications();
+  const { notifications, loading, error, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<FilterOption>("all");
+  const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
-  const typeColor: Record<string, string> = {
-    info: "bg-blue-500",
-    success: "bg-emerald-500",
-    warning: "bg-amber-500",
-    error: "bg-rose-500",
-  };
+  // Filter and search
+  const filteredNotifications = useMemo(() => {
+    return notifications.filter(n => {
+      const matchesSearch = n.title.toLowerCase().includes(searchQuery.toLowerCase()) || n.message.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesFilter = (() => {
+        switch (filter) {
+          case "unread": return !n.read;
+          case "mentions": return n.type === "mention";
+          case "assignments": return n.type === "lead_assigned" || n.type === "task_assigned";
+          case "system": return n.type === "system_reminder" || n.type === "success" || n.type === "warning" || n.type === "error";
+          default: return true;
+        }
+      })();
+      return matchesSearch && matchesFilter;
+    });
+  }, [notifications, searchQuery, filter]);
 
-  const typeBg: Record<string, string> = {
-    info: "bg-blue-50 text-blue-600",
-    success: "bg-emerald-50 text-emerald-600",
-    warning: "bg-amber-50 text-amber-600",
-    error: "bg-rose-50 text-rose-600",
+  // Group by date
+  const groupedNotifications = useMemo(() => {
+    const groups: { label: string; notifications: Notification[] }[] = [];
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const lastWeek = new Date(today);
+    lastWeek.setDate(lastWeek.getDate() - 7);
+
+    const todayGroup: Notification[] = [];
+    const yesterdayGroup: Notification[] = [];
+    const lastWeekGroup: Notification[] = [];
+    const earlierGroup: Notification[] = [];
+
+    filteredNotifications.forEach(n => {
+      const date = new Date(n.createdAt);
+      const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      if (dateOnly.getTime() === today.getTime()) {
+        todayGroup.push(n);
+      } else if (dateOnly.getTime() === yesterday.getTime()) {
+        yesterdayGroup.push(n);
+      } else if (dateOnly >= lastWeek) {
+        lastWeekGroup.push(n);
+      } else {
+        earlierGroup.push(n);
+      }
+    });
+
+    if (todayGroup.length > 0) groups.push({ label: "Today", notifications: todayGroup });
+    if (yesterdayGroup.length > 0) groups.push({ label: "Yesterday", notifications: yesterdayGroup });
+    if (lastWeekGroup.length > 0) groups.push({ label: "Last 7 days", notifications: lastWeekGroup });
+    if (earlierGroup.length > 0) groups.push({ label: "Earlier", notifications: earlierGroup });
+
+    return groups;
+  }, [filteredNotifications]);
+
+  const handleMarkAllRead = async () => {
+    if (unreadCount === 0 || isMarkingAllRead) return;
+    setIsMarkingAllRead(true);
+    try {
+      await markAllRead();
+    } finally {
+      setIsMarkingAllRead(false);
+    }
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6 lg:p-8 space-y-8 animate-in fade-in zoom-in-95 duration-500">
-      {/* Header section with gradient and stats */}
+    <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div className="space-y-1.5">
-          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight flex items-center gap-3">
+        <div>
+          <h1 className="text-3xl font-bold text-text flex items-center gap-3">
             Notifications
-            {unreadCount > 0 ? (
-              <BellRing size={24} className="text-blue-600 animate-bounce" strokeWidth={2.5} />
-            ) : (
-              <Bell size={24} className="text-gray-400" strokeWidth={2.5} />
+            {unreadCount > 0 && (
+              <span className="px-3 py-1 rounded-full bg-primary text-primary-foreground text-sm font-bold">
+                {unreadCount} new
+              </span>
             )}
           </h1>
-          <p className="text-base text-gray-500 font-medium">
-            You have <strong className={unreadCount > 0 ? "text-blue-600" : "text-gray-600"}>{unreadCount}</strong> unread notification{unreadCount !== 1 ? "s" : ""}
+          <p className="text-text-secondary mt-1">
+            Manage your notifications and stay updated
           </p>
         </div>
-
         {unreadCount > 0 && (
           <button
-            onClick={() => markAllRead()}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 transition-all text-sm font-bold shadow-sm active:scale-95"
+            onClick={handleMarkAllRead}
+            disabled={isMarkingAllRead}
+            className={classNames(
+              "flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-all",
+              isMarkingAllRead
+                ? "bg-surface text-text-muted cursor-not-allowed"
+                : "bg-primary text-primary-foreground hover:bg-primary-dark"
+            )}
           >
             <CheckCheck size={18} />
-            Mark all as read
+            {isMarkingAllRead ? "Marking all as read..." : "Mark all as read"}
           </button>
         )}
       </div>
 
-      <div className="bg-white/80 backdrop-blur-xl border border-gray-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl overflow-hidden">
+      {/* Search and Filters */}
+      <div className="bg-surface border border-border rounded-2xl p-4 space-y-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={20} />
+          <input
+            type="text"
+            placeholder="Search notifications..."
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-background-secondary border border-border text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {(["all", "unread", "mentions", "assignments", "system"] as FilterOption[]).map(f => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={classNames(
+                "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                filter === f
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-background-secondary text-text-muted hover:bg-surface-hover"
+              )}
+            >
+              {f.charAt(0).toUpperCase() + f.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Notifications List */}
+      <div className="bg-surface border border-border rounded-2xl overflow-hidden">
         {loading && notifications.length === 0 ? (
-          <div className="p-24 flex justify-center">
-            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-lg" />
+          <div className="p-6 space-y-4">
+            <Skeleton variant="notification" count={4} />
           </div>
         ) : error ? (
-          <div className="p-20 flex flex-col items-center justify-center text-center">
-            <div className="w-16 h-16 rounded-2xl bg-red-50 flex items-center justify-center mb-4">
-              <Info size={32} className="text-red-500" />
-            </div>
-            <h3 className="text-lg font-bold text-gray-900">Oops, something went wrong</h3>
-            <p className="text-sm text-gray-500 mt-2 max-w-sm">{error}</p>
-          </div>
-        ) : notifications.length === 0 ? (
-          <div className="p-24 flex flex-col items-center text-center">
-            <div className="w-24 h-24 bg-gradient-to-br from-gray-50 to-gray-100 rounded-[2rem] flex items-center justify-center mb-6 shadow-inner border border-gray-50">
-              <Bell size={48} className="text-gray-300" strokeWidth={1.5} />
-            </div>
-            <h3 className="text-xl font-extrabold text-gray-900 tracking-tight">You're all caught up!</h3>
-            <p className="text-base text-gray-500 mt-2 font-medium max-w-sm">No new notifications at the moment. Take a break or check back later.</p>
-            <Link href="/dashboard" className="mt-8 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-md transition-colors active:scale-95">
-              Go to Dashboard
-            </Link>
-          </div>
+          <EmptyState
+            icon={Search}
+            title="Failed to load notifications"
+            description={error}
+          />
+        ) : groupedNotifications.length === 0 ? (
+          <EmptyState
+            icon={Bell}
+            title="All caught up!"
+            description={searchQuery || filter !== "all" ? "No notifications match your filters." : "You don't have any notifications yet."}
+          />
         ) : (
-          <div className="divide-y divide-gray-100/50">
-            {notifications.map((notification) => {
-              const colorClass = typeColor[notification.type ?? "info"] || typeColor.info;
-              const bgClass = typeBg[notification.type ?? "info"] || typeBg.info;
-
-              return (
-                <div
-                  key={notification.id}
-                  className={classNames(
-                    "group relative flex flex-col sm:flex-row sm:items-center gap-4 p-5 transition-all duration-300 hover:bg-gray-50/80",
-                    !notification.read ? "bg-blue-50/40" : "bg-transparent"
-                  )}
-                >
-                  {/* Unread indicator line */}
-                  {!notification.read && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-500 rounded-r-full shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
-                  )}
-
-                  <div className="flex items-start gap-4 flex-1 min-w-0 pl-2">
-                    <div
-                      className={classNames(
-                        "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 shadow-sm border border-white/50",
-                        bgClass
-                      )}
-                    >
-                      <Info size={22} strokeWidth={2.5} />
-                    </div>
-
-                    <div className="flex-1 min-w-0 pr-4">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <h4
-                          className={classNames(
-                            "text-base font-bold tracking-tight truncate",
-                            notification.read ? "text-gray-700" : "text-gray-900"
-                          )}
-                        >
-                          {notification.title}
-                        </h4>
-                        {!notification.read && (
-                          <span className="w-2.5 h-2.5 rounded-full bg-blue-600 shrink-0 shadow-[0_0_8px_rgba(37,99,235,0.5)] animate-pulse" />
-                        )}
-                      </div>
-                      <p className="text-[15px] text-gray-500 leading-relaxed break-words font-medium">
-                        {notification.message}
-                      </p>
-                      <p className="text-[13px] text-gray-400 mt-2.5 font-semibold flex items-center gap-1.5">
-                        {new Date(notification.createdAt).toLocaleString("en-US", {
-                          weekday: "short",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 self-end sm:self-center pr-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-300">
-                    {!notification.read && (
-                      <button
-                        onClick={() => markRead(notification.id)}
-                        className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-bold text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-blue-100 active:scale-95"
-                        title="Mark as read"
-                      >
-                        <Check size={18} strokeWidth={2.5} />
-                        <span className="sm:hidden">Mark as read</span>
-                      </button>
-                    )}
-                    <button
-                      onClick={() => removeNotification(notification.id)}
-                      className="flex items-center justify-center gap-2 px-3 py-2 text-sm font-bold text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-red-100 active:scale-95"
-                      title="Delete notification"
-                    >
-                      <Trash2 size={18} strokeWidth={2.5} />
-                      <span className="sm:hidden">Delete</span>
-                    </button>
-                  </div>
+          <div className="divide-y divide-border">
+            {groupedNotifications.map(group => (
+              <div key={group.label}>
+                <div className="px-6 py-3 bg-background-secondary border-b border-border">
+                  <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider">{group.label}</h2>
                 </div>
-              );
-            })}
+                {group.notifications.map(notification => (
+                  <NotificationPageItem
+                    key={notification.id}
+                    notification={notification}
+                    onMarkRead={markRead}
+                    onDelete={removeNotification}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
         )}
       </div>

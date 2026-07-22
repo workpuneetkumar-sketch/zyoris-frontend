@@ -29,41 +29,41 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base",
     "/analytics", "/reports", "/settings", "/automation",
     "/ceo", "/cfo", "/sales", "/operations", "/admin",
-    "/payment", "/profile", "/portal", "/meetings", "/communications",
+    "/payment", "/profile", "/portal", "/meetings", "/communications", "/notifications",
   ],
   CEO: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
     "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base",
     "/analytics", "/reports", "/settings", "/automation",
-    "/ceo", "/payment", "/profile", "/portal",
+    "/ceo", "/payment", "/profile", "/portal", "/notifications",
   ],
   CFO: [
     "/dashboard", "/deals", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
     "/finance", "/documents", "/knowledge-base",
     "/analytics", "/reports", "/settings",
-    "/cfo", "/payment", "/profile",
+    "/cfo", "/payment", "/profile", "/notifications",
   ],
   SALES_HEAD: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
     "/documents", "/knowledge-base",
     "/reports", "/settings",
-    "/sales", "/profile",
+    "/sales", "/profile", "/notifications",
   ],
   OPERATIONS_HEAD: [
     "/dashboard", "/activities",
     "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
     "/projects", "/documents", "/knowledge-base",
     "/reports", "/settings",
-    "/operations", "/profile",
+    "/operations", "/profile", "/notifications",
   ],
   // ── Legacy roles (backward compatibility) ───────────────────
-  HR: ["/hr", "/profile", "/settings"],
-  FINANCE: ["/finance", "/payment", "/profile", "/settings"],
-  PROJECT_MANAGER: ["/projects", "/profile", "/settings"],
-  CLIENT: ["/portal"],
+  HR: ["/hr", "/profile", "/settings", "/notifications"],
+  FINANCE: ["/finance", "/payment", "/profile", "/settings", "/notifications"],
+  PROJECT_MANAGER: ["/projects", "/profile", "/settings", "/notifications"],
+  CLIENT: ["/portal", "/notifications"],
 };
 
 /**
@@ -88,7 +88,7 @@ export const isPathAllowed = (
 
   // Always allowed general/fallback routes
   if (
-    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights"].some(
+    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights", "/notifications"].some(
       (p) => path === p || path.startsWith(`${p}/`)
     )
   ) {
