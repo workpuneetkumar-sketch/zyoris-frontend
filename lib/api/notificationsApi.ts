@@ -76,16 +76,16 @@ export const fetchNotifications = async (params?: { read?: string; limit?: numbe
 };
 
 export const createNotification = async (payload: CreateNotificationPayload) => {
-  const response = await api.post<NotificationDto>("/api/notifications", payload);
+  const response = await api.post<any>("/api/notifications", payload);
   // Handle multiple response shapes
-  if (response.data?.data) return response.data.data;
-  return response.data;
+  if (response.data?.data) return response.data.data as NotificationDto;
+  return response.data as NotificationDto;
 };
 
 export const markNotificationAsRead = async (id: string) => {
-  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/read`);
-  if (response.data?.data) return response.data.data;
-  return response.data;
+  const response = await api.patch<any>(`/api/notifications/${id}/read`);
+  if (response.data?.data) return response.data.data as NotificationDto;
+  return response.data as NotificationDto;
 };
 
 export const markAllNotificationsAsRead = async () => {
