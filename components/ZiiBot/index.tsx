@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ZiiBotAvatar } from "./ZiiBotAvatar";
 import { ZiiBotPanel } from "./ZiiBotPanel";
@@ -20,6 +21,7 @@ function useDarkMode(): boolean {
 }
 
 export function ZiiBot() {
+  const pathname = usePathname();
   const [panelOpen, setPanelOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -57,6 +59,16 @@ export function ZiiBot() {
   }, [fullscreen]);
 
   const toggleFullscreen = useCallback(() => setFullscreen((f) => !f), []);
+
+  // Hide chatbot on login and register routes for privacy
+  if (
+    pathname === "/login" ||
+    pathname?.startsWith("/login") ||
+    pathname === "/register" ||
+    pathname?.startsWith("/register")
+  ) {
+    return null;
+  }
 
   const showPanel = panelOpen || fullscreen || closing;
 
