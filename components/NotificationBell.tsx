@@ -5,6 +5,7 @@ import { Bell, Check, CheckCheck, X, Trash2, Search, Filter, BellRing, ChevronRi
 import classNames from "classnames";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useTheme } from "@/context/ThemeContext";
+import { useRouter } from "next/navigation";
 import { Avatar } from "./ui/Avatar";
 import { PriorityTag } from "./ui/PriorityTag";
 import { EmptyState } from "./ui/EmptyState";
@@ -143,6 +144,7 @@ type FilterOption = "all" | "unread" | "mentions" | "assignments" | "system";
 
 // Main Notification Panel Component
 export function NotificationBell() {
+  const router = useRouter();
   const { notifications, loading, error, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -236,7 +238,8 @@ export function NotificationBell() {
   // Handle notification click
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) markRead(notification.id);
-    window.location.assign(notification.deepLink || "/notifications");
+    setIsOpen(false);
+    router.push(notification.deepLink || "/notifications");
   };
 
   // Handle mark all read
