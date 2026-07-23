@@ -78,16 +78,22 @@ function CanvasInner({
         <GridLayout
           className="layout"
           layout={gridLayout}
-          cols={COLS}
-          rowHeight={ROW_HEIGHT}
           width={width}
-          margin={MARGIN}
-          containerPadding={[0, 0]}
-          isDraggable={!isPreview}
-          isResizable={!isPreview}
+          gridConfig={{
+            cols: COLS,
+            rowHeight: ROW_HEIGHT,
+            margin: MARGIN,
+            containerPadding: [0, 0],
+          }}
+          dragConfig={{
+            enabled: !isPreview,
+            compactType: "vertical",
+            preventCollision: false,
+          }}
+          resizeConfig={{
+            enabled: !isPreview,
+          }}
           onLayoutChange={handleLayoutChange}
-          compactType="vertical"
-          preventCollision={false}
         >
           {widgets
             .filter((w) => catalog.some((d) => d.id === w.widgetId))
