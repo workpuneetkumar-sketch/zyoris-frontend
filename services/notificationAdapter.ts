@@ -37,6 +37,8 @@ function getEntityDeepLink(entityType?: string | null, entityId?: string | null)
     case "invoice":
     case "invoices":
       return "/finance/invoices";
+    case "finance":
+      return "/finance";
     case "payment":
     case "payments":
       return "/payment/dashboard";
@@ -113,12 +115,18 @@ function getEntityDeepLink(entityType?: string | null, entityId?: string | null)
       return "/ingestion";
     case "user":
     case "users":
-    case "role":
-    case "roles":
     case "rbac":
     case "permission":
     case "permissions":
       return "/admin";
+    case "role":
+    case "roles":
+      return "/admin/roles";
+    case "userrole":
+    case "userroles":
+    case "roleassignment":
+    case "roleassignments":
+      return "/admin/user-roles";
     case "organization":
     case "organizations":
       return "/settings";
