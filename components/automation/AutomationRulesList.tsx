@@ -57,6 +57,7 @@ const ActionBadge = ({ action }: { action: ActionType }) => {
   const colors: Record<ActionType, string> = {
     ASSIGN_USER: "bg-indigo-50 text-indigo-700 border-indigo-200",
     ROUND_ROBIN_ASSIGN: "bg-purple-50 text-purple-700 border-purple-200",
+    AI_RECOMMENDATION_ASSIGN: "bg-gradient-to-r from-blue-50 to-indigo-50 text-indigo-700 border-indigo-200 font-semibold shadow-2xs",
     SEND_NOTIFICATION: "bg-rose-50 text-rose-700 border-rose-200",
     NOTIFY_MANAGER: "bg-amber-50 text-amber-700 border-amber-200",
     SEND_REMINDER: "bg-orange-50 text-orange-700 border-orange-200",

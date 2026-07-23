@@ -510,3 +510,92 @@ export async function getLeadScore(leadId: string): Promise<{ score: number }> {
     throw error;
   }
 }
+
+// ── Day 2: AI Lead Assignment Recommendation & Routing Rules ──
+
+export interface RepScoreBreakdown {
+  repId: string;
+  repName: string;
+  totalScore: number;
+  conversionScore: number;
+  loadScore: number;
+  matchScore: number;
+  rationale: string;
+  activeOpenLeads: number;
+  historicalWonDeals: number;
+}
+
+export interface LeadAssignmentRecommendationResult {
+  leadId: string;
+  recommendedRepId: string;
+  rankings: RepScoreBreakdown[];
+  aiTelemetry?: any;
+}
+
+export interface AssignmentRuleConfig {
+  id?: string;
+  name?: string;
+  strategy: "round_robin" | "load_balanced" | "ai_recommendation" | "manual";
+  enabled?: boolean;
+  fallbackRepId?: string;
+  targetRoleIds?: string[];
+}
+
+/**
+ * Endpoint: POST /leads/:id/assignment-recommendation
+ * Evaluates eligible sales representatives for a lead using 3-pillar scoring + AI synthesis.
+ */
+export async function getLeadAssignmentRecommendation(leadId: string): Promise<LeadAssignmentRecommendationResult> {
+  console.log(`[API] getLeadAssignmentRecommendation - leadId: ${leadId}`);
+  try {
+    const res = await api.post(`/leads/${leadId}/assignment-recommendation`);
+    console.log(`[API] getLeadAssignmentRecommendation response:`, res.data);
+    const data = res.data?.data || res.data;
+    if (!data || !data.recommendedRepId) {
+      throw new Error("Invalid recommendation data received from server");
+    }
+    return data;
+  } catch (error: any) {
+    console.error(`[API] getLeadAssignmentRecommendation error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * Endpoint: GET /leads/assignment-rules
+ */
+export async function getAssignmentRules(): Promise<AssignmentRuleConfig> {
+  try {
+    const res = await api.get(`/leads/assignment-rules`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error(`[API] getAssignmentRules error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * Endpoint: POST /leads/assignment-rules
+ */
+export async function saveAssignmentRule(config: AssignmentRuleConfig): Promise<AssignmentRuleConfig> {
+  try {
+    const res = await api.post(`/leads/assignment-rules`, config);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error(`[API] saveAssignmentRule error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * Endpoint: POST /leads/:id/execute-assignment-rule
+ */
+export async function executeAssignmentRule(leadId: string, rule?: AssignmentRuleConfig): Promise<any> {
+  try {
+    const res = await api.post(`/leads/${leadId}/execute-assignment-rule`, { rule });
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    console.error(`[API] executeAssignmentRule error:`, error.response?.data || error.message);
+    throw error;
+  }
+}

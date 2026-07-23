@@ -8,9 +8,10 @@ import {
     Search,
     X,
     ChevronDown,
+    Sparkles,
 } from "lucide-react";
 
-import { assignLead } from "@/lib/api/leadsApi";
+import { assignLead, getLeadAssignmentRecommendation, LeadAssignmentRecommendationResult } from "@/lib/api/leadsApi";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -109,6 +110,8 @@ export function AssignLead({
         useState<TeamMember | null>(currentAssignee);
 
     const [saving, setSaving] = useState(false);
+    const [aiRec, setAiRec] = useState<LeadAssignmentRecommendationResult | null>(null);
+    const [aiLoading, setAiLoading] = useState(false);
 
     useEffect(() => {
         setAssignee(currentAssignee ?? null);
@@ -168,6 +171,16 @@ export function AssignLead({
         propMembers,
         members.length,
     ]);
+
+    // ── Fetch AI Best Match Recommendation ───────────────────────────────
+    useEffect(() => {
+        if (!open || !leadId || aiRec) return;
+        setAiLoading(true);
+        getLeadAssignmentRecommendation(leadId)
+            .then((data) => setAiRec(data))
+            .catch((err) => console.warn("[AssignLeadModal] AI recommendation fetch failed:", err))
+            .finally(() => setAiLoading(false));
+    }, [open, leadId, aiRec]);
 
     // ── Close dropdown outside click ─────────────────────────────────────
 
@@ -404,6 +417,45 @@ export function AssignLead({
 
                             </p>
                         )}
+
+                    {/* AI Best Match Card */}
+                    {aiLoading ? (
+                        <div className="mx-2 my-2 p-2.5 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 rounded-lg flex items-center gap-2 text-blue-700 text-[12px]">
+                            <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
+                            <span>✨ AI analyzing sales team capacity & territory...</span>
+                        </div>
+                    ) : aiRec && aiRec.rankings?.[0] ? (() => {
+                        const topRep = aiRec.rankings[0];
+                        const memberMatch = members.find((m) => m.id === topRep.repId || m.name.toLowerCase() === topRep.repName.toLowerCase());
+                        return (
+                            <div className="mx-2 my-2 p-2.5 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-indigo-200/80 rounded-xl shadow-sm text-left">
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-900">
+                                        <Sparkles size={14} className="text-indigo-600 shrink-0" />
+                                        <span>AI Best Match</span>
+                                    </div>
+                                    <span className="px-2 py-0.5 bg-indigo-600 text-white font-bold text-[11px] rounded-full shadow-xs">
+                                        {topRep.totalScore}% Score
+                                    </span>
+                                </div>
+                                <p className="text-[11.5px] font-medium text-gray-800 mb-0.5">
+                                    {topRep.repName}
+                                </p>
+                                <p className="text-[11px] text-gray-600 leading-snug mb-2 line-clamp-2">
+                                    {topRep.rationale}
+                                </p>
+                                {memberMatch && (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAssign(memberMatch)}
+                                        className="w-full py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-[11.5px] rounded-lg transition-colors flex items-center justify-center gap-1"
+                                    >
+                                        <span>Assign to {topRep.repName.split(" ")[0]}</span>
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })() : null}
 
                     {/* Members */}
 
