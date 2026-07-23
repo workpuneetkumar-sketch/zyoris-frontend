@@ -25,7 +25,7 @@ interface NotificationContextValue {
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +33,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   // const realtime = useRealtimeNotifications(); // TODO: Re-enable
 
   const loadNotifications = useCallback(async () => {
-    // if (!user) return; // TODO: Re-enable auth check when ready
+    // This provider is mounted at the application root, including /login.
+    // Do not call the protected notifications endpoint until a session exists.
+    if (!isAuthenticated || !user) {
+      setNotifications([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
@@ -45,7 +53,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     loadNotifications();

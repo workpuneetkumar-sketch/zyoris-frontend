@@ -173,11 +173,10 @@ api.interceptors.response.use(
                 const raw = localStorage.getItem("zyoris-auth");
 
                 if (!raw) {
-                    // No auth data, redirect immediately
-                    if (!isRedirecting) {
-                        isRedirecting = true;
-                        window.location.href = "/login";
-                    }
+                    // Public pages (including /login) can legitimately receive a
+                    // 401 from an optional protected request. Redirecting here
+                    // reloads the current page and can create a reload loop.
+                    // Protected layouts handle navigation to /login themselves.
                     return Promise.reject(error);
                 }
 
