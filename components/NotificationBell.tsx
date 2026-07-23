@@ -252,8 +252,9 @@ export function NotificationBell() {
   };
 
   const handleViewAllNotifications = () => {
-    setIsOpen(false);
-    router.push("/notifications");
+    // Use a normal browser navigation here. The notification panel unmounts
+    // as it closes, which can interrupt client-side navigation in this overlay.
+    window.location.assign("/notifications");
   };
 
   return (
