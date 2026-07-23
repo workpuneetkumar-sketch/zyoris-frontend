@@ -482,6 +482,10 @@ export default function RazorpayModal({
                   placeholder="Name on card"
                 />
               </div>
+              {/* International card hint */}
+              <p className="text-xs text-gray-400 mt-1">
+                💡 <span className="font-medium">International test cards:</span> Visa 4239 5360 0631 5640 · MC 5421 1393 0609 0628 · Any future expiry · Any CVV
+              </p>
             </div>
           )}
 
