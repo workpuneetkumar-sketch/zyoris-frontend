@@ -87,8 +87,6 @@ function CanvasInner({
           }}
           dragConfig={{
             enabled: !isPreview,
-            compactType: "vertical",
-            preventCollision: false,
           }}
           resizeConfig={{
             enabled: !isPreview,
