@@ -1,5 +1,6 @@
 "use client";
 
+import type { MutableRefObject } from "react";
 import { GridLayout, useContainerWidth } from "react-grid-layout";
 import type { Layout, LayoutItem } from "react-grid-layout";
 
@@ -58,6 +59,9 @@ function CanvasInner({
   onRemoveWidget,
 }: Omit<DashboardCanvasProps, "isLoading" | "isEmpty">) {
   const { width, containerRef, mounted } = useContainerWidth();
+  const setContainerRef = (node: HTMLDivElement | null) => {
+    (containerRef as MutableRefObject<HTMLDivElement | null>).current = node;
+  };
 
   const getDefinition = (widgetId: string): WidgetDefinition | undefined =>
     catalog.find((d) => d.id === widgetId);
@@ -69,7 +73,7 @@ function CanvasInner({
   };
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={setContainerRef} className="w-full">
       {mounted && (
         <GridLayout
           className="layout"
