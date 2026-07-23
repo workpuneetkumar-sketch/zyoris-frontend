@@ -11,6 +11,7 @@ export type TriggerType =
 export type ActionType = 
   | "ASSIGN_USER" 
   | "ROUND_ROBIN_ASSIGN" 
+  | "AI_RECOMMENDATION_ASSIGN"
   | "SEND_NOTIFICATION" 
   | "NOTIFY_MANAGER" 
   | "SEND_REMINDER";
@@ -54,6 +55,7 @@ export const getActionLabel = (action: ActionType): string => {
   const labels: Record<ActionType, string> = {
     ASSIGN_USER: "Assign User",
     ROUND_ROBIN_ASSIGN: "Round Robin Assign",
+    AI_RECOMMENDATION_ASSIGN: "✨ AI Recommendation Strategy",
     SEND_NOTIFICATION: "Send Notification",
     NOTIFY_MANAGER: "Notify Manager",
     SEND_REMINDER: "Send Reminder",
@@ -75,6 +77,7 @@ export const getActionIcon = (action: ActionType): string => {
   const icons: Record<ActionType, string> = {
     ASSIGN_USER: "👤",
     ROUND_ROBIN_ASSIGN: "🔄",
+    AI_RECOMMENDATION_ASSIGN: "✨",
     SEND_NOTIFICATION: "🔔",
     NOTIFY_MANAGER: "👔",
     SEND_REMINDER: "⏰",
@@ -113,6 +116,16 @@ export const getConfigFields = (action: ActionType): ConfigField[] => {
         helperText: "The team to assign this to in round-robin fashion",
         type: "string",
         required: true,
+      },
+    ],
+    AI_RECOMMENDATION_ASSIGN: [
+      {
+        key: "aiStrategyNote",
+        label: "AI Strategy Configuration",
+        placeholder: "Auto-routes using 3-Pillar scoring matrix (conversion, load, territory)",
+        helperText: "No manual ID required. AI dynamically scores and assigns the top representative.",
+        type: "string",
+        required: false,
       },
     ],
     SEND_NOTIFICATION: [
@@ -156,6 +169,7 @@ export const getValidActionsForTrigger = (trigger: TriggerType): ActionType[] =>
     LEAD_CREATED: [
       "ASSIGN_USER",
       "ROUND_ROBIN_ASSIGN",
+      "AI_RECOMMENDATION_ASSIGN",
       "SEND_NOTIFICATION",
       "NOTIFY_MANAGER",
       "SEND_REMINDER",
