@@ -83,14 +83,36 @@ export const createNotification = async (payload: CreateNotificationPayload) => 
 };
 
 export const markNotificationAsRead = async (id: string) => {
-  const response = await api.patch<any>(`/api/notifications/${id}/read`);
-  if (response.data?.data) return response.data.data as NotificationDto;
-  return response.data as NotificationDto;
+  try {
+    const response = await api.patch<any>(`/api/notifications/${id}/read`);
+    if (response.data?.data) return response.data.data as NotificationDto;
+    return response.data as NotificationDto;
+  } catch {
+    try {
+      const response = await api.put<any>(`/api/notifications/${id}/read`, { read: true });
+      if (response.data?.data) return response.data.data as NotificationDto;
+      return response.data as NotificationDto;
+    } catch {
+      const response = await api.post<any>(`/api/notifications/${id}/read`, { read: true });
+      if (response.data?.data) return response.data.data as NotificationDto;
+      return response.data as NotificationDto;
+    }
+  }
 };
 
 export const markAllNotificationsAsRead = async () => {
-  const response = await api.patch("/api/notifications/read-all");
-  return response.data;
+  try {
+    const response = await api.patch("/api/notifications/read-all");
+    return response.data;
+  } catch {
+    try {
+      const response = await api.put("/api/notifications/read-all", { read: true });
+      return response.data;
+    } catch {
+      const response = await api.post("/api/notifications/read-all", { read: true });
+      return response.data;
+    }
+  }
 };
 
 export const deleteNotification = async (id: string) => {

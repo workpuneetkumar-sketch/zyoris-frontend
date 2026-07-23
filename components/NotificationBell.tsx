@@ -10,6 +10,7 @@ import {
 import classNames from "classnames";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Avatar } from "./ui/Avatar";
 import { EmptyState } from "./ui/EmptyState";
 import { Skeleton } from "./ui/Skeleton";
@@ -416,12 +417,10 @@ export function NotificationBell() {
   };
 
   const handleNotificationClick = (n: Notification) => {
-    // 1. Navigate FIRST — make it feel fast!
-    router.push(n.deepLink || "/notifications");
-    // 2. Mark as read (fire-and-forget — don't block navigation)
     if (!n.read) void markRead(n.id);
-    // 3. Close drawer immediately
     setIsOpen(false);
+    const target = n.deepLink || "/notifications";
+    router.push(target);
   };
 
   const handleMarkAllRead = async () => {
@@ -563,13 +562,14 @@ export function NotificationBell() {
 
           {/* Footer */}
           <div className="p-3 border-t border-border shrink-0">
-            <button
-              onClick={() => { router.push("/notifications"); setIsOpen(false); }}
+            <Link
+              href="/notifications"
+              onClick={() => setIsOpen(false)}
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground text-[13px] font-semibold hover:bg-primary-dark transition-colors"
             >
               View all notifications
               <ChevronRight size={15} />
-            </button>
+            </Link>
           </div>
         </>
       )}

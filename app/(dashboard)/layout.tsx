@@ -4,8 +4,6 @@ import { AppShell } from "@/components/Shell";
 import { isPathAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
-import { NotificationProvider } from "@/hooks/useNotifications";
 import { attachAudioUnlock } from "@/lib/notificationSound";
 
 // Helper: check if localStorage has a token (runs client-side only).
@@ -69,9 +67,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated) return null;
 
-  return (
-    <NotificationProvider>
-      <AppShell>{children}</AppShell>
-    </NotificationProvider>
-  );
+  return <AppShell>{children}</AppShell>;
 }
