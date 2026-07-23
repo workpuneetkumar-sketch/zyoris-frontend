@@ -30,6 +30,7 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     "/analytics", "/reports", "/settings", "/automation",
     "/ceo", "/cfo", "/sales", "/operations", "/admin",
     "/payment", "/profile", "/portal", "/meetings", "/communications", "/notifications",
+    "/leads/assignment",
   ],
   CEO: [
     "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
@@ -37,6 +38,7 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base", "/notes",
     "/analytics", "/reports", "/settings", "/automation",
     "/ceo", "/payment", "/profile", "/portal", "/notifications",
+    "/leads/assignment",
   ],
   CFO: [
     "/dashboard", "/deals", "/activities",
@@ -51,6 +53,7 @@ const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
     "/documents", "/knowledge-base", "/notes",
     "/reports", "/settings",
     "/sales", "/profile", "/notifications",
+    "/leads/assignment",
   ],
   OPERATIONS_HEAD: [
     "/dashboard", "/activities",
@@ -88,7 +91,7 @@ export const isPathAllowed = (
 
   // Always allowed general/fallback routes
   if (
-    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights", "/notifications", "/notes"].some(
+    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights", "/notifications", "/notes", "/leads/assignment"].some(
       (p) => path === p || path.startsWith(`${p}/`)
     )
   ) {

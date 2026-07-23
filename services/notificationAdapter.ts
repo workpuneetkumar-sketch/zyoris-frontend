@@ -138,35 +138,40 @@ function getEntityDeepLink(entityType?: string | null, entityId?: string | null)
 // Map API types to app types and generate routes that exist in this frontend.
 function getNotificationTypeAndDeepLink(dto: NotificationDto): { type: NotificationType; deepLink: string | null } {
   const lowerType = dto.type.toLowerCase();
+  const lowerEntityType = dto.entityType?.toLowerCase() || "";
+  const lowerTitle = dto.title.toLowerCase();
   const entityDeepLink = getEntityDeepLink(dto.entityType, dto.entityId);
   
   // Type mapping first
   let type: NotificationType = "info";
   let deepLink: string | null = null;
 
-  if (lowerType.includes("lead")) {
+  if (lowerType.includes("lead") || lowerEntityType.includes("lead") || lowerTitle.includes("lead")) {
     if (lowerType.includes("assigned")) type = "lead_assigned";
     else if (lowerType.includes("shared")) type = "lead_shared";
     else type = "info";
     deepLink = entityDeepLink || "/leads";
-  } else if (lowerType.includes("deal")) {
+  } else if (lowerType.includes("deal") || lowerEntityType.includes("deal") || lowerTitle.includes("deal")) {
     type = "info";
     deepLink = entityDeepLink || "/deals";
-  } else if (lowerType.includes("task")) {
+  } else if (lowerType.includes("task") || lowerEntityType.includes("task") || lowerTitle.includes("task")) {
     type = "task_assigned";
     deepLink = entityDeepLink || "/tasks";
-  } else if (lowerType.includes("mention") || lowerType.includes("chat")) {
+  } else if (lowerType.includes("mention") || lowerType.includes("chat") || lowerEntityType.includes("mention") || lowerEntityType.includes("chat") || lowerTitle.includes("mention") || lowerTitle.includes("chat")) {
     type = "mention";
     deepLink = entityDeepLink || "/messages";
-  } else if (lowerType.includes("meeting") || lowerType.includes("calendar")) {
+  } else if (lowerType.includes("meeting") || lowerType.includes("calendar") || lowerEntityType.includes("meeting") || lowerEntityType.includes("calendar") || lowerTitle.includes("meeting") || lowerTitle.includes("calendar")) {
     type = "system_reminder";
     deepLink = entityDeepLink || "/calendar";
-  } else if (lowerType.includes("activity")) {
+  } else if (lowerType.includes("activity") || lowerEntityType.includes("activity") || lowerTitle.includes("activity")) {
     type = "info";
     deepLink = entityDeepLink || "/activities";
-  } else if (lowerType.includes("invoice") || lowerType.includes("payment")) {
-    type = "info";
-    deepLink = entityDeepLink || "/finance/invoices";
+  } else if (lowerType.includes("invoice") || lowerType.includes("payment") || lowerType.includes("finance") || lowerEntityType.includes("invoice") || lowerEntityType.includes("payment") || lowerEntityType.includes("finance") || lowerTitle.includes("invoice") || lowerTitle.includes("payment") || lowerTitle.includes("finance")) {
+    type = lowerType.includes("success") ? "success" : "info";
+    deepLink = entityDeepLink || "/finance";
+  } else if (lowerType.includes("ingestion") || lowerType.includes("upload") || lowerEntityType.includes("ingestion") || lowerEntityType.includes("upload") || lowerTitle.includes("ingestion") || lowerTitle.includes("upload")) {
+    type = lowerType.includes("success") ? "success" : "info";
+    deepLink = entityDeepLink || "/ingestion";
   } else if (lowerType.includes("success")) {
     type = "success";
   } else if (lowerType.includes("warning")) {
