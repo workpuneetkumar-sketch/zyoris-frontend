@@ -4,6 +4,7 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { Bell, Check, CheckCheck, Trash2, Search } from "lucide-react";
 import classNames from "classnames";
 import { useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { PriorityTag } from "@/components/ui/PriorityTag";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -51,19 +52,22 @@ function NotificationPageItem({
   notification,
   onMarkRead,
   onDelete,
+  onOpen,
 }: {
   notification: Notification;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
+  onOpen: (notification: Notification) => void;
 }) {
   return (
     <div
       className={classNames(
-        "group relative flex flex-col sm:flex-row items-start gap-4 p-5 transition-all duration-200 rounded-xl",
+        "group relative flex flex-col sm:flex-row items-start gap-4 p-5 transition-all duration-200 rounded-xl cursor-pointer",
         !notification.read
           ? "bg-primary/5 dark:bg-primary/10"
           : "hover:bg-surface-hover dark:hover:bg-surface-hover"
       )}
+      onClick={() => onOpen(notification)}
     >
       {/* Unread indicator */}
       {!notification.read && (
@@ -100,7 +104,7 @@ function NotificationPageItem({
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               {!notification.read && (
                 <button
-                  onClick={() => onMarkRead(notification.id)}
+                  onClick={(event) => { event.stopPropagation(); onMarkRead(notification.id); }}
                   className="p-2 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
                   title="Mark as read"
                 >
@@ -108,7 +112,7 @@ function NotificationPageItem({
                 </button>
               )}
               <button
-                onClick={() => onDelete(notification.id)}
+                  onClick={(event) => { event.stopPropagation(); onDelete(notification.id); }}
                 className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
                 title="Delete"
               >
@@ -133,6 +137,7 @@ export default function NotificationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<FilterOption>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
+  const router = useRouter();
 
   // Filter and search
   const filteredNotifications = useMemo(() => {
@@ -196,6 +201,11 @@ export default function NotificationsPage() {
     } finally {
       setIsMarkingAllRead(false);
     }
+  };
+
+  const handleNotificationOpen = (notification: Notification) => {
+    if (!notification.read) markRead(notification.id);
+    router.push(notification.deepLink || "/notifications");
   };
 
   return (
@@ -293,6 +303,7 @@ export default function NotificationsPage() {
                     notification={notification}
                     onMarkRead={markRead}
                     onDelete={removeNotification}
+                    onOpen={handleNotificationOpen}
                   />
                 ))}
               </div>
