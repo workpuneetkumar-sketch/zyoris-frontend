@@ -4,7 +4,6 @@ import { useNotifications } from "@/hooks/useNotifications";
 import { Bell, Check, CheckCheck, Trash2, Search } from "lucide-react";
 import classNames from "classnames";
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
 import { Avatar } from "@/components/ui/Avatar";
 import { PriorityTag } from "@/components/ui/PriorityTag";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -137,7 +136,6 @@ export default function NotificationsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<FilterOption>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
-  const router = useRouter();
 
   // Filter and search
   const filteredNotifications = useMemo(() => {
@@ -205,7 +203,7 @@ export default function NotificationsPage() {
 
   const handleNotificationOpen = (notification: Notification) => {
     if (!notification.read) markRead(notification.id);
-    router.push(notification.deepLink || "/notifications");
+    window.location.assign(notification.deepLink || "/notifications");
   };
 
   return (

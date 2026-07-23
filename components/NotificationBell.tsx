@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Bell, Check, CheckCheck, X, Trash2, Search, Filter, BellRing, ChevronRight, User } from "lucide-react";
-import { useRouter } from "next/navigation";
 import classNames from "classnames";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useTheme } from "@/context/ThemeContext";
@@ -150,7 +149,6 @@ export function NotificationBell() {
   const [filter, setFilter] = useState<FilterOption>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const { isDark } = useTheme();
-  const router = useRouter();
   const desktopPanelRef = useRef<HTMLDivElement>(null);
   const mobilePanelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -238,10 +236,7 @@ export function NotificationBell() {
   // Handle notification click
   const handleNotificationClick = (notification: Notification) => {
     if (!notification.read) markRead(notification.id);
-    if (notification.deepLink) {
-      router.push(notification.deepLink);
-    }
-    setIsOpen(false);
+    window.location.assign(notification.deepLink || "/notifications");
   };
 
   // Handle mark all read
