@@ -329,7 +329,7 @@ function PaymentPage() {
         idempotencyKeyRef.current
       );
 
-      const keyId = order.key || process.env.NEXT_PUBLIC_KEY_ID || "";
+      const keyId = order.key || process.env.KEY_ID || "";
       if (!keyId) {
         throw new Error("Razorpay Key ID is not configured. Please contact support.");
       }
