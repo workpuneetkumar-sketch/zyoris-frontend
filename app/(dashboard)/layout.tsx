@@ -24,7 +24,7 @@ function hasStoredToken(): boolean {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, isInitializing, sidebarItems, visibleDashboards } = useAuth();
+  const { user, isAuthenticated, isInitializing, permissionsLoaded, sidebarItems, visibleDashboards } = useAuth();
   const router = useRouter();
 
   // Only redirect to /login when:
@@ -42,7 +42,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   // Route access guard — only runs after full auth + permissions are loaded
   useEffect(() => {
-    if (isInitializing || !isAuthenticated || !user) return;
+    if (isInitializing || !permissionsLoaded || !isAuthenticated || !user) return;
 
     const allowed = isPathAllowed(window.location.pathname, sidebarItems, visibleDashboards);
 
@@ -50,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       const fallback = visibleDashboards.find((d) => d.visible)?.route || "/dashboard";
       router.replace(fallback);
     }
-  }, [isInitializing, isAuthenticated, router, user, sidebarItems, visibleDashboards]);
+  }, [isInitializing, permissionsLoaded, isAuthenticated, router, user, sidebarItems, visibleDashboards]);
 
   // Show spinner while restoring session
   if (isInitializing) {

@@ -49,6 +49,7 @@ interface AuthContextValue {
     }) => Promise<User>;
     logout: () => Promise<void>;
     isInitializing: boolean;
+    permissionsLoaded: boolean;
     isLoading: boolean; // Backward compatibility
     isAuthenticated: boolean;
     error: string | null;
@@ -87,6 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [visibleDashboards, setVisibleDashboards] = useState<DashboardItem[]>([]);
   const [visibleModules, setVisibleModules] = useState<string[]>([]);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [permissionsLoaded, setPermissionsLoaded] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -100,6 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const restoreSession = async () => {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) {
+        setPermissionsLoaded(true);
         setIsInitializing(false);
         return;
       }
@@ -109,12 +112,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         parsed = JSON.parse(raw);
       } catch {
         clearAuthState();
+        setPermissionsLoaded(true);
         setIsInitializing(false);
         return;
       }
 
       if (!parsed?.token) {
         clearAuthState();
+        setPermissionsLoaded(true);
         setIsInitializing(false);
         return;
       }
@@ -127,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const cachedUser: User | null = parsed.user ?? null;
       setToken(parsed.token);
       setTokenCookie(parsed.token);
+      setPermissionsLoaded(false);
 
       if (cachedUser) {
         setUser(cachedUser);
@@ -181,6 +187,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.warn("Session validation failed (non-auth error), keeping session:", err?.message || err);
         }
       } finally {
+        // The route guard must not evaluate routes against the initial empty
+        // sidebar while these permission requests are still in flight.
+        setPermissionsLoaded(true);
         // Always clear the initializing flag
         setIsInitializing(false);
       }
@@ -192,6 +201,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // LOGIN
   const login = useCallback(async (email: string, password: string) => {
     setError(null);
+    setPermissionsLoaded(false);
 
     const res = await loginApi(email, password);
 
@@ -227,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(res.user);
     setIsAuthenticated(true);
+    setPermissionsLoaded(true);
 
     return res;
   }, []);
@@ -240,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     designation: string;
   }) => {
     setError(null);
+    setPermissionsLoaded(false);
 
     const res = await registerApi(data);
 
@@ -275,6 +287,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     setUser(res.user);
     setIsAuthenticated(true);
+    setPermissionsLoaded(true);
 
     return res.user;
   }, []);
@@ -297,6 +310,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setVisibleDashboards([]);
       setVisibleModules([]);
       setIsAuthenticated(false);
+      setPermissionsLoaded(false);
       clearAuthState();
       router.push("/login");
     }
@@ -317,6 +331,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 register, 
                 logout, 
                 isInitializing, 
+                permissionsLoaded,
                 isLoading: isInitializing, // Backward compatibility
                 isAuthenticated, 
                 error 
