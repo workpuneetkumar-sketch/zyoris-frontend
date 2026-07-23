@@ -112,7 +112,7 @@ function getEntityDeepLink(entityType?: string | null, entityId?: string | null)
     case "upload":
     case "uploads":
     case "ingestion":
-      return "/ingestion";
+      return "/ai-insights";
     case "user":
     case "users":
     case "rbac":
@@ -171,7 +171,7 @@ function getNotificationTypeAndDeepLink(dto: NotificationDto): { type: Notificat
     deepLink = entityDeepLink || "/finance";
   } else if (lowerType.includes("ingestion") || lowerType.includes("upload") || lowerEntityType.includes("ingestion") || lowerEntityType.includes("upload") || lowerTitle.includes("ingestion") || lowerTitle.includes("upload")) {
     type = lowerType.includes("success") ? "success" : "info";
-    deepLink = entityDeepLink || "/ingestion";
+    deepLink = entityDeepLink || "/ai-insights";
   } else if (lowerType.includes("success")) {
     type = "success";
   } else if (lowerType.includes("warning")) {

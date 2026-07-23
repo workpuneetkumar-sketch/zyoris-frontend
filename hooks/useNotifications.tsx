@@ -151,6 +151,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const next = !soundEnabled;
     setSoundEnabled(next);
     setSoundEnabledState(next);
+    if (next) {
+      void playNotificationSound(true);
+    }
   }, [soundEnabled]);
 
   // Browser push permission

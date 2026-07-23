@@ -225,7 +225,7 @@ function NotificationSettings({
 
   const handleTestSound = async () => {
     setTestingSound(true);
-    await playNotificationSound();
+    await playNotificationSound(true);
     setTimeout(() => setTestingSound(false), 500);
   };
 

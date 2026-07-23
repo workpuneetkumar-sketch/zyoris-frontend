@@ -58,6 +58,11 @@ export function attachAudioUnlock(): void {
   document.addEventListener("touchstart", unlock, { passive: true });
 }
 
+// Auto-attach unlock on window load so any user interaction immediately unlocks AudioContext
+if (typeof window !== "undefined") {
+  attachAudioUnlock();
+}
+
 // ── Chime sound (two-tone, 150ms) ─────────────────────────────────────────────
 
 function buildChime(ctx: AudioContext): AudioBuffer {
@@ -73,8 +78,8 @@ function buildChime(ctx: AudioContext): AudioBuffer {
   return buf;
 }
 
-export async function playNotificationSound(): Promise<void> {
-  if (!isSoundEnabled()) return;
+export async function playNotificationSound(force: boolean = false): Promise<void> {
+  if (!force && !isSoundEnabled()) return;
   const ctx = getCtx();
   if (!ctx) return;
 
@@ -85,7 +90,7 @@ export async function playNotificationSound(): Promise<void> {
     src.buffer = buildChime(ctx);
 
     const gain = ctx.createGain();
-    gain.gain.value = 0.4;
+    gain.gain.value = 0.5;
 
     src.connect(gain);
     gain.connect(ctx.destination);
