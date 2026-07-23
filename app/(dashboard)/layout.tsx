@@ -4,6 +4,7 @@ import { AppShell } from "@/components/Shell";
 import { isPathAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { attachAudioUnlock } from "@/lib/notificationSound";
 
 // Helper: check if localStorage has a token (runs client-side only).
