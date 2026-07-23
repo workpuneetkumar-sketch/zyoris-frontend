@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Bell, Check, CheckCheck, X, Trash2, Search, Filter, BellRing, ChevronRight, User } from "lucide-react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import classNames from "classnames";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useTheme } from "@/context/ThemeContext";
@@ -252,6 +251,11 @@ export function NotificationBell() {
     }
   };
 
+  const handleViewAllNotifications = () => {
+    setIsOpen(false);
+    router.push("/notifications");
+  };
+
   return (
     <div className="relative">
       {/* Bell Button */}
@@ -391,14 +395,14 @@ export function NotificationBell() {
 
               {/* Footer */}
             <div className="p-4 border-t border-border">
-                <Link
-                    href="/notifications"
-                    onClick={() => setIsOpen(false)}
+                <button
+                    type="button"
+                    onClick={handleViewAllNotifications}
                     className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary-dark transition-colors"
                 >
                     View all notifications
                     <ChevronRight size={16} />
-                </Link>
+                </button>
             </div>
             </div>
           </div>
