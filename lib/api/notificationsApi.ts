@@ -32,87 +32,24 @@ export interface FetchNotificationsResponse {
   data: NotificationDto[];
 }
 
-export const fetchNotifications = async (params?: { read?: string; limit?: number; offset?: number }): Promise<FetchNotificationsResponse> => {
-  const response = await api.get("/api/notifications", { params });
-  const raw = response.data;
-
-  // Support multiple response shapes
-  let notifications: NotificationDto[] =
-    Array.isArray(raw) ? raw :
-    Array.isArray(raw.data) ? raw.data :
-    Array.isArray(raw.notifications) ? raw.notifications :
-    Array.isArray(raw.data?.notifications) ? raw.data.notifications :
-    [];
-
-  const total: number =
-    typeof raw.pagination?.total === "number" ? raw.pagination.total :
-    typeof raw.meta?.total === "number" ? raw.meta.total :
-    typeof raw.total === "number" ? raw.total :
-    typeof raw.data?.total === "number" ? raw.data.total :
-    notifications.length;
-
-  const unreadCount: number =
-    typeof raw.unreadCount === "number" ? raw.unreadCount :
-    typeof raw.data?.unreadCount === "number" ? raw.data.unreadCount :
-    notifications.filter(n => !n.read).length;
-
-  const limit: number =
-    typeof raw.limit === "number" ? raw.limit :
-    typeof raw.data?.limit === "number" ? raw.data.limit :
-    params?.limit ?? 50;
-
-  const offset: number =
-    typeof raw.offset === "number" ? raw.offset :
-    typeof raw.data?.offset === "number" ? raw.data.offset :
-    params?.offset ?? 0;
-
-  return {
-    total,
-    unreadCount,
-    limit,
-    offset,
-    data: notifications
-  };
+export const fetchNotifications = async (params?: { read?: string; limit?: number; offset?: number }) => {
+  const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params });
+  return response.data;
 };
 
 export const createNotification = async (payload: CreateNotificationPayload) => {
-  const response = await api.post<any>("/api/notifications", payload);
-  // Handle multiple response shapes
-  if (response.data?.data) return response.data.data as NotificationDto;
-  return response.data as NotificationDto;
+  const response = await api.post<NotificationDto>("/api/notifications", payload);
+  return response.data;
 };
 
 export const markNotificationAsRead = async (id: string) => {
-  try {
-    const response = await api.patch<any>(`/api/notifications/${id}/read`);
-    if (response.data?.data) return response.data.data as NotificationDto;
-    return response.data as NotificationDto;
-  } catch {
-    try {
-      const response = await api.put<any>(`/api/notifications/${id}/read`, { read: true });
-      if (response.data?.data) return response.data.data as NotificationDto;
-      return response.data as NotificationDto;
-    } catch {
-      const response = await api.post<any>(`/api/notifications/${id}/read`, { read: true });
-      if (response.data?.data) return response.data.data as NotificationDto;
-      return response.data as NotificationDto;
-    }
-  }
+  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/read`);
+  return response.data;
 };
 
 export const markAllNotificationsAsRead = async () => {
-  try {
-    const response = await api.patch("/api/notifications/read-all");
-    return response.data;
-  } catch {
-    try {
-      const response = await api.put("/api/notifications/read-all", { read: true });
-      return response.data;
-    } catch {
-      const response = await api.post("/api/notifications/read-all", { read: true });
-      return response.data;
-    }
-  }
+  const response = await api.patch("/api/notifications/read-all");
+  return response.data;
 };
 
 export const deleteNotification = async (id: string) => {
