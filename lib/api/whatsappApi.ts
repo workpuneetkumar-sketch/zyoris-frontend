@@ -28,16 +28,64 @@ export interface SendWhatsAppPayload {
     conversationId?: string;
 }
 
-function parseApiError(error: any): string {
+export interface AISummaryResponse {
+    summary: string;
+}
+
+export interface AISentimentResponse {
+    sentiment: string;
+    score?: number;
+}
+
+export interface AISuggestionsResponse {
+    suggestions: string[];
+}
+
+export interface BroadcastPayload {
+    to: string[];
+    templateName: string;
+    language: string;
+    parameters: string[];
+}
+
+export interface BroadcastRecipientResult {
+    to: string;
+    success: boolean;
+    metaMessageId?: string;
+    error?: string;
+}
+
+export interface BroadcastResponse {
+    success: boolean;
+    total: number;
+    sent: number;
+    failed: number;
+    results: BroadcastRecipientResult[];
+}
+
+export interface WhatsAppApiErrorDetail {
+    status?: number;
+    errorCode?: string;
+    message: string;
+}
+
+function parseApiErrorDetail(error: any): WhatsAppApiErrorDetail {
     if (error?.response) {
         const status = error.response.status;
-        const msg = error.response.data?.message || error.response.data?.error;
-        if (status === 404) return msg || "Conversation not found (404)";
-        if (status === 401) return msg || "Unauthorized access (401). Please verify authentication.";
-        if (status >= 500) return msg || "Server error occurred. Please try again (500)";
-        return msg || `Request failed with status ${status}`;
+        const data = error.response.data;
+        const msg = data?.message || data?.error;
+        const errorCode = data?.error;
+        if (status === 404) return { status, errorCode, message: msg || "Conversation not found (404)" };
+        if (status === 401) return { status, errorCode, message: msg || "Unauthorized access (401). Please verify authentication." };
+        if (status === 400) return { status, errorCode, message: msg || "Invalid request validation failed (400)." };
+        if (status >= 500) return { status, errorCode, message: msg || "Server error occurred. Please try again (500)." };
+        return { status, errorCode, message: msg || `Request failed with status ${status}` };
     }
-    return error?.message || "Network error occurred";
+    return { message: error?.message || "Network error occurred" };
+}
+
+function parseApiError(error: any): string {
+    return parseApiErrorDetail(error).message;
 }
 
 export async function fetchConversations(): Promise<WhatsAppConversation[]> {
@@ -102,4 +150,61 @@ export async function setConversationArchived(id: string, archived: boolean): Pr
         throw new Error(parseApiError(err));
     }
 }
+
+/* ---------------------------------------------------
+   AI INSIGHTS & BROADCAST API CALLS
+--------------------------------------------------- */
+
+export async function fetchAISummary(conversationId: string): Promise<AISummaryResponse> {
+    try {
+        const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-summary`);
+        return res.data;
+    } catch (err: any) {
+        const detail = parseApiErrorDetail(err);
+        const error: any = new Error(detail.message);
+        error.status = detail.status;
+        error.errorCode = detail.errorCode;
+        throw error;
+    }
+}
+
+export async function fetchAISentiment(conversationId: string): Promise<AISentimentResponse> {
+    try {
+        const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-sentiment`);
+        return res.data;
+    } catch (err: any) {
+        const detail = parseApiErrorDetail(err);
+        const error: any = new Error(detail.message);
+        error.status = detail.status;
+        error.errorCode = detail.errorCode;
+        throw error;
+    }
+}
+
+export async function fetchAISuggestions(conversationId: string): Promise<AISuggestionsResponse> {
+    try {
+        const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-suggestions`);
+        return res.data;
+    } catch (err: any) {
+        const detail = parseApiErrorDetail(err);
+        const error: any = new Error(detail.message);
+        error.status = detail.status;
+        error.errorCode = detail.errorCode;
+        throw error;
+    }
+}
+
+export async function sendBroadcast(payload: BroadcastPayload): Promise<BroadcastResponse> {
+    try {
+        const res = await api.post("/whatsapp/broadcast", payload);
+        return res.data;
+    } catch (err: any) {
+        const detail = parseApiErrorDetail(err);
+        const error: any = new Error(detail.message);
+        error.status = detail.status;
+        error.errorCode = detail.errorCode;
+        throw error;
+    }
+}
+
 

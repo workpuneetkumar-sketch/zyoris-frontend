@@ -17,10 +17,14 @@ import {
     Tag,
     X,
     RefreshCw,
-    Check
+    Check,
+    Sparkles,
+    Radio
 } from "lucide-react";
 import { WhatsAppConversation } from "@/lib/api/whatsappApi";
 import { WhatsAppTab } from "@/hooks/useWhatsApp";
+import { AIInsightsPanel } from "@/components/whatsapp/AIInsightsPanel";
+import { BroadcastComposerModal } from "@/components/whatsapp/BroadcastComposerModal";
 
 interface WhatsAppUIProps {
     conversations: WhatsAppConversation[];
@@ -83,6 +87,9 @@ export function WhatsAppUI({
     const [showLabelManager, setShowLabelManager] = useState(false);
     const [customLabelInput, setCustomLabelInput] = useState("");
     const [searchQuery, setSearchQuery] = useState("");
+    const [showAIInsights, setShowAIInsights] = useState(false);
+    const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
 
@@ -223,8 +230,16 @@ export function WhatsAppUI({
             <div className="flex items-center justify-between px-4 md:px-0 pt-4 md:pt-0">
                 <div>
                     <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">WhatsApp Workspace</h1>
-                    <p className="text-[15px] text-gray-500 mt-1 font-medium">Manage labels, pinned chats, and archived customer conversations</p>
+                    <p className="text-[15px] text-gray-500 mt-1 font-medium">Manage labels, pinned chats, AI insights, and broadcast campaigns</p>
                 </div>
+
+                <button
+                    onClick={() => setShowBroadcastModal(true)}
+                    className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-lg hover:shadow-blue-200 transition-all flex items-center gap-2 shrink-0"
+                >
+                    <Radio size={16} />
+                    <span>Broadcast Message</span>
+                </button>
             </div>
 
             {/* Demo Banner */}
@@ -364,208 +379,233 @@ export function WhatsAppUI({
                     </div>
                 </div>
 
-                {/* Right Panel - Active Chat Window */}
-                <div className={`flex-1 flex flex-col bg-gray-50/30 min-w-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
+                {/* Right Panel - Active Chat Window & AI Insights Panel */}
+                <div className={`flex-1 flex bg-gray-50/30 min-w-0 ${!showMobileChat ? 'hidden md:flex' : 'flex'}`}>
                     {selectedConversation ? (
                         <>
-                            {/* Chat Header */}
-                            <div className="px-4 md:px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between gap-3 shrink-0 relative">
-                                <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                                    <button onClick={() => setShowMobileChat(false)} className="md:hidden p-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
-                                        <ChevronLeft size={20} />
-                                    </button>
-                                    <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-700 shrink-0 shadow-sm border border-blue-200/50">
-                                        <User size={22} />
+                            <div className="flex-1 flex flex-col min-w-0">
+                                {/* Chat Header */}
+                                <div className="px-4 md:px-6 py-3.5 border-b border-gray-100 bg-white flex items-center justify-between gap-3 shrink-0 relative">
+                                    <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                                        <button onClick={() => setShowMobileChat(false)} className="md:hidden p-2 -ml-2 rounded-full hover:bg-gray-100 text-gray-500 transition-colors">
+                                            <ChevronLeft size={20} />
+                                        </button>
+                                        <div className="w-11 h-11 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 flex items-center justify-center text-blue-700 shrink-0 shadow-sm border border-blue-200/50">
+                                            <User size={22} />
+                                        </div>
+                                        <div className="min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="font-bold text-gray-900 text-[15px] tracking-tight truncate">{selectedConversation.contactName}</h3>
+                                                {selectedConversation.leadStatus && (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200 shrink-0">
+                                                        {selectedConversation.leadStatus}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-gray-400 truncate">
+                                                {selectedConversation.contactPhone}
+                                                {selectedConversation.leadName && ` • Lead: ${selectedConversation.leadName}`}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <h3 className="font-bold text-gray-900 text-[15px] tracking-tight truncate">{selectedConversation.contactName}</h3>
-                                            {selectedConversation.leadStatus && (
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200 shrink-0">
-                                                    {selectedConversation.leadStatus}
+
+                                    {/* Header Action Toolbar */}
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        {/* AI Insights Panel Toggle */}
+                                        <button
+                                            onClick={() => setShowAIInsights(!showAIInsights)}
+                                            className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[12px] font-medium transition-colors ${
+                                                showAIInsights
+                                                    ? 'border-indigo-300 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 shadow-xs'
+                                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <Sparkles size={14} className={showAIInsights ? "text-indigo-600 fill-indigo-100" : "text-indigo-500"} />
+                                            <span>AI Insights</span>
+                                        </button>
+
+                                        {/* Label Manager Toggle */}
+                                        <button
+                                            onClick={() => setShowLabelManager(!showLabelManager)}
+                                            className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[12px] font-medium transition-colors ${
+                                                showLabelManager || (selectedConversation.labels && selectedConversation.labels.length > 0)
+                                                    ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
+                                                    : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            <Tag size={14} />
+                                            <span>Labels</span>
+                                            {selectedConversation.labels && selectedConversation.labels.length > 0 && (
+                                                <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-purple-200 text-purple-800 font-bold">
+                                                    {selectedConversation.labels.length}
                                                 </span>
                                             )}
-                                        </div>
-                                        <p className="text-xs text-gray-400 truncate">
-                                            {selectedConversation.contactPhone}
-                                            {selectedConversation.leadName && ` • Lead: ${selectedConversation.leadName}`}
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* Header Action Toolbar */}
-                                <div className="flex items-center gap-2 shrink-0">
-                                    {/* Label Manager Toggle */}
-                                    <button
-                                        onClick={() => setShowLabelManager(!showLabelManager)}
-                                        className={`flex items-center gap-1.5 h-8 px-3 rounded-lg border text-[12px] font-medium transition-colors ${
-                                            showLabelManager || (selectedConversation.labels && selectedConversation.labels.length > 0)
-                                                ? 'border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100'
-                                                : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        <Tag size={14} />
-                                        <span>Labels</span>
-                                        {selectedConversation.labels && selectedConversation.labels.length > 0 && (
-                                            <span className="ml-0.5 px-1.5 py-0.2 rounded-full text-[10px] bg-purple-200 text-purple-800 font-bold">
-                                                {selectedConversation.labels.length}
-                                            </span>
-                                        )}
-                                    </button>
-
-                                    {/* Pin Toggle */}
-                                    <button
-                                        onClick={() => onTogglePin(selectedConversation.id, !selectedConversation.pinned)}
-                                        title={selectedConversation.pinned ? "Unpin chat" : "Pin chat"}
-                                        className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-colors ${
-                                            selectedConversation.pinned
-                                                ? 'bg-blue-50 border-blue-200 text-blue-600'
-                                                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {selectedConversation.pinned ? <PinOff size={15} /> : <Pin size={15} />}
-                                    </button>
-
-                                    {/* Archive Toggle */}
-                                    <button
-                                        onClick={() => onToggleArchive(selectedConversation.id, !selectedConversation.archived)}
-                                        title={selectedConversation.archived ? "Unarchive chat" : "Archive chat"}
-                                        className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-colors ${
-                                            selectedConversation.archived
-                                                ? 'bg-amber-50 border-amber-200 text-amber-600'
-                                                : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {selectedConversation.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
-                                    </button>
-
-                                    {/* Create Lead Button if not linked */}
-                                    {!selectedConversation.leadId && (
-                                        <button 
-                                            onClick={() => router.push(`/leads/new?phone=${encodeURIComponent(selectedConversation.contactPhone)}&name=${encodeURIComponent(selectedConversation.contactName)}`)}
-                                            className="hidden sm:flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-                                        >
-                                            <Plus size={14} />
-                                            Create Lead
                                         </button>
-                                    )}
-                                </div>
-                            </div>
 
-                            {/* Label Manager Popover / Drawer */}
-                            {showLabelManager && (
-                                <div className="bg-purple-50/60 border-b border-purple-100 p-4 transition-all animate-fadeIn">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <div className="flex items-center gap-2">
-                                            <Tag size={15} className="text-purple-700" />
-                                            <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider">Conversation Labels</h4>
-                                        </div>
-                                        <button onClick={() => setShowLabelManager(false)} className="text-gray-400 hover:text-gray-600">
-                                            <X size={16} />
-                                        </button>
-                                    </div>
-
-                                    {/* Active Labels Chips */}
-                                    <div className="flex flex-wrap gap-1.5 mb-3">
-                                        {(!selectedConversation.labels || selectedConversation.labels.length === 0) ? (
-                                            <span className="text-xs text-gray-400 italic">No labels attached. Select a preset below or add a custom label.</span>
-                                        ) : (
-                                            selectedConversation.labels.map((lbl, idx) => (
-                                                <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-xs ${getLabelBadgeStyle(lbl)}`}>
-                                                    {lbl}
-                                                    <button onClick={() => handleRemoveLabel(lbl)} className="hover:text-red-600">
-                                                        <X size={12} />
-                                                    </button>
-                                                </span>
-                                            ))
-                                        )}
-                                    </div>
-
-                                    {/* Preset Toggles */}
-                                    <div className="mb-3">
-                                        <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Preset Tags:</p>
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {PRESET_LABELS.map(preset => {
-                                                const isActive = selectedConversation.labels?.includes(preset);
-                                                return (
-                                                    <button
-                                                        key={preset}
-                                                        onClick={() => handleTogglePresetLabel(preset)}
-                                                        className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 border ${
-                                                            isActive
-                                                                ? "bg-purple-600 text-white border-purple-600 shadow-sm"
-                                                                : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
-                                                        }`}
-                                                    >
-                                                        {isActive && <Check size={12} />}
-                                                        {preset}
-                                                    </button>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-
-                                    {/* Custom Label Input */}
-                                    <div className="flex gap-2">
-                                        <input
-                                            type="text"
-                                            placeholder="Type custom label..."
-                                            value={customLabelInput}
-                                            onChange={e => setCustomLabelInput(e.target.value)}
-                                            onKeyDown={e => e.key === "Enter" && handleAddCustomLabel()}
-                                            className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
-                                        />
+                                        {/* Pin Toggle */}
                                         <button
-                                            onClick={handleAddCustomLabel}
-                                            disabled={!customLabelInput.trim()}
-                                            className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+                                            onClick={() => onTogglePin(selectedConversation.id, !selectedConversation.pinned)}
+                                            title={selectedConversation.pinned ? "Unpin chat" : "Pin chat"}
+                                            className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-colors ${
+                                                selectedConversation.pinned
+                                                    ? 'bg-blue-50 border-blue-200 text-blue-600'
+                                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                            }`}
                                         >
-                                            Add Label
+                                            {selectedConversation.pinned ? <PinOff size={15} /> : <Pin size={15} />}
                                         </button>
+
+                                        {/* Archive Toggle */}
+                                        <button
+                                            onClick={() => onToggleArchive(selectedConversation.id, !selectedConversation.archived)}
+                                            title={selectedConversation.archived ? "Unarchive chat" : "Archive chat"}
+                                            className={`h-8 w-8 flex items-center justify-center rounded-lg border transition-colors ${
+                                                selectedConversation.archived
+                                                    ? 'bg-amber-50 border-amber-200 text-amber-600'
+                                                    : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                            }`}
+                                        >
+                                            {selectedConversation.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                                        </button>
+
+                                        {/* Create Lead Button if not linked */}
+                                        {!selectedConversation.leadId && (
+                                            <button 
+                                                onClick={() => router.push(`/leads/new?phone=${encodeURIComponent(selectedConversation.contactPhone)}&name=${encodeURIComponent(selectedConversation.contactName)}`)}
+                                                className="hidden sm:flex items-center gap-1.5 h-8 px-3 rounded-lg border border-gray-200 bg-white text-[12px] font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                                            >
+                                                <Plus size={14} />
+                                                Create Lead
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                            )}
 
-                            {/* Messages Area */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                                {selectedConversation.messages.map((msg) => {
-                                    const isUser = msg.sender === 'user';
-                                    return (
-                                        <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-                                            <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-3 shadow-md ${
-                                                isUser ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm' : 'bg-white border border-gray-100 text-gray-800 rounded-bl-sm'
-                                            } break-words transition-all duration-200`}>
-                                                <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
-                                                <p className={`text-[11px] mt-1.5 text-right font-medium ${isUser ? 'text-blue-100/80' : 'text-gray-400'}`}>
-                                                    {formatTime(msg.timestamp)}
-                                                </p>
+                                {/* Label Manager Popover / Drawer */}
+                                {showLabelManager && (
+                                    <div className="bg-purple-50/60 border-b border-purple-100 p-4 transition-all animate-fadeIn">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-2">
+                                                <Tag size={15} className="text-purple-700" />
+                                                <h4 className="text-xs font-bold text-purple-900 uppercase tracking-wider">Conversation Labels</h4>
+                                            </div>
+                                            <button onClick={() => setShowLabelManager(false)} className="text-gray-400 hover:text-gray-600">
+                                                <X size={16} />
+                                            </button>
+                                        </div>
+
+                                        {/* Active Labels Chips */}
+                                        <div className="flex flex-wrap gap-1.5 mb-3">
+                                            {(!selectedConversation.labels || selectedConversation.labels.length === 0) ? (
+                                                <span className="text-xs text-gray-400 italic">No labels attached. Select a preset below or add a custom label.</span>
+                                            ) : (
+                                                selectedConversation.labels.map((lbl, idx) => (
+                                                    <span key={idx} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border shadow-xs ${getLabelBadgeStyle(lbl)}`}>
+                                                        {lbl}
+                                                        <button onClick={() => handleRemoveLabel(lbl)} className="hover:text-red-600">
+                                                            <X size={12} />
+                                                        </button>
+                                                    </span>
+                                                ))
+                                            )}
+                                        </div>
+
+                                        {/* Preset Toggles */}
+                                        <div className="mb-3">
+                                            <p className="text-[11px] font-semibold text-gray-500 mb-1.5">Preset Tags:</p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {PRESET_LABELS.map(preset => {
+                                                    const isActive = selectedConversation.labels?.includes(preset);
+                                                    return (
+                                                        <button
+                                                            key={preset}
+                                                            onClick={() => handleTogglePresetLabel(preset)}
+                                                            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 border ${
+                                                                isActive
+                                                                    ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                                                                    : "bg-white text-gray-700 border-gray-200 hover:bg-gray-100"
+                                                            }`}
+                                                        >
+                                                            {isActive && <Check size={12} />}
+                                                            {preset}
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
-                                    );
-                                })}
-                                <div ref={messagesEndRef} />
-                            </div>
 
-                            {/* Input Area */}
-                            <div className="p-4 pr-20 md:pr-4 bg-white border-t border-gray-100">
-                                <div className="flex gap-3">
-                                    <input
-                                        type="text"
-                                        placeholder="Type a message..."
-                                        value={messageInput}
-                                        onChange={(e) => setMessageInput(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                        className="flex-1 rounded-2xl border border-gray-200 px-5 py-3 text-[15px] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all duration-200 bg-gray-50/50 focus:bg-white shadow-sm"
-                                    />
-                                    <button
-                                        onClick={handleSend}
-                                        disabled={!messageInput.trim() || sending}
-                                        className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white w-12 h-12 rounded-2xl flex items-center justify-center hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200 shrink-0 shadow-md shadow-blue-200"
-                                    >
-                                        <Send size={18} className="ml-1" />
-                                    </button>
+                                        {/* Custom Label Input */}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="Type custom label..."
+                                                value={customLabelInput}
+                                                onChange={e => setCustomLabelInput(e.target.value)}
+                                                onKeyDown={e => e.key === "Enter" && handleAddCustomLabel()}
+                                                className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-200 transition-all"
+                                            />
+                                            <button
+                                                onClick={handleAddCustomLabel}
+                                                disabled={!customLabelInput.trim()}
+                                                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-xs font-semibold rounded-lg transition-colors"
+                                            >
+                                                Add Label
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Messages Area */}
+                                <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                                    {selectedConversation.messages.map((msg) => {
+                                        const isUser = msg.sender === 'user';
+                                        return (
+                                            <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                                                <div className={`max-w-[85%] md:max-w-[70%] rounded-2xl px-4 py-3 shadow-md ${
+                                                    isUser ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm' : 'bg-white border border-gray-100 text-gray-800 rounded-bl-sm'
+                                                } break-words transition-all duration-200`}>
+                                                    <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                                                    <p className={`text-[11px] mt-1.5 text-right font-medium ${isUser ? 'text-blue-100/80' : 'text-gray-400'}`}>
+                                                        {formatTime(msg.timestamp)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    <div ref={messagesEndRef} />
+                                </div>
+
+                                {/* Input Area */}
+                                <div className="p-4 pr-20 md:pr-4 bg-white border-t border-gray-100">
+                                    <div className="flex gap-3">
+                                        <input
+                                            type="text"
+                                            placeholder="Type a message..."
+                                            value={messageInput}
+                                            onChange={(e) => setMessageInput(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                                            className="flex-1 rounded-2xl border border-gray-200 px-5 py-3 text-[15px] outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 transition-all duration-200 bg-gray-50/50 focus:bg-white shadow-sm"
+                                        />
+                                        <button
+                                            onClick={handleSend}
+                                            disabled={!messageInput.trim() || sending}
+                                            className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white w-12 h-12 rounded-2xl flex items-center justify-center hover:shadow-lg hover:-translate-y-0.5 disabled:opacity-50 disabled:hover:translate-y-0 transition-all duration-200 shrink-0 shadow-md shadow-blue-200"
+                                        >
+                                            <Send size={18} className="ml-1" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Collapsible AI Insights Side Panel */}
+                            {showAIInsights && (
+                                <AIInsightsPanel
+                                    conversationId={selectedConversation.id}
+                                    contactName={selectedConversation.contactName}
+                                    onSelectSuggestion={(text) => setMessageInput(text)}
+                                    onClose={() => setShowAIInsights(false)}
+                                />
+                            )}
                         </>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center text-gray-400">
@@ -575,7 +615,14 @@ export function WhatsAppUI({
                     )}
                 </div>
             </div>
+
+            {/* Broadcast Composer Modal */}
+            <BroadcastComposerModal
+                isOpen={showBroadcastModal}
+                onClose={() => setShowBroadcastModal(false)}
+            />
         </div>
     );
 }
+
 
