@@ -3,9 +3,9 @@
 // components/dashboard-builder/DashboardCanvas.tsx
 // Drag-and-drop resizable grid using react-grid-layout v2.
 
-import { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import { ReactGridLayout, useContainerWidth } from "react-grid-layout";
-import type { LayoutItem, Layout, OnLayoutChangeCallback } from "react-grid-layout";
+import type { LayoutItem, Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import { X, GripVertical, Loader2, LayoutTemplate, MousePointerClick, GripHorizontal } from "lucide-react";
@@ -127,8 +127,8 @@ function GridContainer({
 
   const layout = useMemo(() => toRGLLayout(widgets, catalog), [widgets, catalog]);
 
-  const handleLayoutChange = useCallback<OnLayoutChangeCallback>(
-    (newLayout) => {
+  const handleLayoutChange = useCallback(
+    (newLayout: Layout) => {
       const merged = mergeLayout(widgets, newLayout);
       const changed = merged.some(
         (w, i) =>
@@ -143,7 +143,7 @@ function GridContainer({
   );
 
   return (
-    <div ref={containerRef} className="w-full">
+    <div ref={containerRef as React.RefObject<HTMLDivElement>} className="w-full">
       {mounted && (
         <ReactGridLayout
           width={width}
