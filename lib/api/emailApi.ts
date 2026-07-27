@@ -1,6 +1,6 @@
 // lib/api/emailApi.ts
 // All network calls for the Email module.
-// Swagger: POST /email/send | POST /email/send-bulk | GET /email/get-emails | POST /email/sync
+// Endpoints: GET /email/get-emails?folder={inbox|sent|drafts|trash} | POST /email/oauth/gmail/connect | POST /email/send | POST /email/send-bulk | POST /email/sync
 
 import api from "@/lib/api/api";
 
@@ -47,23 +47,41 @@ export interface SendBulkEmailPayload {
     contactId?: string;
 }
 
-// ── GET all email logs ────────────────────────────────────────────────────────
-// Swagger: GET /email/get-emails
+export interface GmailConnectResponse {
+    url?: string;
+    consentUrl?: string;
+    redirectUrl?: string;
+    authUrl?: string;
+    [key: string]: unknown;
+}
 
-export async function fetchEmails(): Promise<EmailsResponse> {
-    const res = await api.get("/email/get-emails");
+// ── GET email logs by folder ──────────────────────────────────────────────────
+// Endpoint: GET /email/get-emails?folder={inbox|sent|drafts|trash}
+
+export async function fetchEmails(folder?: string): Promise<EmailsResponse> {
+    const res = await api.get("/email/get-emails", {
+        params: folder ? { folder: folder.toLowerCase() } : undefined,
+    });
     const raw = res.data;
     // Normalise various response shapes
     if (Array.isArray(raw)) {
         return { emails: raw, total: raw.length };
     }
-    if (Array.isArray(raw.data)) {
+    if (Array.isArray(raw?.data)) {
         return { emails: raw.data, total: raw.pagination?.total ?? raw.data.length };
     }
-    if (Array.isArray(raw.emails)) {
+    if (Array.isArray(raw?.emails)) {
         return { emails: raw.emails, total: raw.total ?? raw.emails.length };
     }
     return { emails: [], total: 0 };
+}
+
+// ── POST Gmail OAuth Connect ──────────────────────────────────────────────────
+// Endpoint: POST /email/oauth/gmail/connect
+
+export async function connectGmail(): Promise<GmailConnectResponse> {
+    const res = await api.post("/email/oauth/gmail/connect");
+    return res.data;
 }
 
 // ── POST send email ───────────────────────────────────────────────────────────

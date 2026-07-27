@@ -7,6 +7,7 @@ import {
     fetchEmails,
     sendEmail,
     syncEmails,
+    connectGmail,
     SendEmailPayload,
 } from "@/lib/api/emailApi";
 
@@ -20,6 +21,8 @@ export interface EmailThread {
     labels: string[];
 }
 
+export type FolderTab = "Inbox" | "Sent" | "Drafts" | "Trash";
+
 export function useEmail() {
     const [emails, setEmails] = useState<EmailLog[]>([]);
     const [total, setTotal] = useState(0);
@@ -29,93 +32,96 @@ export function useEmail() {
     const [sending, setSending] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
-    
+
+    // Gmail Connect State
+    const [connectingGmail, setConnectingGmail] = useState(false);
+    const [gmailConnectError, setGmailConnectError] = useState<string | null>(null);
+
     // UI State
     const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
     const [search, setSearch] = useState("");
-    const [selectedLabel, setSelectedLabel] = useState<string>("Inbox");
+    const [selectedLabel, setSelectedLabel] = useState<FolderTab>("Inbox");
 
-    // ── Fetch ─────────────────────────────────────────────────────────────────
-    const loadEmails = useCallback(async () => {
+    // ── Fetch Emails by Folder ────────────────────────────────────────────────
+    const loadEmails = useCallback(async (folder: FolderTab = selectedLabel) => {
         setLoading(true);
         setError(null);
         try {
-            const data = await fetchEmails();
+            const data = await fetchEmails(folder.toLowerCase());
             const rawEmails = data.emails ?? [];
-            
-            // Basic label inference since API doesn't provide it
-            // Assuming if the status is sent or no 'from' field, it was sent by us
-            rawEmails.forEach(e => {
-                const inferredLabels = [];
-                if (e.status === 'sent' || !e.from) {
-                    inferredLabels.push("Sent");
-                } else {
-                    inferredLabels.push("Inbox");
-                }
-                e.labels = inferredLabels;
+
+            // Assign current folder label to emails for thread view
+            rawEmails.forEach((e) => {
+                e.labels = [folder];
             });
-            
+
             setEmails(rawEmails);
-            setTotal(data.total ?? 0);
+            setTotal(data.total ?? rawEmails.length);
         } catch (err) {
-            if (axios.isAxiosError(err) && err.response?.status === 404) {
-                setEmails([]);
-                setTotal(0);
+            if (axios.isAxiosError(err)) {
+                const status = err.response?.status;
+                if (status === 401) {
+                    setError("Unauthorized. Your session may have expired. Please log in again.");
+                } else if (status === 400) {
+                    setError("Invalid folder requested. Please select a valid email folder.");
+                } else if (status === 404) {
+                    setEmails([]);
+                    setTotal(0);
+                } else {
+                    const serverMsg = err.response?.data?.message || err.response?.data?.error;
+                    setError(serverMsg || `Failed to fetch emails for ${folder} (${status || 'Network Error'}).`);
+                }
             } else {
                 setError(err instanceof Error ? err.message : "Failed to fetch emails.");
             }
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [selectedLabel]);
 
     useEffect(() => {
-        loadEmails();
-    }, [loadEmails]);
+        loadEmails(selectedLabel);
+    }, [selectedLabel, loadEmails]);
 
     // ── Thread Grouping ───────────────────────────────────────────────────────
     const threads = useMemo(() => {
         const groups = new Map<string, EmailLog[]>();
-        
-        emails.forEach(email => {
-            // Normalize subject by removing Re:, Fwd:, etc.
+
+        emails.forEach((email) => {
             const cleanSubject = (email.subject || "")
                 .replace(/^(re|fwd|fw):\s*/i, "")
                 .trim()
                 .toLowerCase();
-            
-            const threadKey = cleanSubject || "no-subject";
-            
+
+            const threadKey = cleanSubject || email.id || "no-subject";
+
             if (!groups.has(threadKey)) {
                 groups.set(threadKey, []);
             }
             groups.get(threadKey)!.push(email);
         });
-        
+
         const generatedThreads: EmailThread[] = [];
         groups.forEach((threadEmails, key) => {
-            // Sort thread emails chronologically
             threadEmails.sort((a, b) => {
                 const dateA = new Date(a.sentAt || a.createdAt).getTime();
                 const dateB = new Date(b.sentAt || b.createdAt).getTime();
                 return dateA - dateB;
             });
-            
+
             const latestEmail = threadEmails[threadEmails.length - 1];
-            
-            // Aggregate participants
+
             const participantSet = new Set<string>();
-            threadEmails.forEach(e => {
+            threadEmails.forEach((e) => {
                 if (e.to) participantSet.add(e.to);
                 if (e.from) participantSet.add(e.from);
             });
-            
-            // Aggregate labels
+
             const labelSet = new Set<string>();
-            threadEmails.forEach(e => {
-                e.labels?.forEach(l => labelSet.add(l));
+            threadEmails.forEach((e) => {
+                e.labels?.forEach((l) => labelSet.add(l));
             });
-            
+
             generatedThreads.push({
                 id: `thread-${key}`,
                 subject: latestEmail.subject || "(No Subject)",
@@ -123,37 +129,29 @@ export function useEmail() {
                 emails: threadEmails,
                 latestDate: latestEmail.sentAt || latestEmail.createdAt,
                 latestPreview: latestEmail.body || "",
-                labels: Array.from(labelSet)
+                labels: Array.from(labelSet),
             });
         });
-        
-        // Sort threads by latest message date (newest first)
-        return generatedThreads.sort((a, b) => 
-            new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime()
+
+        return generatedThreads.sort(
+            (a, b) => new Date(b.latestDate).getTime() - new Date(a.latestDate).getTime()
         );
     }, [emails]);
 
     // ── Filtering & Search ────────────────────────────────────────────────────
     const filteredThreads = useMemo(() => {
-        return threads.filter(thread => {
-            // Filter by label
-            if (selectedLabel !== "All" && !thread.labels.includes(selectedLabel)) {
-                return false;
-            }
-            
-            // Filter by search
+        return threads.filter((thread) => {
             if (search.trim()) {
                 const q = search.toLowerCase();
                 return (
                     thread.subject.toLowerCase().includes(q) ||
-                    thread.participants.some(p => p.toLowerCase().includes(q)) ||
+                    thread.participants.some((p) => p.toLowerCase().includes(q)) ||
                     thread.latestPreview.toLowerCase().includes(q)
                 );
             }
-            
             return true;
         });
-    }, [threads, search, selectedLabel]);
+    }, [threads, search]);
 
     // ── Actions ───────────────────────────────────────────────────────────────
     async function handleSend(data: SendEmailPayload): Promise<boolean> {
@@ -161,7 +159,7 @@ export function useEmail() {
         setSendError(null);
         try {
             await sendEmail(data);
-            await loadEmails();
+            await loadEmails(selectedLabel);
             setIsComposeOpen(false);
             return true;
         } catch (err) {
@@ -176,12 +174,12 @@ export function useEmail() {
             setSending(false);
         }
     }
-    
+
     async function handleSync() {
         setSyncing(true);
         try {
             await syncEmails();
-            await loadEmails();
+            await loadEmails(selectedLabel);
         } catch (err) {
             console.error("Failed to sync emails", err);
         } finally {
@@ -189,11 +187,43 @@ export function useEmail() {
         }
     }
 
+    // ── Gmail Connect Action ─────────────────────────────────────────────────
+    async function handleConnectGmail() {
+        setConnectingGmail(true);
+        setGmailConnectError(null);
+        try {
+            const res = await connectGmail();
+            const consentUrl = res.url || res.consentUrl || res.redirectUrl || res.authUrl;
+            if (consentUrl && typeof window !== "undefined") {
+                window.location.href = consentUrl;
+            } else if (typeof res === "string" && (res as string).startsWith("http")) {
+                window.location.href = res;
+            } else {
+                setGmailConnectError("Server returned an invalid Google authentication URL.");
+            }
+        } catch (err) {
+            if (axios.isAxiosError(err)) {
+                const status = err.response?.status;
+                const message =
+                    err.response?.data?.message ||
+                    err.response?.data?.error ||
+                    (status === 400
+                        ? "User is not associated with an organization."
+                        : "Failed to connect Gmail account.");
+                setGmailConnectError(message);
+            } else {
+                setGmailConnectError(err instanceof Error ? err.message : "Failed to connect Gmail.");
+            }
+        } finally {
+            setConnectingGmail(false);
+        }
+    }
+
     return {
-        emails, // keep for backward compatibility if needed
+        emails,
         threads,
         filteredThreads,
-        total: threads.length, // total now represents total threads
+        total: threads.length,
         loading,
         error,
         isComposeOpen,
@@ -203,12 +233,18 @@ export function useEmail() {
         selectedThread,
         search,
         selectedLabel,
+        connectingGmail,
+        gmailConnectError,
         setSearch,
-        setSelectedLabel,
+        setSelectedLabel: (folder: FolderTab) => {
+            setSelectedLabel(folder);
+            setSelectedThread(null);
+        },
         setIsComposeOpen,
         setSelectedThread,
         handleSend,
         handleSync,
-        retry: loadEmails,
+        handleConnectGmail,
+        retry: () => loadEmails(selectedLabel),
     };
 }
