@@ -1,67 +1,89 @@
 "use client";
 
-import { Clock } from "lucide-react";
+// components/dashboard-builder/widgets/ActivityWidget.tsx
 
-interface ActivityWidgetProps {
-  title: string;
-  activities: Array<{
-    id: string;
-    user: string;
-    action: string;
-    target: string;
-    timestamp: string;
-  }>;
-}
+import { Phone, Mail, MessageSquare, Calendar, Users, Clock } from "lucide-react";
 
-const MOCK_ACTIVITIES = [
-  { id: "1", user: "Alice J.", action: "created a new deal", target: "Acme Corp - Enterprise", timestamp: "2 min ago" },
-  { id: "2", user: "Bob S.", action: "sent proposal to", target: "Globex Inc", timestamp: "15 min ago" },
-  { id: "3", user: "Carol W.", action: "updated lead status for", target: "Initech", timestamp: "1 hour ago" },
-  { id: "4", user: "Dave B.", action: "scheduled meeting with", target: "Umbrella Co", timestamp: "2 hours ago" },
-  { id: "5", user: "Eve D.", action: "closed deal with", target: "Stark Ind", timestamp: "3 hours ago" },
-  { id: "6", user: "Frank L.", action: "added note to", target: "Hooli - Project X", timestamp: "5 hours ago" },
+const ACTIVITIES = [
+  {
+    id: "1",
+    type: "CALL",
+    title: "Called Acme Corp",
+    description: "Discussed Q4 renewal proposal",
+    user: "Sarah K.",
+    time: "5 min ago",
+    icon: Phone,
+    color: "#10b981",
+    bg: "#f0fdf4",
+  },
+  {
+    id: "2",
+    type: "EMAIL",
+    title: "Email sent to GlobalTech",
+    description: "Sent contract for review",
+    user: "John M.",
+    time: "23 min ago",
+    icon: Mail,
+    color: "#6366f1",
+    bg: "#eef2ff",
+  },
+  {
+    id: "3",
+    type: "MEETING",
+    title: "Product demo scheduled",
+    description: "Startup Inc. — tomorrow 2 PM",
+    user: "Alex R.",
+    time: "1 hr ago",
+    icon: Calendar,
+    color: "#f59e0b",
+    bg: "#fffbeb",
+  },
+  {
+    id: "4",
+    type: "NOTE",
+    title: "Note added to TechVentures",
+    description: "Budget confirmed: $50K Q1",
+    user: "Priya L.",
+    time: "2 hrs ago",
+    icon: MessageSquare,
+    color: "#8b5cf6",
+    bg: "#f5f3ff",
+  },
+  {
+    id: "5",
+    type: "LEAD",
+    title: "New lead assigned",
+    description: "BlueWave Corp → John M.",
+    user: "System",
+    time: "3 hrs ago",
+    icon: Users,
+    color: "#06b6d4",
+    bg: "#ecfeff",
+  },
 ];
 
-function getInitials(name: string): string {
-  return name
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .toUpperCase();
-}
-
-export function ActivityWidget({ title }: ActivityWidgetProps) {
-  const activities = MOCK_ACTIVITIES;
-
+export function ActivityWidget({ isPreview }: { isPreview?: boolean }) {
   return (
-    <div className="h-full flex flex-col bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-4 pt-4 pb-2">
-        <h3 className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-          {title}
-        </h3>
-      </div>
-      <div className="flex-1 overflow-auto px-4 pb-2 space-y-1">
-        {activities.map((act) => (
-          <div
-            key={act.id}
-            className="flex items-start gap-3 py-2 border-b border-gray-50 last:border-0"
-          >
-            <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-              {getInitials(act.user)}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-gray-700 leading-relaxed">
-                <span className="font-semibold text-gray-900">{act.user}</span>{" "}
-                {act.action}{" "}
-                <span className="font-medium text-gray-900">{act.target}</span>
-              </p>
-              <div className="flex items-center gap-1 mt-0.5">
-                <Clock size={10} className="text-gray-400" />
-                <span className="text-[10px] text-gray-400">{act.timestamp}</span>
+    <div className="h-full flex flex-col">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-2">
+        {ACTIVITIES.map((activity) => {
+          const Icon = activity.icon;
+          return (
+            <div key={activity.id} className="flex items-start gap-3 p-2 rounded-xl hover:bg-gray-50 transition-colors group">
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ backgroundColor: activity.bg }}
+              >
+                <Icon size={14} style={{ color: activity.color }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-gray-800 truncate">{activity.title}</p>
+                <p className="text-xs text-gray-500 truncate">{activity.description}</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{activity.user} · {activity.time}</p>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

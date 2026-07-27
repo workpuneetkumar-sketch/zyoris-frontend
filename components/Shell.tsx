@@ -41,6 +41,7 @@ import {
   Brain,
   Layers,
   Grid3X3,
+  Bell,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -73,6 +74,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/dashboard/builder",
         label: "Dashboard Builder",
         icon: Grid3X3,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/dashboard/reminders",
+        label: "Reminders",
+        icon: Bell,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
