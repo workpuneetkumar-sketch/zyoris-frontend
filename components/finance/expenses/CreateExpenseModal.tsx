@@ -4,7 +4,7 @@
 
 import React, { useState } from "react";
 import { X, CheckCircle2, Loader2, DollarSign, Calendar, FileText, Tag } from "lucide-react";
-import { financeApi, FinanceApiError } from "@/lib/api/finance/expenseApi";
+import { createExpense } from "@/lib/api/finance/expenseApi";
 
 interface CreateExpenseModalProps {
   onClose: () => void;
@@ -47,24 +47,20 @@ export default function CreateExpenseModal({ onClose, onSuccess }: CreateExpense
     
     setLoading(true);
     try {
-      await financeApi.createExpense({
-        category: form.category,
+      await createExpense({
+        category: form.category as any,
         amount: amountNum,
         description: form.description.trim(),
         expenseDate: new Date(form.expenseDate).toISOString(),
       });
-      
+
       setSuccess(true);
       setTimeout(() => {
         onSuccess();
         onClose();
       }, 1200);
     } catch (e: any) {
-      if (e instanceof FinanceApiError) {
-        setError(e.message);
-      } else {
-        setError(e.message || "Failed to create expense.");
-      }
+      setError(e.message || "Failed to create expense.");
     } finally {
       setLoading(false);
     }

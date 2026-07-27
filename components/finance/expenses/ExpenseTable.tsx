@@ -142,7 +142,7 @@ export default function ExpenseTable({
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  <StatusBadge status={expense.status} size="sm" />
+                  <StatusBadge status={expense.status} />
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-right">
                   <div className="flex items-center justify-end gap-3">

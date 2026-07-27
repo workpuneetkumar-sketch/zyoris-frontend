@@ -1,7 +1,7 @@
 // components/finance/InvoiceDetailModal.tsx
 'use client';
 
-import { Invoice, InvoiceStatus } from '@/lib/api/finance/expenseApi';
+import { Invoice, InvoiceStatus } from '@/lib/api/finance/invoicesApi';
 import { X, Download, Printer } from 'lucide-react';
 import StatusBadge from './StatusBadge';
 
@@ -100,7 +100,7 @@ export default function InvoiceDetailModal({
             </div>
             <div>
               <p className="text-sm text-gray-500">Issue Date</p>
-              <p className="font-medium text-gray-900">{formatDate(invoice.issueDate)}</p>
+              <p className="font-medium text-gray-900">{formatDate(invoice.createdAt)}</p>
             </div>
             <div>
               <p className="text-sm text-gray-500">Due Date</p>
@@ -128,13 +128,13 @@ export default function InvoiceDetailModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {invoice.lineItems.map((item, index) => (
+                  {invoice.items.map((item, index) => (
                     <tr key={index} className="border-b border-gray-200">
                       <td className="p-3 text-gray-900">{item.description}</td>
                       <td className="p-3 text-right text-gray-600">{item.quantity}</td>
-                      <td className="p-3 text-right text-gray-600">{formatCurrency(item.rate)}</td>
+                      <td className="p-3 text-right text-gray-600">{formatCurrency(item.price)}</td>
                       <td className="p-3 text-right font-medium text-gray-900">
-                        {formatCurrency(item.total || item.quantity * item.rate)}
+                        {formatCurrency(item.quantity * item.price)}
                       </td>
                     </tr>
                   ))}

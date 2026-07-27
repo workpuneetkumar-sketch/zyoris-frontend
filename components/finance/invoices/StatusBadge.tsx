@@ -1,7 +1,7 @@
 // components/finance/StatusBadge.tsx
 'use client';
 
-import { InvoiceStatus } from '@/lib/api/finance/expenseApi';
+import { InvoiceStatus } from '@/lib/api/finance/invoicesApi';
 
 interface StatusBadgeProps {
   status: InvoiceStatus;

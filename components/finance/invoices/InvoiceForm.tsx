@@ -3,7 +3,14 @@
 
 import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
-import { createInvoice, InvoiceLineItem } from '@/lib/api/finance/expenseApi';
+import { createInvoice } from '@/lib/api/finance/invoicesApi';
+
+interface InvoiceLineItem {
+  description: string;
+  quantity: number;
+  rate: number;
+  total: number;
+}
 
 interface InvoiceFormProps {
   onClose: () => void;
@@ -72,10 +79,10 @@ export default function InvoiceForm({ onClose, onSuccess }: InvoiceFormProps) {
         clientEmail: clientEmail || undefined,
         clientAddress: clientAddress || undefined,
         dueDate,
-        lineItems: lineItems.map(({ description, quantity, rate }) => ({
+        items: lineItems.map(({ description, quantity, rate }) => ({
           description,
           quantity,
-          rate,
+          price: rate,
         })),
       });
       onSuccess();
