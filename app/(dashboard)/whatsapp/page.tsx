@@ -9,11 +9,17 @@ export default function WhatsAppPage() {
         selectedConversation,
         selectedConversationId,
         setSelectedConversationId,
+        activeTab,
+        setActiveTab,
         loading,
         error,
         isDemoMode,
         sending,
-        handleSendMessage
+        handleSendMessage,
+        handleSetLabels,
+        handleTogglePin,
+        handleToggleArchive,
+        retry
     } = useWhatsApp();
 
     return (
@@ -22,11 +28,18 @@ export default function WhatsAppPage() {
             selectedConversation={selectedConversation}
             selectedConversationId={selectedConversationId}
             setSelectedConversationId={setSelectedConversationId}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
             loading={loading}
             error={error}
             isDemoMode={isDemoMode}
             sending={sending}
             onSendMessage={handleSendMessage}
+            onSetLabels={handleSetLabels}
+            onTogglePin={handleTogglePin}
+            onToggleArchive={handleToggleArchive}
+            onRetry={retry}
         />
     );
 }
+

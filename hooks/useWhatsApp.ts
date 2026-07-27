@@ -1,12 +1,25 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { fetchConversations, fetchConversationMessages, sendWhatsAppMessage, WhatsAppConversation, WhatsAppMessage } from "@/lib/api/whatsappApi";
+import { 
+    fetchConversations, 
+    fetchConversationMessages, 
+    sendWhatsAppMessage, 
+    setConversationLabels,
+    setConversationPinned,
+    setConversationArchived,
+    WhatsAppConversation, 
+    WhatsAppMessage 
+} from "@/lib/api/whatsappApi";
 import { MOCK_CONVERSATIONS } from "@/lib/api/whatsappMockData";
+import { toast } from "react-toastify";
+
+export type WhatsAppTab = "inbox" | "archived";
 
 export function useWhatsApp() {
     const [conversations, setConversations] = useState<WhatsAppConversation[]>([]);
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<WhatsAppTab>("inbox");
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isDemoMode, setIsDemoMode] = useState(false);
@@ -27,18 +40,25 @@ export function useWhatsApp() {
                 setConversations(prev => {
                     return data.map(newConv => {
                         const existing = prev.find(p => p.id === newConv.id);
-                        // Preserve fetched messages if the summary API doesn't include full history
-                        if (existing && (!newConv.messages || newConv.messages.length === 0) && existing.messages && existing.messages.length > 0) {
-                            return { ...newConv, messages: existing.messages };
-                        }
-                        // Ensure messages array exists
-                        return { ...newConv, messages: newConv.messages || [] };
+                        // Preserve fetched messages if summary API doesn't include full history
+                        const messages = existing && (!newConv.messages || newConv.messages.length === 0) && existing.messages && existing.messages.length > 0
+                            ? existing.messages
+                            : (newConv.messages || []);
+                        return {
+                            ...newConv,
+                            pinned: newConv.pinned ?? existing?.pinned ?? false,
+                            archived: newConv.archived ?? existing?.archived ?? false,
+                            labels: newConv.labels ?? existing?.labels ?? [],
+                            messages
+                        };
                     });
                 });
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("WhatsApp API failed", err);
-            setError("Failed to load conversations. Showing demo data.");
+            const errorMsg = err?.message || "Failed to load conversations.";
+            setError(errorMsg);
+            // In demo mode or fallback, load mock conversations so user can continue testing UI
             setIsDemoMode(true);
             setConversations(MOCK_CONVERSATIONS);
         } finally {
@@ -98,11 +118,10 @@ export function useWhatsApp() {
                 apiSuccess = true;
             } catch (apiErr) {
                 console.error("sendWhatsAppMessage API failed", apiErr);
-                if (!isDemoMode) throw apiErr; // Only throw if we are relying on real data
+                if (!isDemoMode) throw apiErr;
             }
 
             if (isDemoMode) {
-                // Simulate network delay for mock UI update
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
                 const newMessage: WhatsAppMessage = {
@@ -137,6 +156,69 @@ export function useWhatsApp() {
         }
     };
 
+    // Label Manager - optimistic update with rollback
+    const handleSetLabels = async (id: string, labels: string[]) => {
+        let previousConversations: WhatsAppConversation[] = [];
+        setConversations(prev => {
+            previousConversations = prev;
+            return prev.map(c => c.id === id ? { ...c, labels } : c);
+        });
+
+        try {
+            await setConversationLabels(id, labels);
+            return true;
+        } catch (err: any) {
+            console.error("setConversationLabels failed", err);
+            const message = err?.message || "Failed to update conversation labels.";
+            toast.error(message);
+            // Rollback optimistic update
+            setConversations(previousConversations);
+            return false;
+        }
+    };
+
+    // Pinned toggle - optimistic update with rollback
+    const handleTogglePin = async (id: string, pinned: boolean) => {
+        let previousConversations: WhatsAppConversation[] = [];
+        setConversations(prev => {
+            previousConversations = prev;
+            return prev.map(c => c.id === id ? { ...c, pinned } : c);
+        });
+
+        try {
+            await setConversationPinned(id, pinned);
+            return true;
+        } catch (err: any) {
+            console.error("setConversationPinned failed", err);
+            const message = err?.message || "Failed to update pin status.";
+            toast.error(message);
+            // Rollback optimistic update
+            setConversations(previousConversations);
+            return false;
+        }
+    };
+
+    // Archived toggle - optimistic update with rollback
+    const handleToggleArchive = async (id: string, archived: boolean) => {
+        let previousConversations: WhatsAppConversation[] = [];
+        setConversations(prev => {
+            previousConversations = prev;
+            return prev.map(c => c.id === id ? { ...c, archived } : c);
+        });
+
+        try {
+            await setConversationArchived(id, archived);
+            return true;
+        } catch (err: any) {
+            console.error("setConversationArchived failed", err);
+            const message = err?.message || "Failed to update archive status.";
+            toast.error(message);
+            // Rollback optimistic update
+            setConversations(previousConversations);
+            return false;
+        }
+    };
+
     const selectedConversation = conversations.find(c => c.id === selectedConversationId) || null;
 
     return {
@@ -144,11 +226,17 @@ export function useWhatsApp() {
         selectedConversation,
         selectedConversationId,
         setSelectedConversationId,
+        activeTab,
+        setActiveTab,
         loading,
         error,
         isDemoMode,
         sending,
         handleSendMessage,
+        handleSetLabels,
+        handleTogglePin,
+        handleToggleArchive,
         retry: loadConversations
     };
 }
+

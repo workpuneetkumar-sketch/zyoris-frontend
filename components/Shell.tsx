@@ -677,15 +677,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Theme toggle */}
         <ThemeToggle />
 
-        {/* Right side: notification bell (desktop) */}
-          <div className="hidden md:block">
-            <NotificationBell />
-          </div>
-
-          {/* Mobile notification bell */}
-          <div className="md:hidden">
-            <NotificationBell />
-          </div>
+        {/* Notification bell — single instance for both mobile & desktop */}
+          <NotificationBell />
       </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
