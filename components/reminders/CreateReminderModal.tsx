@@ -7,7 +7,6 @@ import { useState } from "react";
 import { X, Bell, Loader2, ChevronDown } from "lucide-react";
 import {
   CreateReminderPayload,
-  ReminderChannel,
   ReminderRecurrence,
 } from "@/types/reminders";
 
@@ -17,14 +16,6 @@ interface CreateReminderModalProps {
   onClose: () => void;
   onCreate: (payload: CreateReminderPayload) => Promise<unknown>;
 }
-
-const CHANNELS: { value: ReminderChannel; label: string; emoji: string }[] = [
-  { value: "EMAIL", label: "Email", emoji: "📧" },
-  { value: "SMS", label: "SMS", emoji: "💬" },
-  { value: "PUSH", label: "Push", emoji: "🔔" },
-  { value: "IN_APP", label: "In-App", emoji: "🖥️" },
-  { value: "WHATSAPP", label: "WhatsApp", emoji: "💚" },
-];
 
 const RECURRENCES: { value: ReminderRecurrence; label: string }[] = [
   { value: "NONE", label: "None (one-time)" },
@@ -48,7 +39,6 @@ export function CreateReminderModal({
 }: CreateReminderModalProps) {
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
-  const [channel, setChannel] = useState<ReminderChannel>("EMAIL");
   const [recurrence, setRecurrence] = useState<ReminderRecurrence>("NONE");
   const [dueAt, setDueAt] = useState(defaultDueAt());
   const [error, setError] = useState<string | null>(null);
@@ -58,7 +48,6 @@ export function CreateReminderModal({
   const resetForm = () => {
     setTitle("");
     setMessage("");
-    setChannel("EMAIL");
     setRecurrence("NONE");
     setDueAt(defaultDueAt());
     setError(null);
@@ -79,7 +68,7 @@ export function CreateReminderModal({
       await onCreate({
         title: title.trim(),
         message: message.trim() || undefined,
-        channel,
+        channel: "EMAIL",
         recurrence,
         dueAt: new Date(dueAt).toISOString(),
         leadId: null,
@@ -156,27 +145,6 @@ export function CreateReminderModal({
               onChange={(e) => setDueAt(e.target.value)}
               className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 text-gray-800 transition-all"
             />
-          </div>
-
-          {/* Channel */}
-          <div>
-            <label className="text-xs font-semibold text-gray-600 mb-1.5 block">Channel</label>
-            <div className="flex flex-wrap gap-1.5">
-              {CHANNELS.map((c) => (
-                <button
-                  key={c.value}
-                  type="button"
-                  onClick={() => setChannel(c.value)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
-                    channel === c.value
-                      ? "bg-indigo-600 text-white border-indigo-700 shadow-sm"
-                      : "bg-gray-50 text-gray-600 border-gray-200 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700"
-                  }`}
-                >
-                  <span>{c.emoji}</span> {c.label}
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Recurrence */}

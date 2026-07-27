@@ -7,9 +7,9 @@ import { useState } from "react";
 import {
   Bell, Clock, CheckCircle2, SkipForward, AlarmClock,
   Trash2, Loader2, AlertCircle, RefreshCw,
-  Mail, MessageSquare, Smartphone, Monitor, RotateCcw,
+  Mail, RotateCcw,
 } from "lucide-react";
-import { Reminder, ReminderStatus, ReminderChannel, SnoozeReminderPayload } from "@/types/reminders";
+import { Reminder, ReminderStatus, SnoozeReminderPayload } from "@/types/reminders";
 
 interface ReminderListProps {
   reminders: Reminder[];
@@ -23,15 +23,9 @@ interface ReminderListProps {
   onRetry: () => void;
 }
 
-// ── Channel config ─────────────────────────────────────────────────────────
+// ── Channel icon (always Email) ───────────────────────────────────────────
 
-const CHANNEL_CONFIG: Record<ReminderChannel, { icon: React.ComponentType<any>; label: string; color: string; bg: string }> = {
-  EMAIL: { icon: Mail, label: "Email", color: "#3b82f6", bg: "#eff6ff" },
-  SMS: { icon: MessageSquare, label: "SMS", color: "#10b981", bg: "#f0fdf4" },
-  PUSH: { icon: Bell, label: "Push", color: "#8b5cf6", bg: "#f5f3ff" },
-  IN_APP: { icon: Monitor, label: "In-App", color: "#f59e0b", bg: "#fffbeb" },
-  WHATSAPP: { icon: MessageSquare, label: "WhatsApp", color: "#25d366", bg: "#f0fdf4" },
-};
+const CHANNEL_ICON = { icon: Mail, color: "#3b82f6", bg: "#eff6ff" };
 
 const STATUS_CONFIG: Record<ReminderStatus, { label: string; chip: string; dot: string }> = {
   PENDING: { label: "Pending", chip: "text-indigo-700 bg-indigo-50 border-indigo-200", dot: "bg-indigo-500" },
@@ -190,7 +184,6 @@ export function ReminderList({
   return (
     <div className="space-y-3">
       {reminders.map((reminder) => {
-        const channelCfg = CHANNEL_CONFIG[reminder.channel] ?? CHANNEL_CONFIG.IN_APP;
         const statusCfg = STATUS_CONFIG[reminder.status];
         const isActioning = actionLoadingId === reminder.id;
         const isCompletedOrSkipped = reminder.status === "COMPLETED" || reminder.status === "SKIPPED";
@@ -199,7 +192,7 @@ export function ReminderList({
             ? reminder.snoozedUntil
             : reminder.dueAt
         );
-        const ChannelIcon = channelCfg.icon;
+        const { icon: ChannelIcon, color: iconColor, bg: iconBg } = CHANNEL_ICON;
 
         return (
           <div
@@ -216,9 +209,9 @@ export function ReminderList({
               {/* Channel icon */}
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ backgroundColor: channelCfg.bg }}
+                style={{ backgroundColor: iconBg }}
               >
-                <ChannelIcon size={16} style={{ color: channelCfg.color }} />
+                <ChannelIcon size={16} style={{ color: iconColor }} />
               </div>
 
               {/* Content */}
