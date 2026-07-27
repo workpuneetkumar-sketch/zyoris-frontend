@@ -7,7 +7,8 @@ import { useCallback, useMemo } from "react";
 import { ReactGridLayout, useContainerWidth } from "react-grid-layout";
 import type { LayoutItem, Layout, OnLayoutChangeCallback } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
-import { X, GripVertical } from "lucide-react";
+import "react-resizable/css/styles.css";
+import { X, GripVertical, Loader2, LayoutTemplate, MousePointerClick, GripHorizontal } from "lucide-react";
 import { WidgetInstance, WidgetDefinition } from "@/types/dashboard-builder";
 import { WidgetRenderer } from "./WidgetRenderer";
 import { getWidgetEntry } from "./WidgetRegistry";
@@ -50,40 +51,6 @@ function mergeLayout(widgets: WidgetInstance[], newLayout: Layout): WidgetInstan
     if (!l) return w;
     return { ...w, x: l.x, y: l.y, w: l.w, h: l.h };
   });
-}
-
-// ── Empty state ────────────────────────────────────────────────────────────
-
-function EmptyCanvas() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[400px] gap-4 p-8">
-      <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-50 border-2 border-dashed border-indigo-200 flex items-center justify-center">
-        <span className="text-3xl">📊</span>
-      </div>
-      <div className="text-center">
-        <p className="text-sm font-semibold text-gray-700 mb-1">Your dashboard is empty</p>
-        <p className="text-xs text-gray-400 max-w-[220px]">
-          Click <strong>Add Widget</strong> to start building your custom dashboard
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ── Loading skeleton ───────────────────────────────────────────────────────
-
-function LoadingCanvas() {
-  return (
-    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 p-4 animate-pulse">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div
-          key={i}
-          className="bg-gray-100 rounded-2xl"
-          style={{ height: i % 3 === 0 ? "200px" : "140px" }}
-        />
-      ))}
-    </div>
-  );
 }
 
 // ── Widget card ────────────────────────────────────────────────────────────
@@ -222,18 +189,70 @@ export function DashboardCanvas({
   onLayoutChange,
   onRemoveWidget,
 }: DashboardCanvasProps) {
-  if (isLoading) return <LoadingCanvas />;
-  if (isEmpty) return <EmptyCanvas />;
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50/50 to-white">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center">
+              <Loader2 size={24} className="text-blue-500 animate-spin" />
+            </div>
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-semibold text-gray-600">Loading your dashboard</p>
+            <p className="text-xs text-gray-400 mt-0.5">Preparing your widgets...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50/50 to-white">
+        <div className="flex flex-col items-center gap-5 max-w-sm text-center">
+          <div className="relative">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-100 flex items-center justify-center">
+              <LayoutTemplate size={36} className="text-blue-300" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center">
+              <MousePointerClick size={16} className="text-gray-400" />
+            </div>
+          </div>
+          <div>
+            <p className="text-base font-bold text-gray-700">Your dashboard is empty</p>
+            <p className="text-sm text-gray-400 mt-1.5 leading-relaxed">
+              Click widgets from the library on the left to start building your personalized dashboard.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gray-50 border border-gray-200">
+            <GripHorizontal size={14} className="text-gray-300" />
+            <span className="text-[11px] text-gray-400">Drag or click to add widgets</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex-1 overflow-auto p-4">
-      <GridContainer
-        widgets={widgets}
-        catalog={catalog}
-        isPreview={isPreview}
-        onLayoutChange={onLayoutChange}
-        onRemoveWidget={onRemoveWidget}
-      />
+    <div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50/50 to-white">
+      {!isPreview && (
+        <div className="px-4 pt-3 pb-2">
+          <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+            <GripHorizontal size={12} className="text-gray-300" />
+            Drag widgets to rearrange &middot; Resize from bottom-right corner
+          </p>
+        </div>
+      )}
+      <div className="px-2 pb-4">
+        <GridContainer
+          widgets={widgets}
+          catalog={catalog}
+          isPreview={isPreview}
+          onLayoutChange={onLayoutChange}
+          onRemoveWidget={onRemoveWidget}
+        />
+      </div>
     </div>
   );
 }
