@@ -5,7 +5,7 @@ import { isPathAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { NotificationProvider } from "@/hooks/useNotifications";
+import { attachAudioUnlock } from "@/lib/notificationSound";
 
 // Helper: check if localStorage has a token (runs client-side only).
 // This is used to suppress the redirect-to-login while AuthContext is
@@ -26,6 +26,11 @@ function hasStoredToken(): boolean {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, isInitializing, permissionsLoaded, sidebarItems, visibleDashboards } = useAuth();
   const router = useRouter();
+
+  // Attach audio unlock listeners early to comply with browser autoplay policies
+  useEffect(() => {
+    attachAudioUnlock();
+  }, []);
 
   // Only redirect to /login when:
   //   1. AuthContext has finished initializing (isInitializing = false), AND
@@ -63,9 +68,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (!isAuthenticated) return null;
 
-  return (
-    <NotificationProvider>
-      <AppShell>{children}</AppShell>
-    </NotificationProvider>
-  );
+  return <AppShell>{children}</AppShell>;
 }

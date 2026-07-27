@@ -38,8 +38,11 @@ api.interceptors.request.use(
                     const parsed = JSON.parse(raw);
 
                     if (parsed?.token) {
-                        config.headers.Authorization =
-                            `Bearer ${parsed.token}`;
+                        if (typeof config.headers.set === 'function') {
+                            config.headers.set('Authorization', `Bearer ${parsed.token}`);
+                        } else {
+                            config.headers.Authorization = `Bearer ${parsed.token}`;
+                        }
                     }
                 } catch (e) {
                     console.error("Failed to parse zyoris-auth from localStorage", e);

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
 import { Bell, Check, CheckCheck, Trash2, Search } from "lucide-react";
 import classNames from "classnames";
@@ -132,6 +133,7 @@ function NotificationPageItem({
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const { notifications, loading, error, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<FilterOption>("all");
@@ -202,8 +204,10 @@ export default function NotificationsPage() {
   };
 
   const handleNotificationOpen = (notification: Notification) => {
-    if (!notification.read) markRead(notification.id);
-    window.location.assign(notification.deepLink || "/notifications");
+    // Navigate FIRST — make it feel fast!
+    router.push(notification.deepLink || "/notifications");
+    // Fire-and-forget mark read — don't block navigation
+    if (!notification.read) void markRead(notification.id);
   };
 
   return (

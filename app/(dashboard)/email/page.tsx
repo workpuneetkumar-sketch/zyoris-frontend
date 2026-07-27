@@ -17,12 +17,15 @@ export default function EmailPage() {
         selectedThread,
         search,
         selectedLabel,
+        connectingGmail,
+        gmailConnectError,
         setSearch,
         setSelectedLabel,
         setIsComposeOpen,
         setSelectedThread,
         handleSend,
         handleSync,
+        handleConnectGmail,
         retry,
     } = useEmail();
 
@@ -40,12 +43,15 @@ export default function EmailPage() {
             selectedThread={selectedThread}
             search={search}
             selectedLabel={selectedLabel}
+            connectingGmail={connectingGmail}
+            gmailConnectError={gmailConnectError}
             onSearchChange={setSearch}
             onLabelChange={setSelectedLabel}
             onOpenCompose={() => setIsComposeOpen(true)}
             onCloseCompose={() => setIsComposeOpen(false)}
             onSendEmail={handleSend}
             onSyncEmails={handleSync}
+            onConnectGmail={handleConnectGmail}
             onSelectThread={setSelectedThread}
             onRetry={retry}
         />

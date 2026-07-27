@@ -9,7 +9,8 @@ export type NotificationType =
   | "error"
   | "info";
 
-export type NotificationPriority = "high" | "medium" | "low" | "urgent";
+// Extended to include critical as per requirements
+export type NotificationPriority = "critical" | "high" | "medium" | "low" | "urgent";
 
 export interface NotificationActor {
   id: string;
@@ -28,4 +29,8 @@ export interface Notification {
   deepLink?: string | null;
   actor?: NotificationActor | null;
   icon?: string | null;
+  entityType?: string | null;
+  entityId?: string | null;
 }
+
+export type NotificationFilter = "all" | "unread" | "mentions" | "assignments" | "system";

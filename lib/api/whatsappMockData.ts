@@ -9,6 +9,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         leadName: "Acme Corp Opportunity",
         leadStatus: "QUALIFIED",
         unreadCount: 3,
+        pinned: true,
+        archived: false,
+        labels: ["VIP", "Follow-up"],
         updatedAt: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
         messages: [
             { id: "m1_1", text: "Hi, we received your proposal.", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() },
@@ -23,6 +26,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         contactName: "TechFlow Solutions",
         contactPhone: "+44 7700 900077",
         unreadCount: 0,
+        pinned: true,
+        archived: false,
+        labels: ["Support"],
         updatedAt: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
         messages: [
             { id: "m2_1", text: "Hello! We are experiencing some downtime with the analytics dashboard. Is this a known issue?", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 120).toISOString() },
@@ -39,6 +45,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         leadName: "Michael Chang Renewal",
         leadStatus: "NEW",
         unreadCount: 1,
+        pinned: false,
+        archived: false,
+        labels: ["Contract"],
         updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
         messages: [
             { id: "m3_1", text: "Hey, can you send over the updated contract?", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() }
@@ -49,6 +58,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         contactName: "Emma Watson",
         contactPhone: "+61 491 570 156",
         unreadCount: 0,
+        pinned: false,
+        archived: false,
+        labels: [],
         updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(),
         messages: [
             { id: "m4_1", text: "I'm interested in a demo of Zyoris.", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString() },
@@ -61,6 +73,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         contactName: "Global Logistics Ltd",
         contactPhone: "+1 (212) 555-8899",
         unreadCount: 0,
+        pinned: false,
+        archived: false,
+        labels: ["Integration"],
         updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString(),
         messages: [
             { id: "m5_1", text: "The integration with our ERP went perfectly.", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 5).toISOString() },
@@ -72,6 +87,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         contactName: "David O'Connor",
         contactPhone: "+353 87 123 4567",
         unreadCount: 5,
+        pinned: false,
+        archived: false,
+        labels: ["Inquiry"],
         updatedAt: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
         messages: [
             { id: "m6_1", text: "I have a few questions about the CRM module.", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
@@ -86,6 +104,9 @@ export const MOCK_CONVERSATIONS: WhatsAppConversation[] = [
         contactName: "Nexus Dynamics",
         contactPhone: "+1 (617) 555-3321",
         unreadCount: 0,
+        pinned: false,
+        archived: true,
+        labels: ["Inactive"],
         updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(),
         messages: [
             { id: "m7_1", text: "We need to pause our subscription for a month.", sender: "contact", timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10 - 500000).toISOString() },

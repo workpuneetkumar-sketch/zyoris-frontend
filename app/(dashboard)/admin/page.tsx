@@ -336,7 +336,7 @@ export default function AdminDashboardPage() {
             <h3 className="text-sm font-bold text-gray-800">Data Warehouse Summary</h3>
           </div>
           <button
-            onClick={() => router.push("/ingestion")}
+            onClick={() => router.push("/ai-insights")}
             className="text-xs text-blue-600 hover:underline font-semibold"
           >
             Manage →
@@ -364,7 +364,7 @@ export default function AdminDashboardPage() {
             <Database size={28} className="text-gray-200 mb-2" />
             <p className="text-sm">No ingestion data available yet.</p>
             <button
-              onClick={() => router.push("/ingestion")}
+              onClick={() => router.push("/ai-insights")}
               className="mt-3 text-xs text-blue-600 hover:underline font-semibold"
             >
               Upload data →
