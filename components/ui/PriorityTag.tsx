@@ -3,7 +3,7 @@ import classNames from "classnames";
 type Priority = "critical" | "high" | "medium" | "low" | "urgent";
 
 interface PriorityTagProps extends React.HTMLAttributes<HTMLDivElement> {
-  priority: Priority;
+  priority?: Priority | string; // ⭐ Allow string to handle unknown values
 }
 
 const priorityClasses: Record<Priority, { bg: string; text: string }> = {
@@ -22,8 +22,16 @@ const priorityLabels: Record<Priority, string> = {
   urgent: "Urgent",
 };
 
+// ⭐ DEFAULT priority when unknown
+const DEFAULT_PRIORITY: Priority = "medium";
+
 export function PriorityTag({ priority, className, ...props }: PriorityTagProps) {
-  const { bg, text } = priorityClasses[priority];
+  // ⭐ FIX: Check if priority exists in priorityClasses, otherwise use default
+  const isValidPriority = priority && priority in priorityClasses;
+  const validPriority = isValidPriority ? (priority as Priority) : DEFAULT_PRIORITY;
+  
+  const { bg, text } = priorityClasses[validPriority];
+  
   return (
     <div
       className={classNames(
@@ -34,7 +42,7 @@ export function PriorityTag({ priority, className, ...props }: PriorityTagProps)
       )}
       {...props}
     >
-      {priorityLabels[priority]}
+      {priorityLabels[validPriority]}
     </div>
   );
 }
