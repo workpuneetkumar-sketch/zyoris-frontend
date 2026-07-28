@@ -1,18 +1,20 @@
 "use client";
 
-import type { MutableRefObject } from "react";
-import { GridLayout, useContainerWidth } from "react-grid-layout";
-import type { Layout, LayoutItem } from "react-grid-layout";
+// components/dashboard-builder/DashboardCanvas.tsx
+// Drag-and-drop resizable grid using react-grid-layout v2.
 
+import React, { useCallback, useMemo } from "react";
+import { ReactGridLayout, useContainerWidth } from "react-grid-layout";
+import type { LayoutItem, Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
-import { Loader2, LayoutTemplate, MousePointerClick, GripHorizontal } from "lucide-react";
-import { WidgetDefinition, WidgetInstance } from "@/types/dashboard-builder";
-import { DashboardWidget } from "./DashboardWidget";
+import { X, GripVertical, Loader2, LayoutTemplate, MousePointerClick, GripHorizontal } from "lucide-react";
+import { WidgetInstance, WidgetDefinition } from "@/types/dashboard-builder";
+import { WidgetRenderer } from "./WidgetRenderer";
+import { getWidgetEntry } from "./WidgetRegistry";
 
 const COLS = 12;
-const ROW_HEIGHT = 120;
-const MARGIN: [number, number] = [16, 16];
+const ROW_HEIGHT = 80;
 
 interface DashboardCanvasProps {
   widgets: WidgetInstance[];
@@ -20,96 +22,163 @@ interface DashboardCanvasProps {
   isPreview: boolean;
   isLoading: boolean;
   isEmpty: boolean;
-  onLayoutChange: (layout: WidgetInstance[]) => void;
+  onLayoutChange: (widgets: WidgetInstance[]) => void;
   onRemoveWidget: (instanceId: string) => void;
 }
 
-function toGridLayout(widgets: WidgetInstance[]): Layout {
-  return widgets.map((w) => ({
-    i: w.instanceId,
-    x: w.x,
-    y: w.y,
-    w: w.w,
-    h: w.h,
-    static: false,
-  }));
-}
-
-function fromGridLayout(layout: Layout, currentWidgets: WidgetInstance[]): WidgetInstance[] {
-  const items: LayoutItem[] = Array.isArray(layout) ? [...layout] : [];
-  return items.map((l) => {
-    const existing = currentWidgets.find((w) => w.instanceId === l.i);
-    return {
-      widgetId: existing?.widgetId ?? "",
-      instanceId: l.i,
-      x: l.x,
-      y: l.y,
-      w: l.w,
-      h: l.h,
+// Convert our WidgetInstances to react-grid-layout Layout
+function toRGLLayout(widgets: WidgetInstance[], catalog: WidgetDefinition[]): Layout {
+  return widgets.map((w) => {
+    const def = catalog.find((c) => c.id === w.widgetId);
+    const item: LayoutItem = {
+      i: w.instanceId,
+      x: w.x,
+      y: w.y,
+      w: w.w,
+      h: w.h,
+      minW: def?.minW ?? 2,
+      minH: def?.minH ?? 2,
     };
+    return item;
   });
 }
 
-// Inner canvas that uses the container width hook
-function CanvasInner({
+// Merge new RGL layout positions back to our WidgetInstances
+function mergeLayout(widgets: WidgetInstance[], newLayout: Layout): WidgetInstance[] {
+  const map = new Map(newLayout.map((l) => [l.i, l]));
+  return widgets.map((w) => {
+    const l = map.get(w.instanceId);
+    if (!l) return w;
+    return { ...w, x: l.x, y: l.y, w: l.w, h: l.h };
+  });
+}
+
+// ── Widget card ────────────────────────────────────────────────────────────
+
+interface WidgetCardProps {
+  widget: WidgetInstance;
+  isPreview: boolean;
+  onRemove: (id: string) => void;
+}
+
+function WidgetCard({ widget, isPreview, onRemove }: WidgetCardProps) {
+  const entry = getWidgetEntry(widget.widgetId);
+
+  return (
+    <div
+      className={`bg-white rounded-2xl border shadow-sm flex flex-col overflow-hidden h-full transition-all duration-150 ${
+        isPreview
+          ? "border-gray-100 shadow-sm"
+          : "border-gray-200 hover:border-indigo-200 hover:shadow-md group"
+      }`}
+    >
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 flex-shrink-0">
+        {!isPreview && (
+          <div className="cursor-grab active:cursor-grabbing drag-handle text-gray-300 hover:text-gray-500 transition-colors">
+            <GripVertical size={14} />
+          </div>
+        )}
+        <span className="text-sm leading-none">{entry?.icon ?? "📊"}</span>
+        <p className="text-xs font-semibold text-gray-700 flex-1 truncate">
+          {entry?.title ?? widget.widgetId}
+        </p>
+        {entry?.module && (
+          <span className="text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded-md border border-gray-100 hidden sm:block">
+            {entry.module}
+          </span>
+        )}
+        {!isPreview && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onRemove(widget.instanceId);
+            }}
+            className="w-5 h-5 rounded-md flex items-center justify-center text-gray-300 hover:text-red-400 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
+            aria-label={`Remove ${entry?.title ?? widget.widgetId}`}
+          >
+            <X size={12} />
+          </button>
+        )}
+      </div>
+      <div className="flex-1 min-h-0 p-3 overflow-hidden">
+        <WidgetRenderer widgetId={widget.widgetId} isPreview={isPreview} />
+      </div>
+    </div>
+  );
+}
+
+// ── Width-aware grid container ─────────────────────────────────────────────
+
+function GridContainer({
   widgets,
   catalog,
   isPreview,
   onLayoutChange,
   onRemoveWidget,
-}: Omit<DashboardCanvasProps, "isLoading" | "isEmpty">) {
-  const { width, containerRef, mounted } = useContainerWidth();
-  const setContainerRef = (node: HTMLDivElement | null) => {
-    (containerRef as MutableRefObject<HTMLDivElement | null>).current = node;
-  };
+}: {
+  widgets: WidgetInstance[];
+  catalog: WidgetDefinition[];
+  isPreview: boolean;
+  onLayoutChange: (widgets: WidgetInstance[]) => void;
+  onRemoveWidget: (instanceId: string) => void;
+}) {
+  // useContainerWidth returns { width, containerRef, mounted }
+  const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 1280 });
 
-  const getDefinition = (widgetId: string): WidgetDefinition | undefined =>
-    catalog.find((d) => d.id === widgetId);
+  const layout = useMemo(() => toRGLLayout(widgets, catalog), [widgets, catalog]);
 
-  const gridLayout = toGridLayout(widgets);
-
-  const handleLayoutChange = (layout: Layout) => {
-    onLayoutChange(fromGridLayout(layout, widgets));
-  };
+  const handleLayoutChange = useCallback(
+    (newLayout: Layout) => {
+      const merged = mergeLayout(widgets, newLayout);
+      const changed = merged.some(
+        (w, i) =>
+          w.x !== widgets[i]?.x ||
+          w.y !== widgets[i]?.y ||
+          w.w !== widgets[i]?.w ||
+          w.h !== widgets[i]?.h
+      );
+      if (changed) onLayoutChange(merged);
+    },
+    [widgets, onLayoutChange]
+  );
 
   return (
-    <div ref={setContainerRef} className="w-full">
+    <div ref={containerRef as React.RefObject<HTMLDivElement>} className="w-full">
       {mounted && (
-        <GridLayout
-          className="layout"
-          layout={gridLayout}
+        <ReactGridLayout
           width={width}
+          layout={layout}
           gridConfig={{
             cols: COLS,
             rowHeight: ROW_HEIGHT,
-            margin: MARGIN,
-            containerPadding: [0, 0],
+            margin: [12, 12] as [number, number],
           }}
           dragConfig={{
             enabled: !isPreview,
+            handle: ".drag-handle",
           }}
           resizeConfig={{
             enabled: !isPreview,
+            handles: ["se"] as ["se"],
           }}
           onLayoutChange={handleLayoutChange}
         >
-          {widgets
-            .filter((w) => catalog.some((d) => d.id === w.widgetId))
-            .map((w) => (
-              <div key={w.instanceId}>
-                <DashboardWidget
-                  instance={w}
-                  definition={getDefinition(w.widgetId)!}
-                  onRemove={onRemoveWidget}
-                  isPreview={isPreview}
-                />
-              </div>
-            ))}
-        </GridLayout>
+          {widgets.map((widget) => (
+            <div key={widget.instanceId}>
+              <WidgetCard
+                widget={widget}
+                isPreview={isPreview}
+                onRemove={onRemoveWidget}
+              />
+            </div>
+          ))}
+        </ReactGridLayout>
       )}
     </div>
   );
 }
+
+// ── Main exported component ────────────────────────────────────────────────
 
 export function DashboardCanvas({
   widgets,
@@ -176,7 +245,7 @@ export function DashboardCanvas({
         </div>
       )}
       <div className="px-2 pb-4">
-        <CanvasInner
+        <GridContainer
           widgets={widgets}
           catalog={catalog}
           isPreview={isPreview}

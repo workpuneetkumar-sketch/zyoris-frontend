@@ -4,6 +4,7 @@ import api from "../api";
 
 // ── Types ────────────────────────────────────────────────
 
+export type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 
 export interface InvoiceItem {
   description: string;
