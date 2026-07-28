@@ -4,8 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import {
     EmailLog,
+    EmailTemplate,
     fetchEmails,
+    fetchEmailTemplates,
+    createEmailTemplate,
     sendEmail,
+    scheduleSendEmail,
     syncEmails,
     connectGmail,
     SendEmailPayload,
@@ -33,6 +37,11 @@ export function useEmail() {
     const [sendError, setSendError] = useState<string | null>(null);
     const [syncing, setSyncing] = useState(false);
 
+    // Templates State
+    const [templates, setTemplates] = useState<EmailTemplate[]>([]);
+    const [loadingTemplates, setLoadingTemplates] = useState(false);
+    const [templateError, setTemplateError] = useState<string | null>(null);
+
     // Gmail Connect State
     const [connectingGmail, setConnectingGmail] = useState(false);
     const [gmailConnectError, setGmailConnectError] = useState<string | null>(null);
@@ -41,6 +50,25 @@ export function useEmail() {
     const [selectedThread, setSelectedThread] = useState<EmailThread | null>(null);
     const [search, setSearch] = useState("");
     const [selectedLabel, setSelectedLabel] = useState<FolderTab>("Inbox");
+
+    // ── Fetch Templates ───────────────────────────────────────────────────────
+    const loadTemplates = useCallback(async () => {
+        setLoadingTemplates(true);
+        setTemplateError(null);
+        try {
+            const data = await fetchEmailTemplates();
+            setTemplates(data);
+        } catch (err) {
+            console.warn("Failed to load email templates", err);
+            setTemplateError("Failed to load templates.");
+        } finally {
+            setLoadingTemplates(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        loadTemplates();
+    }, [loadTemplates]);
 
     // ── Fetch Emails by Folder ────────────────────────────────────────────────
     const loadEmails = useCallback(async (folder: FolderTab = selectedLabel) => {
@@ -164,7 +192,7 @@ export function useEmail() {
             return true;
         } catch (err) {
             const msg = axios.isAxiosError(err)
-                ? err.response?.data?.error ?? err.response?.data?.message ?? err.message
+                ? err.response?.data?.message ?? err.response?.data?.error ?? err.message
                 : err instanceof Error
                 ? err.message
                 : "Failed to send email.";
@@ -172,6 +200,38 @@ export function useEmail() {
             return false;
         } finally {
             setSending(false);
+        }
+    }
+
+    async function handleScheduleSend(data: SendEmailPayload): Promise<boolean> {
+        setSending(true);
+        setSendError(null);
+        try {
+            await scheduleSendEmail(data);
+            await loadEmails(selectedLabel);
+            setIsComposeOpen(false);
+            return true;
+        } catch (err) {
+            const msg = axios.isAxiosError(err)
+                ? err.response?.data?.message ?? err.response?.data?.error ?? err.message
+                : err instanceof Error
+                ? err.message
+                : "Failed to schedule email.";
+            setSendError(msg);
+            return false;
+        } finally {
+            setSending(false);
+        }
+    }
+
+    async function handleCreateTemplate(data: { name: string; subject: string; body: string }): Promise<boolean> {
+        try {
+            const created = await createEmailTemplate(data);
+            setTemplates((prev) => [created, ...prev]);
+            return true;
+        } catch (err) {
+            console.error("Failed to create template", err);
+            return false;
         }
     }
 
@@ -233,6 +293,9 @@ export function useEmail() {
         selectedThread,
         search,
         selectedLabel,
+        templates,
+        loadingTemplates,
+        templateError,
         connectingGmail,
         gmailConnectError,
         setSearch,
@@ -243,8 +306,12 @@ export function useEmail() {
         setIsComposeOpen,
         setSelectedThread,
         handleSend,
+        handleScheduleSend,
+        handleCreateTemplate,
+        loadTemplates,
         handleSync,
         handleConnectGmail,
         retry: () => loadEmails(selectedLabel),
     };
 }
+

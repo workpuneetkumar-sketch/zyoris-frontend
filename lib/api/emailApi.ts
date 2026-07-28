@@ -26,8 +26,25 @@ export interface EmailsResponse {
     total: number;
 }
 
+export interface EmailAttachment {
+    filename: string;
+    url?: string;
+    content?: string;
+}
+
+export interface EmailTemplate {
+    id: string;
+    name: string;
+    subject: string;
+    body: string;
+    createdAt?: string;
+    updatedAt?: string;
+}
+
 export interface SendEmailPayload {
     to: string;
+    cc?: string[];
+    bcc?: string[];
     subject: string;
     body: string;
     templateId?: string;
@@ -35,6 +52,8 @@ export interface SendEmailPayload {
     leadId?: string;
     dealId?: string;
     contactId?: string;
+    attachments?: EmailAttachment[];
+    scheduledAt?: string;
 }
 
 export interface SendBulkEmailPayload {
@@ -76,6 +95,23 @@ export async function fetchEmails(folder?: string): Promise<EmailsResponse> {
     return { emails: [], total: 0 };
 }
 
+// ── GET & POST Email Templates ─────────────────────────────────────────────────
+// Endpoints: GET /email/templates | POST /email/templates
+
+export async function fetchEmailTemplates(): Promise<EmailTemplate[]> {
+    const res = await api.get("/email/templates");
+    const raw = res.data;
+    if (Array.isArray(raw)) return raw;
+    if (Array.isArray(raw?.templates)) return raw.templates;
+    if (Array.isArray(raw?.data)) return raw.data;
+    return [];
+}
+
+export async function createEmailTemplate(data: { name: string; subject: string; body: string }): Promise<EmailTemplate> {
+    const res = await api.post("/email/templates", data);
+    return res.data;
+}
+
 // ── POST Gmail OAuth Connect ──────────────────────────────────────────────────
 // Endpoint: POST /email/oauth/gmail/connect
 
@@ -84,11 +120,16 @@ export async function connectGmail(): Promise<GmailConnectResponse> {
     return res.data;
 }
 
-// ── POST send email ───────────────────────────────────────────────────────────
-// Swagger: POST /email/send
+// ── POST send email & schedule send ───────────────────────────────────────────
+// Swagger: POST /email/send | POST /email/schedule-send
 
 export async function sendEmail(data: SendEmailPayload): Promise<EmailLog> {
     const res = await api.post<EmailLog>("/email/send", data);
+    return res.data;
+}
+
+export async function scheduleSendEmail(data: SendEmailPayload): Promise<EmailLog> {
+    const res = await api.post<EmailLog>("/email/schedule-send", data);
     return res.data;
 }
 
