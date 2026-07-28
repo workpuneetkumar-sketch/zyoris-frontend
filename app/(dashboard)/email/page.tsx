@@ -17,6 +17,8 @@ export default function EmailPage() {
         selectedThread,
         search,
         selectedLabel,
+        templates,
+        loadingTemplates,
         connectingGmail,
         gmailConnectError,
         setSearch,
@@ -24,6 +26,8 @@ export default function EmailPage() {
         setIsComposeOpen,
         setSelectedThread,
         handleSend,
+        handleScheduleSend,
+        handleCreateTemplate,
         handleSync,
         handleConnectGmail,
         retry,
@@ -43,6 +47,8 @@ export default function EmailPage() {
             selectedThread={selectedThread}
             search={search}
             selectedLabel={selectedLabel}
+            templates={templates}
+            loadingTemplates={loadingTemplates}
             connectingGmail={connectingGmail}
             gmailConnectError={gmailConnectError}
             onSearchChange={setSearch}
@@ -50,6 +56,8 @@ export default function EmailPage() {
             onOpenCompose={() => setIsComposeOpen(true)}
             onCloseCompose={() => setIsComposeOpen(false)}
             onSendEmail={handleSend}
+            onScheduleEmail={handleScheduleSend}
+            onCreateTemplate={handleCreateTemplate}
             onSyncEmails={handleSync}
             onConnectGmail={handleConnectGmail}
             onSelectThread={setSelectedThread}

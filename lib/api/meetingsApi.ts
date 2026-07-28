@@ -1,6 +1,7 @@
 import api from "@/lib/api/api";
 
 export type MeetingStatus = "SCHEDULED" | "COMPLETED" | "CANCELLED";
+export type MeetingProvider = "google_meet" | "zoom" | "teams";
 
 export interface Attendee {
     id?: string;
@@ -12,7 +13,7 @@ export interface Meeting {
     id: string;
     title: string;
     description?: string;
-    date?: string; // ISO format, sometimes missing
+    date?: string; // ISO format
     startTime: string; // ISO format
     endTime: string; // ISO format
     status?: MeetingStatus;
@@ -21,6 +22,10 @@ export interface Meeting {
     location?: string;
     link?: string;
     meetingLink?: string;
+    joinUrl?: string;
+    provider?: MeetingProvider | "GOOGLE_MEET" | "ZOOM" | "TEAMS" | string;
+    externalCalendarId?: string;
+    calendarSyncStatus?: string;
     createdAt?: string;
     updatedAt?: string;
     [key: string]: unknown;
@@ -33,10 +38,15 @@ export interface CreateMeetingPayload {
     startTime: string;
     endTime: string;
     status?: MeetingStatus;
+    provider?: MeetingProvider;
     location?: string;
     link?: string;
-    attendees?: string[]; // <--- Backend expects array of strings
+    meetingLink?: string;
+    attendees?: string[];
     reminder?: string;
+    leadId?: string;
+    dealId?: string;
+    contactId?: string;
 }
 
 export interface UpdateMeetingPayload extends Partial<CreateMeetingPayload> {
@@ -53,7 +63,6 @@ export async function getMeetings(): Promise<Meeting[]> {
     if (Array.isArray(res.data)) {
         return res.data;
     }
-    // Handle wrapped responses like { data: [...] } or { meetings: [...] }
     if (res.data?.data && Array.isArray(res.data.data)) {
         return res.data.data;
     }
@@ -65,5 +74,12 @@ export async function getMeetings(): Promise<Meeting[]> {
 
 export async function updateMeeting(id: string, data: UpdateMeetingPayload): Promise<Meeting> {
     const res = await api.patch(`/api/meetings/update-meeting/${id}`, data);
+    return res.data;
+}
+
+export async function syncMeetingCalendar(id: string, externalCalendarId?: string): Promise<any> {
+    const res = await api.post(`/api/meetings/${id}/sync-calendar`, {
+        externalCalendarId: externalCalendarId || "primary",
+    });
     return res.data;
 }
