@@ -14,6 +14,7 @@ export interface AttendanceRecord {
 }
 
 export interface TodaySummary {
+
   totalEmployees: number;
   checkedIn: number;
   checkedOut: number;
