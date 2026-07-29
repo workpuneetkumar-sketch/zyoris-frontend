@@ -42,6 +42,7 @@ import {
   Layers,
   Grid3X3,
   Video,
+  Bell,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -74,6 +75,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/dashboard/builder",
         label: "Dashboard Builder",
         icon: Grid3X3,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/dashboard/reminders",
+        label: "Reminders",
+        icon: Bell,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
@@ -430,6 +437,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       // For now, render them as a single "Navigation" group
       const iconMap: Record<string, LucideIcon> = {
         dashboard: LayoutDashboard,
+        reminders: Bell,
         leads: Users,
         deals: Briefcase,
         contacts: Users,

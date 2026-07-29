@@ -1,205 +1,226 @@
 "use client";
 
-import { Loader2, Puzzle, Search, X } from "lucide-react";
+// components/dashboard-builder/WidgetLibrary.tsx
+// Premium sidebar widget catalog with module grouping and search.
+
 import { useState, useMemo } from "react";
+import { Search, Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { WidgetDefinition } from "@/types/dashboard-builder";
-import { WidgetLibraryItem } from "./WidgetLibraryItem";
+import { getWidgetCatalogGroups } from "./WidgetRegistry";
 
 interface WidgetLibraryProps {
   catalog: WidgetDefinition[];
-  onAddWidget: (definition: WidgetDefinition) => void;
-  isPreview: boolean;
-  isLoading: boolean;
+  isOpen: boolean;
+  onClose: () => void;
+  onAdd: (def: WidgetDefinition) => void;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  Finance: "bg-blue-100 text-blue-700 hover:bg-blue-200",
-  Analytics: "bg-violet-100 text-violet-700 hover:bg-violet-200",
-  Sales: "bg-emerald-100 text-emerald-700 hover:bg-emerald-200",
-  Activity: "bg-amber-100 text-amber-700 hover:bg-amber-200",
-  Tasks: "bg-rose-100 text-rose-700 hover:bg-rose-200",
+const MODULE_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  "Executive": { bg: "#fef3c7", text: "#d97706", border: "#fde68a" },
+  "Analytics": { bg: "#dbeafe", text: "#2563eb", border: "#bfdbfe" },
+  "CRM": { bg: "#ede9fe", text: "#7c3aed", border: "#ddd6fe" },
+  "Sales": { bg: "#d1fae5", text: "#059669", border: "#a7f3d0" },
+  "Finance": { bg: "#dcfce7", text: "#16a34a", border: "#bbf7d0" },
+  "HR": { bg: "#fce7f3", text: "#db2777", border: "#fbcfe8" },
+  "Projects": { bg: "#e0f2fe", text: "#0284c7", border: "#bae6fd" },
+  "Tasks": { bg: "#f3e8ff", text: "#9333ea", border: "#e9d5ff" },
+  "Activities": { bg: "#fff7ed", text: "#ea580c", border: "#fed7aa" },
+  "Operations": { bg: "#fdf4ff", text: "#a21caf", border: "#f5d0fe" },
+  "Communications": { bg: "#ecfdf5", text: "#059669", border: "#a7f3d0" },
+  "Marketing": { bg: "#fff1f2", text: "#e11d48", border: "#fecdd3" },
+  "AI & Insights": { bg: "#f5f3ff", text: "#7c3aed", border: "#ddd6fe" },
 };
 
-export function WidgetLibrary({
-  catalog,
-  onAddWidget,
-  isPreview,
-  isLoading,
-}: WidgetLibraryProps) {
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-
-  // ── Extract unique categories ───────────────────────────────────────────────
-  const categories = useMemo(() => {
-    const set = new Set(catalog.map((w) => w.category));
-    return Array.from(set).sort();
-  }, [catalog]);
-
-  // ── Filter by search + category ────────────────────────────────────────────
-  const filteredCatalog = useMemo(() => {
-    let list = catalog;
-    if (activeCategory) {
-      list = list.filter((w) => w.category === activeCategory);
-    }
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (w) =>
-          w.title.toLowerCase().includes(q) ||
-          w.description?.toLowerCase().includes(q) ||
-          w.type.toLowerCase().includes(q) ||
-          w.category.toLowerCase().includes(q)
-      );
-    }
-    return list;
-  }, [catalog, search, activeCategory]);
-
-  // ── Group filtered results by type ──────────────────────────────────────────
-  const grouped = useMemo(() => {
-    const map: Record<string, WidgetDefinition[]> = {};
-    const typeOrder = ["kpi", "chart", "table", "activity", "tasks"] as const;
-    const typeLabels: Record<string, string> = {
-      kpi: "Key Performance Indicators",
-      chart: "Charts & Graphs",
-      table: "Data Tables",
-      activity: "Activity Feeds",
-      tasks: "Task Views",
-    };
-    for (const t of typeOrder) {
-      const items = filteredCatalog.filter((w) => w.type === t);
-      if (items.length > 0) {
-        map[typeLabels[t] ?? t] = items;
-      }
-    }
-    return map;
-  }, [filteredCatalog]);
-
-  const clearFilters = () => {
-    setSearch("");
-    setActiveCategory(null);
-  };
-
-  const hasActiveFilters = search.trim() !== "" || activeCategory !== null;
-
-  // Hidden in preview mode
-  if (isPreview) return null;
+function WidgetCard({ def, onAdd }: { def: WidgetDefinition; onAdd: (def: WidgetDefinition) => void }) {
+  const color = MODULE_COLORS[def.module] ?? { bg: "#f8fafc", text: "#64748b", border: "#e2e8f0" };
 
   return (
-    <aside className="w-[280px] shrink-0 border-r border-gray-200 bg-white flex flex-col" role="complementary" aria-label="Widget Library">
-      {/* Header */}
-      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-gray-500">
-            Widget Library
-          </h2>
-          <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded-full">
-            {filteredCatalog.length}/{catalog.length}
-          </span>
-        </div>
-        <p className="text-[11px] text-gray-400 mb-2">
-          Click a widget to add it to the canvas
-        </p>
-        {/* Search */}
-        <div className="relative">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-300 pointer-events-none" />
-          <input
-            type="text"
-            placeholder="Search widgets..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="Search widgets"
-            className="w-full pl-8 pr-8 py-1.5 text-xs rounded-lg border border-gray-200 bg-gray-50 focus:bg-white focus:border-blue-300 focus:ring-1 focus:ring-blue-100 outline-none transition-all placeholder:text-gray-300 text-gray-600"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500"
-              aria-label="Clear search"
-            >
-              <X size={14} />
-            </button>
-          )}
-        </div>
-        {/* Category filter chips */}
-        {categories.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-2" role="group" aria-label="Filter by category">
-            <button
-              onClick={() => setActiveCategory(null)}
-              className={`text-[10px] font-semibold px-2 py-1 rounded-full transition-colors ${
-                activeCategory === null
-                  ? "bg-gray-800 text-white"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              }`}
-              aria-pressed={activeCategory === null}
-            >
-              All
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                className={`text-[10px] font-semibold px-2 py-1 rounded-full transition-colors ${
-                  activeCategory === cat
-                    ? "bg-gray-800 text-white"
-                    : CATEGORY_COLORS[cat] ?? "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                }`}
-                aria-pressed={activeCategory === cat}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
+    <button
+      onClick={() => onAdd(def)}
+      className="group w-full flex items-center gap-3 p-2.5 rounded-xl border border-gray-100 bg-white hover:border-indigo-200 hover:shadow-md hover:shadow-indigo-50/50 transition-all text-left"
+    >
+      {/* Icon */}
+      <div
+        className="w-9 h-9 rounded-xl flex items-center justify-center text-lg flex-shrink-0 border"
+        style={{ backgroundColor: color.bg, borderColor: color.border }}
+      >
+        {def.icon}
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-semibold text-gray-900 truncate">{def.title}</p>
+        {def.description && (
+          <p className="text-[10px] text-gray-400 truncate">{def.description}</p>
         )}
       </div>
 
-      {/* Scrollable list */}
-      <div className="flex-1 overflow-y-auto px-3 pb-4">
-        {isLoading ? (
-          <div className="space-y-3 pt-4" role="status" aria-label="Loading widgets">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="h-[60px] rounded-xl bg-gray-50 animate-pulse border border-gray-100" />
-            ))}
+      {/* Add button */}
+      <div className="w-6 h-6 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <Plus size={12} className="text-indigo-600" />
+      </div>
+    </button>
+  );
+}
+
+function ModuleGroup({
+  module,
+  widgets,
+  query,
+  onAdd,
+  color,
+}: {
+  module: string;
+  widgets: WidgetDefinition[];
+  query: string;
+  onAdd: (def: WidgetDefinition) => void;
+  color: { bg: string; text: string; border: string };
+}) {
+  const [collapsed, setCollapsed] = useState(false);
+  const filtered = query
+    ? widgets.filter(
+        (w) =>
+          w.title.toLowerCase().includes(query) ||
+          (w.description ?? "").toLowerCase().includes(query)
+      )
+    : widgets;
+
+  if (filtered.length === 0) return null;
+
+  return (
+    <div>
+      <button
+        onClick={() => setCollapsed((p) => !p)}
+        className="w-full flex items-center gap-2 mb-2 group"
+      >
+        <div
+          className="w-5 h-5 rounded-md flex items-center justify-center text-[10px] border"
+          style={{ backgroundColor: color.bg, borderColor: color.border }}
+        >
+          {collapsed ? (
+            <ChevronRight size={10} style={{ color: color.text }} />
+          ) : (
+            <ChevronDown size={10} style={{ color: color.text }} />
+          )}
+        </div>
+        <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: color.text }}>
+          {module}
+        </p>
+        <span
+          className="ml-auto text-[9px] font-semibold px-1.5 py-0.5 rounded-full border"
+          style={{ backgroundColor: color.bg, color: color.text, borderColor: color.border }}
+        >
+          {filtered.length}
+        </span>
+      </button>
+      {!collapsed && (
+        <div className="space-y-1.5 ml-1">
+          {filtered.map((def) => (
+            <WidgetCard key={def.id} def={def} onAdd={onAdd} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function WidgetLibrary({ catalog, isOpen, onClose, onAdd }: WidgetLibraryProps) {
+  const [query, setQuery] = useState("");
+
+  // Use grouped catalog from registry
+  const groups = useMemo(() => getWidgetCatalogGroups(), []);
+  const lowerQuery = query.toLowerCase().trim();
+
+  // Total filtered count
+  const totalFiltered = useMemo(() => {
+    if (!lowerQuery) return catalog.length;
+    return catalog.filter(
+      (w) =>
+        w.title.toLowerCase().includes(lowerQuery) ||
+        (w.description ?? "").toLowerCase().includes(lowerQuery) ||
+        (w.module ?? "").toLowerCase().includes(lowerQuery)
+    ).length;
+  }, [catalog, lowerQuery]);
+
+  if (!isOpen) return null;
+
+  return (
+    <>
+      {/* Backdrop (mobile) */}
+      <div
+        className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm lg:hidden"
+        onClick={onClose}
+      />
+
+      {/* Panel */}
+      <aside className="fixed right-0 top-0 bottom-0 z-40 w-72 bg-white border-l border-gray-100 shadow-2xl flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 bg-gradient-to-r from-indigo-50 to-violet-50">
+          <div>
+            <p className="text-sm font-bold text-gray-900">Widget Library</p>
+            <p className="text-[10px] text-gray-400">{totalFiltered} widgets available</p>
           </div>
-        ) : filteredCatalog.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 mt-12 text-center">
-            <Puzzle size={28} className="text-gray-200" />
-            <div>
-              <p className="text-sm font-semibold text-gray-500">No widgets found</p>
-              <p className="text-xs text-gray-400 mt-1">
-                {hasActiveFilters
-                  ? "Try adjusting your search or filter"
-                  : "Widget catalog is empty"}
-              </p>
-            </div>
-            {hasActiveFilters && (
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-xl flex items-center justify-center bg-white border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors"
+          >
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 py-3 border-b border-gray-100">
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search widgets…"
+              className="w-full pl-8 pr-3 py-2 text-xs border border-gray-200 rounded-xl bg-gray-50 text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 focus:border-indigo-400 transition-all"
+            />
+            {query && (
               <button
-                onClick={clearFilters}
-                className="text-xs font-semibold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg transition-colors"
+                onClick={() => setQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                Clear all filters
+                <X size={11} />
               </button>
             )}
           </div>
-        ) : (
-          Object.entries(grouped).map(([label, items]) => (
-            <div key={label} className="pt-4 first:pt-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-300 px-1 pb-2">
-                {label}
-                <span className="ml-1.5 font-normal text-gray-200">({items.length})</span>
-              </p>
-              <div className="space-y-1.5">
-                {items.map((widget) => (
-                  <WidgetLibraryItem
-                    key={widget.id}
-                    widget={widget}
-                    onAdd={() => onAddWidget(widget)}
-                  />
-                ))}
-              </div>
+        </div>
+
+        {/* Groups */}
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+          {groups.map(({ module, widgets }) => {
+            const color = MODULE_COLORS[module] ?? { bg: "#f8fafc", text: "#64748b", border: "#e2e8f0" };
+            return (
+              <ModuleGroup
+                key={module}
+                module={module}
+                widgets={widgets}
+                query={lowerQuery}
+                onAdd={onAdd}
+                color={color}
+              />
+            );
+          })}
+
+          {totalFiltered === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <p className="text-2xl mb-2">🔍</p>
+              <p className="text-xs text-gray-500">No widgets match "{query}"</p>
             </div>
-          ))
-        )}
-      </div>
-    </aside>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+          <p className="text-[10px] text-gray-400 text-center">
+            Click a widget to add it to your dashboard
+          </p>
+        </div>
+      </aside>
+    </>
   );
 }

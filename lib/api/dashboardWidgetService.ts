@@ -1,95 +1,178 @@
 // lib/api/dashboardWidgetService.ts
-// Mock service for the Dashboard Builder widget catalog.
-// Day 2: Mock data with categories.
-// Future: Replace with GET /dashboard/widgets/catalog
+// Dashboard Builder widget catalog.
+// Calls GET /dashboard/widgets/catalog first, falls back to local registry.
 
-import { WidgetDefinition } from "@/types/dashboard-builder";
+import api from "@/lib/api/api";
+import { WidgetDefinition, WidgetCatalogGroup } from "@/types/dashboard-builder";
 
-const MOCK_CATALOG: WidgetDefinition[] = [
+// ── Local fallback registry ────────────────────────────────────────────────
+// Used when the API is unavailable or returns an empty list.
+
+const FALLBACK_CATALOG: WidgetCatalogGroup[] = [
   {
-    id: "kpi-revenue",
-    type: "kpi",
-    title: "Revenue KPI",
-    description: "Current revenue with trend percentage",
-    icon: "DollarSign",
-    category: "Finance",
-    defaultW: 2,
-    defaultH: 1,
+    module: "Sales",
+    widgets: [
+      { widgetId: "pipeline", title: "Sales Pipeline", minW: 3, minH: 3, defaultW: 6, defaultH: 4 },
+      { widgetId: "conversion-rate", title: "Conversion Rate", minW: 2, minH: 2, defaultW: 3, defaultH: 3 },
+      { widgetId: "revenue", title: "Revenue", minW: 2, minH: 2, defaultW: 3, defaultH: 3 },
+    ],
   },
   {
-    id: "kpi-leads",
-    type: "kpi",
-    title: "Leads Count",
-    description: "Total leads count for this period",
-    icon: "Users",
-    category: "Sales",
-    defaultW: 2,
-    defaultH: 1,
+    module: "Finance",
+    widgets: [
+      { widgetId: "cash-flow", title: "Cash Flow", minW: 3, minH: 3, defaultW: 6, defaultH: 4 },
+      { widgetId: "revenue-kpi", title: "Revenue KPI", minW: 2, minH: 2, defaultW: 3, defaultH: 3 },
+    ],
   },
   {
-    id: "kpi-deal-value",
-    type: "kpi",
-    title: "Deal Value",
-    description: "Total pipeline deal value",
-    icon: "Briefcase",
-    category: "Sales",
-    defaultW: 2,
-    defaultH: 1,
+    module: "Operations",
+    widgets: [
+      { widgetId: "inventory-risk", title: "Inventory Risk", minW: 3, minH: 2, defaultW: 4, defaultH: 3 },
+    ],
   },
   {
-    id: "chart-revenue",
-    type: "chart",
-    title: "Revenue Trend",
-    description: "Monthly revenue over time",
-    icon: "BarChart2",
-    category: "Analytics",
-    defaultW: 4,
-    defaultH: 2,
+    module: "HR",
+    widgets: [
+      { widgetId: "attendance", title: "Attendance", minW: 3, minH: 3, defaultW: 4, defaultH: 3 },
+    ],
   },
   {
-    id: "chart-deals",
-    type: "chart",
-    title: "Deals Pipeline",
-    description: "Deals by pipeline stage",
-    icon: "TrendingUp",
-    category: "Analytics",
-    defaultW: 4,
-    defaultH: 2,
+    module: "CRM",
+    widgets: [
+      { widgetId: "leads-kpi", title: "Leads Overview", minW: 2, minH: 2, defaultW: 3, defaultH: 3 },
+      { widgetId: "activities", title: "Recent Activities", minW: 3, minH: 3, defaultW: 6, defaultH: 4 },
+      { widgetId: "tasks", title: "My Tasks", minW: 3, minH: 3, defaultW: 4, defaultH: 4 },
+    ],
   },
   {
-    id: "table-leads",
-    type: "table",
-    title: "Recent Leads",
-    description: "Latest leads added to the system",
-    icon: "Table",
-    category: "Sales",
-    defaultW: 4,
-    defaultH: 2,
-  },
-  {
-    id: "activity-feed",
-    type: "activity",
-    title: "Activity Feed",
-    description: "Recent team activity entries",
-    icon: "Activity",
-    category: "Activity",
-    defaultW: 3,
-    defaultH: 2,
-  },
-  {
-    id: "tasks-overview",
-    type: "tasks",
-    title: "My Tasks",
-    description: "Overview of pending tasks",
-    icon: "CheckSquare",
-    category: "Tasks",
-    defaultW: 3,
-    defaultH: 2,
+    module: "Analytics",
+    widgets: [
+      { widgetId: "deals-kpi", title: "Deals Summary", minW: 2, minH: 2, defaultW: 3, defaultH: 3 },
+    ],
   },
 ];
 
+// ── Normalize API response ─────────────────────────────────────────────────
+
+function normalizeCatalog(data: any): WidgetCatalogGroup[] {
+  if (!data) return [];
+
+  // Shape: { Sales: [...], Finance: [...] }
+  if (!Array.isArray(data) && typeof data === "object") {
+    const entries = Object.entries(data);
+    if (entries.length > 0 && Array.isArray(entries[0][1])) {
+      return entries.map(([module, widgets]: [string, any]) => ({
+        module,
+        widgets: (widgets as any[]).map((w) => ({
+          widgetId: w.widgetId ?? w.id,
+          title: w.title ?? w.name ?? w.widgetId ?? w.id,
+          minW: w.minW ?? 2,
+          minH: w.minH ?? 2,
+          defaultW: w.defaultW ?? Math.max(w.minW ?? 2, 3),
+          defaultH: w.defaultH ?? Math.max(w.minH ?? 2, 3),
+          description: w.description,
+          type: w.type,
+        })),
+      }));
+    }
+  }
+
+  // Shape: [{ module, widgets: [...] }]
+  if (Array.isArray(data)) {
+    return data.map((group: any) => ({
+      module: group.module ?? group.name ?? "Other",
+      widgets: (group.widgets ?? group.items ?? []).map((w: any) => ({
+        widgetId: w.widgetId ?? w.id,
+        title: w.title ?? w.name,
+        minW: w.minW ?? 2,
+        minH: w.minH ?? 2,
+        defaultW: w.defaultW ?? Math.max(w.minW ?? 2, 3),
+        defaultH: w.defaultH ?? Math.max(w.minH ?? 2, 3),
+        description: w.description,
+        type: w.type,
+      })),
+    }));
+  }
+
+  return [];
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────
+
+/**
+ * Fetch widget catalog grouped by module.
+ * Calls GET /dashboard/widgets/catalog, falls back to local registry.
+ */
+export async function getWidgetCatalogGrouped(): Promise<WidgetCatalogGroup[]> {
+  try {
+    const res = await api.get<any>("/dashboard/widgets/catalog");
+    const raw = res.data?.data ?? res.data;
+    const groups = normalizeCatalog(raw);
+    if (groups.length > 0) return groups;
+    // API returned empty — use fallback
+    return FALLBACK_CATALOG;
+  } catch {
+    return FALLBACK_CATALOG;
+  }
+}
+
+/**
+ * Get the complete widget catalog as a flat list of WidgetDefinitions.
+ */
 export async function getWidgetCatalog(): Promise<WidgetDefinition[]> {
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 400));
-  return MOCK_CATALOG.map((w) => ({ ...w }));
+  const groups = await getWidgetCatalogGrouped();
+  return groups.flatMap((group) =>
+    group.widgets.map((w) => ({
+      id: w.widgetId,
+      title: w.title,
+      module: group.module,
+      description: w.description,
+      minW: w.minW,
+      minH: w.minH,
+      defaultW: w.defaultW ?? Math.max(w.minW, 3),
+      defaultH: w.defaultH ?? Math.max(w.minH, 3),
+      type: w.type,
+    }))
+  );
+}
+
+/**
+ * Get a single widget definition by ID from the local fallback catalog.
+ */
+export function getWidgetDefinitionById(id: string): WidgetDefinition | undefined {
+  for (const group of FALLBACK_CATALOG) {
+    const w = group.widgets.find((w) => w.widgetId === id);
+    if (w) {
+      return {
+        id: w.widgetId,
+        title: w.title,
+        module: group.module,
+        description: undefined,
+        minW: w.minW,
+        minH: w.minH,
+        defaultW: w.defaultW ?? Math.max(w.minW, 3),
+        defaultH: w.defaultH ?? Math.max(w.minH, 3),
+      };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * @deprecated Use getWidgetCatalog instead.
+ * Kept for backward compatibility with WidgetRegistry imports.
+ */
+export function getAllWidgetDefinitions(): WidgetDefinition[] {
+  return FALLBACK_CATALOG.flatMap((group) =>
+    group.widgets.map((w) => ({
+      id: w.widgetId,
+      title: w.title,
+      module: group.module,
+      description: undefined,
+      minW: w.minW,
+      minH: w.minH,
+      defaultW: w.defaultW ?? Math.max(w.minW, 3),
+      defaultH: w.defaultH ?? Math.max(w.minH, 3),
+    }))
+  );
 }
