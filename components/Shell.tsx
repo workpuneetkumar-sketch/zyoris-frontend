@@ -77,6 +77,12 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
+        href: "/dashboard/reminders",
+        label: "Reminders",
+        icon: Bell,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
         href: "/ai-insights",
         label: "AI Insights",
         icon: Brain,
