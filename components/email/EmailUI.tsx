@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { EmailLog, EmailTemplate, SendEmailPayload, EmailAttachment } from "@/lib/api/emailApi";
 import { EmailThread, FolderTab } from "@/hooks/useEmail";
+import { GmailConnectScreen } from "@/components/email/GmailConnectScreen";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -778,6 +779,7 @@ export function EmailUI({
         { name: "Sent", icon: SendIcon, emptyMsg: "No sent messages found." },
         { name: "Drafts", icon: FileText, emptyMsg: "No drafts available." },
         { name: "Trash", icon: Trash2, emptyMsg: "Trash is empty." },
+        { name: "Gmail Connect", icon: ExternalLink, emptyMsg: "Connect your Google account." },
     ];
 
     const currentFolder = folders.find((f) => f.name === selectedLabel) ?? folders[0];
@@ -791,6 +793,12 @@ export function EmailUI({
                     <p className="text-xs text-gray-500 mt-1">Manage communications, templates, and schedule outreach</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => onLabelChange("Gmail Connect")}
+                        className="flex items-center gap-2 px-4 py-2 border border-blue-200 text-blue-700 bg-blue-50/50 hover:bg-blue-100/50 rounded-xl text-xs font-semibold transition"
+                    >
+                        <ExternalLink size={14} className="text-blue-600" /> Connect Gmail
+                    </button>
                     {onCreateTemplate && (
                         <button
                             onClick={() => setIsTemplatesModalOpen(true)}
@@ -863,112 +871,124 @@ export function EmailUI({
                     </div>
                 </div>
 
-                {/* Main Email Table */}
-                <div className={`${selectedThread ? "md:col-span-2" : "md:col-span-3"} transition-all`}>
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        {/* Search Bar */}
-                        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
-                            <Search size={16} className="text-gray-400" />
-                            <input
-                                type="text"
-                                value={search}
-                                onChange={(e) => onSearchChange(e.target.value)}
-                                placeholder="Search by recipient, subject, or snippet..."
-                                className="w-full bg-transparent text-xs font-medium outline-none text-gray-800 placeholder-gray-400"
-                            />
-                        </div>
-
-                        {/* Table */}
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b border-gray-100 bg-gray-50/30 text-[11px] font-bold uppercase tracking-wider text-gray-400">
-                                        <th className="px-5 py-3">Participant</th>
-                                        <th className="px-5 py-3">Subject / Snippet</th>
-                                        <th className="px-5 py-3">Date</th>
-                                        <th className="pr-4 py-3"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {loading ? (
-                                        <tr>
-                                            <td colSpan={4} className="text-center py-16">
-                                                <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-600">
-                                                    <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
-                                                    Loading {selectedLabel.toLowerCase()} emails...
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : filteredThreads.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={4} className="text-center py-16">
-                                                <Mail size={32} className="text-gray-300 mx-auto mb-3" />
-                                                <p className="text-gray-500 text-xs font-semibold">
-                                                    {search ? "No emails match your search filter." : currentFolder.emptyMsg}
-                                                </p>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        filteredThreads.map((thread) => {
-                                            const isSelected = selectedThread?.id === thread.id;
-                                            const displayEmail = thread.participants[0] || "Unknown";
-                                            return (
-                                                <tr
-                                                    key={thread.id}
-                                                    onClick={() => onSelectThread(isSelected ? null : thread)}
-                                                    className={`border-b border-gray-50 cursor-pointer transition-colors ${
-                                                        isSelected ? "bg-blue-50/60" : "hover:bg-gray-50/60"
-                                                    }`}
-                                                >
-                                                    <td className="px-5 py-3.5 whitespace-nowrap">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <Avatar email={displayEmail} />
-                                                            <div className="max-w-[140px] truncate">
-                                                                <p className="font-bold text-gray-800 text-xs truncate">
-                                                                    {displayEmail}
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-5 py-3.5 max-w-[240px]">
-                                                        <p className="font-semibold text-gray-900 truncate text-xs">
-                                                            {thread.subject}
-                                                        </p>
-                                                        <p className="text-gray-400 truncate text-[11px] mt-0.5">
-                                                            {thread.latestPreview}
-                                                        </p>
-                                                    </td>
-                                                    <td className="px-5 py-3.5 whitespace-nowrap">
-                                                        <span className="text-[11px] text-gray-400 font-medium">
-                                                            {formatDate(thread.latestDate)}
-                                                        </span>
-                                                    </td>
-                                                    <td className="pr-4 py-3.5 whitespace-nowrap text-right">
-                                                        <ChevronRight
-                                                            size={16}
-                                                            className={`inline-block transition-colors ${
-                                                                isSelected ? "text-blue-600" : "text-gray-300"
-                                                            }`}
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Thread Detail Drawer */}
-                {selectedThread && (
-                    <div className="md:col-span-1">
-                        <EmailDetailPanel
-                            thread={selectedThread}
-                            onClose={() => onSelectThread(null)}
+                {selectedLabel === "Gmail Connect" ? (
+                    <div className="md:col-span-3">
+                        <GmailConnectScreen
+                            connecting={connectingGmail}
+                            error={gmailConnectError}
+                            onConnect={onConnectGmail}
                         />
                     </div>
+                ) : (
+                    <>
+                        {/* Main Email Table */}
+                        <div className={`${selectedThread ? "md:col-span-2" : "md:col-span-3"} transition-all`}>
+                            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                {/* Search Bar */}
+                                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex items-center gap-3">
+                                    <Search size={16} className="text-gray-400" />
+                                    <input
+                                        type="text"
+                                        value={search}
+                                        onChange={(e) => onSearchChange(e.target.value)}
+                                        placeholder="Search by recipient, subject, or snippet..."
+                                        className="w-full bg-transparent text-xs font-medium outline-none text-gray-800 placeholder-gray-400"
+                                    />
+                                </div>
+
+                                {/* Table */}
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b border-gray-100 bg-gray-50/30 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+                                                <th className="px-5 py-3">Participant</th>
+                                                <th className="px-5 py-3">Subject / Snippet</th>
+                                                <th className="px-5 py-3">Date</th>
+                                                <th className="pr-4 py-3"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {loading ? (
+                                                <tr>
+                                                    <td colSpan={4} className="text-center py-16">
+                                                        <div className="inline-flex items-center gap-2 text-xs font-semibold text-blue-600">
+                                                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-blue-600 border-t-transparent"></div>
+                                                            Loading {selectedLabel.toLowerCase()} emails...
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ) : filteredThreads.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={4} className="text-center py-16">
+                                                        <Mail size={32} className="text-gray-300 mx-auto mb-3" />
+                                                        <p className="text-gray-500 text-xs font-semibold">
+                                                            {search ? "No emails match your search filter." : currentFolder.emptyMsg}
+                                                        </p>
+                                                    </td>
+                                                </tr>
+                                            ) : (
+                                                filteredThreads.map((thread) => {
+                                                    const isSelected = selectedThread?.id === thread.id;
+                                                    const displayEmail = thread.participants[0] || "Unknown";
+                                                    return (
+                                                        <tr
+                                                            key={thread.id}
+                                                            onClick={() => onSelectThread(isSelected ? null : thread)}
+                                                            className={`border-b border-gray-50 cursor-pointer transition-colors ${
+                                                                isSelected ? "bg-blue-50/60" : "hover:bg-gray-50/60"
+                                                            }`}
+                                                        >
+                                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <Avatar email={displayEmail} />
+                                                                    <div className="max-w-[140px] truncate">
+                                                                        <p className="font-bold text-gray-800 text-xs truncate">
+                                                                            {displayEmail}
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-5 py-3.5 max-w-[240px]">
+                                                                <p className="font-semibold text-gray-900 truncate text-xs">
+                                                                    {thread.subject}
+                                                                </p>
+                                                                <p className="text-gray-400 truncate text-[11px] mt-0.5">
+                                                                    {thread.latestPreview}
+                                                                </p>
+                                                            </td>
+                                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                                                <span className="text-[11px] text-gray-400 font-medium">
+                                                                    {formatDate(thread.latestDate)}
+                                                                </span>
+                                                            </td>
+                                                            <td className="pr-4 py-3.5 whitespace-nowrap text-right">
+                                                                <ChevronRight
+                                                                    size={16}
+                                                                    className={`inline-block transition-colors ${
+                                                                        isSelected ? "text-blue-600" : "text-gray-300"
+                                                                    }`}
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Thread Detail Drawer */}
+                        {selectedThread && (
+                            <div className="md:col-span-1">
+                                <EmailDetailPanel
+                                    thread={selectedThread}
+                                    onClose={() => onSelectThread(null)}
+                                />
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
 
