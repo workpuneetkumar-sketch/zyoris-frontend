@@ -25,7 +25,7 @@ export interface EmailThread {
     labels: string[];
 }
 
-export type FolderTab = "Inbox" | "Sent" | "Drafts" | "Trash";
+export type FolderTab = "Inbox" | "Sent" | "Drafts" | "Trash" | "Gmail Connect";
 
 export function useEmail() {
     const [emails, setEmails] = useState<EmailLog[]>([]);
@@ -72,6 +72,10 @@ export function useEmail() {
 
     // ── Fetch Emails by Folder ────────────────────────────────────────────────
     const loadEmails = useCallback(async (folder: FolderTab = selectedLabel) => {
+        if (folder === "Gmail Connect") {
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {

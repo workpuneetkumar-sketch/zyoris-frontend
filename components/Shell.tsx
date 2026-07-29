@@ -41,6 +41,7 @@ import {
   Brain,
   Layers,
   Grid3X3,
+  Video,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -150,6 +151,12 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/messages",
         label: "Messages",
         icon: MessageSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/meetings",
+        label: "Meetings",
+        icon: Video,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
     ],
@@ -434,6 +441,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         tasks: ListTodo,
         calendar: Calendar,
         messages: MessageSquare,
+        meetings: Video,
         hr: UsersRound,
         finance: DollarSign,
         marketing: Megaphone,
