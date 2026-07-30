@@ -232,15 +232,60 @@ export default function DashboardPage() {
   return (
     <div>
       {/* ── Topbar ── */}
-      <div className="flex items-center justify-between mb-8 py-2">
-        <div className="animate-in fade-in zoom-in-95 slide-in-from-left-8 duration-1000 ease-out fill-mode-both space-y-1">
+      <div className="flex items-center justify-between mb-8 py-2 gap-4 overflow-hidden">
+        {/* Left: Title + greeting */}
+        <div className="animate-in fade-in zoom-in-95 slide-in-from-left-8 duration-1000 ease-out fill-mode-both space-y-1 flex-shrink-0">
           <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-indigo-900 to-purple-900 drop-shadow-xs hover:scale-[1.005] transition-transform origin-left cursor-default">
             Dashboard
           </h1>
           <p className="text-lg sm:text-xl text-gray-500 font-semibold flex items-center gap-2 pt-0.5">
             <span>{greeting.text}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600 font-extrabold">{user?.name?.split(" ")[0] || "there"}</span>!</span>
-            <span className="inline-block animate-bounce text-2xl sm:text-3xl drop-shadow-xs">{greeting.emoji}</span>
+            <span className="text-2xl sm:text-3xl">{greeting.emoji}</span>
           </p>
+        </div>
+
+        {/* Right: Animated wave */}
+        <div className="flex-1 h-20 relative overflow-hidden rounded-2xl hidden sm:block">
+          <svg
+            viewBox="0 0 1200 120"
+            preserveAspectRatio="none"
+            className="absolute bottom-0 left-0 w-[200%] h-full"
+            style={{ animation: "waveScroll 8s linear infinite" }}
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <defs>
+              <linearGradient id="wg1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.8" />
+                <stop offset="40%" stopColor="#7c3aed" stopOpacity="0.65" />
+                <stop offset="80%" stopColor="#3b82f6" stopOpacity="0.7" />
+                <stop offset="100%" stopColor="#6366f1" stopOpacity="0.8" />
+              </linearGradient>
+              <linearGradient id="wg2" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#818cf8" stopOpacity="0.5" />
+                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
+                <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.4" />
+              </linearGradient>
+              <linearGradient id="wg3" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#c4b5fd" stopOpacity="0.3" />
+                <stop offset="100%" stopColor="#93c5fd" stopOpacity="0.25" />
+              </linearGradient>
+            </defs>
+            {/* Wave 1 - deepest */}
+            <path
+              d="M0,45 C150,10 300,90 450,50 C600,10 750,90 900,45 C1050,0 1150,70 1200,45 L1200,120 L0,120 Z M1200,45 C1350,10 1500,90 1650,50 C1800,10 1950,90 2100,45 C2250,0 2350,70 2400,45 L2400,120 L1200,120 Z"
+              fill="url(#wg1)"
+            />
+            {/* Wave 2 - mid */}
+            <path
+              d="M0,65 C120,35 250,100 400,68 C550,35 700,95 850,65 C1000,35 1100,85 1200,65 L1200,120 L0,120 Z M1200,65 C1320,35 1450,100 1600,68 C1750,35 1900,95 2050,65 C2200,35 2300,85 2400,65 L2400,120 L1200,120 Z"
+              fill="url(#wg2)"
+            />
+            {/* Wave 3 - top layer */}
+            <path
+              d="M0,80 C100,55 220,105 380,80 C530,55 680,100 830,80 C970,55 1100,95 1200,80 L1200,120 L0,120 Z M1200,80 C1300,55 1420,105 1580,80 C1730,55 1880,100 2030,80 C2170,55 2300,95 2400,80 L2400,120 L1200,120 Z"
+              fill="url(#wg3)"
+            />
+          </svg>
         </div>
       </div>
 
