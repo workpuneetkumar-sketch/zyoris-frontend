@@ -548,7 +548,7 @@ export interface AssignmentRuleConfig {
 export async function getLeadAssignmentRecommendation(leadId: string): Promise<LeadAssignmentRecommendationResult> {
   console.log(`[API] getLeadAssignmentRecommendation - leadId: ${leadId}`);
   try {
-    const res = await api.post(`/leads/${leadId}/assignment-recommendation`);
+    const res = await api.post(`/leads/${leadId}/assignment-recommendation`, { reassign: true });
     console.log(`[API] getLeadAssignmentRecommendation response:`, res.data);
     const data = res.data?.data || res.data;
     if (!data || !data.recommendedRepId) {
