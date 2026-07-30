@@ -47,7 +47,6 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
-import { ThemeToggle } from "./ThemeToggle";
 
 type NavItem = {
   href: string;
@@ -69,12 +68,6 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/dashboard",
         label: "Dashboard",
         icon: LayoutDashboard,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
-      },
-      {
-        href: "/dashboard/builder",
-        label: "Dashboard Builder",
-        icon: Grid3X3,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
@@ -682,9 +675,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex-1 flex justify-start">
           <CrmSearch />
         </div>
-
-        {/* Theme toggle */}
-        <ThemeToggle />
 
         {/* Notification bell — single instance for both mobile & desktop */}
           <NotificationBell />

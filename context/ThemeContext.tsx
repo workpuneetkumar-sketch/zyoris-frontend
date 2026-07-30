@@ -15,57 +15,19 @@ const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 const THEME_KEY = "zyoris-theme";
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<ThemeMode>("system");
+  const [theme] = useState<ThemeMode>("light");
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem(THEME_KEY) as ThemeMode | null;
-    if (savedTheme && ["light", "dark", "system"].includes(savedTheme)) {
-      setTheme(savedTheme);
-    }
+    localStorage.setItem(THEME_KEY, "light");
+    const root = document.documentElement;
+    root.classList.add("light");
+    root.classList.remove("dark");
   }, []);
 
-  const isDark = (() => {
-    if (theme === "dark") return true;
-    if (theme === "light") return false;
-    if (typeof window !== "undefined") {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches;
-    }
-    return false;
-  })();
-
-  useEffect(() => {
-    localStorage.setItem(THEME_KEY, theme);
-    const root = document.documentElement;
-    if (isDark) {
-      root.classList.add("dark");
-      root.classList.remove("light");
-    } else {
-      root.classList.add("light");
-      root.classList.remove("dark");
-    }
-  }, [theme, isDark]);
-
-  useEffect(() => {
-    if (theme !== "system") return;
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e: MediaQueryListEvent) => {
-      const root = document.documentElement;
-      if (e.matches) {
-        root.classList.add("dark");
-        root.classList.remove("light");
-      } else {
-        root.classList.add("light");
-        root.classList.remove("dark");
-      }
-    };
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, [theme]);
-
   const value: ThemeContextValue = {
-    theme,
-    setTheme,
-    isDark,
+    theme: "light",
+    setTheme: () => {},
+    isDark: false,
   };
 
   return (

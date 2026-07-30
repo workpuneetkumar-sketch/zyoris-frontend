@@ -7,8 +7,14 @@ import api from "@/lib/api/api";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
 import { fetchEmails } from "@/lib/api/emailApi";
 import { fetchCalls } from "@/lib/api/callsApi";
-import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon } from "lucide-react";
+import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon, Pencil, X } from "lucide-react";
 import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
+import { useDashboardBuilder } from "@/hooks/useDashboardBuilder";
+import { BuilderHeader } from "@/components/dashboard-builder/BuilderHeader";
+import { WidgetLibrary } from "@/components/dashboard-builder/WidgetLibrary";
+import { DashboardCanvas } from "@/components/dashboard-builder/DashboardCanvas";
+import { LayoutManager } from "@/components/dashboard-builder/LayoutManager";
+import { WidgetDefinition } from "@/types/dashboard-builder";
 
 interface LeadsStatsResponse {
   total?: number;
@@ -204,27 +210,41 @@ export default function DashboardPage() {
     [dealValue, overdueTasks]
   );
 
-  const getGreeting = () => {
+  const getGreetingInfo = () => {
     const hour = new Date().getHours();
-    if (hour < 12) return "Good morning";
-    if (hour < 17) return "Good afternoon";
-    return "Good evening";
+    if (hour >= 4 && hour < 12) return { text: "Good morning", emoji: "🌅" };
+    if (hour >= 12 && hour < 17) return { text: "Good afternoon", emoji: "☀️" };
+    return { text: "Good evening", emoji: "🌆" };
+  };
+
+  const greeting = getGreetingInfo();
+
+  const builder = useDashboardBuilder(user?.role);
+  const [isEditing, setIsEditing] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [managerOpen, setManagerOpen] = useState(false);
+
+  const handleAddWidget = (def: WidgetDefinition) => {
+    builder.addWidget(def);
+    setLibraryOpen(false);
   };
 
   return (
     <div>
       {/* ── Topbar ── */}
-      <div className="flex items-center justify-between mb-8 overflow-hidden py-2">
-        <div className="animate-in fade-in zoom-in-95 slide-in-from-left-8 duration-1000 ease-out fill-mode-both">
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-gray-900 to-gray-600 tracking-tight">
+      <div className="flex items-center justify-between mb-8 py-2">
+        <div className="animate-in fade-in zoom-in-95 slide-in-from-left-8 duration-1000 ease-out fill-mode-both space-y-1">
+          <h1 className="text-4xl sm:text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-gray-900 via-indigo-900 to-purple-900 drop-shadow-xs hover:scale-[1.005] transition-transform origin-left cursor-default">
             Dashboard
           </h1>
-          <p className="text-lg text-gray-500 mt-1 font-medium flex items-center gap-2">
-            <span>{getGreeting()}, <span className="text-indigo-600 font-bold">{user?.name?.split(" ")[0] || "there"}</span>!</span>
-            <span className="animate-bounce origin-bottom text-xl">👋</span>
+          <p className="text-lg sm:text-xl text-gray-500 font-semibold flex items-center gap-2 pt-0.5">
+            <span>{greeting.text}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-violet-600 font-extrabold">{user?.name?.split(" ")[0] || "there"}</span>!</span>
+            <span className="inline-block animate-bounce text-2xl sm:text-3xl drop-shadow-xs">{greeting.emoji}</span>
           </p>
         </div>
       </div>
+
+      {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
         {kpiCards.map((card, index) => (
           <div key={card.label} className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both" style={{ animationDelay: `${index * 100}ms` }}>
@@ -233,9 +253,129 @@ export default function DashboardPage() {
         ))}
       </div>
 
+      {/* ------------------------- User Custom Dashboard(s) ------------------------- */}
+      {(!builder.isEmpty || builder.isLoading) && (
+        <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-100/90 via-purple-100/70 to-blue-100/80 border border-indigo-200/80 shadow-sm transition-all">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 px-1">
+              <div className="flex items-center gap-2.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-indigo-700 shadow-xs" />
+                <h2 className="text-lg font-extrabold text-indigo-950 tracking-tight">
+                  Custom Dashboard
+                </h2>
+                {builder.activeLayout?.isOrgDefault && (
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs">
+                    Org Default
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-indigo-50/50 text-indigo-700 hover:text-indigo-800 text-xs font-bold border border-indigo-200/90 shadow-xs transition-all cursor-pointer"
+              >
+                <Pencil size={13} />
+                <span>Customize Layout</span>
+              </button>
+            </div>
+
+            <div className="bg-white/95 rounded-xl border border-indigo-100 p-2 shadow-xs overflow-x-hidden">
+              <DashboardCanvas
+                widgets={builder.widgets}
+                catalog={builder.catalog}
+                isPreview={true}
+                isLoading={builder.isLoading}
+                isEmpty={builder.isEmpty}
+                onLayoutChange={builder.updateLayout}
+                onRemoveWidget={builder.removeWidget}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Insights */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
         <DashboardAiInsightsBox />
       </div>
+
+      {/* ── Edit Dashboard Modal / Overlay ── */}
+      {isEditing && (
+        <div className="fixed inset-0 z-[90] flex flex-col bg-gray-900/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="flex-1 flex flex-col bg-slate-50 m-2 sm:m-4 rounded-2xl shadow-2xl overflow-hidden border border-gray-200">
+            {/* Builder Header */}
+            <div className="flex items-center justify-between border-b border-gray-200 bg-white px-2">
+              <div className="flex-1">
+                <BuilderHeader
+                  activeLayout={builder.activeLayout}
+                  layouts={builder.layouts}
+                  isLoadingLayouts={builder.isLoadingLayouts}
+                  isPreview={builder.isPreview}
+                  isSaving={builder.isSaving}
+                  hasUnsavedChanges={builder.hasUnsavedChanges}
+                  widgetCount={builder.widgets.length}
+                  canSetOrgDefault={builder.canSetOrgDefault}
+                  onPreviewToggle={builder.togglePreview}
+                  onSave={async () => {
+                    await builder.saveLayout();
+                  }}
+                  onReset={builder.resetLayout}
+                  onAddWidget={() => setLibraryOpen(true)}
+                  onNewLayout={() => setManagerOpen(true)}
+                  onSwitchLayout={builder.switchLayout}
+                  onManageLayouts={() => setManagerOpen(true)}
+                />
+              </div>
+              <button
+                onClick={() => setIsEditing(false)}
+                className="p-2 mr-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                title="Done editing"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Builder Canvas and Sidebars */}
+            <div className="flex flex-1 overflow-hidden relative">
+              <DashboardCanvas
+                widgets={builder.widgets}
+                catalog={builder.catalog}
+                isPreview={builder.isPreview}
+                isLoading={builder.isLoading}
+                isEmpty={builder.isEmpty}
+                onLayoutChange={builder.updateLayout}
+                onRemoveWidget={builder.removeWidget}
+              />
+
+              <WidgetLibrary
+                catalog={builder.catalog}
+                isOpen={libraryOpen}
+                onClose={() => setLibraryOpen(false)}
+                onAdd={handleAddWidget}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Layout Manager Modal */}
+      <LayoutManager
+        isOpen={managerOpen}
+        layouts={builder.layouts}
+        activeLayoutId={builder.activeLayoutId}
+        canSetOrgDefault={builder.canSetOrgDefault}
+        isCreating={builder.isCreating}
+        isDeleting={builder.isDeletingId}
+        isSettingDefault={builder.isSettingDefault}
+        onClose={() => setManagerOpen(false)}
+        onCreateLayout={builder.createLayout}
+        onRenameLayout={builder.renameLayout}
+        onDeleteLayout={builder.deleteLayout}
+        onSwitchLayout={(id) => {
+          builder.switchLayout(id);
+          setManagerOpen(false);
+        }}
+        onSetOrgDefault={builder.setOrgDefault}
+      />
     </div>
   );
 }
