@@ -5,6 +5,7 @@ import { ZII_GREETING } from "./ZiiBotAvatar";
 import { getOrgSummary, getRoleContext, OrgSummary } from "@/lib/api/organizationsApi";
 import { useAuth } from "@/context/AuthContext";
 import { getVoiceService } from "./voiceService";
+import api from "@/lib/api/api";
 
 const SESSION_KEY = "zii-bot-session";
 const HISTORY_KEY = "zii-bot-history";
@@ -133,27 +134,15 @@ export function useZiiBotChat() {
     setIsTyping(true);
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await api.post("/chat/message", {
           sessionId: sessionIdRef.current || getSessionId(),
-          messages: [...messages, userMsg].map((m) => ({ role: m.role, content: m.content })),
-          orgContext: orgContext,
-          roleContext: roleContext,
-          userRole: user?.role,
-          token: token
-        }),
-        signal: (abortRef.current = new AbortController()).signal,
+          message: trimmed
+      }, {
+          signal: (abortRef.current = new AbortController()).signal,
       });
 
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || "Something went wrong");
-      }
-
-      const data = (await res.json()) as { message?: string; text?: string };
-      const assistantText = data.message ?? data.text ?? "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.";
+      const data = res.data;
+      const assistantText = data.reply ?? data.message?.content ?? "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.";
       
       // Play notification sound
       playNotificationSound();
