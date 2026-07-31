@@ -116,9 +116,9 @@ export function AssignmentAnalyticsDashboard({
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Assignments" value={data?.totalAssignments ?? 0} icon={Users} color="bg-primary" />
-        <StatCard label="Avg Response Time" value={data?.avgResponseTime ? `${data.avgResponseTime}m` : "—"} icon={Clock} color="bg-purple-500" sub="minutes" />
+        <StatCard label="Total Converted" value={data?.totalConverted ?? 0} icon={TrendingUp} color="bg-emerald-500" sub="leads converted" />
         <StatCard label="Conversion Rate" value={data?.conversionRate ? `${data.conversionRate.toFixed(1)}%` : "—"} icon={TrendingUp} color="bg-success" />
-        <StatCard label="Active Rules" value={data?.activeRules ?? 0} icon={Zap} color="bg-amber-500" />
+        <StatCard label="Avg Response Time" value={data?.avgResponseTime ? `${data.avgResponseTime}m` : "—"} icon={Clock} color="bg-purple-500" sub="minutes (avg)" />
       </div>
 
       {/* Charts row 1: Distribution + Response Time */}

@@ -599,3 +599,90 @@ export async function executeAssignmentRule(leadId: string, rule?: AssignmentRul
     throw error;
   }
 }
+
+// ── Lead Share Payload ─────────────────────────────────────────────────────
+
+export interface LeadSharePayload {
+  leadId: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  city?: string;
+  source?: string;
+  status?: string;
+  estimatedValue?: number;
+  score?: number;
+  assignedTo?: { name?: string; email?: string };
+  tags?: string[];
+  note?: string;
+  shareUrl?: string;
+  // any extra fields the backend may add
+  [key: string]: any;
+}
+
+/**
+ * GET /leads/{leadId}/share
+ * Returns a structured lead share payload (name, phone, email, status etc.)
+ */
+export async function getLeadSharePayload(leadId: string): Promise<LeadSharePayload> {
+  console.log(`[API] getLeadSharePayload - leadId: ${leadId}`);
+  try {
+    const res = await api.get(`/leads/${leadId}/share`);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] getLeadSharePayload error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * POST /leads/{leadId}/share/pdf
+ * Export lead as PDF. Returns a Blob.
+ */
+export async function exportLeadAsPdf(leadId: string): Promise<Blob> {
+  console.log(`[API] exportLeadAsPdf - leadId: ${leadId}`);
+  try {
+    const res = await api.post(
+      `/leads/${leadId}/share/pdf`,
+      {},
+      { responseType: "blob" }
+    );
+    return res.data;
+  } catch (error: any) {
+    console.error(`[API] exportLeadAsPdf error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+/**
+ * Build a WhatsApp share URL from a lead share payload.
+ * Opens wa.me with a pre-filled message.
+ */
+export function buildWhatsAppShareUrl(payload: LeadSharePayload, phone?: string): string {
+  const lines: string[] = [
+    `📋 *Lead Details*`,
+    ``,
+    `*Name:* ${payload.name || "—"}`,
+  ];
+  if (payload.company) lines.push(`*Company:* ${payload.company}`);
+  if (payload.email) lines.push(`*Email:* ${payload.email}`);
+  if (payload.phone) lines.push(`*Phone:* ${payload.phone}`);
+  if (payload.city) lines.push(`*City:* ${payload.city}`);
+  if (payload.source) lines.push(`*Source:* ${payload.source}`);
+  if (payload.status) lines.push(`*Status:* ${payload.status}`);
+  if (payload.estimatedValue && payload.estimatedValue > 0) {
+    lines.push(`*Est. Value:* ₹${payload.estimatedValue.toLocaleString()}`);
+  }
+  if (payload.score != null) lines.push(`*Score:* ${payload.score}/100`);
+  if (payload.assignedTo?.name) lines.push(`*Assigned To:* ${payload.assignedTo.name}`);
+  if (payload.note) lines.push(``, `*Note:* ${payload.note}`);
+  if (payload.shareUrl) lines.push(``, `🔗 ${payload.shareUrl}`);
+
+  const text = encodeURIComponent(lines.join("\n"));
+  const phoneClean = phone?.replace(/\D/g, "") || "";
+  return phoneClean
+    ? `https://wa.me/${phoneClean}?text=${text}`
+    : `https://wa.me/?text=${text}`;
+}

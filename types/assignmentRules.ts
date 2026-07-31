@@ -133,6 +133,7 @@ export interface RuleEffectivenessItem {
 
 export interface AssignmentAnalytics {
   totalAssignments: number;
+  totalConverted: number;
   avgResponseTime: number;
   conversionRate: number;
   activeRules: number;

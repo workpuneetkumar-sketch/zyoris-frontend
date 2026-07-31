@@ -38,8 +38,12 @@ export function useAssignmentAnalytics(): UseAssignmentAnalyticsReturn {
     try {
       const data = await getAssignmentAnalytics(filters);
       setAnalytics(data);
-      // If backend returned meaningful data (total > 0), mark as available
-      setBackendAvailable(data.totalAssignments > 0 || data.distribution.length > 0);
+      // If backend returned meaningful data, mark as available
+      setBackendAvailable(
+        data.totalAssignments > 0 ||
+        data.totalConverted > 0 ||
+        data.distribution.length > 0
+      );
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? err?.message ?? "Failed to load analytics";
       setError(msg);

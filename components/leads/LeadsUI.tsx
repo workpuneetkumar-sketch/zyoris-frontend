@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
 import UploadLeadsModal from "./UploadLeadsModal";
-import { updateLead, assignLead, fetchTeamMembers, deleteLead, getLeadAssignmentRecommendation, LeadAssignmentRecommendationResult } from "@/lib/api/leadsApi";
+import { updateLead, assignLead, fetchTeamMembers, deleteLead, getLeadAssignmentRecommendation, LeadAssignmentRecommendationResult, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
 import { TeamMember } from "./AssignLeadModal";
 import { toast } from "react-toastify";
 import { LeadCheckbox } from "./BulkActionsToolbar";
@@ -24,6 +24,11 @@ import {
     UserPlus,
     Briefcase,
     Sparkles,
+    Share2,
+    MessageCircle,
+    FileDown,
+    Loader2 as SpinnerIcon,
+    X,
 } from "lucide-react";
 
 import {
@@ -106,6 +111,198 @@ function ScoreBadge({ score }: { score: number | undefined | null }) {
     );
 }
 
+// ── Share Lead Modal ───────────────────────────────────────────────────────────
+
+function ShareLeadModal({
+    lead,
+    onClose,
+}: {
+    lead: Lead;
+    onClose: () => void;
+}) {
+    const [payload, setPayload] = useState<LeadSharePayload | null>(null);
+    const [loadingShare, setLoadingShare] = useState(true);
+    const [shareError, setShareError] = useState<string | null>(null);
+    const [exportingPdf, setExportingPdf] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        setLoadingShare(true);
+        setShareError(null);
+        getLeadSharePayload(lead.id)
+            .then((data) => { if (active) setPayload(data); })
+            .catch((err) => {
+                if (!active) return;
+                console.warn("Share payload fetch failed, using lead data as fallback", err);
+                // Fallback: build payload from existing lead object
+                setPayload({
+                    leadId: lead.id,
+                    name: lead.name,
+                    email: lead.email,
+                    phone: lead.phone,
+                    company: lead.company,
+                    city: lead.city,
+                    source: lead.source,
+                    status: lead.status,
+                    estimatedValue: lead.estimatedValue,
+                    score: lead.score,
+                    assignedTo: lead.assignedTo ?? undefined,
+                    tags: lead.tags,
+                    note: lead.note,
+                });
+            })
+            .finally(() => { if (active) setLoadingShare(false); });
+        return () => { active = false; };
+    }, [lead]);
+
+    const handleWhatsApp = () => {
+        if (!payload) return;
+        const phone = payload.phone?.replace(/\D/g, "") || lead.phone?.replace(/\D/g, "") || "";
+        const url = buildWhatsAppShareUrl(payload, phone);
+        window.open(url, "_blank", "noopener,noreferrer");
+    };
+
+    const handlePdf = async () => {
+        if (exportingPdf) return;
+        setExportingPdf(true);
+        try {
+            const blob = await exportLeadAsPdf(lead.id);
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `lead-${lead.name?.replace(/\s+/g, "-") || lead.id}.pdf`;
+            a.click();
+            URL.revokeObjectURL(url);
+            toast.success("PDF downloaded");
+        } catch (err: any) {
+            toast.error(err?.response?.data?.message || "PDF export failed");
+        } finally {
+            setExportingPdf(false);
+        }
+    };
+
+    const handleCopyLink = () => {
+        const url = payload?.shareUrl || `${window.location.origin}/leads/${lead.id}`;
+        navigator.clipboard.writeText(url).then(() => toast.success("Link copied!")).catch(() => toast.error("Failed to copy"));
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-xl bg-green-50 border border-green-100 flex items-center justify-center">
+                            <Share2 size={16} className="text-green-600" />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-bold text-gray-900">Share Lead</h3>
+                            <p className="text-xs text-gray-400">{lead.name}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-6 space-y-4">
+                    {loadingShare ? (
+                        <div className="flex items-center justify-center py-8 gap-2 text-gray-400 text-sm">
+                            <SpinnerIcon size={18} className="animate-spin" />
+                            Loading share data…
+                        </div>
+                    ) : (
+                        <>
+                            {/* Lead summary card */}
+                            <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-2">
+                                <p className="text-sm font-semibold text-gray-800">{payload?.name || lead.name}</p>
+                                {payload?.company && <p className="text-xs text-gray-500">{payload.company}</p>}
+                                <div className="flex flex-wrap gap-3 pt-1">
+                                    {payload?.email && (
+                                        <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                                            {payload.email}
+                                        </span>
+                                    )}
+                                    {payload?.phone && (
+                                        <span className="flex items-center gap-1.5 text-xs text-gray-500">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.7a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.6 3h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 10.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                                            {payload.phone}
+                                        </span>
+                                    )}
+                                    {payload?.status && (
+                                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100">
+                                            {payload.status}
+                                        </span>
+                                    )}
+                                    {payload?.estimatedValue && payload.estimatedValue > 0 && (
+                                        <span className="text-xs font-medium text-emerald-700">
+                                            ₹{payload.estimatedValue.toLocaleString()}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Share options */}
+                            <div className="grid grid-cols-1 gap-2">
+                                {/* WhatsApp */}
+                                <button
+                                    onClick={handleWhatsApp}
+                                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[#25D366]/10 hover:bg-[#25D366]/20 border border-[#25D366]/20 transition-all group"
+                                >
+                                    <div className="w-9 h-9 rounded-full bg-[#25D366] flex items-center justify-center shrink-0">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413z"/></svg>
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-sm font-semibold text-gray-800">Share via WhatsApp</p>
+                                        <p className="text-xs text-gray-500">Open WhatsApp with pre-filled message</p>
+                                    </div>
+                                    <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600" />
+                                </button>
+
+                                {/* PDF Export */}
+                                <button
+                                    onClick={handlePdf}
+                                    disabled={exportingPdf}
+                                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-red-50 hover:bg-red-100 border border-red-100 transition-all group disabled:opacity-60"
+                                >
+                                    <div className="w-9 h-9 rounded-full bg-red-500 flex items-center justify-center shrink-0">
+                                        {exportingPdf
+                                            ? <SpinnerIcon size={16} className="text-white animate-spin" />
+                                            : <FileDown size={16} className="text-white" />
+                                        }
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-sm font-semibold text-gray-800">{exportingPdf ? "Generating PDF…" : "Export as PDF"}</p>
+                                        <p className="text-xs text-gray-500">Download a formatted PDF of this lead</p>
+                                    </div>
+                                    <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600" />
+                                </button>
+
+                                {/* Copy link */}
+                                <button
+                                    onClick={handleCopyLink}
+                                    className="flex items-center gap-3 px-4 py-3 rounded-xl bg-gray-50 hover:bg-gray-100 border border-gray-100 transition-all group"
+                                >
+                                    <div className="w-9 h-9 rounded-full bg-gray-500 flex items-center justify-center shrink-0">
+                                        <MessageCircle size={16} className="text-white" />
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-sm font-semibold text-gray-800">Copy Link</p>
+                                        <p className="text-xs text-gray-500">Copy the lead URL to clipboard</p>
+                                    </div>
+                                    <ChevronRight size={14} className="text-gray-400 group-hover:text-gray-600" />
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export function LeadsTable({
     leads,
     total,
@@ -135,6 +332,10 @@ export function LeadsTable({
     const [isViewOpen, setIsViewOpen] = useState(false);
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+
+    // Share modal state
+    const [sharingLead, setSharingLead] = useState<Lead | null>(null);
+    const [isShareOpen, setIsShareOpen] = useState(false);
 
     // States for inline vertical assignment submenu
     const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
@@ -525,6 +726,23 @@ export function LeadsTable({
                                         </span>
                                         <ChevronRight size={13} className="text-gray-400" />
                                     </button>
+
+                                    {/* Share */}
+                                    <button
+                                        onClick={() => {
+                                            const lead = safeLeads.find((l) => l.id === openMenu);
+                                            if (lead) {
+                                                setSharingLead(lead);
+                                                setIsShareOpen(true);
+                                                setOpenMenu(null);
+                                                setMenuPos(null);
+                                            }
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                                    >
+                                        <Share2 size={14} />
+                                        Share
+                                    </button>
                                     
                                     {/* Delete */}
                                     <button
@@ -740,6 +958,16 @@ export function LeadsTable({
                     onClose={() => {
                         setIsViewOpen(false);
                         setViewingLead(null);
+                    }}
+                />
+            )}
+
+            {isShareOpen && sharingLead && (
+                <ShareLeadModal
+                    lead={sharingLead}
+                    onClose={() => {
+                        setIsShareOpen(false);
+                        setSharingLead(null);
                     }}
                 />
             )}

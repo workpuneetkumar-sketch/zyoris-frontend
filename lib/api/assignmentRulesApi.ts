@@ -175,34 +175,52 @@ export async function getAssignmentAnalytics(
     if (filters?.userId) params.userId = filters.userId;
 
     const res = await api.get("/leads/assignment-analytics", { params });
+    // Response shape: { success: true, data: { overview: {...}, distribution: [], strategyBreakdown: [] } }
     const d = res.data?.data ?? res.data;
 
+    // Pull from overview sub-object (actual backend shape)
+    const overview = d?.overview ?? d ?? {};
+    const strategyBreakdown: any[] = d?.strategyBreakdown ?? d?.byStrategy ?? [];
+
     return {
-      totalAssignments: d.totalAssignments ?? 0,
-      avgResponseTime: d.avgResponseTime ?? 0,
-      conversionRate: d.conversionRate ?? 0,
+      // Primary KPIs — map from overview object
+      totalAssignments: overview.totalAssignments ?? d.totalAssignments ?? 0,
+      totalConverted:   overview.totalConverted   ?? d.totalConverted   ?? 0,
+      conversionRate:   overview.conversionRate   ?? d.conversionRate   ?? 0,
+      // Backend sends averageResponseTimeSeconds; convert to minutes for display
+      avgResponseTime:  overview.averageResponseTimeSeconds != null
+        ? Math.round(overview.averageResponseTimeSeconds / 60)
+        : (d.avgResponseTime ?? 0),
       activeRules: d.activeRules ?? 0,
-      distribution: d.distribution ?? [],
-      overTime: d.overTime ?? [],
-      byStrategy: d.byStrategy ?? [],
-      topPerformers: d.topPerformers ?? [],
-      ruleEffectiveness: d.ruleEffectiveness ?? [],
+
+      // Array fields
+      distribution: Array.isArray(d.distribution) ? d.distribution : [],
+      overTime:     Array.isArray(d.overTime)     ? d.overTime     : [],
+      // Accept either strategyBreakdown (backend key) or byStrategy (our key)
+      byStrategy: strategyBreakdown.map((item: any) => ({
+        strategy:   item.strategy   ?? item.name   ?? "",
+        count:      item.count      ?? item.total  ?? 0,
+        percentage: item.percentage ?? 0,
+      })),
+      topPerformers:     Array.isArray(d.topPerformers)     ? d.topPerformers     : [],
+      ruleEffectiveness: Array.isArray(d.ruleEffectiveness) ? d.ruleEffectiveness : [],
       period: d.period ?? { from: "", to: "" },
     };
   } catch {
     return {
       totalAssignments: 0,
-      avgResponseTime: 0,
-      conversionRate: 0,
-      activeRules: 0,
-      distribution: [],
-      overTime: [],
-      byStrategy: [],
-      topPerformers: [],
-      ruleEffectiveness: [],
+      totalConverted:   0,
+      avgResponseTime:  0,
+      conversionRate:   0,
+      activeRules:      0,
+      distribution:     [],
+      overTime:         [],
+      byStrategy:       [],
+      topPerformers:    [],
+      ruleEffectiveness:[],
       period: {
         from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
-        to: new Date().toISOString().slice(0, 10),
+        to:   new Date().toISOString().slice(0, 10),
       },
     };
   }
