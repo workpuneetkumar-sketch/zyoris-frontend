@@ -43,6 +43,7 @@ import {
   Grid3X3,
   Video,
   Bell,
+  Inbox,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -117,6 +118,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Comms",
     items: [
+      {
+        href: "/communications",
+        label: "Communication Hub",
+        icon: Inbox,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
       {
         href: "/email",
         label: "Email",
@@ -435,6 +442,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         deals: Briefcase,
         contacts: Users,
         companies: Building2,
+        communications: Inbox,
         activities: CheckSquare,
         email: Mail,
         whatsapp: MessageSquare,
