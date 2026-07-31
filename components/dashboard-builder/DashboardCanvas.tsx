@@ -4,6 +4,7 @@
 // Drag-and-drop resizable grid using react-grid-layout v2.
 
 import React, { useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { ReactGridLayout, useContainerWidth } from "react-grid-layout";
 import type { LayoutItem, Layout } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -62,13 +63,20 @@ interface WidgetCardProps {
 }
 
 function WidgetCard({ widget, isPreview, onRemove }: WidgetCardProps) {
+  const router = useRouter();
   const entry = getWidgetEntry(widget.widgetId);
+  const href = entry?.href;
+  const isClickable = Boolean(isPreview && href);
 
   return (
     <div
+      onClick={() => {
+        if (!isClickable || !href) return;
+        router.push(href);
+      }}
       className={`bg-white rounded-2xl border shadow-sm flex flex-col overflow-hidden h-full transition-all duration-150 ${
         isPreview
-          ? "border-gray-100 shadow-sm"
+          ? `border-gray-100 shadow-sm${isClickable ? " cursor-pointer" : ""}`
           : "border-gray-200 hover:border-indigo-200 hover:shadow-md group"
       }`}
     >
@@ -191,7 +199,7 @@ export function DashboardCanvas({
 }: DashboardCanvasProps) {
   if (isLoading) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50/50 to-white">
+      <div className="flex-1 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="relative">
             <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center">
@@ -209,7 +217,7 @@ export function DashboardCanvas({
 
   if (isEmpty) {
     return (
-      <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-gray-50/50 to-white">
+      <div className="flex-1 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-5 max-w-sm text-center">
           <div className="relative">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-50 to-violet-50 border border-blue-100 flex items-center justify-center">
@@ -235,7 +243,7 @@ export function DashboardCanvas({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gradient-to-br from-gray-50/50 to-white">
+    <div className="flex-1 overflow-y-auto bg-background">
       {!isPreview && (
         <div className="px-4 pt-3 pb-2">
           <p className="text-[11px] text-gray-400 flex items-center gap-1.5">

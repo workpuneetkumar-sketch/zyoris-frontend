@@ -7,7 +7,7 @@ import api from "@/lib/api/api";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
 import { fetchEmails } from "@/lib/api/emailApi";
 import { fetchCalls } from "@/lib/api/callsApi";
-import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon, Pencil, X } from "lucide-react";
+import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon, Pencil, X, Sparkles, LayoutDashboard } from "lucide-react";
 import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
 import { useDashboardBuilder } from "@/hooks/useDashboardBuilder";
 import { BuilderHeader } from "@/components/dashboard-builder/BuilderHeader";
@@ -223,6 +223,7 @@ export default function DashboardPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
+  const [showInsights, setShowInsights] = useState(false);
 
   const handleAddWidget = (def: WidgetDefinition) => {
     builder.addWidget(def);
@@ -244,48 +245,27 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Right: Animated wave */}
-        <div className="flex-1 h-20 relative overflow-hidden rounded-2xl hidden sm:block">
-          <svg
-            viewBox="0 0 1200 120"
-            preserveAspectRatio="none"
-            className="absolute bottom-0 left-0 w-[200%] h-full"
-            style={{ animation: "waveScroll 8s linear infinite" }}
-            xmlns="http://www.w3.org/2000/svg"
+        {/* Right: Animated wave + Action buttons */}
+        <div className="flex items-center gap-3 flex-shrink-0 animate-in fade-in slide-in-from-right-8 duration-700 fill-mode-both">
+          {/* AI INSIGHTS button */}
+          <button
+            id="ai-insights-btn"
+            onClick={() => setShowInsights(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-sm font-bold shadow-lg shadow-violet-500/25 hover:shadow-violet-500/40 transition-all duration-200 cursor-pointer border border-violet-400/30"
           >
-            <defs>
-              <linearGradient id="wg1" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#4f46e5" stopOpacity="0.8" />
-                <stop offset="40%" stopColor="#7c3aed" stopOpacity="0.65" />
-                <stop offset="80%" stopColor="#3b82f6" stopOpacity="0.7" />
-                <stop offset="100%" stopColor="#6366f1" stopOpacity="0.8" />
-              </linearGradient>
-              <linearGradient id="wg2" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#818cf8" stopOpacity="0.5" />
-                <stop offset="50%" stopColor="#a78bfa" stopOpacity="0.6" />
-                <stop offset="100%" stopColor="#60a5fa" stopOpacity="0.4" />
-              </linearGradient>
-              <linearGradient id="wg3" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#c4b5fd" stopOpacity="0.3" />
-                <stop offset="100%" stopColor="#93c5fd" stopOpacity="0.25" />
-              </linearGradient>
-            </defs>
-            {/* Wave 1 - deepest */}
-            <path
-              d="M0,45 C150,10 300,90 450,50 C600,10 750,90 900,45 C1050,0 1150,70 1200,45 L1200,120 L0,120 Z M1200,45 C1350,10 1500,90 1650,50 C1800,10 1950,90 2100,45 C2250,0 2350,70 2400,45 L2400,120 L1200,120 Z"
-              fill="url(#wg1)"
-            />
-            {/* Wave 2 - mid */}
-            <path
-              d="M0,65 C120,35 250,100 400,68 C550,35 700,95 850,65 C1000,35 1100,85 1200,65 L1200,120 L0,120 Z M1200,65 C1320,35 1450,100 1600,68 C1750,35 1900,95 2050,65 C2200,35 2300,85 2400,65 L2400,120 L1200,120 Z"
-              fill="url(#wg2)"
-            />
-            {/* Wave 3 - top layer */}
-            <path
-              d="M0,80 C100,55 220,105 380,80 C530,55 680,100 830,80 C970,55 1100,95 1200,80 L1200,120 L0,120 Z M1200,80 C1300,55 1420,105 1580,80 C1730,55 1880,100 2030,80 C2170,55 2300,95 2400,80 L2400,120 L1200,120 Z"
-              fill="url(#wg3)"
-            />
-          </svg>
+            <Sparkles size={15} className="shrink-0" />
+            <span>AI Insights</span>
+          </button>
+
+          {/* Customise Dashboard button */}
+          <button
+            id="customise-dashboard-btn"
+            onClick={() => setIsEditing(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 hover:text-indigo-900 text-sm font-bold border border-indigo-200 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
+          >
+            <LayoutDashboard size={15} className="shrink-0" />
+            <span>Customise Dashboard</span>
+          </button>
         </div>
       </div>
 
@@ -301,29 +281,15 @@ export default function DashboardPage() {
       {/* ------------------------- User Custom Dashboard(s) ------------------------- */}
       {(!builder.isEmpty || builder.isLoading) && (
         <div className="mb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both">
-          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-indigo-100/90 via-purple-100/70 to-blue-100/80 border border-indigo-200/80 shadow-sm transition-all">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 px-1">
-              <div className="flex items-center gap-2.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-indigo-700 shadow-xs" />
-                <h2 className="text-lg font-extrabold text-indigo-950 tracking-tight">
-                  Custom Dashboard
-                </h2>
-                {builder.activeLayout?.isOrgDefault && (
-                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs">
-                    Org Default
-                  </span>
-                )}
+          <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-sm transition-all">
+            {builder.activeLayout?.isOrgDefault && (
+              <div className="flex items-center gap-2 mb-3 px-1">
+                <span className="text-[10px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs">
+                  Org Default
+                </span>
               </div>
-              <button
-                onClick={() => setIsEditing(true)}
-                className="self-start sm:self-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-white hover:bg-indigo-50/50 text-indigo-700 hover:text-indigo-800 text-xs font-bold border border-indigo-200/90 shadow-xs transition-all cursor-pointer"
-              >
-                <Pencil size={13} />
-                <span>Customize Layout</span>
-              </button>
-            </div>
-
-            <div className="bg-white/95 rounded-xl border border-indigo-100 p-2 shadow-xs overflow-x-hidden">
+            )}
+            <div className="bg-surface rounded-xl border border-border p-2 shadow-xs overflow-x-hidden">
               <DashboardCanvas
                 widgets={builder.widgets}
                 catalog={builder.catalog}
@@ -338,10 +304,41 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* AI Insights */}
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300 fill-mode-both">
-        <DashboardAiInsightsBox />
-      </div>
+      {/* ── AI Insights Slide-in Panel ── */}
+      {showInsights && (
+        <div
+          className="fixed inset-0 z-[80] flex items-start justify-end"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowInsights(false); }}
+        >
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] animate-in fade-in duration-200" />
+
+          {/* Panel */}
+          <div className="relative z-10 w-full max-w-xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out">
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-50 to-indigo-50">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 shadow-sm">
+                  <Sparkles size={16} className="text-white" />
+                </div>
+                <h2 className="text-lg font-extrabold text-gray-900 tracking-tight">AI Insights</h2>
+              </div>
+              <button
+                onClick={() => setShowInsights(false)}
+                className="p-2 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Panel Body - AI Insights content */}
+            <div className="flex-1 overflow-y-auto p-5">
+              <DashboardAiInsightsBox />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Edit Dashboard Modal / Overlay ── */}
       {isEditing && (
