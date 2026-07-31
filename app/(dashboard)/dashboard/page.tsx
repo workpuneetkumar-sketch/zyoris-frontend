@@ -7,6 +7,7 @@ import api from "@/lib/api/api";
 import { fetchTasks, Task } from "@/lib/api/tasksApi";
 import { fetchEmails } from "@/lib/api/emailApi";
 import { fetchCalls } from "@/lib/api/callsApi";
+import { getDashboardAnomalies, getMorningBriefing, AnomalyAlertItem, MorningBriefingData } from "@/lib/api/aiBriefingApi";
 import { Users, Briefcase, DollarSign, Clock, Mail, PhoneCall, LucideIcon, Pencil, X, Sparkles, LayoutDashboard } from "lucide-react";
 import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
 import { useDashboardBuilder } from "@/hooks/useDashboardBuilder";
@@ -121,6 +122,44 @@ function ExecutiveKpiCard({
   );
 }
 
+function AiBriefCard({
+  icon: Icon,
+  label,
+  text,
+  color,
+}: {
+  icon: LucideIcon;
+  label: string;
+  text: string;
+  color: "blue" | "violet" | "emerald" | "amber";
+}) {
+  const colorMap = {
+    blue: { bg: "bg-blue-50", border: "border-blue-100", text: "text-blue-600", hover: "hover:border-blue-300 hover:shadow-blue-100/50" },
+    violet: { bg: "bg-violet-50", border: "border-violet-100", text: "text-violet-600", hover: "hover:border-violet-300 hover:shadow-violet-100/50" },
+    emerald: { bg: "bg-emerald-50", border: "border-emerald-100", text: "text-emerald-600", hover: "hover:border-emerald-300 hover:shadow-emerald-100/50" },
+    amber: { bg: "bg-amber-50", border: "border-amber-100", text: "text-amber-600", hover: "hover:border-amber-300 hover:shadow-amber-100/50" },
+  };
+  const c = colorMap[color];
+
+  return (
+    <div className={`bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-all duration-300 transform hover:-translate-y-0.5 hover:shadow-md ${c.hover} group`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest group-hover:text-gray-700 transition-colors">
+            {label}
+          </p>
+          <p className="mt-2 text-xs font-semibold text-gray-800 leading-relaxed line-clamp-3">
+            {text}
+          </p>
+        </div>
+        <div className={`p-2 rounded-xl ${c.bg} border ${c.border} group-hover:scale-110 transition-transform duration-300 flex-shrink-0`}>
+          <Icon size={16} className={c.text} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { user, token } = useAuth();
   const [leadsCount, setLeadsCount] = useState<number | null>(null);
@@ -129,6 +168,10 @@ export default function DashboardPage() {
   const [overdueTasks, setOverdueTasks] = useState<number | null>(null);
   const [emailsSent, setEmailsSent] = useState<number | null>(null);
   const [callsToday, setCallsToday] = useState<number | null>(null);
+  const [aiBriefing, setAiBriefing] = useState<MorningBriefingData | null>(null);
+  const [aiAnomalies, setAiAnomalies] = useState<AnomalyAlertItem[]>([]);
+  const [aiInsightsLoading, setAiInsightsLoading] = useState(true);
+  const [aiInsightsError, setAiInsightsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -145,6 +188,8 @@ export default function DashboardPage() {
         driversRes,
         forecastRes,
         commStatsRes,
+        briefingRes,
+        anomaliesRes,
       ] = await Promise.all([
         api.get<LeadsStatsResponse>("/leads/stats").catch(() => ({ data: null })),
         api.get<PipelineStatsResponse>("/api/deals/pipeline-stats").catch(() => ({ data: null })),
@@ -154,6 +199,10 @@ export default function DashboardPage() {
         api.get("/analytics/revenue/drivers").catch(() => ({ data: null })),
         api.get("/analytics/revenue/forecast").catch(() => ({ data: null })),
         api.get("/api/communications/stats").catch(() => ({ data: null })),
+        getMorningBriefing().catch(() => null),
+        getDashboardAnomalies()
+          .then((res) => res.anomalies || [])
+          .catch(() => []),
       ]);
 
       setLeadsCount(extractLeadsCount(leadsRes.data));
@@ -163,6 +212,11 @@ export default function DashboardPage() {
       
       setEmailsSent(commStatsRes.data?.emailsSent ?? 0);
       setCallsToday(commStatsRes.data?.calls ?? 0);
+
+      setAiBriefing(briefingRes);
+      setAiAnomalies(Array.isArray(anomaliesRes) ? anomaliesRes : []);
+      setAiInsightsError(briefingRes ? null : "Unable to load AI executive briefing.");
+      setAiInsightsLoading(false);
     }
 
     loadKpis();
@@ -269,8 +323,66 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* AI Executive Briefing */}
+      <div className="mb-8">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-primary/10 border border-border/60 flex items-center justify-center">
+                <Sparkles size={16} className="text-primary" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-extrabold text-gray-900">AI Executive Briefing</p>
+                  <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-full">
+                    BETA
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 font-medium">Overnight summary and key system signals</p>
+              </div>
+            </div>
+          </div>
+
+          {aiInsightsLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="h-[92px] rounded-2xl bg-gray-50 border border-gray-100 animate-pulse" />
+              <div className="h-[92px] rounded-2xl bg-gray-50 border border-gray-100 animate-pulse" />
+              <div className="h-[92px] rounded-2xl bg-gray-50 border border-gray-100 animate-pulse" />
+              <div className="h-[92px] rounded-2xl bg-gray-50 border border-gray-100 animate-pulse" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+              <AiBriefCard
+                icon={Sparkles}
+                label="Greeting"
+                text={aiBriefing?.greeting ?? "AI briefing will appear here once available."}
+                color="blue"
+              />
+              <AiBriefCard
+                icon={Briefcase}
+                label="Brief #1"
+                text={aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."}
+                color="violet"
+              />
+              <AiBriefCard
+                icon={Clock}
+                label="Brief #2"
+                text={aiBriefing?.summaryBullets?.[1] ?? aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."}
+                color="amber"
+              />
+              <AiBriefCard
+                icon={DollarSign}
+                label="Signal"
+                text={aiAnomalies?.[0]?.title ?? aiBriefing?.topPriorityAction ?? "No anomaly signal generated yet."}
+                color="emerald"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
         {kpiCards.map((card, index) => (
           <div key={card.label} className="animate-in fade-in slide-in-from-bottom-4 duration-700 fill-mode-both" style={{ animationDelay: `${index * 100}ms` }}>
             <ExecutiveKpiCard {...card} />
@@ -314,7 +426,7 @@ export default function DashboardPage() {
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] animate-in fade-in duration-200" />
 
           {/* Panel */}
-          <div className="relative z-10 w-full max-w-xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out">
+          <div className="relative z-10 w-full max-w-2xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300 ease-out">
             {/* Panel Header */}
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-violet-50 to-indigo-50">
               <div className="flex items-center gap-2.5">
@@ -334,7 +446,14 @@ export default function DashboardPage() {
 
             {/* Panel Body - AI Insights content */}
             <div className="flex-1 overflow-y-auto p-5">
-              <DashboardAiInsightsBox />
+              <DashboardAiInsightsBox
+                prefetched={{
+                  briefing: aiBriefing,
+                  anomalies: aiAnomalies,
+                  loading: aiInsightsLoading,
+                  error: aiInsightsError,
+                }}
+              />
             </div>
           </div>
         </div>

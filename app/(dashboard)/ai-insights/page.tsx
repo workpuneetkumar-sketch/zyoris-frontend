@@ -5,7 +5,7 @@ import { DataIngestionSection } from "@/components/dashboard/compoents/DataInges
 import { Brain, Cpu, Database, Network } from "lucide-react";
 
 export default function AiInsightsPage() {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
 
   if (!token) return null;
 
@@ -15,7 +15,7 @@ export default function AiInsightsPage() {
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 bg-surface/70 backdrop-blur-xl border border-border/60 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+            <div className="w-10 h-10 bg-primary/10 backdrop-blur-xl border border-primary/20 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
               <Brain size={20} className="text-primary animate-pulse" />
             </div>
             <div>
@@ -30,10 +30,10 @@ export default function AiInsightsPage() {
 
       {/* Grid containing status stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-surface/70 backdrop-blur-xl border border-border/60 text-text rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
+        <div className="bg-primary/5 backdrop-blur-xl border border-primary/15 text-text rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-text-muted">AI Engine</p>
-            <div className="p-1.5 bg-primary/10 border border-border/60 rounded-lg">
+            <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg">
               <Cpu size={14} className="text-primary" />
             </div>
           </div>
@@ -43,10 +43,10 @@ export default function AiInsightsPage() {
           </p>
         </div>
 
-        <div className="bg-surface/70 backdrop-blur-xl border border-border/60 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
+        <div className="bg-primary/5 backdrop-blur-xl border border-primary/15 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-text-muted">Warehouse Status</p>
-            <div className="p-1.5 bg-primary/10 border border-border/60 rounded-lg">
+            <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg">
               <Database size={14} className="text-primary" />
             </div>
           </div>
@@ -56,10 +56,10 @@ export default function AiInsightsPage() {
           </p>
         </div>
 
-        <div className="bg-surface/70 backdrop-blur-xl border border-border/60 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
+        <div className="bg-primary/5 backdrop-blur-xl border border-primary/15 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all group">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-text-muted">Integrations</p>
-            <div className="p-1.5 bg-primary/10 border border-border/60 rounded-lg">
+            <div className="p-1.5 bg-primary/10 border border-primary/20 rounded-lg">
               <Network size={14} className="text-primary" />
             </div>
           </div>

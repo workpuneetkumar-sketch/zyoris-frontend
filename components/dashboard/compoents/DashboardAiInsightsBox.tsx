@@ -17,7 +17,16 @@ import {
   ArrowRight,
 } from "lucide-react";
 
-export function DashboardAiInsightsBox() {
+export function DashboardAiInsightsBox({
+  prefetched,
+}: {
+  prefetched?: {
+    briefing: MorningBriefingData | null;
+    anomalies: AnomalyAlertItem[];
+    loading: boolean;
+    error: string | null;
+  };
+}) {
   const { token } = useAuth();
   const [briefing, setBriefing] = useState<MorningBriefingData | null>(null);
   const [anomalies, setAnomalies] = useState<AnomalyAlertItem[]>([]);
@@ -25,6 +34,7 @@ export function DashboardAiInsightsBox() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (prefetched) return;
     if (!token) return;
     setLoading(true);
     setError(null);
@@ -51,10 +61,15 @@ export function DashboardAiInsightsBox() {
       .finally(() => {
         setLoading(false);
       });
-  }, [token]);
+  }, [token, prefetched]);
 
-  const bullets = briefing?.summaryBullets || [];
-  const hasAnyData = bullets.length > 0 || anomalies.length > 0;
+  const resolvedBriefing = prefetched ? prefetched.briefing : briefing;
+  const resolvedAnomalies = prefetched ? prefetched.anomalies : anomalies;
+  const resolvedLoading = prefetched ? prefetched.loading : loading;
+  const resolvedError = prefetched ? prefetched.error : error;
+
+  const bullets = resolvedBriefing?.summaryBullets || [];
+  const hasAnyData = bullets.length > 0 || resolvedAnomalies.length > 0;
 
   return (
     <div className="bg-surface/70 backdrop-blur-xl rounded-2xl border border-border shadow-sm p-6 md:p-8 transition-all duration-300">
@@ -75,7 +90,7 @@ export function DashboardAiInsightsBox() {
       </div>
 
       <div className="pt-6 animate-in fade-in slide-in-from-top-3 duration-300">
-        {loading ? (
+        {resolvedLoading ? (
           <div className="space-y-4">
             <div className="h-14 bg-surface-hover/60 rounded-xl animate-pulse" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -83,9 +98,9 @@ export function DashboardAiInsightsBox() {
               <div className="h-32 bg-surface-hover/60 rounded-xl animate-pulse" />
             </div>
           </div>
-        ) : error && !hasAnyData ? (
+        ) : resolvedError && !hasAnyData ? (
           <div className="py-8 text-center text-sm font-medium text-text-muted">
-            {error}
+            {resolvedError}
           </div>
         ) : !hasAnyData ? (
           <div className="py-8 text-center text-sm font-medium text-text-muted">
@@ -99,16 +114,16 @@ export function DashboardAiInsightsBox() {
                   <p className="text-[11px] font-extrabold uppercase tracking-widest text-text-muted">
                     Overnight Executive Summary
                   </p>
-                  {briefing?.confidenceScore && (
+                  {resolvedBriefing?.confidenceScore && (
                     <span className="text-[11px] font-bold text-text-muted">
-                      Confidence: {Math.round(briefing.confidenceScore * 100)}%
+                      Confidence: {Math.round(resolvedBriefing.confidenceScore * 100)}%
                     </span>
                   )}
                 </div>
 
-                {briefing?.greeting && (
+                {resolvedBriefing?.greeting && (
                   <p className="text-sm font-semibold text-text tracking-tight pb-1">
-                    {briefing.greeting}
+                    {resolvedBriefing.greeting}
                   </p>
                 )}
 
@@ -126,7 +141,7 @@ export function DashboardAiInsightsBox() {
                   ))}
                 </div>
 
-                {briefing?.topPriorityAction && (
+                {resolvedBriefing?.topPriorityAction && (
                   <div className="mt-4 p-4 rounded-xl bg-primary/10 border border-border/60 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-sm">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 border border-border/60">
@@ -137,7 +152,7 @@ export function DashboardAiInsightsBox() {
                           Top Priority Action Today
                         </p>
                         <p className="text-sm font-bold text-text tracking-tight mt-0.5">
-                          {briefing.topPriorityAction}
+                          {resolvedBriefing.topPriorityAction}
                         </p>
                       </div>
                     </div>
@@ -149,13 +164,13 @@ export function DashboardAiInsightsBox() {
               </div>
             )}
 
-            {anomalies.length > 0 && (
+            {resolvedAnomalies.length > 0 && (
               <div className="space-y-3 pt-2">
                 <p className="text-[11px] font-extrabold uppercase tracking-widest text-text-muted">
                   Proactive Anomaly Alerts (7-Day Baseline Variance)
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {anomalies.map((alert) => {
+                  {resolvedAnomalies.map((alert) => {
                     const isHigh = alert.severity?.toUpperCase() === "HIGH";
                     const isMed = alert.severity?.toUpperCase() === "MEDIUM";
                     const isNegative = alert.change?.startsWith("-");

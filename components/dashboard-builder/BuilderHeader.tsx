@@ -188,7 +188,7 @@ export function BuilderHeader({
             disabled={isSaving}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
               hasUnsavedChanges
-                ? "bg-emerald-600 text-white border-emerald-700 hover:bg-emerald-700 shadow-sm shadow-emerald-200"
+                ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white border-emerald-700/60 shadow-sm shadow-emerald-200 hover:shadow-md hover:shadow-emerald-200/70 hover:from-emerald-500 hover:to-teal-500 hover:-translate-y-[1px] active:translate-y-0 active:scale-[0.99]"
                 : "bg-gray-100 text-gray-400 border-gray-200 cursor-default"
             } disabled:opacity-60 disabled:cursor-not-allowed`}
           >
