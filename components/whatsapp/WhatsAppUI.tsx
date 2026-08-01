@@ -21,7 +21,7 @@ import {
     Sparkles,
     Radio
 } from "lucide-react";
-import { WhatsAppConversation } from "@/lib/api/whatsappApi";
+import { WhatsAppConversation, fetchAISentiment } from "@/lib/api/whatsappApi";
 import { WhatsAppTab } from "@/hooks/useWhatsApp";
 import { AIInsightsPanel } from "@/components/whatsapp/AIInsightsPanel";
 import { BroadcastComposerModal } from "@/components/whatsapp/BroadcastComposerModal";
@@ -47,8 +47,10 @@ interface WhatsAppUIProps {
 const PRESET_LABELS = ["VIP", "Follow-up", "Urgent", "Lead", "Support", "Customer"];
 
 function formatTime(isoStr: string) {
+    if (!isoStr) return "";
     try {
         const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return "";
         return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     } catch {
         return "";
@@ -89,6 +91,18 @@ export function WhatsAppUI({
     const [searchQuery, setSearchQuery] = useState("");
     const [showAIInsights, setShowAIInsights] = useState(false);
     const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+    const [sentimentMap, setSentimentMap] = useState<Record<string, { loading: boolean; sentiment?: string }>>({});
+
+    const handleFetchSentiment = async (id: string) => {
+        if (sentimentMap[id]?.loading) return;
+        setSentimentMap(prev => ({ ...prev, [id]: { loading: true } }));
+        try {
+            const res = await fetchAISentiment(id);
+            setSentimentMap(prev => ({ ...prev, [id]: { loading: false, sentiment: res.sentiment } }));
+        } catch (err) {
+            setSentimentMap(prev => ({ ...prev, [id]: { loading: false, sentiment: "Unavailable" } }));
+        }
+    };
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
@@ -401,6 +415,19 @@ export function WhatsAppUI({
                                                         {selectedConversation.leadStatus}
                                                     </span>
                                                 )}
+                                                {/* 📊 Sentiment Pill */}
+                                                <button
+                                                    onClick={() => handleFetchSentiment(selectedConversation.id)}
+                                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors shrink-0 shadow-2xs"
+                                                    title="Check customer sentiment"
+                                                >
+                                                    <span>📊 Sentiment</span>
+                                                    {sentimentMap[selectedConversation.id]?.loading ? (
+                                                        <RefreshCw size={11} className="animate-spin text-amber-600 ml-0.5" />
+                                                    ) : sentimentMap[selectedConversation.id]?.sentiment ? (
+                                                        <span className="font-semibold text-amber-900 ml-0.5">({sentimentMap[selectedConversation.id].sentiment})</span>
+                                                    ) : null}
+                                                </button>
                                             </div>
                                             <p className="text-xs text-gray-400 truncate">
                                                 {selectedConversation.contactPhone}
@@ -421,7 +448,7 @@ export function WhatsAppUI({
                                             }`}
                                         >
                                             <Sparkles size={14} className={showAIInsights ? "text-indigo-600 fill-indigo-100" : "text-indigo-500"} />
-                                            <span>AI Insights</span>
+                                            <span>✨ AI Summary</span>
                                         </button>
 
                                         {/* Label Manager Toggle */}

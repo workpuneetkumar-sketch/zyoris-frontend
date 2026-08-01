@@ -8,6 +8,7 @@ import { updateLead, assignLead, fetchTeamMembers, deleteLead, getLeadAssignment
 import { TeamMember } from "./AssignLeadModal";
 import { toast } from "react-toastify";
 import { LeadCheckbox } from "./BulkActionsToolbar";
+import { AiBadge } from "@/components/ai/AiBadge";
 
 import {
     Search,
@@ -518,7 +519,14 @@ export function LeadsTable({
                                                     onToggle={onToggleSelect} 
                                                 />
                                             </td>
-                                            <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">{lead.name}</td>
+                                            <td className="px-5 py-3.5 font-medium text-gray-800 whitespace-nowrap">
+                                                <div className="flex items-center gap-2">
+                                                    <span>{lead.name}</span>
+                                                    {String(lead.source || "").toLowerCase() === 'whatsapp_ai_detection' && (
+                                                        <AiBadge label="🤖 Auto-Detected via WhatsApp AI" />
+                                                    )}
+                                                </div>
+                                            </td>
                                             <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{lead.company || "—"}</td>
                                             {/* Owner — shows "NA" badge if unassigned */}
                                             <td className="px-5 py-3.5 whitespace-nowrap">

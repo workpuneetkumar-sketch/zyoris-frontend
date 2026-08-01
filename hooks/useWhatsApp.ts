@@ -30,37 +30,41 @@ export function useWhatsApp() {
         setError(null);
         try {
             const data = await fetchConversations();
+            const conversationList = Array.isArray(data) ? data : [];
             
-            if (!data || data.length === 0) {
-                console.warn("WhatsApp API returned no conversations, falling back to Demo Mode");
-                setIsDemoMode(true);
-                setConversations(MOCK_CONVERSATIONS);
-            } else {
-                setIsDemoMode(false);
-                setConversations(prev => {
-                    return data.map(newConv => {
-                        const existing = prev.find(p => p.id === newConv.id);
-                        // Preserve fetched messages if summary API doesn't include full history
-                        const messages = existing && (!newConv.messages || newConv.messages.length === 0) && existing.messages && existing.messages.length > 0
-                            ? existing.messages
-                            : (newConv.messages || []);
-                        return {
-                            ...newConv,
-                            pinned: newConv.pinned ?? existing?.pinned ?? false,
-                            archived: newConv.archived ?? existing?.archived ?? false,
-                            labels: newConv.labels ?? existing?.labels ?? [],
-                            messages
-                        };
-                    });
+            setIsDemoMode(false);
+            setConversations(prev => {
+                return conversationList.map(newConv => {
+                    const existing = prev.find(p => p.id === newConv.id);
+                    let messages = newConv.messages || [];
+
+                    if (existing && existing.messages && existing.messages.length > 0) {
+                        if (existing.messages.length >= messages.length) {
+                            messages = existing.messages;
+                            if (newConv.messages && newConv.messages.length > 0) {
+                                const latestNew = newConv.messages[newConv.messages.length - 1];
+                                if (latestNew && !messages.some(m => m.id === latestNew.id)) {
+                                    messages = [...messages, latestNew];
+                                }
+                            }
+                        }
+                    }
+
+                    return {
+                        ...newConv,
+                        pinned: newConv.pinned ?? existing?.pinned ?? false,
+                        archived: newConv.archived ?? existing?.archived ?? false,
+                        labels: newConv.labels ?? existing?.labels ?? [],
+                        messages
+                    };
                 });
-            }
+            });
         } catch (err: any) {
             console.error("WhatsApp API failed", err);
             const errorMsg = err?.message || "Failed to load conversations.";
             setError(errorMsg);
-            // In demo mode or fallback, load mock conversations so user can continue testing UI
-            setIsDemoMode(true);
-            setConversations(MOCK_CONVERSATIONS);
+            setIsDemoMode(false);
+            setConversations([]);
         } finally {
             setLoading(false);
         }
@@ -68,30 +72,28 @@ export function useWhatsApp() {
 
     const loadMessages = useCallback(async (conversationId: string) => {
         try {
-            // ALWAYS fire the API so it appears in the Network tab
             const messages = await fetchConversationMessages(conversationId);
-            
-            // Only update state from API if we are NOT in demo mode (otherwise keep mock messages)
-            if (!isDemoMode) {
-                setConversations(prev => prev.map(conv => 
-                    conv.id === conversationId ? { ...conv, messages: messages || [] } : conv
-                ));
-            }
+            setConversations(prev => prev.map(conv => 
+                conv.id === conversationId ? { ...conv, messages: messages || [] } : conv
+            ));
         } catch (err) {
             console.error("Failed to load messages", err);
         }
-    }, [isDemoMode]);
+    }, []);
 
     useEffect(() => {
         loadConversations();
 
-        // Poll for new messages every 5 seconds
+        // Poll for new conversations and active conversation messages every 5 seconds
         const interval = setInterval(() => {
             loadConversations();
+            if (selectedConversationId) {
+                loadMessages(selectedConversationId);
+            }
         }, 5000);
 
         return () => clearInterval(interval);
-    }, [loadConversations]);
+    }, [loadConversations, selectedConversationId, loadMessages]);
 
     useEffect(() => {
         if (selectedConversationId) {
@@ -107,49 +109,30 @@ export function useWhatsApp() {
 
         setSending(true);
         try {
-            // ALWAYS fire the API so it appears in the Network tab
-            let apiSuccess = false;
-            try {
-                await sendWhatsAppMessage({ 
-                    to: currentConversation.contactPhone, 
-                    message: text,
-                    conversationId: selectedConversationId 
-                });
-                apiSuccess = true;
-            } catch (apiErr) {
-                console.error("sendWhatsAppMessage API failed", apiErr);
-                if (!isDemoMode) throw apiErr;
-            }
+            const newMsg = await sendWhatsAppMessage({ 
+                to: currentConversation.contactPhone, 
+                message: text,
+                conversationId: selectedConversationId 
+            });
 
-            if (isDemoMode) {
-                await new Promise(resolve => setTimeout(resolve, 500));
-                
-                const newMessage: WhatsAppMessage = {
-                    id: `m_${Date.now()}`,
-                    text,
-                    sender: 'user',
-                    timestamp: new Date().toISOString()
-                };
-                
+            if (newMsg) {
                 setConversations(prev => prev.map(conv => {
                     if (conv.id === selectedConversationId) {
                         return {
                             ...conv,
-                            messages: [...conv.messages, newMessage],
-                            updatedAt: newMessage.timestamp
+                            messages: [...conv.messages, newMsg],
+                            updatedAt: newMsg.timestamp || new Date().toISOString()
                         };
                     }
                     return conv;
                 }));
-                return true;
-            } else if (apiSuccess) {
-                await loadConversations();
-                await loadMessages(selectedConversationId);
-                return true;
             }
-            return false;
-        } catch (err) {
-            setError("Failed to send message.");
+            await loadConversations();
+            await loadMessages(selectedConversationId);
+            return true;
+        } catch (err: any) {
+            console.error("sendWhatsAppMessage error", err);
+            setError(err?.message || "Failed to send message.");
             return false;
         } finally {
             setSending(false);

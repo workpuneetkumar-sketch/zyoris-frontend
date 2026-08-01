@@ -88,10 +88,55 @@ function parseApiError(error: any): string {
     return parseApiErrorDetail(error).message;
 }
 
+export function normalizeWhatsAppMessage(raw: any): WhatsAppMessage {
+    if (!raw) return { id: `m_${Date.now()}`, text: "", sender: "contact", timestamp: new Date().toISOString() };
+    const dir = String(raw.direction || raw.sender || raw.type || "").toUpperCase();
+    const isUser = dir === "OUTBOUND" || dir === "USER" || dir === "ME" || dir === "SENT" || raw.fromMe === true || raw.isOutgoing === true;
+    return {
+        id: raw.id || raw.metaId || `m_${Date.now()}`,
+        text: raw.text || raw.message || "",
+        sender: isUser ? "user" : "contact",
+        timestamp: raw.timestamp || raw.createdAt || new Date().toISOString(),
+    };
+}
+
+export function normalizeWhatsAppConversation(raw: any): WhatsAppConversation {
+    if (!raw) {
+        return {
+            id: "",
+            contactName: "Unknown Contact",
+            contactPhone: "",
+            unreadCount: 0,
+            messages: [],
+            updatedAt: new Date().toISOString(),
+        };
+    }
+    const rawMessages = Array.isArray(raw.messages) ? raw.messages : [];
+    const messages = rawMessages.map(normalizeWhatsAppMessage);
+    const phone = raw.contactPhone || raw.phoneNumber || "";
+    const name = raw.contactName || raw.customerName || raw.lead?.name || raw.contact?.name || phone || "Unknown Contact";
+
+    return {
+        id: raw.id || "",
+        contactName: name,
+        contactPhone: phone,
+        unreadCount: typeof raw.unreadCount === "number" ? raw.unreadCount : (raw._count?.messages ?? 0),
+        messages: messages,
+        updatedAt: raw.updatedAt || raw.createdAt || (messages.length > 0 ? messages[messages.length - 1].timestamp : new Date().toISOString()),
+        leadId: raw.leadId || raw.lead?.id,
+        leadName: raw.leadName || raw.lead?.name,
+        leadStatus: raw.leadStatus || raw.lead?.status,
+        pinned: Boolean(raw.pinned),
+        archived: Boolean(raw.archived),
+        labels: Array.isArray(raw.labels) ? raw.labels : [],
+    };
+}
+
 export async function fetchConversations(): Promise<WhatsAppConversation[]> {
     try {
         const res = await api.get("/whatsapp/conversations");
-        return res.data;
+        const list = Array.isArray(res.data) ? res.data : (res.data?.data || []);
+        return list.map(normalizeWhatsAppConversation);
     } catch (err: any) {
         throw new Error(parseApiError(err));
     }
@@ -100,7 +145,7 @@ export async function fetchConversations(): Promise<WhatsAppConversation[]> {
 export async function sendWhatsAppMessage(data: SendWhatsAppPayload): Promise<WhatsAppMessage> {
     try {
         const res = await api.post("/whatsapp/send", data);
-        return res.data;
+        return normalizeWhatsAppMessage(res.data?.message || res.data);
     } catch (err: any) {
         throw new Error(parseApiError(err));
     }
@@ -109,7 +154,8 @@ export async function sendWhatsAppMessage(data: SendWhatsAppPayload): Promise<Wh
 export async function fetchConversationMessages(conversationId: string): Promise<WhatsAppMessage[]> {
     try {
         const res = await api.get(`/whatsapp/conversations/${conversationId}/messages`);
-        return res.data;
+        const list = Array.isArray(res.data) ? res.data : (res.data?.messages || res.data?.data || []);
+        return list.map(normalizeWhatsAppMessage);
     } catch (err: any) {
         throw new Error(parseApiError(err));
     }
