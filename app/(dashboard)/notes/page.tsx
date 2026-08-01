@@ -11,17 +11,16 @@ import {
   CheckCircle,
   AlertCircle,
   Loader2,
-  Calendar,
-  Tag,
+  Pin,
   Clock,
-  FileEdit,
+  Calendar,
+  Inbox,
 } from "lucide-react";
 import {
   getNotes,
   createNote,
   updateNote,
   deleteNote,
-  searchNotes,
   Note,
   CreateNotePayload,
   UpdateNotePayload,
@@ -36,21 +35,108 @@ const formatDate = (dateString: string) =>
     day: "numeric",
   });
 
-const formatDateShort = (dateString: string) =>
-  new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-
-const getUniqueTopics = (notes: Note[]): string[] => {
-  const topics = new Set(notes.map((n) => n.topic));
-  return Array.from(topics).sort();
+const timeAgo = (dateString: string) => {
+  const seconds = Math.floor((Date.now() - new Date(dateString).getTime()) / 1000);
+  if (seconds < 45) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return formatDate(dateString);
 };
 
 const Skeleton = ({ className }: { className?: string }) => (
-  <div className={`animate-pulse bg-gray-200 rounded ${className}`} />
+  <div className={`animate-pulse bg-slate-100 rounded-lg ${className}`} />
 );
+
+const STICKY_SKELETONS = ["h-32", "h-44", "h-36", "h-52", "h-32", "h-40", "h-48", "h-36"];
+
+/* ── Note Card ────────────────────────────────────────────────────────── */
+function NoteCard({
+  note,
+  onView,
+  onEdit,
+  onDelete,
+  onTogglePin,
+}: {
+  note: Note;
+  onView: (note: Note) => void;
+  onEdit: (note: Note) => void;
+  onDelete: (note: Note) => void;
+  onTogglePin: (note: Note) => void;
+}) {
+  return (
+    <article
+      onClick={() => onView(note)}
+      className="group relative break-inside-avoid mb-4 rounded-lg border border-slate-200 bg-white p-4 cursor-pointer transition-all duration-200 hover:border-slate-300 hover:shadow-md"
+    >
+      {note.color && (
+        <span
+          className="absolute inset-x-0 top-0 h-[3px] rounded-t-lg"
+          style={{ backgroundColor: note.color }}
+        />
+      )}
+
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-[15px] font-semibold text-slate-900 leading-snug line-clamp-2">
+          {note.title || "Untitled note"}
+        </h3>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin(note);
+          }}
+          title={note.isPinned ? "Unpin" : "Pin"}
+          className={`shrink-0 p-1.5 rounded-md transition-all ${
+            note.isPinned
+              ? "text-amber-500 bg-amber-50"
+              : "text-slate-300 opacity-0 group-hover:opacity-100 hover:text-amber-500 hover:bg-amber-50"
+          }`}
+        >
+          <Pin size={14} className={note.isPinned ? "fill-amber-500 text-amber-500" : ""} />
+        </button>
+      </div>
+
+      {note.content && (
+        <p className="mt-1.5 text-sm text-slate-500 leading-relaxed line-clamp-4 whitespace-pre-wrap">
+          {note.content}
+        </p>
+      )}
+
+      <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
+        <span className="text-[11px] font-medium text-slate-400 flex items-center gap-1">
+          <Clock size={11} />
+          Updated {timeAgo(note.updatedAt)}
+        </span>
+
+        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(note);
+            }}
+            title="Edit"
+            className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
+          >
+            <Edit size={14} />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(note);
+            }}
+            title="Delete"
+            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
 
 /* ── Page Component ──────────────────────────────────────────────────── */
 export default function NotesPage() {
@@ -59,7 +145,6 @@ export default function NotesPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [topicFilter, setTopicFilter] = useState<string>("ALL");
   const [dateFilter, setDateFilter] = useState<string>("ALL");
 
   // Loading / Error
@@ -82,7 +167,7 @@ export default function NotesPage() {
 
   const showToast = (type: "success" | "error", message: string) => {
     setToast({ type, message });
-    setTimeout(() => setToast(null), 4000);
+    window.setTimeout(() => setToast(null), 4000);
   };
 
   /* ── Load data ──────────────────────────────────────────────────────── */
@@ -103,32 +188,20 @@ export default function NotesPage() {
     loadNotes();
   }, [loadNotes]);
 
-  /* ── Derived data ────────────────────────────────────────────────── */
-  const uniqueTopics = useMemo(() => getUniqueTopics(notes), [notes]);
-
   /* ── Filter & Search ──────────────────────────────────────────────── */
   const displayedNotes = useMemo(() => {
     let filtered = [...notes];
 
-    // Topic filter
-    if (topicFilter !== "ALL") {
-      filtered = filtered.filter((n) => n.topic === topicFilter);
-    }
-
-    // Date filter
+    // Date filter (based on updatedAt since the backend has no separate date field)
     if (dateFilter !== "ALL") {
       const now = Date.now();
       filtered = filtered.filter((n) => {
-        const noteDate = new Date(n.date).getTime();
+        const noteDate = new Date(n.updatedAt).getTime();
         if (dateFilter === "TODAY") {
-          return new Date(n.date).toDateString() === new Date().toDateString();
+          return new Date(n.updatedAt).toDateString() === new Date().toDateString();
         }
-        if (dateFilter === "7D") {
-          return now - noteDate <= 7 * 24 * 60 * 60 * 1000;
-        }
-        if (dateFilter === "30D") {
-          return now - noteDate <= 30 * 24 * 60 * 60 * 1000;
-        }
+        if (dateFilter === "7D") return now - noteDate <= 7 * 24 * 60 * 60 * 1000;
+        if (dateFilter === "30D") return now - noteDate <= 30 * 24 * 60 * 60 * 1000;
         return true;
       });
     }
@@ -139,15 +212,19 @@ export default function NotesPage() {
       filtered = filtered.filter(
         (n) =>
           n.title.toLowerCase().includes(q) ||
-          n.topic.toLowerCase().includes(q) ||
-          n.description.toLowerCase().includes(q)
+          n.content.toLowerCase().includes(q)
       );
     }
 
-    return filtered.sort(
-      (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-    );
-  }, [notes, searchQuery, topicFilter, dateFilter]);
+    // Pinned notes first, then by most recently updated
+    return filtered.sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
+  }, [notes, searchQuery, dateFilter]);
+
+  const pinnedNotes = useMemo(() => displayedNotes.filter((n) => n.isPinned), [displayedNotes]);
+  const otherNotes = useMemo(() => displayedNotes.filter((n) => !n.isPinned), [displayedNotes]);
 
   /* ── Note CRUD ────────────────────────────────────────────────────── */
   const handleCreateNote = async (data: CreateNotePayload) => {
@@ -173,6 +250,16 @@ export default function NotesPage() {
     }
   };
 
+  const handleTogglePin = async (note: Note) => {
+    try {
+      const updated = await updateNote(note.id, { isPinned: !note.isPinned });
+      setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)));
+      showToast("success", updated.isPinned ? "Note pinned" : "Note unpinned");
+    } catch (err: any) {
+      showToast("error", err.message);
+    }
+  };
+
   const handleDeleteNote = async () => {
     if (!deletingNoteId) return;
     try {
@@ -186,22 +273,15 @@ export default function NotesPage() {
     }
   };
 
-  const handleViewNote = (note: Note) => {
-    setViewingNote(note);
-    setShowViewModal(true);
-  };
-
   /* ── Inject animation CSS ────────────────────────────────────────── */
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = `
-      @keyframes slideIn {
+      @keyframes toastIn {
         from { opacity: 0; transform: translateX(20px); }
         to { opacity: 1; transform: translateX(0); }
       }
-      .animate-slide-in {
-        animation: slideIn 0.3s ease-out;
-      }
+      .animate-toast-in { animation: toastIn 0.3s ease-out; }
     `;
     document.head.appendChild(style);
     return () => {
@@ -209,302 +289,228 @@ export default function NotesPage() {
     };
   }, []);
 
+  const openNewNote = () => {
+    setEditingNote(null);
+    setShowNoteModal(true);
+  };
+
+  const openEditNote = (note: Note) => {
+    setEditingNote(note);
+    setShowNoteModal(true);
+  };
+
+  const openDeleteConfirm = (note: Note) => {
+    setDeletingNoteId(note.id);
+    setShowDeleteModal(true);
+  };
+
+  const pinnedCount = notes.filter((n) => n.isPinned).length;
+
   /* ── Render ────────────────────────────────────────────────────────── */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-slate-50 p-6">
+    <div className="min-h-screen bg-slate-50">
       {/* Toast */}
       {toast && (
         <div
-          className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium animate-slide-in ${
+          className={`fixed top-6 right-6 z-50 flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg text-sm font-medium animate-toast-in ${
             toast.type === "success"
-              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-              : "bg-red-50 text-red-800 border border-red-200"
+              ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+              : "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
           }`}
         >
           {toast.type === "success" ? (
-            <CheckCircle className="w-5 h-5" />
+            <CheckCircle className="w-4 h-4" />
           ) : (
-            <AlertCircle className="w-5 h-5" />
+            <AlertCircle className="w-4 h-4" />
           )}
           {toast.message}
           <button onClick={() => setToast(null)} className="ml-2 hover:opacity-70">
-            <X size={16} />
+            <X size={14} />
           </button>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
-            <div className="p-2 bg-indigo-100 rounded-xl">
-              <StickyNote className="w-8 h-8 text-indigo-600" />
+      {/* ── Header ─────────────────────────────────────────────────── */}
+      <header className="bg-white border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100">
+                <StickyNote size={20} />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900">Notes</h1>
+                <p className="text-sm text-slate-500">
+                  {notes.length} note{notes.length === 1 ? "" : "s"}
+                  {pinnedCount > 0 ? ` · ${pinnedCount} pinned` : ""}
+                </p>
+              </div>
             </div>
-            Notes
-          </h1>
-          <p className="text-sm text-gray-500 mt-1 ml-12">
-            Capture ideas, information, and important details for future reference.
-          </p>
-        </div>
-        <button
-          onClick={() => {
-            setEditingNote(null);
-            setShowNoteModal(true);
-          }}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition transform hover:-translate-y-0.5"
-        >
-          <Plus size={18} />
-          New Note
-        </button>
-      </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {[
-          {
-            label: "Total Notes",
-            value: notes.length,
-            icon: StickyNote,
-            color: "text-indigo-600 bg-indigo-50",
-          },
-          {
-            label: "Topics",
-            value: uniqueTopics.length,
-            icon: Tag,
-            color: "text-emerald-600 bg-emerald-50",
-          },
-          {
-            label: "Recent (7 days)",
-            value: notes.filter((n) => {
-              const d = new Date(n.updatedAt).getTime();
-              return Date.now() - d <= 7 * 24 * 60 * 60 * 1000;
-            }).length,
-            icon: Clock,
-            color: "text-amber-600 bg-amber-50",
-          },
-          {
-            label: searchQuery ? "Search Results" : "Total Displayed",
-            value: searchQuery ? displayedNotes.length : displayedNotes.length,
-            icon: Search,
-            color: "text-blue-600 bg-blue-50",
-          },
-        ].map((card) => (
-          <div
-            key={card.label}
-            className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow"
-          >
-            <div className={`p-3 rounded-xl ${card.color}`}>
-              <card.icon className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-sm text-gray-500">{card.label}</p>
-              <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Search & Filter Bar */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-6">
-        <div className="flex flex-col sm:flex-row gap-3">
-          {/* Search */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4.5 h-4.5" />
-            <input
-              type="text"
-              placeholder="Search notes by title, topic, or content..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white transition-all"
-            />
-          </div>
-
-          {/* Topic Filter */}
-          <select
-            value={topicFilter}
-            onChange={(e) => setTopicFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-w-[140px]"
-          >
-            <option value="ALL">All Topics</option>
-            {uniqueTopics.map((topic) => (
-              <option key={topic} value={topic}>
-                {topic}
-              </option>
-            ))}
-          </select>
-
-          {/* Date Filter */}
-          <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:ring-2 focus:ring-indigo-500 focus:border-transparent min-w-[140px]"
-          >
-            <option value="ALL">All Time</option>
-            <option value="TODAY">Today</option>
-            <option value="7D">Last 7 Days</option>
-            <option value="30D">Last 30 Days</option>
-          </select>
-        </div>
-      </div>
-
-      {/* Notes Content */}
-      {loading ? (
-        <div className="space-y-4">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32 w-full rounded-2xl" />
-          ))}
-        </div>
-      ) : error ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm">
-          <AlertCircle className="w-12 h-12 mx-auto text-red-400 mb-4" />
-          <p className="text-red-600 font-medium">{error}</p>
-          <button
-            onClick={loadNotes}
-            className="mt-4 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors"
-          >
-            <Loader2 size={14} />
-            Try again
-          </button>
-        </div>
-      ) : notes.length === 0 ? (
-        /* Empty State — No Notes at All */
-        <div className="text-center py-20 bg-white rounded-2xl border border-gray-200 shadow-sm">
-          <div className="p-4 bg-indigo-50 rounded-full inline-flex mb-6">
-            <StickyNote className="w-12 h-12 text-indigo-400" />
-          </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No notes yet</h3>
-          <p className="text-gray-500 max-w-md mx-auto mb-8">
-            Create your first note to save important information for future reference.
-          </p>
-          <button
-            onClick={() => {
-              setEditingNote(null);
-              setShowNoteModal(true);
-            }}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition transform hover:-translate-y-0.5"
-          >
-            <Plus size={18} />
-            Create Your First Note
-          </button>
-        </div>
-      ) : displayedNotes.length === 0 ? (
-        /* Empty State — No Search Results */
-        <div className="text-center py-16 bg-white rounded-2xl border border-gray-200 shadow-sm">
-          <Search className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No notes found</h3>
-          <p className="text-gray-500 mb-6">
-            Try a different search term or create a new note.
-          </p>
-          <div className="flex items-center justify-center gap-3">
             <button
-              onClick={() => {
-                setSearchQuery("");
-                setTopicFilter("ALL");
-                setDateFilter("ALL");
-              }}
-              className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              onClick={openNewNote}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
             >
-              Clear Filters
-            </button>
-            <button
-              onClick={() => {
-                setEditingNote(null);
-                setShowNoteModal(true);
-              }}
-              className="px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors"
-            >
-              <Plus size={16} className="inline mr-1" />
+              <Plus size={16} />
               New Note
             </button>
           </div>
         </div>
-      ) : (
-        /* Notes Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {displayedNotes.map((note) => (
-            <div
-              key={note.id}
-              className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all group flex flex-col"
-            >
-              {/* Card Body */}
-              <div
-                className="flex-1 p-5 cursor-pointer"
-                onClick={() => handleViewNote(note)}
-              >
-                {/* Topic Badge */}
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-medium border border-indigo-100">
-                    <Tag size={12} />
-                    {note.topic}
-                  </span>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 text-gray-500 rounded-full text-xs font-medium border border-gray-100">
-                    <Calendar size={12} />
-                    {formatDateShort(note.date)}
-                  </span>
-                </div>
+      </header>
 
-                {/* Title */}
-                <h3 className="text-base font-semibold text-gray-900 line-clamp-1 mb-2 group-hover:text-indigo-600 transition-colors">
-                  {note.title}
-                </h3>
+      {/* ── Toolbar ─────────────────────────────────────────────────── */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 bg-white rounded-lg border border-slate-200 p-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search notes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all"
+            />
+          </div>
 
-                {/* Description Preview */}
-                <p className="text-sm text-gray-500 line-clamp-3 leading-relaxed">
-                  {note.description}
-                </p>
-              </div>
-
-              {/* Card Footer */}
-              <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
-                <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                  <Clock size={12} />
-                  Updated {formatDate(note.updatedAt)}
-                </span>
-
-                {/* Actions */}
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleViewNote(note);
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    title="View"
-                  >
-                    <FileEdit size={15} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setEditingNote(note);
-                      setShowNoteModal(true);
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                    title="Edit"
-                  >
-                    <Edit size={15} />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDeletingNoteId(note.id);
-                      setShowDeleteModal(true);
-                    }}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+          <select
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className="px-3 py-2 text-sm font-medium text-slate-600 bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 cursor-pointer"
+          >
+            <option value="ALL">All time</option>
+            <option value="TODAY">Today</option>
+            <option value="7D">Last 7 days</option>
+            <option value="30D">Last 30 days</option>
+          </select>
         </div>
-      )}
+      </div>
+
+      {/* ── Notes content ───────────────────────────────────────────── */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+        {loading ? (
+          <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+            {STICKY_SKELETONS.map((h, i) => (
+              <Skeleton key={i} className={`${h} w-full mb-4 break-inside-avoid`} />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="text-center py-20">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-rose-50 text-rose-500 rounded-full ring-1 ring-rose-100 mb-4">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">Something went wrong</h3>
+            <p className="text-sm text-slate-500 mb-6">{error}</p>
+            <button
+              onClick={loadNotes}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Loader2 size={16} />
+              Try again
+            </button>
+          </div>
+        ) : notes.length === 0 ? (
+          /* Empty State — No notes at all */
+          <div className="text-center py-20">
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-indigo-50 text-indigo-500 rounded-xl ring-1 ring-indigo-100 mb-4">
+              <StickyNote className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">No notes yet</h3>
+            <p className="text-sm text-slate-500 max-w-sm mx-auto mb-6">
+              Create your first note to capture ideas and to-dos.
+            </p>
+            <button
+              onClick={openNewNote}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={16} />
+              Create your first note
+            </button>
+          </div>
+        ) : displayedNotes.length === 0 ? (
+          /* Empty State — No results */
+          <div className="text-center py-20">
+            <div className="inline-flex items-center justify-center w-12 h-12 bg-slate-100 text-slate-400 rounded-full ring-1 ring-slate-200 mb-4">
+              <Inbox className="w-6 h-6" />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">No matching notes</h3>
+            <p className="text-sm text-slate-500 mb-6">
+              Try a different search term, or clear your filters to see everything.
+            </p>
+            <button
+              onClick={() => {
+                setSearchQuery("");
+                setDateFilter("ALL");
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-slate-600 bg-white rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+            >
+              <X size={15} />
+              Clear filters
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Pinned section */}
+            {pinnedNotes.length > 0 && (
+              <section className="mb-8">
+                <div className="flex items-center gap-2 mb-3">
+                  <Pin size={13} className="text-amber-500" />
+                  <h2 className="text-sm font-semibold text-slate-700">Pinned</h2>
+                  <span className="text-xs text-slate-400">{pinnedNotes.length}</span>
+                  <div className="flex-1 h-px bg-slate-200 ml-1" />
+                </div>
+                <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+                  {pinnedNotes.map((note) => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      onView={(n) => {
+                        setViewingNote(n);
+                        setShowViewModal(true);
+                      }}
+                      onEdit={openEditNote}
+                      onDelete={openDeleteConfirm}
+                      onTogglePin={handleTogglePin}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Other notes section */}
+            {otherNotes.length > 0 && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <h2 className="text-sm font-semibold text-slate-700">
+                    {pinnedNotes.length > 0 ? "Others" : "Notes"}
+                  </h2>
+                  <span className="text-xs text-slate-400">{otherNotes.length}</span>
+                  <div className="flex-1 h-px bg-slate-200 ml-1" />
+                </div>
+                <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4">
+                  {otherNotes.map((note) => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      onView={(n) => {
+                        setViewingNote(n);
+                        setShowViewModal(true);
+                      }}
+                      onEdit={openEditNote}
+                      onDelete={openDeleteConfirm}
+                      onTogglePin={handleTogglePin}
+                    />
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
+        )}
+      </main>
 
       {/* ── Note Modal (Create / Edit) ──────────────────────────────── */}
       {showNoteModal && (
         <NoteModal
+          key={editingNote?.id ?? "new"}
           isOpen={showNoteModal}
           initialData={editingNote}
           onClose={() => {
@@ -523,58 +529,75 @@ export default function NotesPage() {
 
       {/* ── View Note Modal ─────────────────────────────────────────── */}
       {showViewModal && viewingNote && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl bg-white rounded-xl shadow-2xl ring-1 ring-slate-900/10 overflow-hidden max-h-[90vh] flex flex-col">
+            {viewingNote.color && (
+              <span
+                className="h-1 w-full shrink-0"
+                style={{ backgroundColor: viewingNote.color }}
+              />
+            )}
+
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900">{viewingNote.title}</h2>
+            <div className="flex items-center justify-between px-6 py-5 border-b border-slate-100">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <h2 className="text-lg font-bold text-slate-900 truncate">
+                  {viewingNote.title}
+                </h2>
+                {viewingNote.isPinned && (
+                  <Pin size={15} className="fill-amber-500 text-amber-500 shrink-0" />
+                )}
+              </div>
               <button
                 onClick={() => {
                   setShowViewModal(false);
                   setViewingNote(null);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors shrink-0"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Meta */}
-            <div className="px-6 pt-5 pb-3 flex flex-wrap items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium border border-indigo-100">
-                <Tag size={14} />
-                {viewingNote.topic}
+            <div className="px-6 py-3 flex flex-wrap items-center gap-2 text-xs text-slate-500 border-b border-slate-100">
+              <span className="inline-flex items-center gap-1">
+                <Calendar size={12} />
+                Created {formatDate(viewingNote.createdAt)}
               </span>
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-gray-50 text-gray-600 rounded-full text-sm font-medium border border-gray-100">
-                <Calendar size={14} />
-                {formatDate(viewingNote.date)}
+              <span className="text-slate-300">•</span>
+              <span className="inline-flex items-center gap-1">
+                <Clock size={12} />
+                Updated {timeAgo(viewingNote.updatedAt)}
               </span>
-            </div>
-
-            {/* Timestamps */}
-            <div className="px-6 pb-4 text-xs text-gray-400">
-              Created {formatDate(viewingNote.createdAt)} &middot; Updated{" "}
-              {formatDate(viewingNote.updatedAt)}
+              {viewingNote.color && (
+                <span className="ml-auto inline-flex items-center gap-1.5">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full"
+                    style={{ backgroundColor: viewingNote.color }}
+                  />
+                  {viewingNote.color}
+                </span>
+              )}
             </div>
 
             {/* Content */}
-            <div className="px-6 pb-6">
-              <div className="bg-gray-50 rounded-xl p-5 border border-gray-100">
-                <div className="whitespace-pre-wrap text-sm text-gray-800 leading-relaxed">
-                  {viewingNote.description}
-                </div>
+            <div className="px-6 py-5 flex-1 overflow-y-auto">
+              <div className="whitespace-pre-wrap text-[15px] text-slate-700 leading-relaxed">
+                {viewingNote.content || (
+                  <span className="text-slate-400 italic">No content</span>
+                )}
               </div>
             </div>
 
             {/* Actions */}
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3">
+            <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
               <button
                 onClick={() => {
                   setShowViewModal(false);
-                  setEditingNote(viewingNote);
-                  setShowNoteModal(true);
+                  openEditNote(viewingNote);
                 }}
-                className="px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-xl hover:bg-indigo-100 transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-indigo-600 bg-indigo-50 rounded-lg hover:bg-indigo-100 transition-colors"
               >
                 <Edit size={14} className="inline mr-1.5" />
                 Edit
@@ -584,7 +607,7 @@ export default function NotesPage() {
                   setShowViewModal(false);
                   setViewingNote(null);
                 }}
-                className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
               >
                 Close
               </button>
@@ -595,15 +618,15 @@ export default function NotesPage() {
 
       {/* ── Delete Confirmation Modal ───────────────────────────────── */}
       {showDeleteModal && deletingNoteId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-red-100 rounded-full">
-                <Trash2 className="w-5 h-5 text-red-600" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl ring-1 ring-slate-900/5">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="p-2 bg-rose-50 rounded-lg">
+                <Trash2 className="w-5 h-5 text-rose-600" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900">Delete this note?</h3>
+              <h3 className="text-lg font-semibold text-slate-900">Delete this note?</h3>
             </div>
-            <p className="mt-2 text-sm text-gray-600 ml-11">
+            <p className="mt-2 text-sm text-slate-500 ml-11">
               This action cannot be undone.
             </p>
             <div className="mt-6 flex justify-end gap-3">
@@ -612,13 +635,13 @@ export default function NotesPage() {
                   setShowDeleteModal(false);
                   setDeletingNoteId(null);
                 }}
-                className="px-4 py-2 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleDeleteNote}
-                className="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-xl hover:bg-red-700 transition-colors"
+                className="px-4 py-2 text-sm font-semibold text-white bg-rose-600 rounded-lg hover:bg-rose-700 transition-colors"
               >
                 Delete
               </button>

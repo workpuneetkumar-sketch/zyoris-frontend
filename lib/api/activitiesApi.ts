@@ -22,7 +22,9 @@ import { fetchConversations } from "./whatsappApi";
 // ── Helper: Get initials from name ─────────────────────────────────────────────
 
 function getInitials(name: string): string {
-  return name
+  const safe = (name || "").trim();
+  if (!safe) return "?";
+  return safe
     .split(" ")
     .map((n) => n[0])
     .join("")
@@ -177,8 +179,8 @@ function convertWhatsAppToActivity(whatsapp: any): NormalizedActivity {
     relatedTo: whatsapp.contactName || "Contact",
     relatedToCompany: whatsapp.companyName || "Company",
     type: "WhatsApp",
-    owner: lastMessage?.sender === "user" ? "Current User" : whatsapp.contactName,
-    ownerAvatar: getInitials(lastMessage?.sender === "user" ? "Current User" : whatsapp.contactName),
+    owner: lastMessage?.sender === "user" ? "Current User" : whatsapp.contactName || "User",
+    ownerAvatar: getInitials(lastMessage?.sender === "user" ? "Current User" : whatsapp.contactName || "User"),
     dueDate: date.toLocaleDateString(),
     dueTime: date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     status: "Completed",

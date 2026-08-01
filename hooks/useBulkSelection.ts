@@ -55,7 +55,7 @@ export function useBulkSelection(onSuccess?: (type: BulkOperationType) => void) 
         const result = await apiFn((pct) =>
           setBulkState((prev) => ({ ...prev, progress: pct }))
         );
-        setBulkState((prev) => ({ ...prev, isProcessing: false, progress: 100, result }));
+        setBulkState((prev) => ({ ...prev, isProcessing: false, progress: 100, result, isOpen: false }));
         toast.success(result.message);
         onSuccess?.(type);
         clearSelection();

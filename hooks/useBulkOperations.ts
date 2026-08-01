@@ -152,6 +152,7 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
         isProcessing: false,
         progress: 100,
         result,
+        isOpen: false,
       }));
       toast.success(result.message);
       onSuccess?.("delete");
