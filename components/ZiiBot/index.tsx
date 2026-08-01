@@ -89,6 +89,7 @@ export function ZiiBot() {
             onToggleSound={chat.toggleSound}
             showGreeting={chat.showGreeting}
             darkMode={darkMode}
+            userName={chat.userName}
           />
         ) : showPanel ? (
           <ZiiBotPanel
@@ -104,6 +105,7 @@ export function ZiiBot() {
             onToggleSound={chat.toggleSound}
             showGreeting={chat.showGreeting}
             darkMode={darkMode}
+            userName={chat.userName}
           />
         ) : null}
       </AnimatePresence>
