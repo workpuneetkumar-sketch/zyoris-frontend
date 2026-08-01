@@ -31,7 +31,7 @@ function getSessionId(): string {
 function loadHistory(): ChatMessage[] {
   if (typeof window === "undefined") return [];
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = sessionStorage.getItem(HISTORY_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as ChatMessage[];
     return Array.isArray(parsed) ? parsed.slice(-50) : [];
@@ -43,7 +43,7 @@ function loadHistory(): ChatMessage[] {
 function saveHistory(messages: ChatMessage[]) {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-50)));
+    sessionStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-50)));
   } catch {
     // Ignore
   }
@@ -111,6 +111,25 @@ export function useZiiBotChat() {
   useEffect(() => {
     sessionIdRef.current = getSessionId();
   }, []);
+
+  // Clear messages if user logs out or changes
+  useEffect(() => {
+    if (user?.id) {
+      // It's a new user login or refresh with active user, keep their session or clear if they want it fresh
+      // The user requested: "whenever I login I should see a clean chatbot"
+      // Since it's in sessionStorage, it's tied to the tab. But just to be sure on auth state change:
+      const savedUser = sessionStorage.getItem('zii-bot-user-id');
+      if (savedUser !== user.id) {
+        sessionStorage.setItem('zii-bot-user-id', user.id);
+        sessionStorage.removeItem(HISTORY_KEY);
+        setMessages([]);
+      }
+    } else {
+      sessionStorage.removeItem('zii-bot-user-id');
+      sessionStorage.removeItem(HISTORY_KEY);
+      setMessages([]);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     setSoundOn(getSoundEnabled());
@@ -201,5 +220,6 @@ export function useZiiBotChat() {
     soundOn,
     toggleSound,
     showGreeting,
+    userName: user?.name || "",
   };
 }
