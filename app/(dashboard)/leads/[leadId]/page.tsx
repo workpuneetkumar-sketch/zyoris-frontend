@@ -32,6 +32,8 @@ import { updateDeal } from "@/lib/api/dealsApi";
 import { mapLeadStatusToDealStage } from "@/lib/dealStageMapper";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { toast } from "react-toastify";
+import { AiExtractionCard } from "@/components/ai/AiExtractionCard";
+import { AiBadge } from "@/components/ai/AiBadge";
 
 // Helper to format date safely
 function formatDate(dateString: string | undefined) {
@@ -349,10 +351,7 @@ export default function LeadDetailPage() {
                         <User size={14} className="text-green-400" /> Source
                     </p>
                     {isWhatsAppAI ? (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-green-50 border border-green-200 text-green-700 shadow-sm">
-                            <Bot size={14} />
-                            Auto-Detected via WhatsApp AI
-                        </span>
+                        <AiBadge label="🤖 Auto-Detected via WhatsApp AI" />
                     ) : (
                         <span className="text-sm font-medium text-gray-700">{safeString(lead.source)}</span>
                     )}
@@ -406,50 +405,7 @@ export default function LeadDetailPage() {
 
             {/* AI Extraction Card */}
             {extractionData && (
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border border-green-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-3 border-b border-green-100/50 flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-md bg-green-500 flex items-center justify-center shrink-0">
-                            <Bot size={14} className="text-white" />
-                        </div>
-                        <h3 className="text-sm font-bold text-green-900 tracking-tight">AI Extraction Summary</h3>
-                    </div>
-                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {extractionData.project && (
-                            <div className="bg-white rounded-xl p-3 border border-green-100 shadow-sm">
-                                <p className="text-[11px] font-bold text-green-600 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                    <Home size={12} /> Project
-                                </p>
-                                <p className="text-sm font-semibold text-gray-900">{extractionData.project}</p>
-                            </div>
-                        )}
-                        {extractionData.interest && (
-                            <div className="bg-white rounded-xl p-3 border border-green-100 shadow-sm">
-                                <p className="text-[11px] font-bold text-green-600 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                    <MapPin size={12} /> Interest
-                                </p>
-                                <p className="text-sm font-semibold text-gray-900">{extractionData.interest}</p>
-                            </div>
-                        )}
-                        {extractionData.budget && (
-                            <div className="bg-white rounded-xl p-3 border border-green-100 shadow-sm">
-                                <p className="text-[11px] font-bold text-green-600 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                    <IndianRupee size={12} /> Budget
-                                </p>
-                                <p className="text-sm font-semibold text-gray-900">
-                                    {typeof extractionData.budget === 'number' ? `₹${extractionData.budget.toLocaleString()}` : extractionData.budget}
-                                </p>
-                            </div>
-                        )}
-                        {extractionData.timeline && (
-                            <div className="bg-white rounded-xl p-3 border border-green-100 shadow-sm">
-                                <p className="text-[11px] font-bold text-green-600 uppercase tracking-wider mb-1 flex items-center gap-1">
-                                    <Clock size={12} /> Timeline
-                                </p>
-                                <p className="text-sm font-semibold text-gray-900">{extractionData.timeline}</p>
-                            </div>
-                        )}
-                    </div>
-                </div>
+                <AiExtractionCard data={extractionData} />
             )}
 
             {/* Ownership & Assignment */}
