@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api/api";
-import { fetchTasks, Task } from "@/lib/api/tasksApi";
 import { getDashboardAnomalies, getMorningBriefing, AnomalyAlertItem, MorningBriefingData } from "@/lib/api/aiBriefingApi";
 import {
   Users, Briefcase, DollarSign, Clock, Mail, PhoneCall,
@@ -19,55 +18,23 @@ import { WidgetDefinition } from "@/types/dashboard-builder";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-interface LeadsStatsResponse {
-  total?: number; count?: number; totalLeads?: number;
-  [key: string]: unknown;
-}
-interface PipelineStageStat {
-  stage?: string; amount?: number; totalAmount?: number; value?: number;
-  [key: string]: unknown;
-}
-interface PipelineStatsResponse {
-  stages?: PipelineStageStat[]; pipeline?: PipelineStageStat[];
-  data?: PipelineStageStat[]; totalValue?: number;
+interface DashboardStatsResponse {
+  leadsCount?: number;
+  totalDealValue?: number;
+  revenue?: number;
+  overdueTasks?: number;
+  emailsSent?: number;
+  callsToday?: number;
   [key: string]: unknown;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function extractLeadsCount(data: LeadsStatsResponse | null): number | null {
-  if (!data) return null;
-  return typeof data.total === "number" ? data.total
-    : typeof data.count === "number" ? data.count
-    : typeof data.totalLeads === "number" ? data.totalLeads
-    : null;
-}
-
-function sumPipelineDealValue(data: PipelineStatsResponse | null): number | null {
-  if (!data) return null;
-  if (typeof data.totalValue === "number") return data.totalValue;
-  const stages = data.stages ?? data.pipeline ?? data.data;
-  if (!Array.isArray(stages) || stages.length === 0) return null;
-  return stages.reduce((sum, s) => {
-    const a = s.amount ?? s.totalAmount ?? s.value ?? 0;
-    return sum + (typeof a === "number" ? a : 0);
-  }, 0);
-}
-
-function extractRevenue(ceo: any, cfo: any, drivers: any, forecast: any): number | null {
-  for (const v of [ceo?.kpis?.totalRevenue, forecast?.projectedRevenue, drivers?.totals?.totalRevenue, cfo?.marginTrends?.margin]) {
-    if (typeof v === "number" && v > 0) return v;
-  }
-  return null;
-}
-
-function countOverdueTasks(tasks: Task[]): number {
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  return tasks.filter((t) => {
-    if (!t.dueDate || t.status === "DONE") return false;
-    const d = new Date(t.dueDate); d.setHours(0, 0, 0, 0);
-    return d < today;
-  }).length;
+function normalizeDashboardStats(payload: any): DashboardStatsResponse | null {
+  if (!payload) return null;
+  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
+  if (!data || typeof data !== "object") return null;
+  return data as DashboardStatsResponse;
 }
 
 // ── KPI Card ───────────────────────────────────────────────────────────────
@@ -119,8 +86,7 @@ function BriefCard({ icon: Icon, label, text }: {
 
 export default function DashboardPage() {
   const { user, token } = useAuth();
-  const [dealValue, setDealValue] = useState<number | null>(null);
-  const [overdueTasks, setOverdueTasks] = useState<number | null>(null);
+  const [dashboardStats, setDashboardStats] = useState<DashboardStatsResponse | null>(null);
   const [aiBriefing, setAiBriefing] = useState<MorningBriefingData | null>(null);
   const [aiAnomalies, setAiAnomalies] = useState<AnomalyAlertItem[]>([]);
   const [aiLoading, setAiLoading] = useState(true);
@@ -129,21 +95,12 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!token) return;
     (async () => {
-      const isCfo = user?.role === "CFO";
-      const [leadsRes, pipelineRes, tasksRes, ceoRes, cfoRes, driversRes, forecastRes, briefingRes, anomaliesRes] =
-        await Promise.all([
-          api.get<LeadsStatsResponse>("/leads/stats").catch(() => ({ data: null })),
-          api.get<PipelineStatsResponse>("/api/deals/pipeline-stats").catch(() => ({ data: null })),
-          fetchTasks().catch(() => ({ tasks: [], total: 0 })),
-          isCfo ? Promise.resolve({ data: null }) : api.get("/dashboard/ceo").catch(() => ({ data: null })),
-          isCfo ? api.get("/dashboard/cfo").catch(() => ({ data: null })) : Promise.resolve({ data: null }),
-          api.get("/analytics/revenue/drivers").catch(() => ({ data: null })),
-          api.get("/analytics/revenue/forecast").catch(() => ({ data: null })),
-          getMorningBriefing().catch(() => null),
-          getDashboardAnomalies().then((r) => r.anomalies || []).catch(() => []),
-        ]);
-      setDealValue(sumPipelineDealValue(pipelineRes.data));
-      setOverdueTasks(countOverdueTasks(tasksRes.tasks ?? []));
+      const [statsRes, briefingRes, anomaliesRes] = await Promise.all([
+        api.get<DashboardStatsResponse>("/dashboard/stats").catch(() => ({ data: null })),
+        getMorningBriefing().catch(() => null),
+        getDashboardAnomalies().then((r) => r.anomalies || []).catch(() => []),
+      ]);
+      setDashboardStats(normalizeDashboardStats(statsRes?.data));
       setAiBriefing(briefingRes);
       setAiAnomalies(Array.isArray(anomaliesRes) ? anomaliesRes : []);
       setAiError(briefingRes ? null : "Unable to load AI executive briefing.");
@@ -152,13 +109,13 @@ export default function DashboardPage() {
   }, [token, user?.role]);
 
   const kpiCards = useMemo(() => [
-    { icon: Users,     label: "Leads Count",     value: "42",    accent: "blue"    as const },
-    { icon: Briefcase, label: "Total Deal Value", value: dealValue != null ? `$${Math.round(dealValue).toLocaleString()}` : "--", accent: "blue" as const },
-    { icon: DollarSign,label: "Revenue",          value: "$79,070", accent: "emerald" as const },
-    { icon: Clock,     label: "Overdue Tasks",    value: overdueTasks != null ? String(overdueTasks) : "--", accent: "amber" as const },
-    { icon: Mail,      label: "Emails Sent",      value: "3",     accent: "blue"    as const },
-    { icon: PhoneCall, label: "Calls Today",      value: "5",     accent: "emerald" as const },
-  ], [dealValue, overdueTasks]);
+    { icon: Users,     label: "Leads Count",      value: typeof dashboardStats?.leadsCount === "number" ? dashboardStats.leadsCount.toLocaleString() : "--", accent: "blue"    as const },
+    { icon: Briefcase, label: "Total Deal Value", value: typeof dashboardStats?.totalDealValue === "number" ? `$${Math.round(dashboardStats.totalDealValue).toLocaleString()}` : "--", accent: "blue" as const },
+    { icon: DollarSign,label: "Revenue",          value: typeof dashboardStats?.revenue === "number" ? `$${Math.round(dashboardStats.revenue).toLocaleString()}` : "--", accent: "emerald" as const },
+    { icon: Clock,     label: "Overdue Tasks",    value: typeof dashboardStats?.overdueTasks === "number" ? dashboardStats.overdueTasks.toLocaleString() : "--", accent: "amber" as const },
+    { icon: Mail,      label: "Emails Sent",      value: typeof dashboardStats?.emailsSent === "number" ? dashboardStats.emailsSent.toLocaleString() : "--", accent: "blue"    as const },
+    { icon: PhoneCall, label: "Calls Today",      value: typeof dashboardStats?.callsToday === "number" ? dashboardStats.callsToday.toLocaleString() : "--", accent: "emerald" as const },
+  ], [dashboardStats]);
 
   const greeting = (() => {
     const h = new Date().getHours();
