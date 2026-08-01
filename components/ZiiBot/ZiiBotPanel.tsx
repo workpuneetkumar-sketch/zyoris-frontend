@@ -7,6 +7,7 @@ import type { ChatMessage } from "./useZiiBotChat";
 import { ContextualSuggestions } from "./ContextualSuggestions";
 import { Send, Bot, Paperclip, Smile, Minimize2, Maximize2, X, Volume2, VolumeX, ThumbsUp, ThumbsDown, MoreVertical, ChevronDown } from "lucide-react";
 import { getVoiceService } from "./voiceService";
+import { toast } from "react-toastify";
 
 interface ZiiBotPanelProps {
   isOpen: boolean;
@@ -36,6 +37,18 @@ function formatMessageContent(content: string): string {
 // ─── Message bubble ─────────────────────────────────────────────
 
 function MessageBubble({ message, isUser }: { message: ChatMessage; isUser: boolean; darkMode: boolean }) {
+  const [rating, setRating] = useState<'up' | 'down' | null>(null);
+
+  const handleRating = (type: 'up' | 'down') => {
+    if (rating) return; // Prevent multiple ratings
+    setRating(type);
+    if (type === 'up') {
+      toast.success("Thanks for your feedback!");
+    } else {
+      toast.info("Thanks, we'll try to improve.");
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 15, scale: 0.95 }}
@@ -65,9 +78,15 @@ function MessageBubble({ message, isUser }: { message: ChatMessage; isUser: bool
         </div>
         {!isUser && (
           <div className="flex items-center gap-2 mt-2 ml-2">
-            <span className="text-[11px] text-gray-500 font-medium">Was this helpful?</span>
-            <button className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsUp size={14} /></button>
-            <button className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsDown size={14} /></button>
+            {rating ? (
+              <span className="text-[11px] text-gray-400 font-medium italic">Feedback recorded</span>
+            ) : (
+              <>
+                <span className="text-[11px] text-gray-500 font-medium">Was this helpful?</span>
+                <button onClick={() => handleRating('up')} className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsUp size={14} /></button>
+                <button onClick={() => handleRating('down')} className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsDown size={14} /></button>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -285,13 +304,25 @@ export function ZiiBotPanel({
             className="flex flex-col px-4 pt-2 pb-3 bg-white"
           >
             <div className="flex items-center border-t border-gray-100 pt-3">
-              <button type="button" className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+              <button 
+                type="button" 
+                onClick={() => toast.info("Bot triggers coming soon!")}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <Bot size={18} />
               </button>
-              <button type="button" className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+              <button 
+                type="button" 
+                onClick={() => toast.info("File attachments coming soon!")}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <Paperclip size={18} />
               </button>
-              <button type="button" className="p-2 text-gray-400 hover:text-gray-600 transition-colors">
+              <button 
+                type="button" 
+                onClick={() => toast.info("Emoji picker coming soon!")}
+                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+              >
                 <Smile size={18} />
               </button>
               
