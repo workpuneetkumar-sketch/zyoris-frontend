@@ -61,22 +61,16 @@ export function ContextualSuggestions({ onSelect }: { onSelect: (text: string) =
   if (suggestions.length === 0) return null;
 
   return (
-    <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
-      <p className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">
-        Suggested for {user?.role || 'You'}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {suggestions.map((sug, idx) => (
-          <button
-            key={idx}
-            onClick={() => onSelect(sug.text)}
-            className="text-xs bg-white hover:bg-blue-50 text-gray-600 hover:text-blue-600 px-3 py-1.5 rounded-full border border-gray-200 hover:border-blue-200 transition-all duration-200 shadow-sm hover:shadow"
-          >
-            <span className="mr-1">{sug.icon}</span>
-            {sug.text}
-          </button>
-        ))}
-      </div>
+    <div className="flex flex-col items-end gap-2 mt-4 pr-2">
+      {suggestions.map((sug, idx) => (
+        <button
+          key={idx}
+          onClick={() => onSelect(sug.text)}
+          className="text-[13px] font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-full transition-colors shadow-sm"
+        >
+          {sug.text}
+        </button>
+      ))}
     </div>
   );
 }
