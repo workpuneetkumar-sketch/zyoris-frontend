@@ -220,6 +220,6 @@ export function useZiiBotChat() {
     soundOn,
     toggleSound,
     showGreeting,
-    userName: user?.name || user?.firstName || "",
+    userName: user?.name || "",
   };
 }
