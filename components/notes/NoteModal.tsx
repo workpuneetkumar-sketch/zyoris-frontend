@@ -1,23 +1,11 @@
 "use client";
 
 import React, { useState } from "react";
-import { X } from "lucide-react";
+import { X, Pin, Check } from "lucide-react";
 import { Note, CreateNotePayload, UpdateNotePayload } from "@/lib/api/notesApi";
+import { NOTE_COLORS, hexToRgba } from "./noteStyles";
 
-// ── Topics for quick selection ──────────────────────────────────────
-const TOPICS = [
-  "Project Planning",
-  "Meeting Notes",
-  "Ideas",
-  "Tasks",
-  "Research",
-  "Learning",
-  "Personal",
-  "Work",
-  "Other",
-];
-
-// ── Props ───────────────────────────────────────────────────────────
+// ── Props ───────────────────────────────────────────────────────────────
 interface NoteModalProps {
   isOpen: boolean;
   initialData?: Note | null;
@@ -25,21 +13,12 @@ interface NoteModalProps {
   onSave: (data: CreateNotePayload | UpdateNotePayload) => void;
 }
 
-// ── Format date for input[type=date] ────────────────────────────────
-const toDateInputValue = (dateStr: string) => {
-  const d = new Date(dateStr);
-  return d.toISOString().split("T")[0];
-};
-
-// ── Component ───────────────────────────────────────────────────────
+// ── Component ───────────────────────────────────────────────────────────
 export function NoteModal({ isOpen, initialData, onClose, onSave }: NoteModalProps) {
-  const [date, setDate] = useState(() =>
-    initialData ? toDateInputValue(initialData.date) : new Date().toISOString().split("T")[0]
-  );
-  const [topic, setTopic] = useState(initialData?.topic || "");
-  const [topicCustom, setTopicCustom] = useState(false);
   const [title, setTitle] = useState(initialData?.title || "");
-  const [description, setDescription] = useState(initialData?.description || "");
+  const [content, setContent] = useState(initialData?.content || "");
+  const [color, setColor] = useState<string | null>(initialData?.color ?? null);
+  const [isPinned, setIsPinned] = useState(initialData?.isPinned || false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -47,10 +26,7 @@ export function NoteModal({ isOpen, initialData, onClose, onSave }: NoteModalPro
 
     // Validation
     const newErrors: Record<string, string> = {};
-    if (!date) newErrors.date = "Date is required";
-    if (!topic.trim()) newErrors.topic = "Topic is required";
     if (!title.trim()) newErrors.title = "Title is required";
-    if (!description.trim()) newErrors.description = "Description is required";
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -59,181 +35,143 @@ export function NoteModal({ isOpen, initialData, onClose, onSave }: NoteModalPro
 
     setErrors({});
     const payload: CreateNotePayload = {
-      date,
-      topic: topic.trim(),
       title: title.trim(),
-      description: description.trim(),
+      content: content.trim(),
+      color,
+      isPinned,
     };
     onSave(payload);
   };
 
   if (!isOpen) return null;
 
+  const divider = color ? hexToRgba(color, 0.15) : "#e2e8f0";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-      <div className="bg-white rounded-2xl w-full max-w-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+      <div className="w-full max-w-2xl rounded-xl shadow-2xl ring-1 ring-slate-900/10 flex flex-col max-h-[92vh] overflow-hidden bg-white">
+        {color && (
+          <span
+            className="h-1 w-full shrink-0"
+            style={{ backgroundColor: color }}
+          />
+        )}
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900">
-            {initialData ? "Edit Note" : "Create New Note"}
+        <div
+          className="flex items-center justify-between px-6 py-5 border-b"
+          style={{ borderColor: divider }}
+        >
+          <h2 className="text-lg font-bold text-slate-900">
+            {initialData ? "Edit note" : "New note"}
           </h2>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-xl transition-colors"
-          >
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg transition-colors">
             <X size={20} />
           </button>
         </div>
 
         {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Date */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Date <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="date"
-              value={date}
-              onChange={(e) => {
-                setDate(e.target.value);
-                if (errors.date) setErrors((prev) => ({ ...prev, date: "" }));
-              }}
-              className={`w-full px-4 py-2.5 border ${
-                errors.date ? "border-red-300 ring-2 ring-red-200" : "border-gray-200"
-              } rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white`}
-            />
-            {errors.date && (
-              <p className="mt-1 text-xs text-red-500">{errors.date}</p>
-            )}
-          </div>
-
-          {/* Topic */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Topic <span className="text-red-500">*</span>
-            </label>
-            {!topicCustom ? (
-              <div className="flex flex-wrap gap-2">
-                {TOPICS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      setTopic(t);
-                      if (errors.topic) setErrors((prev) => ({ ...prev, topic: "" }));
-                    }}
-                    className={`px-3.5 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                      topic === t
-                        ? "bg-indigo-100 text-indigo-700 border-indigo-200"
-                        : "bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTopicCustom(true);
-                    setTopic("");
-                  }}
-                  className="px-3.5 py-1.5 rounded-lg text-sm font-medium border border-dashed border-gray-300 text-gray-500 hover:bg-gray-50 transition-colors"
-                >
-                  + Custom
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  placeholder="Enter custom topic..."
-                  value={topic}
-                  onChange={(e) => {
-                    setTopic(e.target.value);
-                    if (errors.topic) setErrors((prev) => ({ ...prev, topic: "" }));
-                  }}
-                  autoFocus
-                  className={`flex-1 px-4 py-2.5 border ${
-                    errors.topic ? "border-red-300 ring-2 ring-red-200" : "border-gray-200"
-                  } rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTopicCustom(false);
-                    setTopic("");
-                  }}
-                  className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 font-medium"
-                >
-                  Back
-                </button>
-              </div>
-            )}
-            {errors.topic && (
-              <p className="mt-1 text-xs text-red-500">{errors.topic}</p>
-            )}
-          </div>
-
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           {/* Title */}
+          <input
+            type="text"
+            placeholder="Title"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
+            }}
+            className={`w-full text-xl font-bold text-slate-900 bg-transparent placeholder:text-slate-400 focus:outline-none border-b pb-2 transition-colors ${
+              errors.title ? "border-rose-300" : "border-slate-200 focus:border-indigo-400"
+            }`}
+          />
+          {errors.title && <p className="-mt-3 text-xs text-rose-500">{errors.title}</p>}
+
+          {/* Content */}
+          <textarea
+            rows={10}
+            placeholder="Start typing..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            className="w-full text-[15px] text-slate-700 bg-transparent focus:outline-none resize-y min-h-[220px] leading-relaxed placeholder:text-slate-400"
+            style={{ fontFamily: "inherit" }}
+          />
+
+          {/* Color */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Title <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Enter note title..."
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                if (errors.title) setErrors((prev) => ({ ...prev, title: "" }));
-              }}
-              className={`w-full px-4 py-2.5 border ${
-                errors.title ? "border-red-300 ring-2 ring-red-200" : "border-gray-200"
-              } rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
-            />
-            {errors.title && (
-              <p className="mt-1 text-xs text-red-500">{errors.title}</p>
-            )}
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2.5">
+              Color
+            </p>
+            <div className="flex flex-wrap items-center gap-2.5">
+              {NOTE_COLORS.map((c) => {
+                const selected = color === c.value;
+                return (
+                  <button
+                    key={c.name}
+                    type="button"
+                    title={c.name}
+                    onClick={() => setColor(c.value)}
+                    className={`relative w-8 h-8 rounded-full transition-all ${
+                      selected
+                        ? "ring-2 ring-offset-2 ring-slate-800 scale-110"
+                        : "ring-1 ring-slate-900/10 hover:scale-110"
+                    }`}
+                    style={
+                      c.value
+                        ? { backgroundColor: c.value }
+                        : {
+                            background:
+                              "linear-gradient(135deg, #fff 42%, #e2e8f0 42%, #e2e8f0 58%, #fff 58%)",
+                          }
+                    }
+                  >
+                    {selected && (
+                      <Check
+                        size={14}
+                        className={`absolute inset-0 m-auto ${
+                          c.value ? "text-white" : "text-slate-700"
+                        }`}
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          {/* Description / Note Content */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Description <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              rows={10}
-              placeholder="Write your notes here..."
-              value={description}
-              onChange={(e) => {
-                setDescription(e.target.value);
-                if (errors.description) setErrors((prev) => ({ ...prev, description: "" }));
-              }}
-              className={`w-full px-4 py-3 border ${
-                errors.description ? "border-red-300 ring-2 ring-red-200" : "border-gray-200"
-              } rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-y min-h-[200px] leading-relaxed`}
-              style={{ fontFamily: "inherit" }}
-            />
-            {errors.description && (
-              <p className="mt-1 text-xs text-red-500">{errors.description}</p>
-            )}
+          {/* Pinned */}
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsPinned((prev) => !prev)}
+              className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-lg text-sm font-semibold transition-all ${
+                isPinned
+                  ? "bg-amber-100 text-amber-700 ring-1 ring-amber-300"
+                  : "bg-slate-100 text-slate-600 ring-1 ring-slate-200 hover:bg-slate-200/70"
+              }`}
+            >
+              <Pin size={15} className={isPinned ? "fill-amber-500 text-amber-500" : ""} />
+              {isPinned ? "Pinned" : "Pin this note"}
+            </button>
+            {color && <span className="text-xs text-slate-400">Saved with a custom color accent</span>}
           </div>
 
           {/* Actions */}
-          <div className="pt-4 flex items-center justify-end gap-3 border-t border-gray-100">
+          <div
+            className="pt-4 flex items-center justify-end gap-3 border-t"
+            style={{ borderColor: divider }}
+          >
             <button
               type="button"
               onClick={onClose}
-              className="px-5 py-2.5 text-sm font-semibold text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors"
+              className="px-5 py-2.5 text-sm font-semibold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-200"
+              className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
             >
-              {initialData ? "Update Note" : "Save Note"}
+              {initialData ? "Update note" : "Save note"}
             </button>
           </div>
         </form>

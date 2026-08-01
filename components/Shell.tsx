@@ -46,7 +46,6 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
-import { ThemeToggle } from "./ThemeToggle";
 
 type NavItem = {
   href: string;
@@ -673,9 +672,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="flex-1 flex justify-start">
           <CrmSearch />
         </div>
-
-        {/* Theme toggle */}
-        <ThemeToggle />
 
         {/* Notification bell — single instance for both mobile & desktop */}
           <NotificationBell />
