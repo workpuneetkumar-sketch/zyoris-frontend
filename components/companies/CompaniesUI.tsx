@@ -4,7 +4,6 @@ import { useState } from "react";
 import {
     Search,
     Plus,
-    Filter,
     MoreVertical,
     ChevronLeft,
     ChevronRight,
@@ -634,10 +633,6 @@ export function CompaniesUI({
                                 className="h-9 pl-8 pr-4 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
                             />
                         </div>
-                        <button className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                            <Filter size={13} />
-                            Filters
-                        </button>
                     </div>
 
                     {/* Bulk select-all row */}

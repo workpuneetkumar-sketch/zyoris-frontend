@@ -90,6 +90,96 @@ export async function getDashboardInsights(
 }
 
 // =========================================
+// Weekly AI Briefing
+// =========================================
+
+export interface WeeklyBriefingData {
+  period: string;
+  highlights: string[];
+  leadsCreated?: number;
+  dealsClosed?: number;
+  revenueGenerated?: number;
+  topPerformer?: string;
+  keyInsights?: string[];
+  generatedAt: string;
+  fallback?: boolean;
+}
+
+/**
+ * GET /dashboard/briefing?weekly=true
+ */
+export async function getWeeklyBriefing(): Promise<WeeklyBriefingData> {
+  try {
+    const response = await api.get("/dashboard/briefing", { params: { weekly: true } });
+    const raw = response.data?.data || response.data;
+    return {
+      period: raw.period || "Last 7 days",
+      highlights: Array.isArray(raw.highlights)
+        ? raw.highlights
+        : Array.isArray(raw.summaryBullets)
+        ? raw.summaryBullets
+        : [],
+      leadsCreated: raw.leadsCreated,
+      dealsClosed: raw.dealsClosed,
+      revenueGenerated: raw.revenueGenerated,
+      topPerformer: raw.topPerformer,
+      keyInsights: Array.isArray(raw.keyInsights) ? raw.keyInsights : [],
+      generatedAt: raw.generatedAt || new Date().toISOString(),
+      fallback: raw.fallback || false,
+    };
+  } catch (error: any) {
+    throw new Error(
+      error.response?.data?.message || error.message || "Unable to load weekly briefing."
+    );
+  }
+}
+
+// =========================================
+// Communication Intelligence
+// =========================================
+
+export interface CommunicationIntelligenceData {
+  buyingProbability: number; // 0-100
+  intent: string;
+  mood: string;
+  nextBestAction: string;
+  engagementScore?: number;
+  riskLevel?: string;
+  generatedAt?: string;
+  fallback?: boolean;
+}
+
+/**
+ * GET /crm/communication-intelligence/{leadId}
+ */
+export async function getCommunicationIntelligence(
+  leadId: string
+): Promise<CommunicationIntelligenceData> {
+  try {
+    const response = await api.get(`/crm/communication-intelligence/${leadId}`);
+    const raw = response.data?.data || response.data;
+    return {
+      buyingProbability: typeof raw.buyingProbability === "number"
+        ? Math.round(raw.buyingProbability * (raw.buyingProbability > 1 ? 1 : 100))
+        : typeof raw.score === "number"
+        ? raw.score
+        : 0,
+      intent: raw.intent || raw.intentLabel || "Unknown",
+      mood: raw.mood || raw.sentiment || "Neutral",
+      nextBestAction: raw.nextBestAction || raw.recommendation || "No recommendation available.",
+      engagementScore: raw.engagementScore,
+      riskLevel: raw.riskLevel,
+      generatedAt: raw.generatedAt,
+      fallback: raw.fallback || false,
+    };
+  } catch (error: any) {
+    throw new Error(
+      error.response?.data?.message || error.message || "Unable to load communication intelligence."
+    );
+  }
+}
+
+// =========================================
 // AI Business Intelligence API
 // =========================================
 

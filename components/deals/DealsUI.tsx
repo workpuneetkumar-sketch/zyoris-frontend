@@ -5,16 +5,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
     Search,
-    Settings2,
     ChevronDown,
     Plus,
     CheckCircle2,
     XCircle,
-    DollarSign,
-    Layers,
-    Calendar,
-    TrendingUp,
-    BarChart2,
     X,
     AlertCircle,
 } from "lucide-react";
@@ -440,18 +434,6 @@ export function DealsUI({
                         <ChevronDown size={13} className="text-gray-400" />
                     </div>
 
-                    {/* Period selector */}
-                    <div className="flex items-center gap-1.5 h-10 px-4 rounded-xl border border-gray-200 bg-white shadow-sm cursor-pointer hover:bg-gray-50 transition-colors">
-                        <span className="text-[13px] font-medium text-gray-700">This Month</span>
-                        <ChevronDown size={13} className="text-gray-400" />
-                    </div>
-
-                    {/* Pipeline settings */}
-                    <button className="flex items-center gap-1.5 h-10 px-4 rounded-xl border border-gray-200 bg-white shadow-sm text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Settings2 size={14} className="text-gray-400" />
-                        Pipeline Settings
-                    </button>
-
                     {/* New Deal — primary action */}
                     <button
                         onClick={() => onOpenCreate()}
@@ -483,37 +465,6 @@ export function DealsUI({
                     options={stageFilterOptions}
                     onChange={(v) => onFiltersChange({ ...filters, stage: v })}
                 />
-
-                {/* Owner filter */}
-                <Select
-                    value={filters.owner}
-                    options={["All Owners"]}
-                    onChange={(v) => onFiltersChange({ ...filters, owner: v })}
-                />
-
-                {/* Date from */}
-                <div className="relative">
-                    <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    <input
-                        type="date"
-                        value={filters.dateFrom}
-                        onChange={(e) => onFiltersChange({ ...filters, dateFrom: e.target.value })}
-                        className="h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        title="From date"
-                    />
-                </div>
-
-                {/* Date to */}
-                <div className="relative">
-                    <Calendar size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    <input
-                        type="date"
-                        value={filters.dateTo}
-                        onChange={(e) => onFiltersChange({ ...filters, dateTo: e.target.value })}
-                        className="h-9 pl-8 pr-3 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        title="To date"
-                    />
-                </div>
             </div>
 
             {/* ── Kanban board ── */}
@@ -528,53 +479,6 @@ export function DealsUI({
                         onAddDeal={onOpenCreate}
                     />
                 ))}
-            </div>
-
-            {/* ── KPI stats bar ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
-                        <DollarSign size={18} className="text-blue-500" />
-                    </div>
-                    <div>
-                        <p className="text-[12px] text-gray-400">Total Pipeline Value</p>
-                        <p className="text-[18px] font-bold text-gray-900 leading-tight">{formatCurrency(totalPipeline)}</p>
-                        <p className="text-[11px] text-gray-400">Across {deals.length} deals</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center shrink-0">
-                        <Layers size={18} className="text-indigo-500" />
-                    </div>
-                    <div>
-                        <p className="text-[12px] text-gray-400">Avg. Deal Size</p>
-                        <p className="text-[18px] font-bold text-gray-900 leading-tight">{formatCurrency(avgDealSize)}</p>
-                        <p className="text-[11px] text-green-500 flex items-center gap-0.5"><TrendingUp size={11} />vs last month</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center shrink-0">
-                        <CheckCircle2 size={18} className="text-green-500" />
-                    </div>
-                    <div>
-                        <p className="text-[12px] text-gray-400">Win Rate</p>
-                        <p className="text-[18px] font-bold text-gray-900 leading-tight">{winRate}%</p>
-                        <p className="text-[11px] text-green-500 flex items-center gap-0.5"><TrendingUp size={11} />vs last month</p>
-                    </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-orange-50 flex items-center justify-center shrink-0">
-                        <BarChart2 size={18} className="text-orange-500" />
-                    </div>
-                    <div>
-                        <p className="text-[12px] text-gray-400">Conversion Rate</p>
-                        <p className="text-[18px] font-bold text-gray-900 leading-tight">{conversionRate}%</p>
-                        <p className="text-[11px] text-green-500 flex items-center gap-0.5"><TrendingUp size={11} />vs last month</p>
-                    </div>
-                </div>
             </div>
 
             {/* ── Create Deal Modal ── */}

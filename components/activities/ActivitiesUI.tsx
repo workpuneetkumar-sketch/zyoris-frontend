@@ -7,8 +7,6 @@ import {
     MoreVertical,
     ChevronLeft,
     ChevronRight,
-    Filter,
-    Calendar,
     LayoutList,
     Phone,
     Users,
@@ -306,20 +304,6 @@ export function ActivitiesTable({
                 </div>
                 {/* RESPONSIVE: buttons wrap on small screens */}
                 <div className="flex items-center gap-2.5 flex-wrap">
-                    {/* RESPONSIVE: hide the long date-range label on xs, show on sm+ */}
-                    <button className="hidden sm:flex items-center gap-1.5 h-9 px-4 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Calendar size={14} />
-                        {dateRange.from} – {dateRange.to}
-                        <ChevronRight size={12} className="rotate-90 text-gray-400" />
-                    </button>
-                    {/* RESPONSIVE: show icon-only date button on xs */}
-                    <button className="sm:hidden flex items-center gap-1.5 h-9 px-3 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                        <Calendar size={14} />
-                    </button>
-                    <button className="flex items-center gap-1.5 h-9 px-3.5 rounded-lg border border-gray-200 bg-white text-[13px] font-medium text-gray-600 hover:bg-gray-50 transition-colors">
-                        <Filter size={13} />
-                        <span className="hidden sm:inline">Filter</span>
-                    </button>
                     <button
                         onClick={onNewActivity}
                         className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
@@ -364,7 +348,6 @@ export function ActivitiesTable({
             </div>
 
             {/* ── Main content grid ────────────────────────────────────────── */}
-            {/* RESPONSIVE: single column on mobile, fixed sidebar on lg+ */}
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 items-start">
 
                 {/* Left — Table */}
@@ -551,24 +534,6 @@ export function ActivitiesTable({
 
                 {/* Right sidebar */}
                 <div className="space-y-4">
-
-                    {/* Calendar */}
-                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-                        <h3 className="text-[13px] font-semibold text-gray-700 mb-4">Activity Calendar</h3>
-                        <MiniCalendar month="May" year="2024" />
-                        {/* RESPONSIVE: wrap legend items if sidebar is narrow */}
-                        <div className="flex flex-wrap items-center gap-3 mt-4 pt-4 border-t border-gray-100">
-                            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" /> 32 Upcoming
-                            </div>
-                            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span className="w-2 h-2 rounded-full bg-green-400 shrink-0" /> 78 Completed
-                            </div>
-                            <div className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                                <span className="w-2 h-2 rounded-full bg-red-400 shrink-0" /> 18 Overdue
-                            </div>
-                        </div>
-                    </div>
 
                     {/* Activity by Type */}
                     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">

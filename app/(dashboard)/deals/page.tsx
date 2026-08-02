@@ -200,7 +200,7 @@ export default function DealsPage() {
                             <thead>
                                 <tr className="border-b border-gray-100">
                                     <th className="text-left px-3 py-3 w-8"></th>
-                                    {["Deal Name", "Stage", "Amount", "Owner", "Company", "Close Date", "Created"].map((h) => (
+                                    {["Deal Name", "Stage", "Amount", "Created"].map((h) => (
                                         <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
                                             {h}
                                         </th>
@@ -212,7 +212,7 @@ export default function DealsPage() {
                                     Array.from({ length: 8 }).map((_, i) => (
                                         <tr key={i} className="border-b border-gray-50">
                                             <td className="px-3 py-4"></td>
-                                            {Array.from({ length: 7 }).map((_, j) => (
+                                            {Array.from({ length: 4 }).map((_, j) => (
                                                 <td key={j} className="px-5 py-4">
                                                     <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
                                                 </td>
@@ -221,7 +221,7 @@ export default function DealsPage() {
                                     ))
                                 ) : deals.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="text-center py-16 text-gray-400 text-sm">
+                                        <td colSpan={5} className="text-center py-16 text-gray-400 text-sm">
                                             No deals found.
                                         </td>
                                     </tr>
@@ -251,15 +251,6 @@ export default function DealsPage() {
                                             </td>
                                             <td className="px-5 py-3.5 text-gray-700 whitespace-nowrap font-medium">
                                                 ${deal.amount.toLocaleString()}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
-                                                {deal.owner || "—"}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">
-                                                {deal.companyName || "—"}
-                                            </td>
-                                            <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">
-                                                {deal.closeDate ? new Date(deal.closeDate).toLocaleDateString() : "—"}
                                             </td>
                                             <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">
                                                 {deal.createdAt ? new Date(deal.createdAt).toLocaleDateString() : "—"}

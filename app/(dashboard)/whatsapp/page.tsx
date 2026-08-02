@@ -15,11 +15,19 @@ export default function WhatsAppPage() {
         error,
         isDemoMode,
         sending,
+        waStatus,
+        waProfile,
+        waStatusLoading,
         handleSendMessage,
         handleSetLabels,
         handleTogglePin,
         handleToggleArchive,
-        retry
+        handleAssignConversation,
+        handleUpdateProfile,
+        handleUploadMedia,
+        retry,
+        refreshStatus,
+        refreshProfile,
     } = useWhatsApp();
 
     return (
@@ -34,11 +42,19 @@ export default function WhatsAppPage() {
             error={error}
             isDemoMode={isDemoMode}
             sending={sending}
+            waStatus={waStatus}
+            waProfile={waProfile}
+            waStatusLoading={waStatusLoading}
             onSendMessage={handleSendMessage}
             onSetLabels={handleSetLabels}
             onTogglePin={handleTogglePin}
             onToggleArchive={handleToggleArchive}
+            onAssignConversation={handleAssignConversation}
+            onUpdateProfile={handleUpdateProfile}
+            onUploadMedia={handleUploadMedia}
             onRetry={retry}
+            refreshStatus={refreshStatus}
+            refreshProfile={refreshProfile}
         />
     );
 }

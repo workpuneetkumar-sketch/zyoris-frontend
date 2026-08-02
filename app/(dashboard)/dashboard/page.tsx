@@ -6,7 +6,7 @@ import api from "@/lib/api/api";
 import { getDashboardAnomalies, getMorningBriefing, AnomalyAlertItem, MorningBriefingData } from "@/lib/api/aiBriefingApi";
 import {
   Users, Briefcase, DollarSign, Clock, Mail, PhoneCall,
-  LucideIcon, X, Sparkles, LayoutDashboard,
+  LucideIcon, X, Sparkles, LayoutDashboard, CalendarDays,
 } from "lucide-react";
 import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
 import { useDashboardBuilder } from "@/hooks/useDashboardBuilder";
@@ -15,6 +15,7 @@ import { WidgetLibrary } from "@/components/dashboard-builder/WidgetLibrary";
 import { DashboardCanvas } from "@/components/dashboard-builder/DashboardCanvas";
 import { LayoutManager } from "@/components/dashboard-builder/LayoutManager";
 import { WidgetDefinition } from "@/types/dashboard-builder";
+import { WeeklyAIBriefing } from "@/components/dashboard/WeeklyAIBriefing";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -129,6 +130,7 @@ export default function DashboardPage() {
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [managerOpen, setManagerOpen] = useState(false);
   const [showInsights, setShowInsights] = useState(false);
+  const [showWeeklyBriefing, setShowWeeklyBriefing] = useState(false);
 
   const handleAddWidget = (def: WidgetDefinition) => { builder.addWidget(def); setLibraryOpen(false); };
 
@@ -155,6 +157,32 @@ export default function DashboardPage() {
             <Sparkles size={14} />
             <span className="hidden xs:inline">AI Insights</span>
             <span className="xs:hidden">AI</span>
+          </button>
+
+          {/* Weekly AI Briefing toggle */}
+          <button
+            onClick={() => setShowWeeklyBriefing((v) => !v)}
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
+              showWeeklyBriefing
+                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200"
+                : "bg-white hover:bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm"
+            }`}
+          >
+            <CalendarDays size={14} />
+            <span className="hidden sm:inline">Weekly AI Briefing</span>
+            <span className="sm:hidden">Weekly</span>
+            {/* Toggle pill */}
+            <span
+              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                showWeeklyBriefing ? "bg-indigo-400" : "bg-gray-300"
+              }`}
+            >
+              <span
+                className={`absolute h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                  showWeeklyBriefing ? "translate-x-3.5" : "translate-x-0.5"
+                }`}
+              />
+            </span>
           </button>
 
           <button
@@ -208,6 +236,13 @@ export default function DashboardPage() {
           ))}
         </div>
       </div>
+
+      {/* ── Weekly AI Briefing ───────────────────────────────── */}
+      {showWeeklyBriefing && (
+        <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100 animate-in fade-in slide-in-from-top-2 duration-300">
+          <WeeklyAIBriefing />
+        </div>
+      )}
 
       {/* ── Custom Dashboard Canvas ──────────────────────────── */}
       {(!builder.isEmpty || builder.isLoading) && (

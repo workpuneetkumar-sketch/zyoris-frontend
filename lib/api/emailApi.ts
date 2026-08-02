@@ -148,3 +148,52 @@ export async function syncEmails(): Promise<any> {
     const res = await api.post("/email/sync");
     return res.data;
 }
+
+// ── POST AI summarize email thread ────────────────────────────────────────────
+// Endpoint: POST /email/{id}/ai-summary
+
+export interface EmailAISummaryResponse {
+    summary: string;
+}
+
+export async function aiSummarizeThread(emailId: string): Promise<EmailAISummaryResponse> {
+    const res = await api.post(`/email/${emailId}/ai-summary`);
+    const data = res.data?.data || res.data;
+    return { summary: data.summary || data.text || data.result || JSON.stringify(data) };
+}
+
+// ── POST AI reply suggestion ──────────────────────────────────────────────────
+// Endpoint: POST /email/ai-reply-suggestion
+
+export interface EmailAIReplySuggestionResponse {
+    suggestion: string;
+}
+
+export async function aiReplySuggestion(payload: {
+    emailId?: string;
+    threadId?: string;
+    body?: string;
+    subject?: string;
+}): Promise<EmailAIReplySuggestionResponse> {
+    const res = await api.post("/email/ai-reply-suggestion", payload);
+    const data = res.data?.data || res.data;
+    const suggestion =
+        data.suggestion || data.reply || data.text || data.result || "";
+    return { suggestion };
+}
+
+// ── POST AI subject suggestion ────────────────────────────────────────────────
+// Endpoint: POST /email/ai-subject-suggestion
+
+export interface EmailAISubjectSuggestionResponse {
+    subject: string;
+}
+
+export async function aiSubjectSuggestion(payload: {
+    body?: string;
+    context?: string;
+}): Promise<EmailAISubjectSuggestionResponse> {
+    const res = await api.post("/email/ai-subject-suggestion", payload);
+    const data = res.data?.data || res.data;
+    return { subject: data.subject || data.text || data.result || "" };
+}

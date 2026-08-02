@@ -34,6 +34,7 @@ import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { toast } from "react-toastify";
 import { AiExtractionCard } from "@/components/ai/AiExtractionCard";
 import { AiBadge } from "@/components/ai/AiBadge";
+import { CommunicationIntelligenceWidget } from "@/components/ai/CommunicationIntelligenceWidget";
 
 // Helper to format date safely
 function formatDate(dateString: string | undefined) {
@@ -407,6 +408,9 @@ export default function LeadDetailPage() {
             {extractionData && (
                 <AiExtractionCard data={extractionData} />
             )}
+
+            {/* AI Communication Intelligence Widget */}
+            <CommunicationIntelligenceWidget leadId={leadId} />
 
             {/* Ownership & Assignment */}
             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

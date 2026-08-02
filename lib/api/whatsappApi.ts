@@ -73,15 +73,38 @@ function parseApiErrorDetail(error: any): WhatsAppApiErrorDetail {
     if (error?.response) {
         const status = error.response.status;
         const data = error.response.data;
-        const msg = data?.message || data?.error;
-        const errorCode = data?.error;
-        if (status === 404) return { status, errorCode, message: msg || "Conversation not found (404)" };
-        if (status === 401) return { status, errorCode, message: msg || "Unauthorized access (401). Please verify authentication." };
-        if (status === 400) return { status, errorCode, message: msg || "Invalid request validation failed (400)." };
-        if (status >= 500) return { status, errorCode, message: msg || "Server error occurred. Please try again (500)." };
-        return { status, errorCode, message: msg || `Request failed with status ${status}` };
+
+        // Log the raw error data to help debug
+        if (process.env.NODE_ENV !== "production") {
+            console.error("[WhatsApp API Error]", { status, data });
+        }
+
+        // Try all common backend error message fields, including nested ones
+        const msg =
+            data?.message ||
+            data?.error ||
+            data?.detail ||
+            data?.msg ||
+            data?.errors?.[0]?.message ||
+            data?.errors?.[0] ||
+            (typeof data === "string" ? data : null);
+
+        const errorCode = data?.code || data?.errorCode;
+
+        if (status === 404) return { status, errorCode, message: msg || "Not found (404)" };
+        if (status === 401) return { status, errorCode, message: msg || "Unauthorized (401). Please log in again." };
+        if (status === 400) return { status, errorCode, message: msg || "Invalid request (400)." };
+        if (status === 403) return { status, errorCode, message: msg || "Permission denied (403)." };
+        if (status === 422) return { status, errorCode, message: msg || "Unprocessable request (422)." };
+        if (status >= 500) return { status, errorCode, message: msg || "Server error. Please try again." };
+        return { status, errorCode, message: msg || `Request failed (${status})` };
     }
-    return { message: error?.message || "Network error occurred" };
+    // Network / timeout errors
+    if (error?.code === "ECONNABORTED" || error?.code === "ETIMEDOUT") {
+        return { message: "Request timed out. Please check your connection." };
+    }
+    if (error?.message) return { message: error.message };
+    return { message: "Network error. Please check your connection." };
 }
 
 function parseApiError(error: any): string {
@@ -144,10 +167,31 @@ export async function fetchConversations(): Promise<WhatsAppConversation[]> {
 
 export async function sendWhatsAppMessage(data: SendWhatsAppPayload): Promise<WhatsAppMessage> {
     try {
-        const res = await api.post("/whatsapp/send", data);
-        return normalizeWhatsAppMessage(res.data?.message || res.data);
+        // Only send fields the backend accepts: to, message (+ optional media fields)
+        // conversationId is not in the API spec and may cause validation errors
+        const payload: Record<string, any> = { to: data.to };
+        if (data.message) payload.message = data.message;
+
+        if (process.env.NODE_ENV !== "production") {
+            console.log("[WhatsApp Send] payload:", JSON.stringify(payload));
+        }
+
+        const res = await api.post("/whatsapp/send", payload);
+
+        if (process.env.NODE_ENV !== "production") {
+            console.log("[WhatsApp Send] success response:", res.status, JSON.stringify(res.data));
+        }
+
+        return normalizeWhatsAppMessage(res.data?.message || res.data?.data || res.data);
     } catch (err: any) {
-        throw new Error(parseApiError(err));
+        const detail = parseApiErrorDetail(err);
+        if (process.env.NODE_ENV !== "production") {
+            console.error("[WhatsApp Send] error detail:", detail);
+        }
+        const error: any = new Error(detail.message);
+        error.status = detail.status;
+        error.errorCode = detail.errorCode;
+        throw error;
     }
 }
 
@@ -204,7 +248,9 @@ export async function setConversationArchived(id: string, archived: boolean): Pr
 export async function fetchAISummary(conversationId: string): Promise<AISummaryResponse> {
     try {
         const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-summary`);
-        return { summary: res.data.data.summary };
+        const data = res.data?.data ?? res.data;
+        const summary = data?.summary || data?.text || data?.result || (typeof data === "string" ? data : "");
+        return { summary };
     } catch (err: any) {
         const detail = parseApiErrorDetail(err);
         const error: any = new Error(detail.message);
@@ -217,9 +263,10 @@ export async function fetchAISummary(conversationId: string): Promise<AISummaryR
 export async function fetchAISentiment(conversationId: string): Promise<AISentimentResponse> {
     try {
         const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-sentiment`);
-        return { 
-            sentiment: res.data.data.overallSentiment, 
-            score: res.data.data.confidence 
+        const data = res.data?.data ?? res.data;
+        return {
+            sentiment: data?.overallSentiment || data?.sentiment || data?.label || "Unknown",
+            score: data?.confidence ?? data?.score,
         };
     } catch (err: any) {
         const detail = parseApiErrorDetail(err);
@@ -233,9 +280,18 @@ export async function fetchAISentiment(conversationId: string): Promise<AISentim
 export async function fetchAISuggestions(conversationId: string): Promise<AISuggestionsResponse> {
     try {
         const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-suggestions`);
-        const suggestionsArray = res.data.data.suggestions || [];
-        return { 
-            suggestions: suggestionsArray.map((s: any) => s.text || s) 
+        // Handle multiple possible shapes: data.data.suggestions | data.suggestions | data.data (array) | data (array)
+        const outer = res.data?.data ?? res.data;
+        let raw: any[] = [];
+        if (Array.isArray(outer)) {
+            raw = outer;
+        } else if (Array.isArray(outer?.suggestions)) {
+            raw = outer.suggestions;
+        } else if (Array.isArray(res.data?.suggestions)) {
+            raw = res.data.suggestions;
+        }
+        return {
+            suggestions: raw.map((s: any) => (typeof s === "string" ? s : s?.text || s?.message || JSON.stringify(s))).filter(Boolean),
         };
     } catch (err: any) {
         const detail = parseApiErrorDetail(err);
@@ -256,6 +312,193 @@ export async function sendBroadcast(payload: BroadcastPayload): Promise<Broadcas
         error.status = detail.status;
         error.errorCode = detail.errorCode;
         throw error;
+    }
+}
+
+/* ---------------------------------------------------
+   ASSIGN CONVERSATION
+   PATCH /whatsapp/conversations/{id}/assign
+--------------------------------------------------- */
+
+export interface AssignConversationPayload {
+    userId: string | null; // null = unassign
+}
+
+export async function assignConversation(
+    id: string,
+    userId: string | null
+): Promise<WhatsAppConversation> {
+    try {
+        // Backend expects "assignedToId" per API spec
+        const res = await api.patch(`/whatsapp/conversations/${id}/assign`, { assignedToId: userId });
+        return normalizeWhatsAppConversation(res.data?.data || res.data);
+    } catch (err: any) {
+        throw new Error(parseApiError(err));
+    }
+}
+
+/* ---------------------------------------------------
+   SEND TEMPLATE MESSAGE
+   POST /whatsapp/send-template
+--------------------------------------------------- */
+
+export interface SendTemplatePayload {
+    to: string;
+    templateName: string;
+    language: string;
+    parameters?: string[];
+    conversationId?: string;
+}
+
+export async function sendTemplateMessage(payload: SendTemplatePayload): Promise<any> {
+    try {
+        const res = await api.post("/whatsapp/send-template", payload);
+        return res.data?.data || res.data;
+    } catch (err: any) {
+        throw new Error(parseApiError(err));
+    }
+}
+
+/* ---------------------------------------------------
+   STATUS
+   GET /whatsapp/status
+--------------------------------------------------- */
+
+export interface WhatsAppStatusResponse {
+    connected: boolean;
+    phoneNumber?: string;
+    displayName?: string;
+    accountStatus?: string;
+    qualityRating?: string;
+    messagingLimit?: string;
+    [key: string]: any;
+}
+
+export async function fetchWhatsAppStatus(): Promise<WhatsAppStatusResponse | null> {
+    try {
+        const res = await api.get("/whatsapp/status");
+        const data = res.data?.data || res.data;
+
+        // Debug log so we can see exactly what the backend returns
+        if (process.env.NODE_ENV !== "production") {
+            console.log("[WhatsApp Status] raw response:", res.status, JSON.stringify(data));
+        }
+
+        // Determine connected: explicit boolean > status string comparison > default true
+        let connected = true;
+        if (typeof data?.connected === "boolean") {
+            connected = data.connected;
+        } else if (typeof data?.status === "string") {
+            connected = data.status === "connected" || data.status === "CONNECTED";
+        }
+        return {
+            connected,
+            phoneNumber: data?.phoneNumber || data?.phone_number,
+            displayName: data?.displayName || data?.display_name,
+            accountStatus: data?.accountStatus || data?.account_status,
+            qualityRating: data?.qualityRating || data?.quality_rating,
+            messagingLimit: data?.messagingLimit || data?.messaging_limit,
+            ...(data || {}),
+        };
+    } catch (err: any) {
+        // Endpoint may not exist yet — return null so UI can show "N/A"
+        if (process.env.NODE_ENV !== "production") {
+            console.warn("[WhatsApp Status] fetch failed:", parseApiError(err));
+        }
+        return null;
+    }
+}
+
+/* ---------------------------------------------------
+   BUSINESS PROFILE
+   GET  /whatsapp/profile
+   PATCH /whatsapp/profile
+--------------------------------------------------- */
+
+export interface WhatsAppBusinessProfile {
+    about?: string;
+    address?: string;
+    description?: string;
+    email?: string;
+    websites?: string[];
+    vertical?: string;
+    profilePictureUrl?: string;
+    [key: string]: any;
+}
+
+export async function fetchWhatsAppProfile(): Promise<WhatsAppBusinessProfile | null> {
+    try {
+        const res = await api.get("/whatsapp/profile");
+        return res.data?.data || res.data;
+    } catch (err: any) {
+        // Endpoint may not exist yet — return null so UI can handle gracefully
+        console.warn("fetchWhatsAppProfile failed:", parseApiError(err));
+        return null;
+    }
+}
+
+export async function updateWhatsAppProfile(
+    updates: Partial<WhatsAppBusinessProfile>
+): Promise<WhatsAppBusinessProfile> {
+    try {
+        const res = await api.patch("/whatsapp/profile", updates);
+        return res.data?.data || res.data;
+    } catch (err: any) {
+        throw new Error(parseApiError(err));
+    }
+}
+
+/* ---------------------------------------------------
+   MEDIA
+   POST /whatsapp/media         – upload
+   GET  /whatsapp/media/{id}    – download / get URL
+--------------------------------------------------- */
+
+export interface WhatsAppMediaUploadResponse {
+    mediaId: string;
+    url?: string;
+    mimeType?: string;
+    [key: string]: any;
+}
+
+export interface WhatsAppMediaResponse {
+    mediaId: string;
+    url: string;
+    mimeType?: string;
+    fileSize?: number;
+    [key: string]: any;
+}
+
+export async function uploadWhatsAppMedia(file: File): Promise<WhatsAppMediaUploadResponse> {
+    try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await api.post("/whatsapp/media", formData);
+        const data = res.data?.data || res.data;
+        return {
+            mediaId: data.mediaId || data.id || data.media_id || "",
+            url: data.url,
+            mimeType: data.mimeType || data.mime_type,
+            ...data,
+        };
+    } catch (err: any) {
+        throw new Error(parseApiError(err));
+    }
+}
+
+export async function fetchWhatsAppMedia(mediaId: string): Promise<WhatsAppMediaResponse> {
+    try {
+        const res = await api.get(`/whatsapp/media/${mediaId}`);
+        const data = res.data?.data || res.data;
+        return {
+            mediaId: data.mediaId || data.id || data.media_id || mediaId,
+            url: data.url || "",
+            mimeType: data.mimeType || data.mime_type,
+            fileSize: data.fileSize || data.file_size,
+            ...data,
+        };
+    } catch (err: any) {
+        throw new Error(parseApiError(err));
     }
 }
 

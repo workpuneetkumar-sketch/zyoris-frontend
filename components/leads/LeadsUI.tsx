@@ -333,6 +333,7 @@ export function LeadsTable({
     const [isViewOpen, setIsViewOpen] = useState(false);
     const [isUploadOpen, setIsUploadOpen] = useState(false);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
     // Share modal state
     const [sharingLead, setSharingLead] = useState<Lead | null>(null);
@@ -386,9 +387,9 @@ export function LeadsTable({
 
     // ── Handle Delete ──────────────────────────────────────────
     const handleDelete = async (leadId: string) => {
-        if (!confirm("Are you sure you want to delete this lead?")) return;
-        
         setDeletingId(leadId);
+        setOpenMenu(null);
+        setMenuPos(null);
         try {
             const result = await deleteLead(leadId);
             if (result.success) {
@@ -400,8 +401,7 @@ export function LeadsTable({
             toast.error(error.message || "Failed to delete lead");
         } finally {
             setDeletingId(null);
-            setOpenMenu(null);
-            setMenuPos(null);
+            setConfirmDeleteId(null);
         }
     };
 
@@ -757,7 +757,9 @@ export function LeadsTable({
                                         onClick={() => {
                                             const lead = safeLeads.find((l) => l.id === openMenu);
                                             if (lead) {
-                                                handleDelete(lead.id);
+                                                setConfirmDeleteId(lead.id);
+                                                setOpenMenu(null);
+                                                setMenuPos(null);
                                             }
                                         }}
                                         className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-red-500 border-t border-gray-100 mt-1 pt-1"
@@ -988,6 +990,46 @@ export function LeadsTable({
                         toast.success("Leads imported successfully!");
                     }}
                 />
+            )}
+
+            {/* ── Delete Confirm Modal ── */}
+            {confirmDeleteId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+                    <div className="bg-white w-full max-w-sm rounded-2xl shadow-2xl overflow-hidden">
+                        <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
+                            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center mb-4">
+                                <Trash2 size={22} className="text-red-500" />
+                            </div>
+                            <h2 className="text-[16px] font-bold text-gray-900 mb-1">Delete Lead</h2>
+                            <p className="text-[13px] text-gray-500">
+                                Are you sure you want to delete this lead? This action cannot be undone.
+                            </p>
+                        </div>
+                        <div className="flex gap-3 px-6 pb-6">
+                            <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                disabled={deletingId === confirmDeleteId}
+                                className="flex-1 h-10 rounded-xl border border-gray-200 text-[13px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => handleDelete(confirmDeleteId)}
+                                disabled={deletingId === confirmDeleteId}
+                                className="flex-1 h-10 rounded-xl bg-red-600 text-white text-[13px] font-semibold hover:bg-red-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2"
+                            >
+                                {deletingId === confirmDeleteId ? (
+                                    <>
+                                        <SpinnerIcon size={14} className="animate-spin" />
+                                        Deleting…
+                                    </>
+                                ) : (
+                                    "Delete"
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );
