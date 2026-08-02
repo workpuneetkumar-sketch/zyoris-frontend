@@ -77,8 +77,9 @@ function normaliseList(raw: unknown): BackendDeal[] {
 // Swagger: GET /api/deals/get-deals
 
 export async function fetchDeals(): Promise<Deal[]> {
-    const res = await api.get("/api/deals/get-deals");
-    return normaliseList(res.data).map(mapDeal);
+    const res = await api.get("/api/deals/get-deals?limit=1000");
+    // Backend returns { data: deals[], pagination: {...} }
+    return (res.data.data || []).map(mapDeal);
 }
 
 // ── GET single deal ───────────────────────────────────────────────────────
