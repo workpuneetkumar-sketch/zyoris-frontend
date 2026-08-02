@@ -198,7 +198,7 @@ export function useZiiBotChat() {
       setIsTyping(false);
       abortRef.current = null;
     }
-  }, [messages, isTyping, orgContext, roleContext, user, token, soundOn, voiceService]);
+  }, [isTyping, soundOn, voiceService]);
 
   const toggleSound = useCallback(() => {
     const next = !getSoundEnabled();

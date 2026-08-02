@@ -260,7 +260,7 @@ export function WhatsAppUI({
     const archivedCount = conversations.filter(c => c.archived).length;
     // null waStatus = endpoint unavailable/failed → show "N/A"
     // non-null waStatus = real response from backend → use connected field
-    const isConnected: boolean | null = waStatus === null ? null : (waStatus.connected ?? true);
+    const isConnected: boolean | null = waStatus == null ? null : (waStatus.connected ?? true);
 
     const renderConversationCard = (conv: WhatsAppConversation) => {
         const lastMsg = conv.messages[conv.messages.length - 1];
