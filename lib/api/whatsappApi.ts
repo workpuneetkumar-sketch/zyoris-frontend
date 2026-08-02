@@ -204,7 +204,7 @@ export async function setConversationArchived(id: string, archived: boolean): Pr
 export async function fetchAISummary(conversationId: string): Promise<AISummaryResponse> {
     try {
         const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-summary`);
-        return res.data;
+        return { summary: res.data.data.summary };
     } catch (err: any) {
         const detail = parseApiErrorDetail(err);
         const error: any = new Error(detail.message);
@@ -217,7 +217,10 @@ export async function fetchAISummary(conversationId: string): Promise<AISummaryR
 export async function fetchAISentiment(conversationId: string): Promise<AISentimentResponse> {
     try {
         const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-sentiment`);
-        return res.data;
+        return { 
+            sentiment: res.data.data.overallSentiment, 
+            score: res.data.data.confidence 
+        };
     } catch (err: any) {
         const detail = parseApiErrorDetail(err);
         const error: any = new Error(detail.message);
@@ -230,7 +233,10 @@ export async function fetchAISentiment(conversationId: string): Promise<AISentim
 export async function fetchAISuggestions(conversationId: string): Promise<AISuggestionsResponse> {
     try {
         const res = await api.post(`/whatsapp/conversations/${conversationId}/ai-suggestions`);
-        return res.data;
+        const suggestionsArray = res.data.data.suggestions || [];
+        return { 
+            suggestions: suggestionsArray.map((s: any) => s.text || s) 
+        };
     } catch (err: any) {
         const detail = parseApiErrorDetail(err);
         const error: any = new Error(detail.message);
