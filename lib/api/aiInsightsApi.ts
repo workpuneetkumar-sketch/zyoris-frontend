@@ -88,3 +88,38 @@ export async function getDashboardInsights(
 
   throw new Error(message);
 }
+
+// =========================================
+// AI Business Intelligence API
+// =========================================
+
+export async function uploadDataset(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post("/insights/dashboard/upload", formData);
+  return response.data;
+}
+
+export async function getDatasetDetails(datasetId: string) {
+  const response = await api.get(`/insights/dashboard/dataset/${datasetId}`);
+  return response.data;
+}
+
+export async function getDatasetInsights(datasetId: string) {
+  const response = await api.get(`/insights/dashboard/insights/${datasetId}`);
+  return response.data;
+}
+
+export async function getDatasetCharts(datasetId: string) {
+  const response = await api.get(`/insights/dashboard/charts/${datasetId}`);
+  return response.data;
+}
+
+export async function chatWithDataset(datasetId: string, message: string, conversationId?: string) {
+  const response = await api.post("/insights/dashboard/chat", {
+    datasetId,
+    message,
+    conversationId
+  });
+  return response.data;
+}
