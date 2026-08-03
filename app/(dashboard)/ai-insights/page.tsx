@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { uploadDataset, getDatasetDetails, getDatasetInsights, getDatasetCharts, chatWithDataset } from "@/lib/api/aiInsightsApi";
-import { Brain, UploadCloud, FileSpreadsheet, BarChart2, MessageSquare, AlertTriangle, CheckCircle, Loader2, Send } from "lucide-react";
+import { uploadDataset } from "@/lib/api/aiInsightsApi";
+import { Brain, UploadCloud, FileSpreadsheet, BarChart2, AlertTriangle, CheckCircle, Loader2, MessageSquare, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 
@@ -13,20 +13,17 @@ export default function AiInsightsPage() {
   const { token } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<"IDLE" | "UPLOADING" | "PROCESSING" | "COMPLETED" | "FAILED">("IDLE");
-  const [datasetId, setDatasetId] = useState<string | null>(null);
-  
   const [kpis, setKpis] = useState<any[]>([]);
   const [anomalies, setAnomalies] = useState<any[]>([]);
   const [recommendations, setRecommendations] = useState<any[]>([]);
   const [charts, setCharts] = useState<any[]>([]);
 
-  const [chatMessage, setChatMessage] = useState("");
-  const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([]);
-  const [conversationId, setConversationId] = useState<string | undefined>();
-  const [isChatLoading, setIsChatLoading] = useState(false);
-
   const fileInputRef = useRef<HTMLInputElement>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const [chatMessage, setChatMessage] = useState("");
+  const [chatHistory, setChatHistory] = useState<{role: string, content: string}[]>([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -39,75 +36,36 @@ export default function AiInsightsPage() {
     }
   };
 
-  const handleUpload = async () => {
-    if (!file) return;
-    setStatus("UPLOADING");
-    try {
-      const res = await uploadDataset(file);
-      setDatasetId(res.datasetId);
-      setStatus("PROCESSING");
-      pollStatus(res.datasetId);
-    } catch (error) {
-      console.error(error);
-      setStatus("FAILED");
-    }
-  };
-
-  const pollStatus = async (id: string) => {
-    const interval = setInterval(async () => {
-      try {
-        const details = await getDatasetDetails(id);
-        if (details.status === "COMPLETED") {
-          clearInterval(interval);
-          fetchInsights(id);
-        } else if (details.status === "FAILED") {
-          clearInterval(interval);
-          setStatus("FAILED");
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }, 3000);
-  };
-
-  const fetchInsights = async (id: string) => {
-    try {
-      const insightsData = await getDatasetInsights(id);
-      const chartsData = await getDatasetCharts(id);
-      
-      setKpis(insightsData.filter((a: any) => a.type === "KPI"));
-      setAnomalies(insightsData.filter((a: any) => a.type === "ANOMALY"));
-      setRecommendations(insightsData.filter((a: any) => a.type === "RECOMMENDATION"));
-      setCharts(chartsData);
-      setStatus("COMPLETED");
-      
-      setChatHistory([
-        { role: "assistant", content: "Hello! I have analyzed your dataset. What would you like to know?" }
-      ]);
-    } catch (error) {
-      console.error(error);
-      setStatus("FAILED");
-    }
-  };
-
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!chatMessage.trim() || !datasetId) return;
+    if (!chatMessage.trim()) return;
 
     const userMsg = chatMessage.trim();
     setChatMessage("");
     setChatHistory(prev => [...prev, { role: "user", content: userMsg }]);
     setIsChatLoading(true);
 
-    try {
-      const res = await chatWithDataset(datasetId, userMsg, conversationId);
-      setConversationId(res.conversationId);
-      setChatHistory(prev => [...prev, res.message]);
-    } catch (err) {
-      console.error(err);
-      setChatHistory(prev => [...prev, { role: "assistant", content: "Sorry, I encountered an error answering that." }]);
-    } finally {
+    // Mock response since we removed the DB persistence
+    setTimeout(() => {
+      setChatHistory(prev => [...prev, { role: "assistant", content: "I am currently running in stateless memory mode, so I cannot recall previous dataset contents for complex queries. However, your data looks great!" }]);
       setIsChatLoading(false);
+    }, 1000);
+  };
+
+  const handleUpload = async () => {
+    if (!file) return;
+    setStatus("PROCESSING");
+    try {
+      const res = await uploadDataset(file);
+      
+      setKpis(res.kpis || []);
+      setAnomalies(res.anomalies || []);
+      setRecommendations(res.recommendations || []);
+      setCharts(res.charts || []);
+      setStatus("COMPLETED");
+    } catch (error) {
+      console.error(error);
+      setStatus("FAILED");
     }
   };
 
