@@ -57,7 +57,8 @@ interface AssignmentAnalyticsDashboardProps {
   filters: AssignmentAnalyticsFilters;
   onFiltersChange: (f: AssignmentAnalyticsFilters) => void;
   onRefresh: () => void;
-}export function AssignmentAnalyticsDashboard({
+}
+export function AssignmentAnalyticsDashboard({
   analytics, loading, error, backendAvailable,
   filters, onFiltersChange, onRefresh,
 }: AssignmentAnalyticsDashboardProps) {
@@ -83,6 +84,8 @@ interface AssignmentAnalyticsDashboardProps {
   }
 
   const data = analytics;
+  // Detect if the backend returned data but it's all zeros (no assignments run yet)
+  const hasNoData = !data || (data.totalAssignments === 0 && data.distribution.length === 0 && data.overTime.length === 0);
 
   return (
     <div className="space-y-6">
@@ -134,11 +137,24 @@ interface AssignmentAnalyticsDashboardProps {
         </button>
       </div>
 
+      {/* No-data callout */}
+      {hasNoData && (
+        <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200">
+          <Zap size={18} className="text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-[13px] font-semibold text-amber-800">No assignment data yet</p>
+            <p className="text-[12px] text-amber-700 mt-0.5">
+              Analytics will populate once leads are processed through your assignment rules. Your rules are configured — data will appear after the next batch of leads is auto-assigned.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Assignments" value={data?.totalAssignments ?? 0} icon={Users} color="bg-blue-500" />
         <StatCard label="Total Converted" value={data?.totalConverted ?? 0} icon={TrendingUp} color="bg-emerald-500" sub="leads converted" />
-        <StatCard label="Conversion Rate" value={data?.conversionRate ? `${data.conversionRate.toFixed(1)}%` : "0.0%"} icon={TrendingUp} color="bg-teal-500" />
+        <StatCard label="Conversion Rate" value={data?.conversionRate ? `${(data.conversionRate * (data.conversionRate <= 1 ? 100 : 1)).toFixed(1)}%` : "0.0%"} icon={TrendingUp} color="bg-teal-500" />
         <StatCard label="Avg Response Time" value={data?.avgResponseTime ? `${data.avgResponseTime}m` : "—"} icon={Clock} color="bg-indigo-500" sub="minutes (avg)" />
       </div>
 

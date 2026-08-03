@@ -181,8 +181,6 @@ export async function getAssignmentHistory(
   };
 }
 
-// ── LIVE: GET /leads/assignment-analytics ───────────────────────────────
-
 export async function getAssignmentAnalytics(
   filters?: Partial<AssignmentAnalyticsFilters>
 ): Promise<AssignmentAnalytics> {
@@ -207,36 +205,90 @@ export async function getAssignmentAnalytics(
     if (filters?.groupBy) params.groupBy = filters.groupBy;
 
     const res = await api.get("/leads/assignment-analytics", { params });
-    // Response shape: { success: true, data: { overview: {...}, distribution: [], strategyBreakdown: [] } }
+    // Backend shape: { success, data: { overview, distribution, conversionRate, strategyBreakdown,
+    //   strategyPerformance, summary, timeLine, topAssignees } }
     const d = res.data?.data ?? res.data;
 
     // Pull from overview sub-object (actual backend shape)
-    const overview = d?.overview ?? d ?? {};
-    const strategyBreakdown: any[] = d?.strategyBreakdown ?? d?.byStrategy ?? [];
+    const overview = d?.overview ?? {};
+    const summary  = d?.summary  ?? {};
+
+    // Strategy data: try strategyBreakdown first, then strategyPerformance
+    const rawStrategy: any[] = Array.isArray(d?.strategyBreakdown)
+      ? d.strategyBreakdown
+      : Array.isArray(d?.strategyPerformance)
+      ? d.strategyPerformance
+      : Array.isArray(d?.byStrategy)
+      ? d.byStrategy
+      : [];
+
+    // Timeline: backend sends timeLine or overTime
+    const rawTimeline: any[] = Array.isArray(d?.timeLine)
+      ? d.timeLine
+      : Array.isArray(d?.overTime)
+      ? d.overTime
+      : [];
+
+    // Top assignees: backend sends topAssignees or topPerformers
+    const rawTop: any[] = Array.isArray(d?.topAssignees)
+      ? d.topAssignees
+      : Array.isArray(d?.topPerformers)
+      ? d.topPerformers
+      : [];
+
+    // conversionRate may live at d.conversionRate (top level array) or overview.conversionRate (number)
+    const conversionRateNum: number =
+      typeof overview.conversionRate === "number"
+        ? overview.conversionRate
+        : typeof summary.conversionRate === "number"
+        ? summary.conversionRate
+        : typeof d?.conversionRate === "number"
+        ? d.conversionRate
+        : 0;
 
     return {
-      // Primary KPIs — map from overview object
-      totalAssignments: overview.totalAssignments ?? d.totalAssignments ?? 0,
-      totalConverted:   overview.totalConverted   ?? d.totalConverted   ?? 0,
-      conversionRate:   overview.conversionRate   ?? d.conversionRate   ?? 0,
-      // Backend sends averageResponseTimeSeconds; convert to minutes for display
+      // Primary KPIs
+      totalAssignments: overview.totalAssignments ?? summary.totalAssignments ?? d?.totalAssignments ?? 0,
+      totalConverted:   overview.totalConverted   ?? summary.totalConverted   ?? d?.totalConverted   ?? 0,
+      conversionRate:   conversionRateNum,
+      // averageResponseTimeSeconds → convert to minutes
       avgResponseTime:  overview.averageResponseTimeSeconds != null
         ? Math.round(overview.averageResponseTimeSeconds / 60)
-        : (d.avgResponseTime ?? 0),
-      activeRules: d.activeRules ?? 0,
+        : summary.avgResponseTime != null
+        ? Math.round(summary.avgResponseTime / 60)
+        : (d?.avgResponseTime ?? 0),
+      activeRules: d?.activeRules ?? 0,
 
-      // Array fields
-      distribution: Array.isArray(d.distribution) ? d.distribution : [],
-      overTime:     Array.isArray(d.overTime)     ? d.overTime     : [],
-      // Accept either strategyBreakdown (backend key) or byStrategy (our key)
-      byStrategy: strategyBreakdown.map((item: any) => ({
+      // Distribution (pie chart)
+      distribution: Array.isArray(d?.distribution) ? d.distribution : [],
+
+      // Timeline (line/area chart) — map timeLine entries
+      overTime: rawTimeline.map((item: any) => ({
+        date:  item.date  ?? item.period ?? item.day ?? item.week ?? item.month ?? "",
+        count: item.count ?? item.totalAssignments ?? item.total ?? 0,
+      })),
+
+      // Strategies (bar chart)
+      byStrategy: rawStrategy.map((item: any) => ({
         strategy:   item.strategy   ?? item.name   ?? "",
-        count:      item.count      ?? item.total  ?? 0,
+        count:      item.count      ?? item.total  ?? item.totalAssignments ?? 0,
         percentage: item.percentage ?? 0,
       })),
-      topPerformers:     Array.isArray(d.topPerformers)     ? d.topPerformers     : [],
-      ruleEffectiveness: Array.isArray(d.ruleEffectiveness) ? d.ruleEffectiveness : [],
-      period: d.period ?? { from: "", to: "" },
+
+      // Top performers leaderboard — map topAssignees fields
+      topPerformers: rawTop.map((item: any) => ({
+        assigneeId:     item.assigneeId ?? item.userId ?? item.id ?? "",
+        assigneeName:   item.assigneeName ?? item.name ?? item.userName ?? "—",
+        totalAssigned:  item.totalAssigned ?? item.count ?? item.totalAssignments ?? 0,
+        converted:      item.converted ?? item.totalConverted ?? 0,
+        conversionRate: item.conversionRate ?? 0,
+        avgResponseTime: item.avgResponseTime != null
+          ? Math.round(item.avgResponseTime / 60)
+          : null,
+      })),
+
+      ruleEffectiveness: Array.isArray(d?.ruleEffectiveness) ? d.ruleEffectiveness : [],
+      period: d?.period ?? { from: "", to: "" },
     };
   } catch {
     return {

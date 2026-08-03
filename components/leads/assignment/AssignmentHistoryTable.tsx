@@ -175,7 +175,15 @@ export function AssignmentHistoryTable({
         ) : error ? (
           <EmptyState title="Failed to load history" description={error} button={<button onClick={onRefresh} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium">Retry</button>} />
         ) : history.length === 0 ? (
-          <EmptyState title="No assignment history" description="Assignments will appear here once leads are assigned." />
+          <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mb-4">
+              <Search size={24} className="text-blue-400" />
+            </div>
+            <p className="text-[15px] font-semibold text-gray-800 mb-1">No assignment history yet</p>
+            <p className="text-[13px] text-gray-500 max-w-sm">
+              Assignment records will appear here once leads are automatically distributed through your assignment rules. Your rules are active — history will populate as new leads come in.
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

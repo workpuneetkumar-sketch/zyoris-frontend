@@ -261,7 +261,7 @@ export default function LeadsPage() {
                   leads={displayLeads}
                   total={displayTotal}
                   page={usingAdvanced ? (advFilters.page ?? 1) : page}
-                  perPage={PER_PAGE}
+                  perPage={usingAdvanced ? advFilters.pageSize : PER_PAGE}
                   filters={filters}
                   loading={isLoading}
                   openMenu={openMenu}

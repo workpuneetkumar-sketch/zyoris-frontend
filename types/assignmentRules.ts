@@ -118,7 +118,7 @@ export interface AssignmentDistributionItem {
 export interface AssignmentOverTimeItem {
   date: string;
   count: number;
-  strategy: string;
+  strategy?: string;
 }
 
 export interface StrategyBreakdownItem {
@@ -133,7 +133,7 @@ export interface TopPerformerItem {
   totalAssigned: number;
   converted: number;
   conversionRate: number;
-  avgResponseTime: number;
+  avgResponseTime: number | null;
 }
 
 export interface RuleEffectivenessItem {
