@@ -187,5 +187,28 @@ export async function uploadDataset(file: File) {
   const formData = new FormData();
   formData.append("file", file);
   const response = await api.post("/insights/dashboard/upload", formData);
+  return response.data; // { sessionId, message, status }
+}
+
+export async function getAnalysisSessions() {
+  const response = await api.get("/insights/dashboard/sessions");
+  return response.data;
+}
+
+export async function getAnalysisSession(sessionId: string) {
+  const response = await api.get(`/insights/dashboard/session/${sessionId}`);
+  return response.data;
+}
+
+export async function deleteAnalysisSession(sessionId: string) {
+  const response = await api.delete(`/insights/dashboard/session/${sessionId}`);
+  return response.data;
+}
+
+export async function chatWithDatasetSession(sessionId: string, message: string, chatSessionId?: string) {
+  const response = await api.post(`/insights/dashboard/session/${sessionId}/chat`, {
+    message,
+    chatSessionId
+  });
   return response.data;
 }
