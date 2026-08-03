@@ -84,14 +84,14 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
   };
 
   const formatCurrency = (amount: number | undefined): string => {
-    if (amount === undefined || amount === null) return "$0";
+    if (amount === undefined || amount === null) return "₹0";
     if (amount >= 1_000_000) {
-      return `$${(amount / 1_000_000).toFixed(1)}M`;
+      return `₹${(amount / 1_000_000).toFixed(1)}M`;
     }
     if (amount >= 1_000) {
-      return `$${(amount / 1_000).toFixed(0)}K`;
+      return `₹${(amount / 1_000).toFixed(0)}K`;
     }
-    return `$${amount.toLocaleString()}`;
+    return `₹${amount.toLocaleString("en-IN")}`;
   };
 
   const formatDate = (dateString: string | null | undefined): string => {
@@ -407,7 +407,7 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                   <label className="text-[11px] font-black text-gray-400 uppercase tracking-widest ml-1">Amount</label>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-400 font-bold">
-                      $
+                      ₹
                     </div>
                     <input 
                       type="number" 

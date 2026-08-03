@@ -180,11 +180,19 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     if (!name.trim()) { toast.error("Name cannot be empty"); return; }
     setSaving(true);
     try {
+      // Persist name via settings API using key "profile.name"
+      await saveSetting("profile.name", name.trim());
+      // Also try PATCH /auth/me if the endpoint exists
+      try {
+        await api.patch("/auth/me", { name: name.trim() });
+      } catch {
+        // endpoint may not exist yet — settings key is the fallback
+      }
       setOriginalName(name.trim());
       setIsEditing(false);
       setPhotoFile(null);
       setPhotoPreview(null);
-      toast.success("Profile updated!");
+      toast.success("Profile updated successfully!");
     } catch (e: any) {
       toast.error(e?.response?.data?.message ?? "Failed to save changes");
     } finally {

@@ -611,6 +611,7 @@ export function LeadsTable({
                             : `Showing ${total === 0 ? 0 : (page - 1) * perPage + 1} to ${Math.min(page * perPage, total)} of ${total} leads`}
                     </p>
                     <div className="flex items-center gap-1.5">
+                        {/* Prev */}
                         <button
                             onClick={() => onPageChange(Math.max(1, page - 1))}
                             disabled={page === 1 || loading}
@@ -618,26 +619,58 @@ export function LeadsTable({
                         >
                             <ChevronLeft size={18} />
                         </button>
-                        {Array.from({ length: totalPages }, (_, i) => i + 1)
-                            .filter((p) => p <= 5 || p === totalPages)
-                            .map((p, idx, arr) => (
-                                <>
-                                    {idx > 0 && arr[idx - 1] !== p - 1 && (
-                                        <span key={`e-${p}`} className="w-10 h-10 flex items-center justify-center text-gray-400 text-sm">…</span>
-                                    )}
+
+                        {/* Page buttons — windowed: always show 1, last, current±2, with ellipsis */}
+                        {(() => {
+                            const delta = 2;
+                            const range: number[] = [];
+                            const rangeWithDots: (number | "...")[] = [];
+                            let prev: number | undefined;
+
+                            for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) {
+                                range.push(i);
+                            }
+
+                            if (totalPages > 1) {
+                                // always include first
+                                [1, ...range, totalPages].forEach((i) => {
+                                    if (prev !== undefined) {
+                                        if (i - prev === 2) rangeWithDots.push(prev + 1);
+                                        else if (i - prev > 2) rangeWithDots.push("...");
+                                    }
+                                    rangeWithDots.push(i);
+                                    prev = i;
+                                });
+                            } else {
+                                rangeWithDots.push(1);
+                            }
+
+                            return rangeWithDots.map((p, idx) =>
+                                p === "..." ? (
+                                    <span
+                                        key={`dots-${idx}`}
+                                        className="w-10 h-10 flex items-center justify-center text-gray-400 text-sm select-none"
+                                    >
+                                        …
+                                    </span>
+                                ) : (
                                     <button
                                         key={p}
-                                        onClick={() => onPageChange(p)}
+                                        onClick={() => onPageChange(p as number)}
                                         disabled={loading}
-                                        className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium transition-all ${page === p
-                                            ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
-                                            : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                                            }`}
+                                        className={`w-10 h-10 flex items-center justify-center rounded-lg text-sm font-medium transition-all ${
+                                            page === p
+                                                ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
+                                                : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                                        }`}
                                     >
                                         {p}
                                     </button>
-                                </>
-                            ))}
+                                )
+                            );
+                        })()}
+
+                        {/* Next */}
                         <button
                             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                             disabled={page === totalPages || loading}

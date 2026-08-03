@@ -41,13 +41,13 @@ interface DealsUIProps {
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function formatCurrency(amount: number): string {
-    if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-    if (amount >= 1_000)     return `$${(amount / 1_000).toFixed(0)}K`;
-    return `$${amount.toLocaleString()}`;
+    if (amount >= 1_000_000) return `₹${(amount / 1_000_000).toFixed(1)}M`;
+    if (amount >= 1_000)     return `₹${(amount / 1_000).toFixed(0)}K`;
+    return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 function formatAmount(amount: number): string {
-    return `$${amount.toLocaleString()}`;
+    return `₹${amount.toLocaleString("en-IN")}`;
 }
 
 // ── Create Deal Modal ──────────────────────────────────────────────────────
@@ -143,10 +143,10 @@ function CreateDealModal({ defaultStage, creating, createError, onClose, onSave 
                     {/* Amount */}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Amount (USD) <span className="text-red-500">*</span>
+                            Amount (INR) <span className="text-red-500">*</span>
                         </label>
                         <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
                             <input
                                 name="amount"
                                 type="number"

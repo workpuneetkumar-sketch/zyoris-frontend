@@ -146,6 +146,17 @@ export default function LeadsPage() {
     handleFiltersChange({ status: "All Status", source: "All Sources", owner: "All Owners", search: "" });
   }, [handleFiltersChange]);
 
+  // Single page-change handler that works for both normal and advanced-filter modes
+  const handlePageChange = useCallback((newPage: number) => {
+    if (usingAdvanced) {
+      const updated = { ...advFilters, page: newPage };
+      setAdvFilters(updated);
+      loadWithAdvancedFilters(updated);
+    } else {
+      setPage(newPage);
+    }
+  }, [usingAdvanced, advFilters, loadWithAdvancedFilters, setPage]);
+
   const handleBulkSuccess = useCallback((type: BulkOperationType) => {
     if (usingAdvanced) void loadWithAdvancedFilters(advFilters);
     else void retry();
@@ -234,13 +245,13 @@ export default function LeadsPage() {
                 <LeadsTable
                   leads={displayLeads}
                   total={displayTotal}
-                  page={page}
+                  page={usingAdvanced ? (advFilters.page ?? 1) : page}
                   perPage={PER_PAGE}
                   filters={filters}
                   loading={isLoading}
                   openMenu={openMenu}
                   convertingId={null}
-                  onPageChange={setPage}
+                  onPageChange={handlePageChange}
                   onRefreshLeads={retry}
                   onFiltersChange={handleFiltersChange}
                   onNewLead={handleNewLead}

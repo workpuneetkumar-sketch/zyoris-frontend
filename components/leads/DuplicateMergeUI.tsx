@@ -447,7 +447,7 @@ function PreviewStep({
                 <span className="text-[11px] text-gray-400 w-24 shrink-0 pt-0.5">{label}</span>
                 <span className="text-[12px] font-medium text-gray-800 flex-1">
                   {key === "estimatedValue" && typeof value === "number"
-                    ? `$${value.toLocaleString()}`
+                    ? `₹${value.toLocaleString("en-IN")}`
                     : String(value)}
                 </span>
               </div>
