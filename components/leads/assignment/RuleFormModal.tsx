@@ -2,8 +2,9 @@
 // Rule Builder — matches POST /assignment-rules/create Swagger schema exactly
 
 import { useState, useEffect, useRef } from "react";
-import { X, Save, Loader2, HelpCircle, Plus, Tag } from "lucide-react";
+import { X, Save, Loader2, HelpCircle, Search, UserCheck, ChevronDown } from "lucide-react";
 import classNames from "classnames";
+import type { TeamMember } from "@/lib/api/organizationsApi";
 import type {
   AssignmentRule,
   CreateAssignmentRulePayload,
@@ -146,48 +147,170 @@ function TagInput({
   );
 }
 
-// ── AssigneeIds input ─────────────────────────────────────────────────────────
+// ── Team Member multi-select picker ───────────────────────────────────────────
 
-function AssigneeInput({ values, onChange }: { values: string[]; onChange: (v: string[]) => void }) {
-  const [input, setInput] = useState("");
+function TeamMemberPicker({
+  values,
+  onChange,
+  team,
+}: {
+  values: string[];
+  onChange: (v: string[]) => void;
+  team: TeamMember[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
 
-  function add() {
-    const v = input.trim();
-    if (v && !values.includes(v)) onChange([...values, v]);
-    setInput("");
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch("");
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = team.filter(
+    (m) =>
+      !search ||
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      m.email.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function toggle(id: string) {
+    if (values.includes(id)) onChange(values.filter((x) => x !== id));
+    else onChange([...values, id]);
   }
+
+  const selectedMembers = values
+    .map((id) => team.find((m) => m.id === id))
+    .filter(Boolean) as TeamMember[];
 
   return (
     <div>
-      <Label text="Assignee IDs *" hint="User IDs of reps eligible to receive leads under this rule" />
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
-            placeholder="Paste user ID and press Enter"
-            className={inputCls()}
-          />
-          <button
-            type="button"
-            onClick={add}
-            disabled={!input.trim()}
-            className="px-3 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary-dark transition-colors disabled:opacity-40 shrink-0"
-          >
-            <Plus size={15} />
-          </button>
-        </div>
-        {values.length > 0 && (
+      <Label text="Assignees *" hint="Select team members who will receive leads under this rule" />
+      <div className="space-y-2" ref={ref}>
+        {selectedMembers.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {values.map((id) => (
-              <span key={id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-success-light text-success text-[11.5px] font-medium font-mono">
-                {id.length > 16 ? `…${id.slice(-12)}` : id}
-                <button type="button" onClick={() => onChange(values.filter((x) => x !== id))} className="hover:text-error">
-                  <X size={11} />
+            {selectedMembers.map((m) => (
+              <span
+                key={m.id}
+                className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-[12px] font-medium"
+              >
+                <UserCheck size={11} />
+                {m.name}
+                <button
+                  type="button"
+                  onClick={() => onChange(values.filter((x) => x !== m.id))}
+                  className="w-4 h-4 flex items-center justify-center rounded-full hover:bg-primary/20 transition-colors"
+                >
+                  <X size={10} />
                 </button>
               </span>
             ))}
+          </div>
+        )}
+
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className={classNames(
+            "w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-sm transition-all",
+            open
+              ? "border-primary/50 ring-2 ring-primary/20 bg-background-secondary"
+              : "border-border bg-background-secondary hover:border-primary/30"
+          )}
+        >
+          <span className={values.length === 0 ? "text-text-muted" : "text-text font-medium"}>
+            {values.length === 0
+              ? "Select team members…"
+              : `${values.length} member${values.length > 1 ? "s" : ""} selected`}
+          </span>
+          <ChevronDown
+            size={15}
+            className={classNames("text-text-muted transition-transform duration-200", open && "rotate-180")}
+          />
+        </button>
+
+        {open && (
+          <div className="relative z-50">
+            <div className="absolute top-1 left-0 right-0 bg-surface rounded-xl border border-border shadow-2xl overflow-hidden">
+              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
+                <Search size={13} className="text-text-muted shrink-0" />
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search by name or email…"
+                  className="flex-1 bg-transparent text-sm text-text placeholder-text-muted outline-none"
+                />
+              </div>
+
+              <div className="max-h-52 overflow-y-auto">
+                {team.length === 0 ? (
+                  <div className="py-8 text-center text-text-muted text-sm">No team members found</div>
+                ) : filtered.length === 0 ? (
+                  <div className="py-6 text-center text-text-muted text-sm">No matches</div>
+                ) : (
+                  filtered.map((m) => {
+                    const selected = values.includes(m.id);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => toggle(m.id)}
+                        className={classNames(
+                          "w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors",
+                          selected ? "bg-primary/10 hover:bg-primary/15" : "hover:bg-surface-hover"
+                        )}
+                      >
+                        <div
+                          className={classNames(
+                            "w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0",
+                            selected
+                              ? "bg-primary text-white"
+                              : "bg-background-tertiary text-text-secondary"
+                          )}
+                        >
+                          {m.name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={classNames("text-[13px] font-medium truncate", selected ? "text-primary" : "text-text")}>
+                            {m.name}
+                          </p>
+                          <p className="text-[11px] text-text-muted truncate">{m.email}</p>
+                        </div>
+                        {selected && (
+                          <div className="w-4 h-4 rounded-full bg-primary flex items-center justify-center shrink-0">
+                            <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                              <path d="M1 4l3 3 5-6" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {values.length > 0 && (
+                <div className="px-4 py-2.5 border-t border-border bg-background-secondary/60 flex items-center justify-between">
+                  <span className="text-[12px] text-text-muted">
+                    {values.length} of {team.length} selected
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onChange([])}
+                    className="text-[12px] text-error hover:underline font-medium"
+                  >
+                    Clear all
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -203,9 +326,10 @@ interface Props {
   isSaving: boolean;
   onSave: (payload: CreateAssignmentRulePayload | UpdateAssignmentRulePayload) => Promise<void>;
   onCancel: () => void;
+  team: TeamMember[];
 }
 
-export function RuleFormModal({ isOpen, editRule, isSaving, onSave, onCancel }: Props) {
+export function RuleFormModal({ isOpen, editRule, isSaving, onSave, onCancel, team }: Props) {
   const [form, setForm] = useState<CreateAssignmentRulePayload>(EMPTY);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -439,7 +563,7 @@ export function RuleFormModal({ isOpen, editRule, isSaving, onSave, onCancel }: 
             {/* ── Assignees ────────────────────────────────────── */}
             <section className="space-y-3">
               <h3 className="text-[10.5px] font-bold uppercase tracking-widest text-text-muted border-b border-border pb-2">Assignees</h3>
-              <AssigneeInput values={form.assigneeIds} onChange={(v) => set("assigneeIds", v)} />
+              <TeamMemberPicker values={form.assigneeIds} onChange={(v) => set("assigneeIds", v)} team={team} />
               {errors.assigneeIds && <p className="text-[11px] text-error">{errors.assigneeIds}</p>}
             </section>
 

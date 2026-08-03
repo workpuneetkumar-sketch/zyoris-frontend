@@ -8,6 +8,7 @@ import classNames from "classnames";
 import type { AssignmentRule } from "@/types/assignmentRules";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { EmptyState } from "@/components/ui/EmptyState";
+import type { TeamMember } from "@/lib/api/organizationsApi";
 
 const STRATEGY_BADGE: Record<string, string> = {
   ROUND_ROBIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
@@ -42,6 +43,7 @@ interface Props {
   onDeleteRule: (rule: AssignmentRule) => void;
   onToggleStatus: (rule: AssignmentRule) => void;
   onRefresh: () => void;
+  team: TeamMember[];
 }
 
 type SortField = "name" | "priority" | "strategy";
@@ -75,7 +77,7 @@ export function RulesList({
   rules, filteredRules, loading, error,
   searchQuery, onSearchChange,
   statusFilter, onStatusFilterChange,
-  onNewRule, onEditRule, onDeleteRule, onToggleStatus, onRefresh,
+  onNewRule, onEditRule, onDeleteRule, onToggleStatus, onRefresh, team,
 }: Props) {
   const [sortField, setSortField] = useState<SortField>("priority");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -223,11 +225,14 @@ export function RulesList({
                           <span className="text-[12px] text-text-muted">None</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
-                            {rule.assigneeIds.slice(0, 2).map((id) => (
-                              <span key={id} className="inline-block px-1.5 py-0.5 rounded text-[10.5px] font-mono bg-background-tertiary text-text-secondary border border-border truncate max-w-[80px]" title={id}>
-                                {id.length > 8 ? `…${id.slice(-6)}` : id}
-                              </span>
-                            ))}
+                            {rule.assigneeIds.slice(0, 2).map((id) => {
+                              const name = team.find((m) => m.id === id)?.name ?? id;
+                              return (
+                                <span key={id} className="inline-block px-1.5 py-0.5 rounded text-[10.5px] font-medium bg-background-tertiary text-text-secondary border border-border truncate max-w-[100px]" title={name}>
+                                  {name}
+                                </span>
+                              );
+                            })}
                             {rule.assigneeIds.length > 2 && (
                               <span className="text-[11px] text-text-muted">+{rule.assigneeIds.length - 2}</span>
                             )}

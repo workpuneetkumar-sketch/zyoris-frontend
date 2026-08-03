@@ -27,6 +27,8 @@ import type {
   CreateAssignmentRulePayload,
   UpdateAssignmentRulePayload,
 } from "@/types/assignmentRules";
+import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
+import { useEffect } from "react";
 
 type LeadsTab = "leads" | "assignment-rules" | "assignment-history" | "assignment-analytics" | "duplicates";
 
@@ -88,6 +90,13 @@ export default function LeadsPage() {
   // Assignment rules state
   const [ruleFormOpen, setRuleFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AssignmentRule | null>(null);
+  const [team, setTeam] = useState<TeamMember[]>([]);
+
+  useEffect(() => {
+    getTeamMembers()
+      .then(setTeam)
+      .catch(() => setTeam([]));
+  }, []);
 
   // ── Leads hook ────────────────────────────────────────────────────────────
   const {
@@ -290,6 +299,7 @@ export default function LeadsPage() {
               onDeleteRule={handleDeleteRule}
               onToggleStatus={handleToggleStatus}
               onRefresh={rulesHook.refresh}
+              team={team}
             />
           </div>
         )}
@@ -362,6 +372,7 @@ export default function LeadsPage() {
         isSaving={rulesHook.creating || rulesHook.updating}
         onSave={handleSaveRule}
         onCancel={() => setRuleFormOpen(false)}
+        team={team}
       />
     </>
   );
