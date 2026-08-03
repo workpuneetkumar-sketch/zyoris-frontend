@@ -222,8 +222,10 @@ export async function getAssignmentAnalytics(
       ? d.byStrategy
       : [];
 
-    // Timeline: backend sends timeLine or overTime
-    const rawTimeline: any[] = Array.isArray(d?.timeLine)
+    // Timeline: backend sends timeline, timeLine, or overTime
+    const rawTimeline: any[] = Array.isArray(d?.timeline)
+      ? d.timeline
+      : Array.isArray(d?.timeLine)
       ? d.timeLine
       : Array.isArray(d?.overTime)
       ? d.overTime
@@ -259,13 +261,18 @@ export async function getAssignmentAnalytics(
         : (d?.avgResponseTime ?? 0),
       activeRules: d?.activeRules ?? 0,
 
-      // Distribution (pie chart)
-      distribution: Array.isArray(d?.distribution) ? d.distribution : [],
+      // Distribution (pie chart) — backend distribution sends 'assignments' instead of 'count'
+      distribution: (Array.isArray(d?.distribution) ? d.distribution : []).map((item: any) => ({
+        assigneeId: item.userId ?? item.id ?? "",
+        assigneeName: item.name ?? item.userName ?? "—",
+        count: item.assignments ?? item.count ?? 0,
+        percentage: item.percentage ?? 0,
+      })),
 
-      // Timeline (line/area chart) — map timeLine entries
+      // Timeline (line/area chart) — map timeline entries (using 'assignments' or 'count')
       overTime: rawTimeline.map((item: any) => ({
-        date:  item.date  ?? item.period ?? item.day ?? item.week ?? item.month ?? "",
-        count: item.count ?? item.totalAssignments ?? item.total ?? 0,
+        date:  item.date ?? item.label ?? item.period ?? item.day ?? item.week ?? item.month ?? "",
+        count: item.assignments ?? item.count ?? item.totalAssignments ?? item.total ?? 0,
       })),
 
       // Strategies (bar chart)

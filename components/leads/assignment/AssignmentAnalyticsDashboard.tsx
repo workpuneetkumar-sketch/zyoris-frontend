@@ -137,19 +137,6 @@ export function AssignmentAnalyticsDashboard({
         </button>
       </div>
 
-      {/* No-data callout */}
-      {hasNoData && (
-        <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200">
-          <Zap size={18} className="text-amber-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-semibold text-amber-800">No assignment data yet</p>
-            <p className="text-[12px] text-amber-700 mt-0.5">
-              Analytics will populate once leads are processed through your assignment rules. Your rules are configured — data will appear after the next batch of leads is auto-assigned.
-            </p>
-          </div>
-        </div>
-      )}
-
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard label="Total Assignments" value={data?.totalAssignments ?? 0} icon={Users} color="bg-blue-500" />
