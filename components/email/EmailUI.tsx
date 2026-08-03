@@ -19,10 +19,18 @@ import {
     Paperclip,
     Calendar,
     CheckCircle2,
+    Sparkles,
+    Lightbulb,
 } from "lucide-react";
 import { GmailConnectScreen } from "@/components/email/GmailConnectScreen";
 import { EmailThread, FolderTab } from "@/hooks/useEmail";
-import { EmailTemplate, SendEmailPayload } from "@/lib/api/emailApi";
+import {
+    EmailTemplate,
+    SendEmailPayload,
+    aiSummarizeThread,
+    aiReplySuggestion,
+    aiSubjectSuggestion,
+} from "@/lib/api/emailApi";
 
 // ── Folder config ─────────────────────────────────────────────────────────────
 
@@ -64,6 +72,8 @@ function ComposeModal({
     const [savingTemplate, setSavingTemplate] = useState(false);
     const [templateName, setTemplateName] = useState("");
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+    const [suggestingSubject, setSuggestingSubject] = useState(false);
+    const [suggestingReply, setSuggestingReply] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -73,6 +83,39 @@ function ComposeModal({
             if (tpl) {
                 setForm((prev) => ({ ...prev, subject: tpl.subject, body: tpl.body, templateId: value }));
             }
+        }
+    };
+
+    const handleAISubject = async () => {
+        if (suggestingSubject) return;
+        setSuggestingSubject(true);
+        try {
+            const res = await aiSubjectSuggestion({ body: form.body, context: form.to });
+            if (res.subject) {
+                setForm((prev) => ({ ...prev, subject: res.subject }));
+            }
+        } catch (err) {
+            console.error("AI Subject suggestion error:", err);
+        } finally {
+            setSuggestingSubject(false);
+        }
+    };
+
+    const handleAIReply = async () => {
+        if (suggestingReply) return;
+        setSuggestingReply(true);
+        try {
+            const res = await aiReplySuggestion({ subject: form.subject, body: form.body });
+            if (res.suggestion) {
+                setForm((prev) => ({
+                    ...prev,
+                    body: prev.body ? `${prev.body}\n\n${res.suggestion}` : res.suggestion,
+                }));
+            }
+        } catch (err) {
+            console.error("AI Reply suggestion error:", err);
+        } finally {
+            setSuggestingReply(false);
         }
     };
 
@@ -175,19 +218,50 @@ function ComposeModal({
                     {/* Subject */}
                     <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">Subject *</label>
-                        <input
-                            name="subject"
-                            value={form.subject}
-                            onChange={handleChange}
-                            placeholder="Email subject"
-                            className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.subject ? "border-red-400" : "border-gray-200 focus:border-blue-500"}`}
-                        />
+                        <div className="relative">
+                            <input
+                                name="subject"
+                                value={form.subject}
+                                onChange={handleChange}
+                                placeholder="Email subject"
+                                className={`w-full h-10 rounded-lg border pl-3 pr-9 text-sm text-gray-900 outline-none focus:ring-2 focus:ring-blue-500 ${errors.subject ? "border-red-400" : "border-gray-200 focus:border-blue-500"}`}
+                            />
+                            <button
+                                type="button"
+                                onClick={handleAISubject}
+                                disabled={suggestingSubject}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-md transition-colors disabled:opacity-50"
+                                title="✨ Auto-suggest subject using AI"
+                            >
+                                {suggestingSubject ? (
+                                    <RefreshCw size={14} className="animate-spin text-indigo-600" />
+                                ) : (
+                                    <Sparkles size={15} className="text-indigo-600" />
+                                )}
+                            </button>
+                        </div>
                         {errors.subject && <p className="text-xs text-red-500 mt-1">{errors.subject}</p>}
                     </div>
 
                     {/* Body */}
                     <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Message *</label>
+                        <div className="flex items-center justify-between mb-1">
+                            <label className="block text-xs font-medium text-gray-700">Message *</label>
+                            <button
+                                type="button"
+                                onClick={handleAIReply}
+                                disabled={suggestingReply}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 text-xs font-semibold transition-colors disabled:opacity-50"
+                                title="Generate AI reply suggestion"
+                            >
+                                {suggestingReply ? (
+                                    <RefreshCw size={12} className="animate-spin" />
+                                ) : (
+                                    <Lightbulb size={12} className="text-amber-600" />
+                                )}
+                                <span>💡 AI Reply</span>
+                            </button>
+                        </div>
                         <textarea
                             name="body"
                             value={form.body}
@@ -290,6 +364,26 @@ interface ThreadPanelProps {
 }
 
 function ThreadPanel({ thread, onClose, onReply }: ThreadPanelProps) {
+    const [summary, setSummary] = useState<string | null>(null);
+    const [summarizing, setSummarizing] = useState(false);
+    const [summaryError, setSummaryError] = useState<string | null>(null);
+
+    const handleSummarize = async () => {
+        const latestEmail = thread.emails[thread.emails.length - 1];
+        const emailId = latestEmail?.id || thread.id;
+        if (!emailId || summarizing) return;
+        setSummarizing(true);
+        setSummaryError(null);
+        try {
+            const res = await aiSummarizeThread(emailId);
+            setSummary(res.summary);
+        } catch (err: any) {
+            setSummaryError(err.message || "Failed to summarize email thread.");
+        } finally {
+            setSummarizing(false);
+        }
+    };
+
     return (
         <div className="flex flex-col h-full">
             {/* Panel header */}
@@ -306,16 +400,61 @@ function ThreadPanel({ thread, onClose, onReply }: ThreadPanelProps) {
                         {thread.participants.join(", ")}
                     </p>
                 </div>
-                <button
-                    onClick={onReply}
-                    className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
-                >
-                    <Reply size={13} /> Reply
-                </button>
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        type="button"
+                        onClick={handleSummarize}
+                        disabled={summarizing}
+                        className="flex items-center gap-1.5 h-8 px-3 rounded-lg bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 text-xs font-semibold transition-colors disabled:opacity-50"
+                        title="Summarize email thread with AI"
+                    >
+                        {summarizing ? (
+                            <RefreshCw size={13} className="animate-spin text-indigo-600" />
+                        ) : (
+                            <Sparkles size={13} className="text-indigo-600" />
+                        )}
+                        <span>✨ Summarize Thread</span>
+                    </button>
+                    <button
+                        onClick={onReply}
+                        className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+                    >
+                        <Reply size={13} /> Reply
+                    </button>
+                </div>
             </div>
 
             {/* Emails */}
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                {/* AI Summary Banner */}
+                {summary && (
+                    <div className="p-4 rounded-xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-indigo-150 shadow-sm relative animate-in fade-in duration-200">
+                        <div className="flex items-center justify-between mb-1.5">
+                            <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                                <Sparkles size={14} className="text-indigo-600" />
+                                AI Thread Summary
+                            </h4>
+                            <button
+                                onClick={() => setSummary(null)}
+                                className="text-gray-400 hover:text-gray-600 p-0.5 rounded-md hover:bg-white/50"
+                            >
+                                <X size={13} />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">{summary}</p>
+                    </div>
+                )}
+
+                {summaryError && (
+                    <div className="flex items-center justify-between p-3 rounded-xl bg-red-50 border border-red-100 text-xs text-red-700 font-medium">
+                        <span className="flex items-center gap-2">
+                            <AlertCircle size={14} className="text-red-500 shrink-0" />
+                            {summaryError}
+                        </span>
+                        <button onClick={() => setSummaryError(null)} className="text-red-500 hover:underline">Dismiss</button>
+                    </div>
+                )}
+
                 {thread.emails.map((email) => (
                     <div key={email.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
                         <div className="flex items-start justify-between gap-3 px-5 py-3.5 bg-gray-50/60 border-b border-gray-100">

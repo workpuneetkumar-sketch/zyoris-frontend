@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Brain, RefreshCw, AlertCircle, TrendingUp, Zap, Activity, MessageSquare } from "lucide-react";
+import { Brain, RefreshCw, AlertCircle, TrendingUp, Zap, Activity, MessageSquare, Sparkles, Copy, Check } from "lucide-react";
 import {
   getCommunicationIntelligence,
   CommunicationIntelligenceData,
@@ -87,6 +87,8 @@ export function CommunicationIntelligenceWidget({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetched, setFetched] = useState(false);
+  const [composerText, setComposerText] = useState("");
+  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -208,6 +210,58 @@ export function CommunicationIntelligenceWidget({
                 <p className="text-xs font-medium text-gray-800 leading-relaxed">
                   {data.nextBestAction}
                 </p>
+              </div>
+            </div>
+
+            {/* Clickable AI Suggestion Pills & Composer */}
+            <div className="pt-2 border-t border-gray-100 space-y-2">
+              <p className="text-[11px] font-bold text-gray-500 flex items-center gap-1.5">
+                <Sparkles size={12} className="text-indigo-500" />
+                Suggested Smart Responses
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {(data.suggestedReplies && data.suggestedReplies.length > 0
+                  ? data.suggestedReplies
+                  : [data.nextBestAction]
+                ).map((pill, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setComposerText(pill)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-medium transition-all text-left max-w-full"
+                    title="Click to insert into composer"
+                  >
+                    <Sparkles size={11} className="text-indigo-500 shrink-0" />
+                    <span className="truncate">{pill}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Composer Input Box */}
+              <div className="relative mt-2">
+                <textarea
+                  value={composerText}
+                  onChange={(e) => setComposerText(e.target.value)}
+                  placeholder="Click a pill above or write custom response..."
+                  rows={2}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-xl bg-gray-50 focus:bg-white text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400/40 resize-none pr-16"
+                />
+                <div className="absolute right-2 bottom-2.5 flex items-center gap-1">
+                  {composerText && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(composerText);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      className="p-1 text-gray-400 hover:text-indigo-600 bg-white rounded-md border border-gray-200 shadow-2xs"
+                      title="Copy message"
+                    >
+                      {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 

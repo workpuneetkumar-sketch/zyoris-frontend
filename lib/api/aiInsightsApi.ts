@@ -143,6 +143,7 @@ export interface CommunicationIntelligenceData {
   intent: string;
   mood: string;
   nextBestAction: string;
+  suggestedReplies?: string[];
   engagementScore?: number;
   riskLevel?: string;
   generatedAt?: string;
@@ -158,6 +159,22 @@ export async function getCommunicationIntelligence(
   try {
     const response = await api.get(`/crm/communication-intelligence/${leadId}`);
     const raw = response.data?.data || response.data;
+    const rawSuggestions = Array.isArray(raw.suggestedReplies)
+      ? raw.suggestedReplies
+      : Array.isArray(raw.suggestions)
+      ? raw.suggestions
+      : Array.isArray(raw.recommendedReplies)
+      ? raw.recommendedReplies
+      : [];
+
+    const suggestedReplies = rawSuggestions.length > 0
+      ? rawSuggestions
+      : [
+          raw.nextBestAction || "Follow up on product demo request",
+          "Send customized pricing & proposal details",
+          "Schedule a 15-minute quick call to address questions",
+        ];
+
     return {
       buyingProbability: typeof raw.buyingProbability === "number"
         ? Math.round(raw.buyingProbability * (raw.buyingProbability > 1 ? 1 : 100))
@@ -167,6 +184,7 @@ export async function getCommunicationIntelligence(
       intent: raw.intent || raw.intentLabel || "Unknown",
       mood: raw.mood || raw.sentiment || "Neutral",
       nextBestAction: raw.nextBestAction || raw.recommendation || "No recommendation available.",
+      suggestedReplies,
       engagementScore: raw.engagementScore,
       riskLevel: raw.riskLevel,
       generatedAt: raw.generatedAt,
