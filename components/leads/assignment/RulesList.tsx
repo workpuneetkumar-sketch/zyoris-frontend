@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import {
-  Search, Plus, RefreshCw, Pencil,
+  Search, Plus, RefreshCw, Pencil, Trash2,
   CheckCircle, XCircle, Zap, ArrowUpDown,
 } from "lucide-react";
 import classNames from "classnames";
@@ -12,10 +12,20 @@ import { EmptyState } from "@/components/ui/EmptyState";
 const STRATEGY_BADGE: Record<string, string> = {
   ROUND_ROBIN: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   EQUAL_DISTRIBUTION: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  COUNTRY: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  LANGUAGE: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  PIN_CODE: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+  AI_RECOMMENDATION: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
+  MANUAL: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
 };
 const STRATEGY_LABEL: Record<string, string> = {
   ROUND_ROBIN: "Round Robin",
   EQUAL_DISTRIBUTION: "Equal Distribution",
+  COUNTRY: "Country Match",
+  LANGUAGE: "Language Match",
+  PIN_CODE: "Pin Code Match",
+  AI_RECOMMENDATION: "AI Recommendation",
+  MANUAL: "Manual",
 };
 
 interface Props {
@@ -29,6 +39,7 @@ interface Props {
   onStatusFilterChange: (f: "all" | "ACTIVE" | "INACTIVE") => void;
   onNewRule: () => void;
   onEditRule: (rule: AssignmentRule) => void;
+  onDeleteRule: (rule: AssignmentRule) => void;
   onToggleStatus: (rule: AssignmentRule) => void;
   onRefresh: () => void;
 }
@@ -64,7 +75,7 @@ export function RulesList({
   rules, filteredRules, loading, error,
   searchQuery, onSearchChange,
   statusFilter, onStatusFilterChange,
-  onNewRule, onEditRule, onToggleStatus, onRefresh,
+  onNewRule, onEditRule, onDeleteRule, onToggleStatus, onRefresh,
 }: Props) {
   const [sortField, setSortField] = useState<SortField>("priority");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
@@ -168,6 +179,9 @@ export function RulesList({
                     ...rule.cities.map((c) => ({ label: c, color: "bg-sky-100 text-sky-700 dark:bg-sky-900/20" })),
                     ...rule.states.map((s) => ({ label: s, color: "bg-green-100 text-green-700 dark:bg-green-900/20" })),
                     ...rule.products.map((p) => ({ label: p, color: "bg-violet-100 text-violet-700 dark:bg-violet-900/20" })),
+                    ...(rule.countries ?? []).map((co) => ({ label: co, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20" })),
+                    ...(rule.languages ?? []).map((l) => ({ label: l, color: "bg-rose-100 text-rose-700 dark:bg-rose-900/20" })),
+                    ...(rule.pinCodes ?? []).map((pc) => ({ label: pc, color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20" })),
                   ];
                   const hasBudget = rule.minBudget != null || rule.maxBudget != null;
 
@@ -233,13 +247,22 @@ export function RulesList({
                         </button>
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => onEditRule(rule)}
-                          className="p-2 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
-                          title="Edit"
-                        >
-                          <Pencil size={13} />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => onEditRule(rule)}
+                            className="p-2 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
+                            title="Edit"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            onClick={() => onDeleteRule(rule)}
+                            className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );

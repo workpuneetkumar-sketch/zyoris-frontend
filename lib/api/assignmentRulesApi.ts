@@ -38,6 +38,9 @@ function normaliseRule(raw: any): AssignmentRule {
     products: Array.isArray(raw.products) ? raw.products : [],
     cities: Array.isArray(raw.cities) ? raw.cities : [],
     states: Array.isArray(raw.states) ? raw.states : [],
+    countries: Array.isArray(raw.countries) ? raw.countries : [],
+    languages: Array.isArray(raw.languages) ? raw.languages : [],
+    pinCodes: Array.isArray(raw.pinCodes) ? raw.pinCodes : [],
     minBudget: raw.minBudget ?? null,
     maxBudget: raw.maxBudget ?? null,
     assigneeIds: Array.isArray(raw.assigneeIds) ? raw.assigneeIds : [],
@@ -62,6 +65,9 @@ export async function createAssignmentRule(
     products: payload.products,
     cities: payload.cities,
     states: payload.states,
+    countries: payload.countries,
+    languages: payload.languages,
+    pinCodes: payload.pinCodes,
     minBudget: payload.minBudget ?? null,
     maxBudget: payload.maxBudget ?? null,
     assigneeIds: payload.assigneeIds,
@@ -100,8 +106,15 @@ export async function listAssignmentRules(
   return { rules, total };
 }
 
-// ── SCAFFOLDED: PATCH /assignment-rules/:id ───────────────────────────────────
-// When backend exposes this, only the URL needs to change
+// ── LIVE: GET /assignment-rules/{id} ─────────────────────────────────────────
+
+export async function getAssignmentRule(id: string): Promise<AssignmentRule> {
+  const res = await api.get(`/assignment-rules/${id}`);
+  const raw = res.data?.data ?? res.data?.rule ?? res.data;
+  return normaliseRule(raw);
+}
+
+// ── LIVE: PATCH /assignment-rules/{id} ───────────────────────────────────
 
 export async function updateAssignmentRule(
   payload: UpdateAssignmentRulePayload
@@ -110,6 +123,12 @@ export async function updateAssignmentRule(
   const res = await api.patch(`/assignment-rules/${id}`, rest);
   const raw = res.data?.data ?? res.data?.rule ?? res.data;
   return normaliseRule(raw);
+}
+
+// ── LIVE: DELETE /assignment-rules/{id} ─────────────────────────────────
+
+export async function deleteAssignmentRule(id: string): Promise<void> {
+  await api.delete(`/assignment-rules/${id}`);
 }
 
 // ── LIVE: GET /leads/assignment-history ──────────────────────────────────────
@@ -162,17 +181,30 @@ export async function getAssignmentHistory(
   };
 }
 
-// ── SCAFFOLDED: GET /leads/assignment-analytics ───────────────────────────────
+// ── LIVE: GET /leads/assignment-analytics ───────────────────────────────
 
 export async function getAssignmentAnalytics(
   filters?: Partial<AssignmentAnalyticsFilters>
 ): Promise<AssignmentAnalytics> {
   try {
     const params: Record<string, string | undefined> = {};
-    if (filters?.dateFrom) params.dateFrom = filters.dateFrom;
-    if (filters?.dateTo) params.dateTo = filters.dateTo;
+    if (filters?.dateFrom) {
+      try {
+        params.from = new Date(filters.dateFrom).toISOString();
+      } catch {
+        params.from = filters.dateFrom;
+      }
+    }
+    if (filters?.dateTo) {
+      try {
+        params.to = new Date(filters.dateTo).toISOString();
+      } catch {
+        params.to = filters.dateTo;
+      }
+    }
     if (filters?.strategy && filters.strategy !== "All") params.strategy = filters.strategy;
     if (filters?.userId) params.userId = filters.userId;
+    if (filters?.groupBy) params.groupBy = filters.groupBy;
 
     const res = await api.get("/leads/assignment-analytics", { params });
     // Response shape: { success: true, data: { overview: {...}, distribution: [], strategyBreakdown: [] } }

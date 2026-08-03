@@ -179,6 +179,12 @@ export default function LeadsPage() {
     });
   }, [rulesHook]);
 
+  const handleDeleteRule = useCallback(async (rule: AssignmentRule) => {
+    if (window.confirm(`Are you sure you want to delete assignment rule "${rule.name}"?`)) {
+      await rulesHook.deleteRule(rule.id);
+    }
+  }, [rulesHook]);
+
   const handleSaveRule = useCallback(async (payload: CreateAssignmentRulePayload | UpdateAssignmentRulePayload) => {
     let result: AssignmentRule | null = null;
     if ("id" in payload && payload.id) {
@@ -281,6 +287,7 @@ export default function LeadsPage() {
               onStatusFilterChange={rulesHook.setStatusFilter}
               onNewRule={handleNewRule}
               onEditRule={handleEditRule}
+              onDeleteRule={handleDeleteRule}
               onToggleStatus={handleToggleStatus}
               onRefresh={rulesHook.refresh}
             />

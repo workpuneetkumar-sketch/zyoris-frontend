@@ -15,6 +15,11 @@ import type {
 const STRATEGIES: { value: AssignmentStrategy; label: string; desc: string }[] = [
   { value: "ROUND_ROBIN", label: "Round Robin", desc: "Rotate evenly across all eligible assignees in order." },
   { value: "EQUAL_DISTRIBUTION", label: "Equal Distribution", desc: "Balance load so each assignee gets roughly equal leads." },
+  { value: "COUNTRY", label: "Country Match", desc: "Assign based on the country of the lead." },
+  { value: "LANGUAGE", label: "Language Match", desc: "Assign based on the language preference of the lead." },
+  { value: "PIN_CODE", label: "Pin Code Match", desc: "Assign based on postal/zip code mapping." },
+  { value: "AI_RECOMMENDATION", label: "AI Recommendation", desc: "Use machine learning scoring to match the best representative." },
+  { value: "MANUAL", label: "Manual Routing", desc: "Route to a queue or manual distribution pool." },
 ];
 
 const EMPTY: CreateAssignmentRulePayload = {
@@ -26,6 +31,9 @@ const EMPTY: CreateAssignmentRulePayload = {
   products: [],
   cities: [],
   states: [],
+  countries: [],
+  languages: [],
+  pinCodes: [],
   minBudget: null,
   maxBudget: null,
   assigneeIds: [],
@@ -213,6 +221,9 @@ export function RuleFormModal({ isOpen, editRule, isSaving, onSave, onCancel }: 
         products: editRule.products,
         cities: editRule.cities,
         states: editRule.states,
+        countries: editRule.countries ?? [],
+        languages: editRule.languages ?? [],
+        pinCodes: editRule.pinCodes ?? [],
         minBudget: editRule.minBudget ?? null,
         maxBudget: editRule.maxBudget ?? null,
         assigneeIds: editRule.assigneeIds,
@@ -376,6 +387,26 @@ export function RuleFormModal({ isOpen, editRule, isSaving, onSave, onCancel }: 
                   onChange={(v) => set("states", v)}
                   placeholder="Telangana, Karnataka…"
                 />
+                <TagInput
+                  label="Countries"
+                  values={form.countries ?? []}
+                  onChange={(v) => set("countries", v)}
+                  placeholder="India, USA…"
+                />
+                <TagInput
+                  label="Languages"
+                  values={form.languages ?? []}
+                  onChange={(v) => set("languages", v)}
+                  placeholder="English, Spanish…"
+                />
+                <div className="sm:col-span-2">
+                  <TagInput
+                    label="Pin Codes"
+                    values={form.pinCodes ?? []}
+                    onChange={(v) => set("pinCodes", v)}
+                    placeholder="500081, 560001…"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">

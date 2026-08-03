@@ -3,7 +3,14 @@
 // and GET /assignment-rules/list
 
 // ── Strategy — exact backend enum values ─────────────────────────────────────
-export type AssignmentStrategy = "ROUND_ROBIN" | "EQUAL_DISTRIBUTION";
+export type AssignmentStrategy =
+  | "ROUND_ROBIN"
+  | "EQUAL_DISTRIBUTION"
+  | "COUNTRY"
+  | "LANGUAGE"
+  | "PIN_CODE"
+  | "AI_RECOMMENDATION"
+  | "MANUAL";
 
 // ── Rule status ───────────────────────────────────────────────────────────────
 export type AssignmentRuleStatus = "ACTIVE" | "INACTIVE";
@@ -19,6 +26,9 @@ export interface AssignmentRule {
   products: string[];
   cities: string[];
   states: string[];
+  countries?: string[];
+  languages?: string[];
+  pinCodes?: string[];
   minBudget?: number | null;
   maxBudget?: number | null;
   assigneeIds: string[];
@@ -37,6 +47,9 @@ export interface CreateAssignmentRulePayload {
   products: string[];
   cities: string[];
   states: string[];
+  countries?: string[];
+  languages?: string[];
+  pinCodes?: string[];
   minBudget?: number | null;
   maxBudget?: number | null;
   assigneeIds: string[];
@@ -150,4 +163,5 @@ export interface AssignmentAnalyticsFilters {
   dateTo: string;
   strategy: string;
   userId: string;
+  groupBy?: "DAY" | "WEEK" | "MONTH" | "USER" | "STRATEGY";
 }

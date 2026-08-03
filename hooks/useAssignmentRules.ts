@@ -14,6 +14,7 @@ import {
   listAssignmentRules,
   createAssignmentRule,
   updateAssignmentRule,
+  deleteAssignmentRule,
 } from "@/lib/api/assignmentRulesApi";
 
 export function useAssignmentRules() {
@@ -23,6 +24,7 @@ export function useAssignmentRules() {
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "INACTIVE">("all");
   const [strategyFilter, setStrategyFilter] = useState<"all" | AssignmentStrategy>("all");
@@ -92,6 +94,28 @@ export function useAssignmentRules() {
     [rules]
   );
 
+  const deleteRule = useCallback(
+    async (id: string): Promise<boolean> => {
+      setDeleting(true);
+      const snapshot = rules.slice();
+      // Optimistic
+      setRules((prev) => prev.filter((r) => r.id !== id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      try {
+        await deleteAssignmentRule(id);
+        toast.success("Assignment rule deleted successfully");
+        return true;
+      } catch (err: any) {
+        setRules(snapshot); // rollback
+        toast.error(err?.response?.data?.message ?? err?.message ?? "Failed to delete rule");
+        return false;
+      } finally {
+        setDeleting(false);
+      }
+    },
+    [rules]
+  );
+
   const filteredRules = rules.filter((r) => {
     const q = searchQuery.toLowerCase();
     const matchSearch = !q || r.name.toLowerCase().includes(q) ||
@@ -110,8 +134,10 @@ export function useAssignmentRules() {
     error,
     creating,
     updating,
+    deleting,
     createRule,
     updateRule,
+    deleteRule,
     refresh: loadRules,
     searchQuery,
     setSearchQuery,
