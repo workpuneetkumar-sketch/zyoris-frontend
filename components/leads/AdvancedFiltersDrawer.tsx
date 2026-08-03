@@ -3,7 +3,7 @@
 // components/leads/AdvancedFiltersDrawer.tsx
 // Advanced Search + Filters + Saved Views drawer — Task 4
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   X,
   Filter,
@@ -177,6 +177,10 @@ export function AdvancedFiltersDrawer({
   const [saveViewName, setSaveViewName] = useState("");
   const [showSaveView, setShowSaveView] = useState(false);
   const [savingView, setSavingView] = useState(false);
+
+  useEffect(() => {
+    setLocalFilters(filters);
+  }, [filters]);
 
   const {
     views,
