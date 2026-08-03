@@ -1026,6 +1026,10 @@ a {
   transform: scale(0.95);
 }
 
+.zii-fab--whatsapp {
+  bottom: 8rem;
+}
+
 /* Scrollbar styling */
 .zii-chat-scroll::-webkit-scrollbar {
   width: 4px;
