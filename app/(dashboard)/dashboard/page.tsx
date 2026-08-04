@@ -111,19 +111,27 @@ export default function DashboardPage() {
 
   const kpiCards = useMemo(() => [
     { icon: Users,     label: "Leads Count",      value: typeof dashboardStats?.leadsCount === "number" ? dashboardStats.leadsCount.toLocaleString() : "--", accent: "blue"    as const },
-    { icon: Briefcase, label: "Total Deal Value", value: typeof dashboardStats?.totalDealValue === "number" ? `$${Math.round(dashboardStats.totalDealValue).toLocaleString()}` : "--", accent: "blue" as const },
-    { icon: DollarSign,label: "Revenue",          value: typeof dashboardStats?.revenue === "number" ? `$${Math.round(dashboardStats.revenue).toLocaleString()}` : "--", accent: "emerald" as const },
+    { icon: Briefcase, label: "Total Deal Value", value: typeof dashboardStats?.totalDealValue === "number" ? `₹${Math.round(dashboardStats.totalDealValue).toLocaleString()}` : "--", accent: "blue" as const },
+    { icon: DollarSign,label: "Revenue",          value: typeof dashboardStats?.revenue === "number" ? `₹${Math.round(dashboardStats.revenue).toLocaleString()}` : "--", accent: "emerald" as const },
     { icon: Clock,     label: "Overdue Tasks",    value: typeof dashboardStats?.overdueTasks === "number" ? dashboardStats.overdueTasks.toLocaleString() : "--", accent: "amber" as const },
     { icon: Mail,      label: "Emails Sent",      value: typeof dashboardStats?.emailsSent === "number" ? dashboardStats.emailsSent.toLocaleString() : "--", accent: "blue"    as const },
     { icon: PhoneCall, label: "Calls Today",      value: typeof dashboardStats?.callsToday === "number" ? dashboardStats.callsToday.toLocaleString() : "--", accent: "emerald" as const },
   ], [dashboardStats]);
 
-  const greeting = (() => {
+  // Computed client-side so it always reflects the user's local clock, not the server timezone
+  const computeGreeting = () => {
     const h = new Date().getHours();
-    if (h >= 4 && h < 12) return { text: "Good morning", emoji: "🌅" };
+    if (h >= 0 && h < 12) return { text: "Good morning", emoji: "🌅" };
     if (h >= 12 && h < 17) return { text: "Good afternoon", emoji: "☀️" };
     return { text: "Good evening", emoji: "🌆" };
-  })();
+  };
+  const [greeting, setGreeting] = useState(computeGreeting);
+  useEffect(() => {
+    setGreeting(computeGreeting());
+    // Re-evaluate every minute so the greeting updates as time passes
+    const interval = setInterval(() => setGreeting(computeGreeting()), 60_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const builder = useDashboardBuilder(user?.role);
   const [isEditing, setIsEditing]   = useState(false);

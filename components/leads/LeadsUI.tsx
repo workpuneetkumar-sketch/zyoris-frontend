@@ -4,8 +4,7 @@ import { useState, useEffect } from "react";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
 import UploadLeadsModal from "./UploadLeadsModal";
-import { updateLead, assignLead, fetchTeamMembers, deleteLead, getLeadAssignmentRecommendation, LeadAssignmentRecommendationResult, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
-import { TeamMember } from "./AssignLeadModal";
+import { updateLead, deleteLead, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
 import { toast } from "react-toastify";
 import { LeadCheckbox } from "./BulkActionsToolbar";
 import { AiBadge } from "@/components/ai/AiBadge";
@@ -339,52 +338,6 @@ export function LeadsTable({
     const [sharingLead, setSharingLead] = useState<Lead | null>(null);
     const [isShareOpen, setIsShareOpen] = useState(false);
 
-    // States for inline vertical assignment submenu
-    const [isAssignSubmenuOpen, setIsAssignSubmenuOpen] = useState(false);
-    const [members, setMembers] = useState<TeamMember[]>([]);
-    const [membersLoading, setMembersLoading] = useState(false);
-    const [membersError, setMembersError] = useState<string | null>(null);
-    const [assignSearch, setAssignSearch] = useState("");
-    const [aiRec, setAiRec] = useState<LeadAssignmentRecommendationResult | null>(null);
-    const [aiLoading, setAiLoading] = useState(false);
-
-    const getInitials = (name: string) => {
-        return name
-            .split(" ")
-            .map((p) => p[0]?.toUpperCase() ?? "")
-            .join("")
-            .slice(0, 2);
-    };
-
-    useEffect(() => {
-        if (isAssignSubmenuOpen && members.length === 0) {
-            setMembersLoading(true);
-            setMembersError(null);
-            fetchTeamMembers()
-                .then((data) => setMembers(data.members || []))
-                .catch((err) => setMembersError(err?.response?.data?.message || err.message || "An error occurred"))
-                .finally(() => setMembersLoading(false));
-        }
-    }, [isAssignSubmenuOpen, members.length]);
-
-    useEffect(() => {
-        if (!isAssignSubmenuOpen || !openMenu) return;
-        setAiRec(null);
-        setAiLoading(true);
-        getLeadAssignmentRecommendation(openMenu)
-            .then((data) => setAiRec(data))
-            .catch((err) => console.warn("AI recommendation fetch failed:", err))
-            .finally(() => setAiLoading(false));
-    }, [isAssignSubmenuOpen, openMenu]);
-
-    const filteredMembers = Array.isArray(members)
-        ? members.filter(
-            (m) =>
-                m.name.toLowerCase().includes(assignSearch.toLowerCase()) ||
-                m.role.toLowerCase().includes(assignSearch.toLowerCase())
-        )
-        : [];
-
     // ── Handle Delete ──────────────────────────────────────────
     const handleDelete = async (leadId: string) => {
         setDeletingId(leadId);
@@ -689,266 +642,98 @@ export function LeadsTable({
                         onClick={() => {
                             setOpenMenu(null);
                             setMenuPos(null);
-                            setIsAssignSubmenuOpen(false);
-                            setAssignSearch("");
                         }}
                     />
                     {menuPos && (
                         <div
-                            className={`fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 transition-all duration-150 ${isAssignSubmenuOpen ? "w-56" : "w-44"
-                                }`}
+                            className="fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 w-44 transition-all duration-150"
                             style={{
                                 top: menuPos.top,
-                                left: isAssignSubmenuOpen ? menuPos.left - 80 : menuPos.left,
+                                left: menuPos.left,
                             }}
                         >
-                            {!isAssignSubmenuOpen ? (
-                                <>
-                                    {/* View */}
-                                    <button
-                                        onClick={() => {
-                                            const lead = safeLeads.find((l) => l.id === openMenu);
-                                            if (lead) {
-                                                setViewingLead(lead);
-                                                setIsViewOpen(true);
-                                                setOpenMenu(null);
-                                                setMenuPos(null);
-                                            }
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
-                                    >
-                                        <Eye size={14} />
-                                        View
-                                    </button>
-                                    
-                                    {/* Edit */}
-                                    <button
-                                        onClick={() => {
-                                            const lead = safeLeads.find((l) => l.id === openMenu);
-                                            if (lead) {
-                                                setEditingLead(lead);
-                                                setIsEditOpen(true);
-                                                setOpenMenu(null);
-                                                setMenuPos(null);
-                                            }
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
-                                    >
-                                        <Edit size={14} />
-                                        Edit
-                                    </button>
-                                    
-                                    {/* Convert to Deal */}
-                                    <button
-                                        onClick={() => {
-                                            const lead = safeLeads.find((l) => l.id === openMenu);
-                                            if (lead) {
-                                                onAction("Convert", lead);
-                                                setOpenMenu(null);
-                                                setMenuPos(null);
-                                            }
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
-                                    >
-                                        <Briefcase size={14} />
-                                        Convert to Deal
-                                    </button>
-                                    
-                                    {/* Assign */}
-                                    <button
-                                        onClick={() => {
-                                            setIsAssignSubmenuOpen(true);
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center justify-between text-gray-700"
-                                    >
-                                        <span className="flex items-center gap-2">
-                                            <UserPlus size={14} />
-                                            Assign
-                                        </span>
-                                        <ChevronRight size={13} className="text-gray-400" />
-                                    </button>
+                            {/* View */}
+                            <button
+                                onClick={() => {
+                                    const lead = safeLeads.find((l) => l.id === openMenu);
+                                    if (lead) {
+                                        setViewingLead(lead);
+                                        setIsViewOpen(true);
+                                        setOpenMenu(null);
+                                        setMenuPos(null);
+                                    }
+                                }}
+                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                            >
+                                <Eye size={14} />
+                                View
+                            </button>
 
-                                    {/* Share */}
-                                    <button
-                                        onClick={() => {
-                                            const lead = safeLeads.find((l) => l.id === openMenu);
-                                            if (lead) {
-                                                setSharingLead(lead);
-                                                setIsShareOpen(true);
-                                                setOpenMenu(null);
-                                                setMenuPos(null);
-                                            }
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
-                                    >
-                                        <Share2 size={14} />
-                                        Share
-                                    </button>
-                                    
-                                    {/* Delete */}
-                                    <button
-                                        onClick={() => {
-                                            const lead = safeLeads.find((l) => l.id === openMenu);
-                                            if (lead) {
-                                                setConfirmDeleteId(lead.id);
-                                                setOpenMenu(null);
-                                                setMenuPos(null);
-                                            }
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-red-500 border-t border-gray-100 mt-1 pt-1"
-                                    >
-                                        <Trash2 size={14} />
-                                        Delete
-                                    </button>
-                                </>
-                            ) : (
-                                <div className="flex flex-col">
-                                    {/* Submenu Header */}
-                                    <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-                                        <button
-                                            onClick={() => {
-                                                setIsAssignSubmenuOpen(false);
-                                                setAssignSearch("");
-                                            }}
-                                            className="p-1 rounded hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors"
-                                        >
-                                            <ChevronLeft size={14} />
-                                        </button>
-                                        <span className="text-[13px] font-semibold text-gray-700">Assign Lead</span>
-                                    </div>
+                            {/* Edit */}
+                            <button
+                                onClick={() => {
+                                    const lead = safeLeads.find((l) => l.id === openMenu);
+                                    if (lead) {
+                                        setEditingLead(lead);
+                                        setIsEditOpen(true);
+                                        setOpenMenu(null);
+                                        setMenuPos(null);
+                                    }
+                                }}
+                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                            >
+                                <Edit size={14} />
+                                Edit
+                            </button>
 
-                                    {/* Search Input */}
-                                    <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-100">
-                                        <Search size={12} className="text-gray-400 shrink-0" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search members..."
-                                            value={assignSearch}
-                                            onChange={(e) => setAssignSearch(e.target.value)}
-                                            className="w-full text-[12px] outline-none text-gray-700 placeholder-gray-400 bg-transparent"
-                                            autoFocus
-                                        />
-                                    </div>
+                            {/* Convert to Deal */}
+                            <button
+                                onClick={() => {
+                                    const lead = safeLeads.find((l) => l.id === openMenu);
+                                    if (lead) {
+                                        onAction("Convert", lead);
+                                        setOpenMenu(null);
+                                        setMenuPos(null);
+                                    }
+                                }}
+                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                            >
+                                <Briefcase size={14} />
+                                Convert to Deal
+                            </button>
 
-                                    {/* AI Best Match Card */}
-                                    {aiLoading ? (
-                                        <div className="mx-2 my-2 p-2.5 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 rounded-lg flex items-center gap-2 text-blue-700 text-[12px]">
-                                            <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin shrink-0" />
-                                            <span>✨ AI analyzing capacity & territory...</span>
-                                        </div>
-                                    ) : aiRec && aiRec.rankings?.[0] ? (() => {
-                                        const topRep = aiRec.rankings[0];
-                                        const memberMatch = members.find((m) => m.id === topRep.repId || m.name.toLowerCase() === topRep.repName.toLowerCase());
-                                        return (
-                                            <div className="mx-2 my-2 p-2.5 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-indigo-200/80 rounded-xl shadow-sm text-left">
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <div className="flex items-center gap-1.5 text-[12px] font-semibold text-indigo-900">
-                                                        <Sparkles size={14} className="text-indigo-600 shrink-0" />
-                                                        <span>AI Best Match</span>
-                                                    </div>
-                                                    <span className="px-2 py-0.5 bg-indigo-600 text-white font-bold text-[11px] rounded-full shadow-xs">
-                                                        {topRep.totalScore}% Score
-                                                    </span>
-                                                </div>
-                                                <p className="text-[11.5px] font-medium text-gray-800 mb-0.5">
-                                                    {topRep.repName}
-                                                </p>
-                                                <p className="text-[11px] text-gray-600 leading-snug mb-2 line-clamp-2">
-                                                    {topRep.rationale}
-                                                </p>
-                                                {memberMatch && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={async (e) => {
-                                                            e.preventDefault();
-                                                            e.stopPropagation();
-                                                            const lead = safeLeads.find((l) => l.id === openMenu);
-                                                            if (!lead) return;
-                                                            try {
-                                                                await assignLead(lead.id, memberMatch.id);
-                                                                await onRefreshLeads();
-                                                                toast.success(`Lead assigned to ${memberMatch.name}`);
-                                                                setOpenMenu(null);
-                                                                setMenuPos(null);
-                                                                setIsAssignSubmenuOpen(false);
-                                                                setAssignSearch("");
-                                                            } catch (err) {
-                                                                toast.error("Failed to assign lead");
-                                                            }
-                                                        }}
-                                                        className="w-full py-1 bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-[11.5px] rounded-lg transition-colors flex items-center justify-center gap-1"
-                                                    >
-                                                        <span>Assign to {topRep.repName.split(" ")[0]}</span>
-                                                    </button>
-                                                )}
-                                            </div>
-                                        );
-                                    })() : null}
+                            {/* Share */}
+                            <button
+                                onClick={() => {
+                                    const lead = safeLeads.find((l) => l.id === openMenu);
+                                    if (lead) {
+                                        setSharingLead(lead);
+                                        setIsShareOpen(true);
+                                        setOpenMenu(null);
+                                        setMenuPos(null);
+                                    }
+                                }}
+                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                            >
+                                <Share2 size={14} />
+                                Share
+                            </button>
 
-                                    {/* Members List */}
-                                    <div className="max-h-[180px] overflow-y-auto py-1">
-                                        {membersLoading ? (
-                                            <div className="flex justify-center py-4">
-                                                <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-                                            </div>
-                                        ) : membersError ? (
-                                            <div className="px-3 py-2 text-[11px] text-red-500 text-center">
-                                                {membersError}
-                                            </div>
-                                        ) : filteredMembers.length === 0 ? (
-                                            <div className="px-3 py-2 text-[11px] text-gray-400 text-center">
-                                                No members found
-                                            </div>
-                                        ) : (
-                                            filteredMembers.map((member) => (
-                                                <button
-                                                    key={member.id}
-                                                    onClick={async (e) => {
-                                                        e.preventDefault();
-                                                        e.stopPropagation();
-                                                        const lead = safeLeads.find((l) => l.id === openMenu);
-
-                                                        if (!lead) {
-                                                            console.warn("No lead found for openMenu:", openMenu);
-                                                        } else if (lead.assignedTo?.id === member.id) {
-                                                            setOpenMenu(null);
-                                                            setMenuPos(null);
-                                                            setIsAssignSubmenuOpen(false);
-                                                            setAssignSearch("");
-                                                            return;
-                                                        } else {
-                                                            try {
-                                                                await assignLead(lead.id, member.id);
-                                                                await onRefreshLeads();
-                                                                toast.success(`Lead assigned to ${member.name}`);
-                                                            } catch (err) {
-                                                                console.error("Failed to assign lead", err);
-                                                                toast.error("Failed to assign lead");
-                                                            }
-                                                        }
-
-                                                        setOpenMenu(null);
-                                                        setMenuPos(null);
-                                                        setIsAssignSubmenuOpen(false);
-                                                        setAssignSearch("");
-                                                    }}
-                                                    className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-gray-50 transition-colors text-left"
-                                                >
-                                                    <Avatar initials={getInitials(member.name)} />
-                                                    <div className="flex-1 min-w-0">
-                                                        <p className="text-[12.5px] font-medium text-gray-800 truncate">
-                                                            {member.name}
-                                                        </p>
-                                                        <p className="text-[10.5px] text-gray-400 truncate">
-                                                            {member.role}
-                                                        </p>
-                                                    </div>
-                                                </button>
-                                            ))
-                                        )}
-                                    </div>
-                                </div>
-                            )}
+                            {/* Delete */}
+                            <button
+                                onClick={() => {
+                                    const lead = safeLeads.find((l) => l.id === openMenu);
+                                    if (lead) {
+                                        setConfirmDeleteId(lead.id);
+                                        setOpenMenu(null);
+                                        setMenuPos(null);
+                                    }
+                                }}
+                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-red-500 border-t border-gray-100 mt-1 pt-1"
+                            >
+                                <Trash2 size={14} />
+                                Delete
+                            </button>
                         </div>
                     )}
                 </>

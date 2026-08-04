@@ -25,25 +25,16 @@ export interface AnomalyAlertsData {
 }
 
 export async function getMorningBriefing(): Promise<MorningBriefingData> {
-  const h = new Date().getHours();
-  const timeGreeting =
-    h >= 4 && h < 12 ? "Good morning" :
-    h >= 12 && h < 17 ? "Good afternoon" :
-    "Good evening";
-
   try {
     const response = await api.get("/dashboard/briefing");
     const data = response.data?.data || response.data;
-    // Replace whatever greeting the AI returns with the correct time-based one
+    // Strip the AI's time-of-day prefix entirely — the UI renders its own greeting
     const aiGreeting: string = data.greeting || "";
     const greetingBody = aiGreeting
       .replace(/^good (morning|afternoon|evening)[,.]?\s*/i, "")
       .trim();
-    const greeting = greetingBody
-      ? `${timeGreeting}. ${greetingBody}`
-      : `${timeGreeting}. Here is your daily brief.`;
     return {
-      greeting,
+      greeting: greetingBody || "Here is your daily executive brief.",
       summaryBullets: Array.isArray(data.summaryBullets) ? data.summaryBullets : [],
       overdueHighlight: data.overdueHighlight,
       topPriorityAction: data.topPriorityAction,
