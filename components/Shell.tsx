@@ -385,27 +385,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   // ── Mobile Swipe Gesture Support ──
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     let touchStartX = 0;
     let touchStartY = 0;
-    
+
     const handleTouchStart = (e: TouchEvent) => {
       const touch = e.changedTouches[0];
       touchStartX = touch.screenX;
       touchStartY = touch.screenY;
     };
-    
+
     const handleTouchEnd = (e: TouchEvent) => {
       const touch = e.changedTouches[0];
       const touchEndX = touch.screenX;
       const touchEndY = touch.screenY;
-      
+
       const swipeDistanceX = touchEndX - touchStartX;
       const swipeDistanceY = touchEndY - touchStartY;
-      
+
       // Only handle horizontal swipes
       if (Math.abs(swipeDistanceX) < Math.abs(swipeDistanceY)) return;
-      
+
       // Swipe right to open (if on left edge of screen)
       if (swipeDistanceX > 80 && touchStartX < 50 && !drawerOpen) {
         setDrawerOpen(true);
@@ -415,10 +415,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         setDrawerOpen(false);
       }
     };
-    
+
     document.addEventListener("touchstart", handleTouchStart, { passive: true });
     document.addEventListener("touchend", handleTouchEnd, { passive: true });
-    
+
     return () => {
       document.removeEventListener("touchstart", handleTouchStart);
       document.removeEventListener("touchend", handleTouchEnd);
@@ -540,10 +540,6 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="w-full flex items-center gap-3 rounded-xl px-1 py-1">
           {/* Left: avatar + name → goes to profile */}
           <button
-            onClick={() => {
-              router.push("/profile");
-              setDrawerOpen(false);
-            }}
             className="flex items-center gap-3 flex-1 min-w-0 hover:bg-surface-hover rounded-xl transition-colors"
           >
             {user.avatarUrl ? (
@@ -622,7 +618,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="px-5 pt-6 pb-5">
           <LogoMark />
         </div>
-        <nav 
+        <nav
           ref={sidebarNavRef}
           onScroll={handleSidebarScroll}
           className="flex-1 px-3 py-1 space-y-0.5 overflow-y-auto"
@@ -664,29 +660,29 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex-1 flex flex-col overflow-hidden">
 
         {/* Top bar (desktop + mobile) */}
-      <header className="flex items-center gap-4 px-4 md:px-6 py-3 bg-surface border-b border-border shrink-0">
-        {/* Mobile menu button */}
-        <button
-          onClick={() => setDrawerOpen(true)}
-          className="md:hidden p-1.5 rounded-xl hover:bg-surface-hover transition-colors"
-          aria-label="Open menu"
-        >
-          <Menu size={20} className="text-text" />
-        </button>
+        <header className="flex items-center gap-4 px-4 md:px-6 py-3 bg-surface border-b border-border shrink-0">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setDrawerOpen(true)}
+            className="md:hidden p-1.5 rounded-xl hover:bg-surface-hover transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu size={20} className="text-text" />
+          </button>
 
-        {/* Mobile logo */}
-        <div className="md:hidden">
-          <LogoMark small />
-        </div>
+          {/* Mobile logo */}
+          <div className="md:hidden">
+            <LogoMark small />
+          </div>
 
-        {/* Search component */}
-        <div className="flex-1 flex justify-start">
-          <CrmSearch />
-        </div>
+          {/* Search component */}
+          <div className="flex-1 flex justify-start">
+            <CrmSearch />
+          </div>
 
-        {/* Notification bell — single instance for both mobile & desktop */}
+          {/* Notification bell — single instance for both mobile & desktop */}
           <NotificationBell />
-      </header>
+        </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
       </div>
