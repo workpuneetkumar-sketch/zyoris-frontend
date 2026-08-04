@@ -8,6 +8,7 @@ import {
   bulkUpdateLeads,
   bulkDeleteLeads,
 } from "@/lib/api/bulkOperationsApi";
+import { executeAssignmentRule } from "@/lib/api/leadsApi";
 import {
   BulkOperationType,
   BulkOperationState,
@@ -164,6 +165,63 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
     }
   }, [selectedIds, onSuccess, clearSelection]);
 
+  // Apply the configured assignment rule to each selected lead one-by-one,
+  // reporting progress as we go. Uses executeAssignmentRule (POST /leads/:id/execute-assignment-rule)
+  // which honours the active rule strategy (round_robin, load_balanced, etc.)
+  // — NOT AI recommendation.
+  const executeBulkApplyRule = useCallback(async () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+
+    setBulkState((prev) => ({ ...prev, isProcessing: true, progress: 0, error: null }));
+
+    let failed = 0;
+    const errors: Array<{ id: string; error: string }> = [];
+
+    for (let i = 0; i < ids.length; i++) {
+      try {
+        await executeAssignmentRule(ids[i]);
+      } catch (err) {
+        failed++;
+        errors.push({
+          id: ids[i],
+          error: err instanceof Error ? err.message : "Unknown error",
+        });
+      }
+      setBulkState((prev) => ({
+        ...prev,
+        progress: Math.round(((i + 1) / ids.length) * 100),
+      }));
+    }
+
+    const processed = ids.length - failed;
+    const result: BulkOperationResult = {
+      success: processed > 0,
+      processedCount: processed,
+      failedCount: failed,
+      message: failed === 0
+        ? `Assignment rule applied to ${processed} lead${processed !== 1 ? "s" : ""}.`
+        : `${processed} lead${processed !== 1 ? "s" : ""} assigned via rule, ${failed} failed.`,
+      errors: errors.length ? errors : undefined,
+    };
+
+    setUndoStack((prev) => [...prev, { type: "apply-rule", ids }]);
+    setBulkState((prev) => ({
+      ...prev,
+      isProcessing: false,
+      progress: 100,
+      result,
+    }));
+    if (result.success) {
+      toast.success(result.message);
+      onSuccess?.("apply-rule");
+      clearSelection();
+    } else {
+      toast.error(result.message);
+      setBulkState((prev) => ({ ...prev, error: result.message }));
+    }
+  }, [selectedIds, onSuccess, clearSelection]);
+
   return {
     // Selection state
     selectedIds,
@@ -181,5 +239,6 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
     executeBulkAssign,
     executeBulkUpdate,
     executeBulkDelete,
+    executeBulkApplyRule,
   };
 }

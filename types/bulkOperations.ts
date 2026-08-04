@@ -11,7 +11,7 @@ export interface BulkOperationResult {
   errors?: Array<{ id: string; error: string }>;
 }
 
-export type BulkOperationType = "assign" | "update" | "delete";
+export type BulkOperationType = "assign" | "update" | "delete" | "apply-rule";
 
 export interface BulkOperationState {
   type: BulkOperationType | null;

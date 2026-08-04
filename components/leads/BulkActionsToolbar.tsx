@@ -14,6 +14,8 @@ import {
   AlertTriangle,
   ChevronDown,
   Search,
+  Zap,
+  GitBranch,
 } from "lucide-react";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { useBulkOperations } from "@/hooks/useBulkOperations";
@@ -268,19 +270,22 @@ function ProgressBar({ value }: { value: number }) {
 
 function BulkAssignDialog({
   count,
-  onConfirm,
+  onConfirmMember,
+  onConfirmRule,
   onCancel,
   isProcessing,
   progress,
   error,
 }: {
   count: number;
-  onConfirm: (assignedToId: string, name: string) => void;
+  onConfirmMember: (assignedToId: string, name: string) => void;
+  onConfirmRule: () => void;
   onCancel: () => void;
   isProcessing: boolean;
   progress: number;
   error: string | null;
 }) {
+  const [mode, setMode] = useState<"member" | "rule">("member");
   const [selected, setSelected] = useState<TeamMember | null>(null);
 
   return (
@@ -307,8 +312,40 @@ function BulkAssignDialog({
           </button>
         </div>
 
+        {/* Mode tabs */}
+        <div className="px-6 pt-4">
+          <div className="grid grid-cols-2 gap-1.5 p-1 bg-gray-100 rounded-xl">
+            <button
+              type="button"
+              onClick={() => setMode("member")}
+              disabled={isProcessing}
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                mode === "member"
+                  ? "bg-white text-blue-700 shadow-sm border border-blue-100"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <UserCheck size={13} />
+              Assign to Member
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("rule")}
+              disabled={isProcessing}
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all duration-150 ${
+                mode === "rule"
+                  ? "bg-white text-violet-700 shadow-sm border border-violet-100"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <GitBranch size={13} />
+              Apply Assignment Rule
+            </button>
+          </div>
+        </div>
+
         {/* Body */}
-        <div className="px-6 pt-5 pb-4 space-y-4">
+        <div className="px-6 pt-4 pb-4 space-y-4">
           {error && (
             <div className="flex items-center gap-2.5 p-3 bg-red-50 rounded-xl border border-red-100 text-xs text-red-600">
               <AlertTriangle size={13} className="shrink-0" />
@@ -316,29 +353,54 @@ function BulkAssignDialog({
             </div>
           )}
 
-          <div>
-            <label className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
-              Assign to
-              <span className="text-red-500 ml-0.5">*</span>
-            </label>
-            <TeamMemberPicker
-              value={selected}
-              onChange={setSelected}
-              disabled={isProcessing}
-            />
-          </div>
-
-          {/* Selected member summary card */}
-          {selected && !isProcessing && (
-            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl">
-              <MemberAvatar name={selected.name} size="md" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-blue-800 truncate">{selected.name}</p>
-                <p className="text-[11px] text-blue-500 truncate">{selected.email}</p>
+          {mode === "member" ? (
+            <>
+              <div>
+                <label className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
+                  Assign to
+                  <span className="text-red-500 ml-0.5">*</span>
+                </label>
+                <TeamMemberPicker
+                  value={selected}
+                  onChange={setSelected}
+                  disabled={isProcessing}
+                />
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">{count} leads</p>
-                <p className="text-[10px] text-blue-400">will be assigned</p>
+
+              {/* Selected member summary card */}
+              {selected && !isProcessing && (
+                <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl">
+                  <MemberAvatar name={selected.name} size="md" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-blue-800 truncate">{selected.name}</p>
+                    <p className="text-[11px] text-blue-500 truncate">{selected.email}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">{count} leads</p>
+                    <p className="text-[10px] text-blue-400">will be assigned</p>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            /* Rule mode info card */
+            <div className="rounded-xl border border-violet-100 bg-gradient-to-br from-violet-50 to-purple-50 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-violet-100 border border-violet-200 flex items-center justify-center shrink-0">
+                  <GitBranch size={15} className="text-violet-600" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-violet-900">Apply Active Assignment Rule</p>
+                  <p className="text-[11px] text-violet-600 mt-0.5 leading-relaxed">
+                    The configured rule (e.g. Round Robin, Load Balanced) will be applied to each of the {count} selected lead{count !== 1 ? "s" : ""}. Leads are distributed according to your rule's strategy — not AI recommendation.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 px-3 py-2 bg-white/70 border border-violet-100 rounded-lg">
+                <Zap size={12} className="text-amber-500 shrink-0" />
+                <p className="text-[11px] text-gray-600">
+                  Each lead is processed individually. Progress is shown below.
+                </p>
               </div>
             </div>
           )}
@@ -349,7 +411,7 @@ function BulkAssignDialog({
               <div className="flex justify-between text-xs text-gray-500">
                 <span className="flex items-center gap-1.5">
                   <Loader2 size={11} className="animate-spin text-blue-500" />
-                  Assigning {count} leads…
+                  {mode === "rule" ? "Applying rule to" : "Assigning"} {count} leads…
                 </span>
                 <span className="font-semibold text-blue-600">{progress}%</span>
               </div>
@@ -367,16 +429,30 @@ function BulkAssignDialog({
           >
             Cancel
           </button>
-          <button
-            onClick={() => selected && onConfirm(selected.id, selected.name)}
-            disabled={!selected || isProcessing}
-            className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-40 flex items-center gap-2 shadow-sm shadow-blue-200"
-          >
-            {isProcessing
-              ? <><Loader2 size={14} className="animate-spin" />Assigning…</>
-              : <><UserCheck size={14} />Assign {count} Leads</>
-            }
-          </button>
+
+          {mode === "member" ? (
+            <button
+              onClick={() => selected && onConfirmMember(selected.id, selected.name)}
+              disabled={!selected || isProcessing}
+              className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-40 flex items-center gap-2 shadow-sm shadow-blue-200"
+            >
+              {isProcessing
+                ? <><Loader2 size={14} className="animate-spin" />Assigning…</>
+                : <><UserCheck size={14} />Assign {count} Leads</>
+              }
+            </button>
+          ) : (
+            <button
+              onClick={onConfirmRule}
+              disabled={isProcessing}
+              className="px-5 py-2 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-700 active:bg-violet-800 transition-colors disabled:opacity-40 flex items-center gap-2 shadow-sm shadow-violet-200"
+            >
+              {isProcessing
+                ? <><Loader2 size={14} className="animate-spin" />Applying Rule…</>
+                : <><GitBranch size={14} />Apply Rule to {count} Leads</>
+              }
+            </button>
+          )}
         </div>
 
       </div>
@@ -629,6 +705,7 @@ export interface BulkActionsToolbarProps {
     executeBulkAssign: (assignedToId: string, assignedToName?: string) => Promise<void>;
     executeBulkUpdate: (updates: { status?: string; source?: string; tags?: string[]; owner?: string }) => Promise<void>;
     executeBulkDelete: () => Promise<void>;
+    executeBulkApplyRule?: () => Promise<void>;
 }
 
 export function BulkActionsToolbar({
@@ -645,6 +722,7 @@ export function BulkActionsToolbar({
     executeBulkAssign,
     executeBulkUpdate,
     executeBulkDelete,
+    executeBulkApplyRule,
 }: BulkActionsToolbarProps) {
     const allSelected = allLeads.length > 0 && allLeads.every((l) => isSelected(l.id));
     const someSelected = selectedCount > 0;
@@ -728,7 +806,8 @@ export function BulkActionsToolbar({
       {bulkState.isOpen && bulkState.type === "assign" && (
         <BulkAssignDialog
           count={selectedCount}
-          onConfirm={(id, name) => executeBulkAssign(id, name)}
+          onConfirmMember={(id, name) => executeBulkAssign(id, name)}
+          onConfirmRule={() => executeBulkApplyRule?.()}
           onCancel={closeBulkAction}
           isProcessing={bulkState.isProcessing}
           progress={bulkState.progress}

@@ -184,7 +184,7 @@ export default function LeadsPage() {
   const {
     selectedIds, selectedCount, isSelected, toggleSelect, selectAll,
     clearSelection, bulkState, openBulkAction, closeBulkAction,
-    executeBulkAssign, executeBulkUpdate, executeBulkDelete,
+    executeBulkAssign, executeBulkUpdate, executeBulkDelete, executeBulkApplyRule,
   } = useBulkOperations(handleBulkSuccess);
 
   // ── Assignment handlers ───────────────────────────────────────────────────
@@ -265,6 +265,7 @@ export default function LeadsPage() {
                 executeBulkAssign={executeBulkAssign}
                 executeBulkUpdate={executeBulkUpdate}
                 executeBulkDelete={executeBulkDelete}
+                executeBulkApplyRule={executeBulkApplyRule}
               />
               <div className="mt-4">
                 <LeadsTable
