@@ -14,12 +14,39 @@ import {
   AlertTriangle,
   ChevronDown,
   Search,
-  ChevronUp,
 } from "lucide-react";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { useBulkOperations } from "@/hooks/useBulkOperations";
 import { Lead } from "@/types/leads";
 import { BulkOperationType } from "@/types/bulkOperations";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+const AVATAR_COLORS = [
+  "bg-blue-100 text-blue-700",
+  "bg-violet-100 text-violet-700",
+  "bg-emerald-100 text-emerald-700",
+  "bg-amber-100 text-amber-700",
+  "bg-rose-100 text-rose-700",
+  "bg-cyan-100 text-cyan-700",
+];
+
+function memberColor(name: string) {
+  let sum = 0;
+  for (let i = 0; i < name.length; i++) sum += name.charCodeAt(i);
+  return AVATAR_COLORS[sum % AVATAR_COLORS.length];
+}
+
+function MemberAvatar({ name, size = "md" }: { name: string; size?: "sm" | "md" }) {
+  const initials = name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  const color = memberColor(name);
+  const dim = size === "sm" ? "w-7 h-7 text-[10px]" : "w-9 h-9 text-xs";
+  return (
+    <div className={`${dim} ${color} rounded-full font-bold flex items-center justify-center shrink-0`}>
+      {initials}
+    </div>
+  );
+}
 
 // ── Team-member picker ────────────────────────────────────────────────────────
 
@@ -37,8 +64,8 @@ function TeamMemberPicker({
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch once on mount
   useEffect(() => {
     setLoading(true);
     getTeamMembers()
@@ -47,16 +74,21 @@ function TeamMemberPicker({
       .finally(() => setLoading(false));
   }, []);
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handle(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setQuery("");
       }
     }
     document.addEventListener("mousedown", handle);
     return () => document.removeEventListener("mousedown", handle);
   }, []);
+
+  // Focus the search input whenever the list opens
+  useEffect(() => {
+    if (open) setTimeout(() => inputRef.current?.focus(), 30);
+  }, [open]);
 
   const filtered = members.filter(
     (m) =>
@@ -70,97 +102,142 @@ function TeamMemberPicker({
     setOpen(false);
   }
 
-  function clear() {
+  function clear(e: React.MouseEvent) {
+    e.stopPropagation();
     onChange(null);
     setQuery("");
   }
 
-  const displayValue = value ? value.name : "";
-
   return (
     <div ref={containerRef} className="relative">
-      <div
-        className={`flex items-center w-full px-3 py-2 border rounded-lg text-sm gap-2 cursor-pointer transition-all ${
-          open ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
-        } ${disabled ? "bg-gray-50 cursor-not-allowed" : "bg-white"}`}
+      {/* ── Trigger ── */}
+      <button
+        type="button"
+        disabled={disabled}
         onClick={() => !disabled && setOpen((o) => !o)}
-        role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
+        className={`
+          w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border text-sm text-left
+          transition-all duration-150 outline-none
+          ${open
+            ? "border-blue-500 ring-2 ring-blue-100 bg-white shadow-sm"
+            : value
+              ? "border-blue-200 bg-blue-50/40 hover:border-blue-300"
+              : "border-gray-200 bg-white hover:border-gray-300"
+          }
+          ${disabled ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}
+        `}
       >
-        <Search size={13} className="text-gray-400 shrink-0" />
         {value ? (
-          <span className="flex-1 truncate text-gray-800">{displayValue}</span>
+          <>
+            <MemberAvatar name={value.name} size="sm" />
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-gray-900 truncate text-sm leading-tight">{value.name}</p>
+              <p className="text-[11px] text-gray-400 truncate leading-tight mt-0.5">{value.email}</p>
+            </div>
+            {value.role && (
+              <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-md shrink-0 uppercase tracking-wide">
+                {value.role}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={clear}
+              disabled={disabled}
+              aria-label="Clear selection"
+              className="ml-1 w-5 h-5 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors shrink-0"
+            >
+              <X size={11} />
+            </button>
+          </>
         ) : (
-          <span className="flex-1 text-gray-400">Search team member…</span>
+          <>
+            <Search size={14} className="text-gray-400 shrink-0" />
+            <span className="flex-1 text-gray-400 text-sm">Search team member…</span>
+            <ChevronDown size={14} className={`text-gray-400 shrink-0 transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+          </>
         )}
-        {value ? (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); clear(); }}
-            disabled={disabled}
-            className="text-gray-400 hover:text-gray-600 shrink-0"
-            aria-label="Clear selection"
-          >
-            <X size={13} />
-          </button>
-        ) : (
-          open ? <ChevronUp size={13} className="text-gray-400 shrink-0" /> : <ChevronDown size={13} className="text-gray-400 shrink-0" />
-        )}
-      </div>
+      </button>
 
+      {/* ── Dropdown ── */}
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
-          {/* Search input inside dropdown */}
-          <div className="p-2 border-b border-gray-100">
-            <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
-              <Search size={12} className="text-gray-400 shrink-0" />
+        <div className="absolute left-0 right-0 top-[calc(100%+6px)] z-[200] bg-white rounded-2xl border border-gray-200 shadow-xl overflow-hidden">
+          {/* Search bar */}
+          <div className="px-3 pt-3 pb-2">
+            <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+              <Search size={13} className="text-gray-400 shrink-0" />
               <input
-                autoFocus
+                ref={inputRef}
                 type="text"
-                placeholder="Type to filter…"
+                placeholder="Search by name or email…"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                onClick={(e) => e.stopPropagation()}
-                className="flex-1 bg-transparent text-xs outline-none text-gray-700 placeholder-gray-400"
+                className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder-gray-400"
               />
+              {query && (
+                <button onClick={() => setQuery("")} className="text-gray-400 hover:text-gray-600">
+                  <X size={11} />
+                </button>
+              )}
             </div>
           </div>
 
-          <ul role="listbox" className="max-h-48 overflow-y-auto py-1">
+          {/* List */}
+          <ul role="listbox" className="max-h-52 overflow-y-auto pb-2 px-1.5">
             {loading ? (
-              <li className="flex items-center justify-center gap-2 py-4 text-xs text-gray-400">
-                <Loader2 size={12} className="animate-spin" />
-                Loading members…
+              <li className="flex items-center justify-center gap-2 py-6 text-xs text-gray-400">
+                <Loader2 size={13} className="animate-spin text-blue-500" />
+                <span>Loading team members…</span>
               </li>
             ) : filtered.length === 0 ? (
-              <li className="py-3 text-center text-xs text-gray-400">No members found</li>
+              <li className="py-6 text-center text-sm text-gray-400">
+                <p>No members match "{query}"</p>
+              </li>
             ) : (
-              filtered.map((m) => (
-                <li
-                  key={m.id}
-                  role="option"
-                  aria-selected={value?.id === m.id}
-                  onClick={() => select(m)}
-                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors ${
-                    value?.id === m.id ? "bg-blue-50" : ""
-                  }`}
-                >
-                  {/* Avatar */}
-                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">
-                    {m.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold text-gray-800 truncate">{m.name}</p>
-                    <p className="text-[11px] text-gray-400 truncate">{m.email}</p>
-                  </div>
-                  {m.role && (
-                    <span className="text-[10px] font-medium text-gray-400 shrink-0 capitalize">{m.role}</span>
-                  )}
-                </li>
-              ))
+              filtered.map((m) => {
+                const isActive = value?.id === m.id;
+                return (
+                  <li
+                    key={m.id}
+                    role="option"
+                    aria-selected={isActive}
+                    onClick={() => select(m)}
+                    className={`
+                      flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all duration-100 my-0.5
+                      ${isActive
+                        ? "bg-blue-50 border border-blue-100"
+                        : "hover:bg-gray-50 border border-transparent"
+                      }
+                    `}
+                  >
+                    <MemberAvatar name={m.name} size="md" />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold truncate leading-tight ${isActive ? "text-blue-700" : "text-gray-800"}`}>
+                        {m.name}
+                      </p>
+                      <p className="text-[11px] text-gray-400 truncate leading-tight mt-0.5">{m.email}</p>
+                    </div>
+                    {m.role && (
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md shrink-0 uppercase tracking-wide ${isActive ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-500"}`}>
+                        {m.role}
+                      </span>
+                    )}
+                    {isActive && (
+                      <CheckCircle2 size={14} className="text-blue-500 shrink-0" />
+                    )}
+                  </li>
+                );
+              })
             )}
           </ul>
+
+          {/* Footer count */}
+          {!loading && filtered.length > 0 && (
+            <div className="px-4 py-2 border-t border-gray-100 bg-gray-50/60">
+              <p className="text-[11px] text-gray-400">{filtered.length} member{filtered.length !== 1 ? "s" : ""} available</p>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -207,61 +284,101 @@ function BulkAssignDialog({
   const [selected, setSelected] = useState<TeamMember | null>(null);
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
+      <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-gray-100">
+
+        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900 flex items-center gap-2">
-            <UserCheck size={18} className="text-blue-600" />
-            Bulk Assign ({count} leads)
-          </h2>
-          <button onClick={onCancel} disabled={isProcessing} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition-colors">
-            <X size={16} />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+              <UserCheck size={16} className="text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 leading-tight">Bulk Assign</h2>
+              <p className="text-[11px] text-gray-400 leading-tight">{count} leads selected</p>
+            </div>
+          </div>
+          <button
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
+          >
+            <X size={15} />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+
+        {/* Body */}
+        <div className="px-6 pt-5 pb-4 space-y-4">
           {error && (
-            <div className="flex items-center gap-2 p-3 bg-red-50 rounded-xl border border-red-100 text-xs text-red-600">
+            <div className="flex items-center gap-2.5 p-3 bg-red-50 rounded-xl border border-red-100 text-xs text-red-600">
               <AlertTriangle size={13} className="shrink-0" />
               {error}
             </div>
           )}
+
           <div>
-            <label className="text-xs font-medium text-gray-600 mb-1.5 block">
-              Assign to <span className="text-red-500">*</span>
+            <label className="text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1">
+              Assign to
+              <span className="text-red-500 ml-0.5">*</span>
             </label>
             <TeamMemberPicker
               value={selected}
               onChange={setSelected}
               disabled={isProcessing}
             />
-            {selected && (
-              <p className="mt-1.5 text-[11px] text-gray-400">
-                ID: <span className="font-mono">{selected.id}</span>
-              </p>
-            )}
           </div>
+
+          {/* Selected member summary card */}
+          {selected && !isProcessing && (
+            <div className="flex items-center gap-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl">
+              <MemberAvatar name={selected.name} size="md" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-blue-800 truncate">{selected.name}</p>
+                <p className="text-[11px] text-blue-500 truncate">{selected.email}</p>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">{count} leads</p>
+                <p className="text-[10px] text-blue-400">will be assigned</p>
+              </div>
+            </div>
+          )}
+
+          {/* Progress */}
           {isProcessing && (
-            <div className="space-y-1.5">
+            <div className="space-y-2">
               <div className="flex justify-between text-xs text-gray-500">
-                <span>Assigning {count} leads…</span>
-                <span>{progress}%</span>
+                <span className="flex items-center gap-1.5">
+                  <Loader2 size={11} className="animate-spin text-blue-500" />
+                  Assigning {count} leads…
+                </span>
+                <span className="font-semibold text-blue-600">{progress}%</span>
               </div>
               <ProgressBar value={progress} />
             </div>
           )}
         </div>
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3">
-          <button onClick={onCancel} disabled={isProcessing} className="px-4 py-2 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-white transition-colors disabled:opacity-50">
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-2.5">
+          <button
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="px-4 py-2 rounded-xl border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
             Cancel
           </button>
           <button
             onClick={() => selected && onConfirm(selected.id, selected.name)}
             disabled={!selected || isProcessing}
-            className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+            className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 active:bg-blue-800 transition-colors disabled:opacity-40 flex items-center gap-2 shadow-sm shadow-blue-200"
           >
-            {isProcessing ? <><Loader2 size={14} className="animate-spin" />Assigning…</> : <><UserCheck size={14} />Assign {count} Leads</>}
+            {isProcessing
+              ? <><Loader2 size={14} className="animate-spin" />Assigning…</>
+              : <><UserCheck size={14} />Assign {count} Leads</>
+            }
           </button>
         </div>
+
       </div>
     </div>
   );
