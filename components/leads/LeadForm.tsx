@@ -273,19 +273,11 @@ export default function LeadForm({
                         />
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Assigned To
-                        </label>
-
-                        <input
-                            type="text"
-                            name="assignedToId"
-                            value={form.assignedToId}
-                            onChange={handleChange}
-                            placeholder="User ID"
-                            className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
-                        />
+                    <div className="flex items-start gap-2 col-span-2 mt-1 px-3 py-2.5 bg-blue-50 border border-blue-100 rounded-lg">
+                        <span className="text-blue-500 mt-0.5 text-xs">ℹ</span>
+                        <p className="text-xs text-blue-700 font-medium">
+                            Assignment is handled automatically by your <strong>Assignment Rules</strong>. Configure them in the Leads → Assignment Rules tab.
+                        </p>
                     </div>
 
                     <div className="col-span-2">

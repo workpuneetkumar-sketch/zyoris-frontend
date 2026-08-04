@@ -9,7 +9,7 @@ import LeadForm, {
     LeadFormValues,
 } from "./LeadForm";
 
-import { createLead } from "@/lib/api/leadsApi";
+import { createLead, executeAssignmentRule } from "@/lib/api/leadsApi";
 
 export default function NewLeadPage() {
     const router = useRouter();
@@ -64,13 +64,19 @@ export default function NewLeadPage() {
                 estimatedValue: (form.estimatedValue !== "" && form.estimatedValue !== undefined && form.estimatedValue !== null) 
                     ? Number(form.estimatedValue) 
                     : undefined,
-                assignedToId:
-                    form.assignedToId.trim() || null,
+                assignedToId: null, // assignment handled by rules below
             };
             console.log('[NewLeadPage] Payload to createLead:', payload);
 
             const newLead = await createLead(payload);
             console.log('[NewLeadPage] Created lead:', newLead);
+
+            // Run assignment rule on the new lead (fire-and-forget — don't block UX)
+            if (newLead?.id) {
+                executeAssignmentRule(newLead.id).catch((err) => {
+                    console.warn('[NewLeadPage] Assignment rule execution failed (non-fatal):', err?.message);
+                });
+            }
 
             toast.success("Lead created successfully");
             router.push("/leads");

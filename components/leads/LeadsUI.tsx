@@ -1020,7 +1020,23 @@ export function LeadsTable({
                     onClose={() => setIsUploadOpen(false)}
                     onSuccess={async () => {
                         await onRefreshLeads();
-                        toast.success("Leads imported successfully!");
+                        toast.success("Leads imported! Applying assignment rules…");
+                        // Fire assignment rules on all unassigned leads after bulk import
+                        // This is best-effort — individual failures are non-fatal
+                        try {
+                            const { fetchLeads: fetchLeadsApi } = await import("@/lib/api/leadsApi");
+                            const { executeAssignmentRule } = await import("@/lib/api/leadsApi");
+                            const data = await fetchLeadsApi(1, { status: "All Status", source: "All Sources", owner: "All Owners", search: "" });
+                            const unassigned = data.leads.filter((l: any) => !l.assignedToId && !l.assignedTo);
+                            await Promise.allSettled(
+                                unassigned.slice(0, 50).map((l: any) => executeAssignmentRule(l.id))
+                            );
+                            if (unassigned.length > 0) {
+                                toast.success(`Assignment rules applied to ${Math.min(unassigned.length, 50)} leads.`);
+                            }
+                        } catch (err) {
+                            console.warn("[BulkUpload] Assignment rule run failed (non-fatal):", err);
+                        }
                     }}
                 />
             )}

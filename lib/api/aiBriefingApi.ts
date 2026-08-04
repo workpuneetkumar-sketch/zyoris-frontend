@@ -25,11 +25,25 @@ export interface AnomalyAlertsData {
 }
 
 export async function getMorningBriefing(): Promise<MorningBriefingData> {
+  const h = new Date().getHours();
+  const timeGreeting =
+    h >= 4 && h < 12 ? "Good morning" :
+    h >= 12 && h < 17 ? "Good afternoon" :
+    "Good evening";
+
   try {
     const response = await api.get("/dashboard/briefing");
     const data = response.data?.data || response.data;
+    // Replace whatever greeting the AI returns with the correct time-based one
+    const aiGreeting: string = data.greeting || "";
+    const greetingBody = aiGreeting
+      .replace(/^good (morning|afternoon|evening)[,.]?\s*/i, "")
+      .trim();
+    const greeting = greetingBody
+      ? `${timeGreeting}. ${greetingBody}`
+      : `${timeGreeting}. Here is your daily brief.`;
     return {
-      greeting: data.greeting || "Good morning. Here is your overnight brief.",
+      greeting,
       summaryBullets: Array.isArray(data.summaryBullets) ? data.summaryBullets : [],
       overdueHighlight: data.overdueHighlight,
       topPriorityAction: data.topPriorityAction,
@@ -39,7 +53,7 @@ export async function getMorningBriefing(): Promise<MorningBriefingData> {
   } catch (error: any) {
     console.error("Failed to fetch morning briefing:", error);
     throw new Error(
-      error.response?.data?.message || error.message || "Unable to load morning briefing."
+      error.response?.data?.message || error.message || "Unable to load briefing."
     );
   }
 }
