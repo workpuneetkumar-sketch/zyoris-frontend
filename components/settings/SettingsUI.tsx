@@ -134,6 +134,8 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
   const [originalDesignation, setOriginalDesignation] = useState(profile?.designation ?? "");
   const [photoPreview, setPhotoPreview]     = useState<string | null>(null);
   const [photoFile, setPhotoFile]           = useState<File | null>(null);
+  // URL returned by server after a successful upload – persists as the profile pic
+  const [savedAvatarUrl, setSavedAvatarUrl] = useState<string | null>((profile as any)?.avatarUrl ?? null);
   const [saving, setSaving]                 = useState(false);
   const [isEditing, setIsEditing]           = useState(false);
 
@@ -193,6 +195,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
       setOriginalName(profile.name);
       setDesignation(profile.designation ?? "");
       setOriginalDesignation(profile.designation ?? "");
+      if ((profile as any).avatarUrl) setSavedAvatarUrl((profile as any).avatarUrl);
     }
   }, [profile]);
 
@@ -216,12 +219,22 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
       if (designation.trim()) {
         await saveSetting("profile.designation", designation.trim());
       }
-      
-      // Update authenticated user profile info
-      await updateProfileApi({
+
+      // PATCH /auth/me – sends multipart/form-data when a photo file is selected
+      // so the avatar binary reaches the backend; otherwise sends plain JSON.
+      const updated = await updateProfileApi({
         name: name.trim(),
-        designation: designation.trim() || undefined
+        designation: designation.trim() || undefined,
+        avatarFile: photoFile ?? undefined,
       });
+
+      // Capture the avatar URL returned by the server so the circle stays updated
+      if (updated?.avatarUrl) {
+        setSavedAvatarUrl(updated.avatarUrl);
+      } else if (photoPreview) {
+        // Fallback: keep the local object-URL preview visible
+        setSavedAvatarUrl(photoPreview);
+      }
 
       setOriginalName(name.trim());
       setOriginalDesignation(designation.trim());
@@ -351,7 +364,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
             {activeTab === "Profile" && (
               <ProfileTab name={name} designation={designation} email={profile?.email ?? fallback.email}
                 role={profile?.role ?? fallback.role} initials={initials}
-                photoPreview={photoPreview} saving={saving} isEditing={isEditing}
+                photoPreview={photoPreview} savedAvatarUrl={savedAvatarUrl} saving={saving} isEditing={isEditing}
                 fileInputRef={fileInputRef} onNameChange={setName} onDesignationChange={setDesignation}
                 onPhotoChange={handlePhotoChange} onSave={handleSaveProfile}
                 onCancel={handleCancel} onEdit={() => setIsEditing(true)} profile={profile} />
@@ -382,7 +395,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
 
 interface ProfileTabProps {
   name: string; designation: string; email: string; role: string; initials: string;
-  photoPreview: string | null; saving: boolean; isEditing: boolean;
+  photoPreview: string | null; savedAvatarUrl: string | null; saving: boolean; isEditing: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
   onNameChange: (v: string) => void;
   onDesignationChange: (v: string) => void;
@@ -391,8 +404,13 @@ interface ProfileTabProps {
   profile: Profile | null;
 }
 
-function ProfileTab({ name, designation, email, role, initials, photoPreview, saving, isEditing,
+function ProfileTab({ name, designation, email, role, initials, photoPreview, savedAvatarUrl, saving, isEditing,
   fileInputRef, onNameChange, onDesignationChange, onPhotoChange, onSave, onCancel, onEdit, profile }: ProfileTabProps) {
+  // Determine the image to display in the avatar circle:
+  // 1. While editing – show the local file preview if user picked a new photo
+  // 2. Otherwise (view mode or editing without a new pick) – show the server-saved avatar URL
+  // 3. Fallback: initials
+  const avatarSrc = photoPreview ?? savedAvatarUrl;
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -410,7 +428,9 @@ function ProfileTab({ name, designation, email, role, initials, photoPreview, sa
         <div className="flex items-center gap-6">
           <div className="relative">
             <div className="w-24 h-24 rounded-full bg-gradient-to-r from-blue-500 to-blue-600 flex items-center justify-center text-3xl font-bold text-white border-4 border-white shadow-lg overflow-hidden">
-              {photoPreview ? <img src={photoPreview} alt="Preview" className="w-full h-full object-cover" /> : initials}
+              {avatarSrc
+                ? <img src={avatarSrc} alt="Profile" className="w-full h-full object-cover" />
+                : initials}
             </div>
             {isEditing && (
               <button onClick={() => fileInputRef.current?.click()}

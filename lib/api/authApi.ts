@@ -44,9 +44,25 @@ export interface UpdateProfilePayload {
     email?: string;
     avatarUrl?: string;
     designation?: string;
+    // If provided, avatar file is uploaded as multipart/form-data
+    avatarFile?: File | null;
 }
 
-export const updateProfileApi = async (data: UpdateProfilePayload) => {
+export const updateProfileApi = async ({ avatarFile, ...data }: UpdateProfilePayload) => {
+    // If a file is attached, send as multipart/form-data so the backend
+    // receives the binary via the "avatar" field.
+    if (avatarFile) {
+        const formData = new FormData();
+        formData.append("avatar", avatarFile);
+        if (data.name) formData.append("name", data.name);
+        if (data.email) formData.append("email", data.email);
+        if (data.designation !== undefined) formData.append("designation", data.designation ?? "");
+        const res = await api.patch("/auth/me", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
+        return res.data;
+    }
+    // No file – plain JSON patch
     const res = await api.patch("/auth/me", data);
     return res.data;
 };
