@@ -561,7 +561,7 @@ export function LeadsTable({
                     <p className="text-sm text-gray-500">
                         {loading
                             ? "Loading..."
-                            : `Showing ${total === 0 ? 0 : (page - 1) * perPage + 1} to ${Math.min(page * perPage, total)} of ${total} leads`}
+                            : `Showing ${total === 0 ? 0 : (page - 1) * perPage + 1}–${Math.min(page * perPage, total)} of ${total} leads`}
                     </p>
                     <div className="flex items-center gap-1.5">
                         {/* Prev */}

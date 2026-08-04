@@ -407,7 +407,8 @@ export function AdvancedFiltersDrawer({
           {/* Page size */}
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Results Per Page</p>
-            <div className="flex gap-2">
+            {/* Preset chips */}
+            <div className="flex gap-2 mb-2">
               {PAGE_SIZE_OPTIONS.map((size) => (
                 <button
                   key={size}
@@ -423,6 +424,35 @@ export function AdvancedFiltersDrawer({
                 </button>
               ))}
             </div>
+            {/* Custom value input */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  placeholder="Custom (e.g. 200)"
+                  value={PAGE_SIZE_OPTIONS.includes(localFilters.pageSize) ? "" : localFilters.pageSize}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!isNaN(v) && v >= 1) updateFilter("pageSize", v);
+                  }}
+                  className={`w-full px-3 py-1.5 border rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all ${
+                    !PAGE_SIZE_OPTIONS.includes(localFilters.pageSize)
+                      ? "border-blue-500 ring-2 ring-blue-100 bg-blue-50/30 font-semibold text-blue-700"
+                      : "border-gray-200 text-gray-600"
+                  }`}
+                />
+              </div>
+              <span className="text-[11px] text-gray-400 shrink-0">per page</span>
+            </div>
+            {/* Active indicator for custom value */}
+            {!PAGE_SIZE_OPTIONS.includes(localFilters.pageSize) && (
+              <p className="mt-1.5 text-[11px] text-blue-600 flex items-center gap-1">
+                <Check size={10} />
+                Custom: {localFilters.pageSize} per page
+              </p>
+            )}
           </div>
 
           {/* Saved views */}
