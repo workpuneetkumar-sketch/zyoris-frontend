@@ -83,7 +83,6 @@ export function DashboardAiInsightsBox({
               AI Executive Briefing &amp; Anomaly Detection
             </h3>
             <p className="text-xs text-text-muted mt-0.5 font-medium">
-              Real-time role-tailored insights and 7-day metric baselines powered by Groq LPUs
             </p>
           </div>
         </div>
@@ -183,13 +182,12 @@ export function DashboardAiInsightsBox({
                         <div>
                           <div className="flex items-center justify-between gap-2 mb-3">
                             <span
-                              className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
-                                isHigh
+                              className={`px-2.5 py-1 rounded-md text-[10px] font-bold uppercase tracking-wider border ${isHigh
                                   ? "bg-rose-500/10 text-rose-600 border-rose-500/20"
                                   : isMed
-                                  ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
-                                  : "bg-surface-hover/70 text-text-muted border-border/60"
-                              }`}
+                                    ? "bg-amber-500/10 text-amber-700 border-amber-500/20"
+                                    : "bg-surface-hover/70 text-text-muted border-border/60"
+                                }`}
                             >
                               {alert.severity} Severity
                             </span>
