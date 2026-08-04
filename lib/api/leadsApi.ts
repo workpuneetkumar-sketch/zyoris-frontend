@@ -50,10 +50,50 @@ function isLeadSoftDeleted(lead: Lead): boolean {
 
 // ── GET paginated + filtered leads ─────────────────────────
 
+// ── Backend page-size cap (the API won't return more than this per request) ──
+const BACKEND_MAX_LIMIT = 100;
+
 export async function fetchLeads(
     page: number,
     filters: LeadsFilters,
     limit: number = PER_PAGE
+): Promise<LeadsResponse> {
+    // If the requested limit fits within the backend cap, do a single request.
+    // Otherwise, fan out into multiple backend requests (each capped at
+    // BACKEND_MAX_LIMIT) and stitch the results together client-side.
+    if (limit <= BACKEND_MAX_LIMIT) {
+        return _fetchLeadsPage(page, filters, limit);
+    }
+
+    // --- Multi-page stitch ---
+    // Work out which backend pages correspond to the virtual page the caller
+    // asked for, then fetch exactly those backend pages in parallel.
+    const virtualOffset = (page - 1) * limit;          // first lead index (0-based)
+    const firstBackendPage = Math.floor(virtualOffset / BACKEND_MAX_LIMIT) + 1;
+    const lastBackendPage  = Math.ceil((virtualOffset + limit) / BACKEND_MAX_LIMIT);
+
+    const results = await Promise.all(
+        Array.from(
+            { length: lastBackendPage - firstBackendPage + 1 },
+            (_, i) => _fetchLeadsPage(firstBackendPage + i, filters, BACKEND_MAX_LIMIT)
+        )
+    );
+
+    // Stitch all leads together, then slice to the exact window the caller wants
+    const allLeads  = results.flatMap((r) => r.leads);
+    const totalReal = results[0]?.total ?? 0;           // total comes from first page
+
+    // Relative offset within the stitched array
+    const sliceStart = virtualOffset - (firstBackendPage - 1) * BACKEND_MAX_LIMIT;
+    const sliceEnd   = sliceStart + limit;
+
+    return { leads: allLeads.slice(sliceStart, sliceEnd), total: totalReal };
+}
+
+async function _fetchLeadsPage(
+    page: number,
+    filters: LeadsFilters,
+    limit: number
 ): Promise<LeadsResponse> {
     const params = {
         page,
