@@ -17,7 +17,31 @@ import {
   saveBoolSetting,
   deleteSetting,
   SettingsMap,
+  patchNotificationPreferences,
 } from "@/lib/api/settingsApi";
+import {
+  updateProfileApi,
+  updatePasswordApi,
+  deleteAccountApi,
+} from "@/lib/api/authApi";
+import {
+  getEmailTemplates,
+  createEmailTemplate,
+  updateEmailTemplate,
+  deleteEmailTemplate,
+  getWhatsAppTemplates,
+  createWhatsAppTemplate,
+  updateWhatsAppTemplate,
+  deleteWhatsAppTemplate,
+  getCampaignTemplates,
+  createCampaignTemplate,
+  updateCampaignTemplate,
+  deleteCampaignTemplate,
+  EmailTemplate,
+  WhatsAppTemplate,
+  CampaignTemplate
+} from "@/lib/api/templatesApi";
+
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -106,6 +130,8 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
   const [activeTab, setActiveTab]           = useState("Profile");
   const [name, setName]                     = useState(profile?.name ?? fallback.name);
   const [originalName, setOriginalName]     = useState(profile?.name ?? fallback.name);
+  const [designation, setDesignation]       = useState(profile?.designation ?? "");
+  const [originalDesignation, setOriginalDesignation] = useState(profile?.designation ?? "");
   const [photoPreview, setPhotoPreview]     = useState<string | null>(null);
   const [photoFile, setPhotoFile]           = useState<File | null>(null);
   const [saving, setSaving]                 = useState(false);
@@ -160,9 +186,14 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
-  // Sync name from profile
+  // Sync name & designation from profile
   useEffect(() => {
-    if (profile) { setName(profile.name); setOriginalName(profile.name); }
+    if (profile) {
+      setName(profile.name);
+      setOriginalName(profile.name);
+      setDesignation(profile.designation ?? "");
+      setOriginalDesignation(profile.designation ?? "");
+    }
   }, [profile]);
 
   const initials = (profile?.name ?? fallback.name)
@@ -180,15 +211,20 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     if (!name.trim()) { toast.error("Name cannot be empty"); return; }
     setSaving(true);
     try {
-      // Persist name via settings API using key "profile.name"
+      // Persist name and designation via settings API keys
       await saveSetting("profile.name", name.trim());
-      // Also try PATCH /auth/me if the endpoint exists
-      try {
-        await api.patch("/auth/me", { name: name.trim() });
-      } catch {
-        // endpoint may not exist yet — settings key is the fallback
+      if (designation.trim()) {
+        await saveSetting("profile.designation", designation.trim());
       }
+      
+      // Update authenticated user profile info
+      await updateProfileApi({
+        name: name.trim(),
+        designation: designation.trim() || undefined
+      });
+
       setOriginalName(name.trim());
+      setOriginalDesignation(designation.trim());
       setIsEditing(false);
       setPhotoFile(null);
       setPhotoPreview(null);
@@ -202,12 +238,13 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
 
   const handleCancel = () => {
     setName(originalName);
+    setDesignation(originalDesignation);
     setPhotoPreview(null);
     setPhotoFile(null);
     setIsEditing(false);
   };
 
-  // ── Notification toggle handler (calls PUT /settings/{key}) ───────────────
+  // ── Notification toggle handler (calls PATCH /settings/notification-preferences) ─
   const handleNotificationChange = async (
     key: keyof NotificationPreferences,
     value: boolean
@@ -217,7 +254,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     // Optimistic update
     setNotificationPrefs((prev) => ({ ...prev, [key]: value }));
     try {
-      await saveBoolSetting(apiKey, value);
+      await patchNotificationPreferences({ [apiKey]: value });
       setRemoteSettings((prev) => ({ ...prev, [apiKey]: String(value) }));
       toast.success(`${value ? "Enabled" : "Disabled"} successfully`);
     } catch (err: any) {
@@ -312,10 +349,10 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
           {/* Content */}
           <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
             {activeTab === "Profile" && (
-              <ProfileTab name={name} email={profile?.email ?? fallback.email}
+              <ProfileTab name={name} designation={designation} email={profile?.email ?? fallback.email}
                 role={profile?.role ?? fallback.role} initials={initials}
                 photoPreview={photoPreview} saving={saving} isEditing={isEditing}
-                fileInputRef={fileInputRef} onNameChange={setName}
+                fileInputRef={fileInputRef} onNameChange={setName} onDesignationChange={setDesignation}
                 onPhotoChange={handlePhotoChange} onSave={handleSaveProfile}
                 onCancel={handleCancel} onEdit={() => setIsEditing(true)} profile={profile} />
             )}
@@ -344,17 +381,18 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
 // ── Profile Tab ───────────────────────────────────────────────────────────────
 
 interface ProfileTabProps {
-  name: string; email: string; role: string; initials: string;
+  name: string; designation: string; email: string; role: string; initials: string;
   photoPreview: string | null; saving: boolean; isEditing: boolean;
   fileInputRef: React.RefObject<HTMLInputElement>;
   onNameChange: (v: string) => void;
+  onDesignationChange: (v: string) => void;
   onPhotoChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onSave: () => void; onCancel: () => void; onEdit: () => void;
   profile: Profile | null;
 }
 
-function ProfileTab({ name, email, role, initials, photoPreview, saving, isEditing,
-  fileInputRef, onNameChange, onPhotoChange, onSave, onCancel, onEdit, profile }: ProfileTabProps) {
+function ProfileTab({ name, designation, email, role, initials, photoPreview, saving, isEditing,
+  fileInputRef, onNameChange, onDesignationChange, onPhotoChange, onSave, onCancel, onEdit, profile }: ProfileTabProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
@@ -406,9 +444,13 @@ function ProfileTab({ name, email, role, initials, photoPreview, saving, isEditi
         {profile?.organizationName && (
           <FormField label="Organization"><ReadonlyField>{profile.organizationName}</ReadonlyField></FormField>
         )}
-        {profile?.designation && (
-          <FormField label="Designation"><ReadonlyField>{profile.designation}</ReadonlyField></FormField>
-        )}
+        <FormField label="Designation">
+          {isEditing
+            ? <input type="text" value={designation} onChange={(e) => onDesignationChange(e.target.value)}
+                placeholder="e.g. Software Engineer"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+            : <ReadonlyField>{designation || "Not specified"}</ReadonlyField>}
+        </FormField>
         {profile?.department && (
           <FormField label="Department"><ReadonlyField>{profile.department}</ReadonlyField></FormField>
         )}
@@ -432,6 +474,35 @@ function ProfileTab({ name, email, role, initials, photoPreview, saving, isEditi
 // ── Account Tab ───────────────────────────────────────────────────────────────
 
 function AccountTab({ profile, fallback }: { profile: Profile | null; fallback: { email: string; name: string; role: string } }) {
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmString, setConfirmString] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  const handleDeleteAccount = async () => {
+    if (!password) {
+      toast.error("Please enter your password");
+      return;
+    }
+    if (confirmString !== "DELETE") {
+      toast.error("Please type DELETE to confirm");
+      return;
+    }
+    setDeleting(true);
+    try {
+      await deleteAccountApi({
+        currentPassword: password,
+        confirmation: "DELETE",
+      });
+      toast.success("Account deleted successfully");
+      window.location.href = "/login";
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to delete account");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-8">Account</h2>
@@ -447,13 +518,41 @@ function AccountTab({ profile, fallback }: { profile: Profile | null; fallback: 
             )}
           </div>
         </div>
-        <div className="bg-red-50 rounded-2xl p-6 border border-red-200">
-          <h3 className="text-sm font-semibold text-red-700 mb-2">Delete Account</h3>
-          <p className="text-xs text-red-500 mb-4">Once deleted, your account cannot be recovered. This action is permanent.</p>
-          <button className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
-            Delete My Account
-          </button>
-        </div>
+
+        {!showConfirm ? (
+          <div className="bg-red-50 rounded-2xl p-6 border border-red-200">
+            <h3 className="text-sm font-semibold text-red-700 mb-2">Delete Account</h3>
+            <p className="text-xs text-red-500 mb-4">Once deleted, your account cannot be recovered. This action is permanent.</p>
+            <button onClick={() => setShowConfirm(true)} className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition-colors">
+              Delete My Account
+            </button>
+          </div>
+        ) : (
+          <div className="bg-red-50 rounded-2xl p-6 border-2 border-red-500 space-y-4">
+            <h3 className="text-sm font-bold text-red-700">Are you absolutely sure?</h3>
+            <p className="text-xs text-red-600 leading-relaxed">
+              This action is permanent and cannot be undone. Enter your current password and type <strong>DELETE</strong> in the box below to proceed.
+            </p>
+            <FormField label="Current Password">
+              <input type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white" />
+            </FormField>
+            <FormField label='Type "DELETE" to confirm'>
+              <input type="text" placeholder="DELETE" value={confirmString} onChange={(e) => setConfirmString(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 bg-white" />
+            </FormField>
+            <div className="flex items-center gap-3 pt-2">
+              <button onClick={() => setShowConfirm(false)} disabled={deleting}
+                className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-100 disabled:opacity-50">
+                Cancel
+              </button>
+              <button onClick={handleDeleteAccount} disabled={deleting || confirmString !== "DELETE"}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg disabled:opacity-50 transition-colors">
+                {deleting ? "Deleting…" : "Permanently Delete Account"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -462,25 +561,58 @@ function AccountTab({ profile, fallback }: { profile: Profile | null; fallback: 
 // ── Security Tab ──────────────────────────────────────────────────────────────
 
 function SecurityTab() {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleUpdatePassword = async () => {
+    if (!currentPassword || !newPassword || !confirmNewPassword) {
+      toast.error("All fields are required");
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    setLoading(true);
+    try {
+      await updatePasswordApi({
+        currentPassword,
+        newPassword,
+        confirmNewPassword,
+      });
+      toast.success("Password updated successfully!");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to update password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
       <h2 className="text-xl font-bold text-gray-900 mb-8">Security</h2>
       <div className="space-y-6 max-w-xl">
         <FormField label="Current Password">
-          <input type="password" placeholder="••••••••"
+          <input type="password" placeholder="••••••••" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
         </FormField>
         <FormField label="New Password">
-          <input type="password" placeholder="••••••••"
+          <input type="password" placeholder="••••••••" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
         </FormField>
         <FormField label="Confirm New Password">
-          <input type="password" placeholder="••••••••"
+          <input type="password" placeholder="••••••••" value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)}
             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
         </FormField>
         <div className="pt-4">
-          <button className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm">
-            Update Password
+          <button onClick={handleUpdatePassword} disabled={loading}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm">
+            {loading ? <><Loader2 size={16} className="animate-spin" /> Updating…</> : "Update Password"}
           </button>
         </div>
       </div>
@@ -567,7 +699,7 @@ function NotificationsTab({ prefs, loading, savingKey, onPrefChange, onDeleteSet
 
       <p className="mt-6 text-xs text-gray-400 flex items-center gap-1.5">
         <CheckCircle2 size={12} />
-        Changes are persisted immediately via <code className="bg-gray-100 px-1 rounded text-[10px]">PUT /settings/{"{key}"}</code>
+        Changes are persisted immediately via <code className="bg-gray-100 px-1 rounded text-[10px]">PATCH /settings/notification-preferences</code>
       </p>
     </div>
   );
@@ -737,32 +869,505 @@ function PrefCard({ label, apiKey, icon, children, onReset }: {
 // ── Templates Tab ─────────────────────────────────────────────────────────────
 
 function TemplatesTab() {
-  const templates = [
-    { title: "WhatsApp Templates",  description: "Manage approved WhatsApp message templates",  icon: MessageSquare, path: "/whatsapp" },
-    { title: "Email Templates",     description: "Quick access to saved email compositions",     icon: Mail,         path: "/email" },
-    { title: "Campaign Templates",  description: "Marketing and outreach communication templates", icon: Megaphone,  path: "/marketing/campaigns" },
-  ];
+  const [subTab, setSubTab] = useState<"email" | "whatsapp" | "campaign">("email");
+  const [loading, setLoading] = useState(false);
+  const [emails, setEmails] = useState<EmailTemplate[]>([]);
+  const [whatsapps, setWhatsapps] = useState<WhatsAppTemplate[]>([]);
+  const [campaigns, setCampaigns] = useState<CampaignTemplate[]>([]);
+
+  // Modal / Form state
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Form Fields
+  // Email fields
+  const [emailName, setEmailName] = useState("");
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+
+  // WhatsApp fields
+  const [waName, setWaName] = useState("");
+  const [waBody, setWaBody] = useState("");
+  const [waCategory, setWaCategory] = useState("MARKETING");
+  const [waLanguage, setWaLanguage] = useState("en_US");
+  const [waStatus, setWaStatus] = useState("DRAFT");
+
+  // Campaign fields
+  const [campName, setCampName] = useState("");
+  const [campDesc, setCampDesc] = useState("");
+  const [campChannel, setCampChannel] = useState("EMAIL");
+  const [campBudget, setCampBudget] = useState<number>(0);
+  const [campStatus, setCampStatus] = useState("DRAFT");
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      if (subTab === "email") {
+        const list = await getEmailTemplates();
+        setEmails(list);
+      } else if (subTab === "whatsapp") {
+        const list = await getWhatsAppTemplates();
+        setWhatsapps(list);
+      } else if (subTab === "campaign") {
+        const list = await getCampaignTemplates();
+        setCampaigns(list);
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to fetch templates");
+    } finally {
+      setLoading(false);
+    }
+  }, [subTab]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleOpenCreate = () => {
+    setModalMode("create");
+    setActiveId(null);
+    setEmailName("");
+    setEmailSubject("");
+    setEmailBody("");
+    setWaName("");
+    setWaBody("");
+    setWaCategory("MARKETING");
+    setWaLanguage("en_US");
+    setWaStatus("DRAFT");
+    setCampName("");
+    setCampDesc("");
+    setCampChannel("EMAIL");
+    setCampBudget(0);
+    setCampStatus("DRAFT");
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (item: any) => {
+    setModalMode("edit");
+    setActiveId(item.id);
+    if (subTab === "email") {
+      setEmailName(item.name || "");
+      setEmailSubject(item.subject || "");
+      setEmailBody(item.body || "");
+    } else if (subTab === "whatsapp") {
+      setWaName(item.name || "");
+      setWaBody(item.body || "");
+      setWaCategory(item.category || "MARKETING");
+      setWaLanguage(item.language || "en_US");
+      setWaStatus(item.status || "DRAFT");
+    } else if (subTab === "campaign") {
+      setCampName(item.name || "");
+      setCampDesc(item.description || "");
+      setCampChannel(item.channel || "EMAIL");
+      setCampBudget(item.budget || 0);
+      setCampStatus(item.status || "DRAFT");
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this template?")) return;
+    try {
+      if (subTab === "email") {
+        await deleteEmailTemplate(id);
+      } else if (subTab === "whatsapp") {
+        await deleteWhatsAppTemplate(id);
+      } else if (subTab === "campaign") {
+        await deleteCampaignTemplate(id);
+      }
+      toast.success("Template deleted successfully");
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to delete template");
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      if (subTab === "email") {
+        const payload = { name: emailName, subject: emailSubject, body: emailBody };
+        if (modalMode === "create") {
+          await createEmailTemplate(payload);
+        } else {
+          await updateEmailTemplate(activeId!, payload);
+        }
+      } else if (subTab === "whatsapp") {
+        const payload = { name: waName, body: waBody, category: waCategory, language: waLanguage, status: waStatus };
+        if (modalMode === "create") {
+          await createWhatsAppTemplate(payload);
+        } else {
+          await updateWhatsAppTemplate(activeId!, payload);
+        }
+      } else if (subTab === "campaign") {
+        const payload = { name: campName, description: campDesc, channel: campChannel, budget: Number(campBudget), status: campStatus };
+        if (modalMode === "create") {
+          await createCampaignTemplate(payload);
+        } else {
+          await updateCampaignTemplate(activeId!, payload);
+        }
+      }
+      toast.success(`Template ${modalMode === "create" ? "created" : "updated"} successfully`);
+      setIsModalOpen(false);
+      loadData();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message ?? "Failed to save template");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-8">Communication Templates</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {templates.map((t) => {
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-gray-900">Communication Templates</h2>
+          <p className="text-sm text-gray-500 mt-1">Manage and sync Email, WhatsApp, and Campaign templates</p>
+        </div>
+        <button
+          onClick={handleOpenCreate}
+          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 transition-all shadow-sm"
+        >
+          Create Template
+        </button>
+      </div>
+
+      {/* Sub Tabs */}
+      <div className="flex gap-2 p-1 bg-gray-100 rounded-xl max-w-md">
+        {[
+          { id: "email", label: "Email", icon: Mail },
+          { id: "whatsapp", label: "WhatsApp", icon: MessageSquare },
+          { id: "campaign", label: "Campaigns", icon: Megaphone },
+        ].map((t) => {
           const Icon = t.icon;
+          const isActive = subTab === t.id;
           return (
-            <a key={t.title} href={t.path}
-              className="group p-6 bg-gradient-to-br from-gray-50 to-white rounded-2xl border border-gray-200 hover:border-blue-300 hover:shadow-md transition-all">
-              <div className="flex items-start justify-between mb-4">
-                <div className="p-3 bg-blue-100 rounded-xl group-hover:bg-blue-200 transition-colors">
-                  <Icon size={24} className="text-blue-600" />
-                </div>
-                <ExternalLink size={18} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
-              </div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">{t.title}</h3>
-              <p className="text-xs text-gray-500">{t.description}</p>
-            </a>
+            <button
+              key={t.id}
+              onClick={() => setSubTab(t.id as any)}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+                isActive ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"
+              }`}
+            >
+              <Icon size={14} />
+              {t.label}
+            </button>
           );
         })}
       </div>
+
+      {/* Templates List */}
+      <div className="bg-gray-50/50 rounded-2xl border border-gray-200 overflow-hidden">
+        {loading && (
+          <div className="p-12 flex justify-center items-center">
+            <Loader2 className="animate-spin text-blue-500" size={32} />
+          </div>
+        )}
+
+        {!loading && subTab === "email" && (
+          emails.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">No Email Templates found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-100/50 text-gray-600 font-semibold">
+                    <th className="px-6 py-4">Name</th>
+                    <th className="px-6 py-4">Subject</th>
+                    <th className="px-6 py-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {emails.map((e) => (
+                    <tr key={e.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900">{e.name}</td>
+                      <td className="px-6 py-4 text-gray-500">{e.subject}</td>
+                      <td className="px-6 py-4 flex gap-2">
+                        <button onClick={() => handleOpenEdit(e)} className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        <button onClick={() => handleDelete(e.id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+
+        {!loading && subTab === "whatsapp" && (
+          whatsapps.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">No WhatsApp Templates found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-100/50 text-gray-600 font-semibold">
+                    <th className="px-6 py-4">Name</th>
+                    <th className="px-6 py-4">Category</th>
+                    <th className="px-6 py-4">Language</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {whatsapps.map((w) => (
+                    <tr key={w.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900">{w.name}</td>
+                      <td className="px-6 py-4 text-gray-500">{w.category || "N/A"}</td>
+                      <td className="px-6 py-4 text-gray-500 font-mono">{w.language || "N/A"}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          w.status === "ACTIVE" || w.status === "APPROVED" ? "bg-green-100 text-green-800" :
+                          w.status === "REJECTED" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"
+                        }`}>
+                          {w.status || "DRAFT"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 flex gap-2">
+                        <button onClick={() => handleOpenEdit(w)} className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        <button onClick={() => handleDelete(w.id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+
+        {!loading && subTab === "campaign" && (
+          campaigns.length === 0 ? (
+            <div className="p-12 text-center text-gray-400">No Campaign Templates found</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-100/50 text-gray-600 font-semibold">
+                    <th className="px-6 py-4">Name</th>
+                    <th className="px-6 py-4">Channel</th>
+                    <th className="px-6 py-4">Budget</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 bg-white">
+                  {campaigns.map((c) => (
+                    <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="px-6 py-4 font-medium text-gray-900">
+                        <div>
+                          <p className="font-semibold">{c.name}</p>
+                          {c.description && <p className="text-xs text-gray-400">{c.description}</p>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-gray-500 font-semibold">{c.channel}</td>
+                      <td className="px-6 py-4 text-gray-500 font-mono">${c.budget || 0}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
+                          c.status === "ACTIVE" || c.status === "COMPLETED" ? "bg-green-100 text-green-800" :
+                          c.status === "PAUSED" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800"
+                        }`}>
+                          {c.status || "DRAFT"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 flex gap-2">
+                        <button onClick={() => handleOpenEdit(c)} className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
+                        <button onClick={() => handleDelete(c.id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Premium Form Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden border border-gray-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h3 className="text-lg font-bold text-gray-900">
+                {modalMode === "create" ? "Create New" : "Edit"} {subTab === "email" ? "Email" : subTab === "whatsapp" ? "WhatsApp" : "Campaign"} Template
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {subTab === "email" && (
+                <>
+                  <FormField label="Template Name">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. welcome_email"
+                      value={emailName}
+                      onChange={(e) => setEmailName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Subject Line">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Welcome to Zyoris!"
+                      value={emailSubject}
+                      onChange={(e) => setEmailSubject(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Body HTML/Text">
+                    <textarea
+                      required
+                      rows={5}
+                      placeholder="Hi {{name}}, welcome to our platform!"
+                      value={emailBody}
+                      onChange={(e) => setEmailBody(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-mono"
+                    />
+                  </FormField>
+                </>
+              )}
+
+              {subTab === "whatsapp" && (
+                <>
+                  <FormField label="Template Name">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. welcome_template"
+                      value={waName}
+                      onChange={(e) => setWaName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Category">
+                    <select
+                      value={waCategory}
+                      onChange={(e) => setWaCategory(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    >
+                      <option value="MARKETING">MARKETING</option>
+                      <option value="UTILITY">UTILITY</option>
+                      <option value="AUTHENTICATION">AUTHENTICATION</option>
+                    </select>
+                  </FormField>
+                  <FormField label="Language Code">
+                    <input
+                      type="text"
+                      placeholder="e.g. en_US"
+                      value={waLanguage}
+                      onChange={(e) => setWaLanguage(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Status">
+                    <select
+                      value={waStatus}
+                      onChange={(e) => setWaStatus(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    >
+                      <option value="DRAFT">DRAFT</option>
+                      <option value="PENDING">PENDING</option>
+                      <option value="APPROVED">APPROVED</option>
+                      <option value="REJECTED">REJECTED</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="INACTIVE">INACTIVE</option>
+                    </select>
+                  </FormField>
+                  <FormField label="Message Body">
+                    <textarea
+                      required
+                      rows={4}
+                      placeholder="Hi {{1}}, welcome to our service!"
+                      value={waBody}
+                      onChange={(e) => setWaBody(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm font-mono"
+                    />
+                  </FormField>
+                </>
+              )}
+
+              {subTab === "campaign" && (
+                <>
+                  <FormField label="Campaign Name">
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Summer Outreach"
+                      value={campName}
+                      onChange={(e) => setCampName(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Description">
+                    <input
+                      type="text"
+                      placeholder="Summary of campaign scope"
+                      value={campDesc}
+                      onChange={(e) => setCampDesc(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Channel">
+                    <select
+                      value={campChannel}
+                      onChange={(e) => setCampChannel(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    >
+                      <option value="EMAIL">EMAIL</option>
+                      <option value="WHATSAPP">WHATSAPP</option>
+                      <option value="SMS">SMS</option>
+                    </select>
+                  </FormField>
+                  <FormField label="Budget Limit ($)">
+                    <input
+                      type="number"
+                      placeholder="0"
+                      value={campBudget}
+                      onChange={(e) => setCampBudget(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    />
+                  </FormField>
+                  <FormField label="Status">
+                    <select
+                      value={campStatus}
+                      onChange={(e) => setCampStatus(e.target.value)}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-sm"
+                    >
+                      <option value="DRAFT">DRAFT</option>
+                      <option value="ACTIVE">ACTIVE</option>
+                      <option value="PAUSED">PAUSED</option>
+                      <option value="COMPLETED">COMPLETED</option>
+                    </select>
+                  </FormField>
+                </>
+              )}
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 text-sm font-semibold rounded-xl hover:bg-gray-50 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl transition-all shadow-sm"
+                >
+                  {loading ? "Saving…" : "Save Template"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

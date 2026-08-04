@@ -63,6 +63,16 @@ export async function deleteSetting(key: string): Promise<void> {
     await api.delete(`/settings/${encodeURIComponent(key)}`);
 }
 
+/** PATCH /settings – update multiple settings */
+export async function patchSettings(settings: { key: string; value: any }[]): Promise<void> {
+    await api.patch("/settings", { settings });
+}
+
+/** PATCH /settings/notification-preferences – bulk notification preferences */
+export async function patchNotificationPreferences(prefs: Record<string, boolean>): Promise<void> {
+    await api.patch("/settings/notification-preferences", prefs);
+}
+
 // ── Convenience helpers for boolean / string preferences ─────────────────────
 
 /** Save a boolean preference (stored as "true" / "false"). */
@@ -76,3 +86,4 @@ export async function saveSettingsBatch(entries: SettingsMap): Promise<void> {
         Object.entries(entries).map(([key, value]) => saveSetting(key, value))
     );
 }
+

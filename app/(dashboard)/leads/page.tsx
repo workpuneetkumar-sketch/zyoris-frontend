@@ -111,6 +111,16 @@ export default function LeadsPage() {
   const historyHook = useAssignmentHistory();
   const analyticsHook = useAssignmentAnalytics();
 
+  useEffect(() => {
+    if (activeTab === "assignment-history") {
+      void historyHook.refresh();
+    } else if (activeTab === "assignment-analytics") {
+      void analyticsHook.refresh();
+    } else if (activeTab === "assignment-rules") {
+      void rulesHook.refresh();
+    }
+  }, [activeTab]);
+
   const displayLeads = usingAdvanced ? serverLeads : leads;
   const displayTotal = usingAdvanced ? serverTotal : total;
   const isLoading = usingAdvanced ? serverLoading : loading;

@@ -39,6 +39,39 @@ export const getMeApi = async () => {
     return res.data;
 };
 
+export interface UpdateProfilePayload {
+    name?: string;
+    email?: string;
+    avatarUrl?: string;
+    designation?: string;
+}
+
+export const updateProfileApi = async (data: UpdateProfilePayload) => {
+    const res = await api.patch("/auth/me", data);
+    return res.data;
+};
+
+export interface UpdatePasswordPayload {
+    currentPassword?: string;
+    newPassword?: string;
+    confirmNewPassword?: string;
+}
+
+export const updatePasswordApi = async (data: UpdatePasswordPayload) => {
+    const res = await api.patch("/auth/me/password", data);
+    return res.data;
+};
+
+export interface DeleteAccountPayload {
+    currentPassword?: string;
+    confirmation: "DELETE";
+}
+
+export const deleteAccountApi = async (data: DeleteAccountPayload) => {
+    const res = await api.delete("/auth/me", { data });
+    return res.data;
+};
+
 export const logoutApi = async (refreshToken: string): Promise<void> => {
     await api.post("/auth/logout", { refreshToken });
 };
