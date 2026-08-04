@@ -3,7 +3,7 @@
 // components/leads/BulkActionsToolbar.tsx
 // Bulk Operations toolbar — Task 5
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   UserCheck,
   Edit3,
@@ -13,10 +13,159 @@ import {
   CheckCircle2,
   AlertTriangle,
   ChevronDown,
+  Search,
+  ChevronUp,
 } from "lucide-react";
+import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { useBulkOperations } from "@/hooks/useBulkOperations";
 import { Lead } from "@/types/leads";
 import { BulkOperationType } from "@/types/bulkOperations";
+
+// ── Team-member picker ────────────────────────────────────────────────────────
+
+function TeamMemberPicker({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: TeamMember | null;
+  onChange: (member: TeamMember | null) => void;
+  disabled?: boolean;
+}) {
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch once on mount
+  useEffect(() => {
+    setLoading(true);
+    getTeamMembers()
+      .then(setMembers)
+      .catch(() => setMembers([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handle);
+    return () => document.removeEventListener("mousedown", handle);
+  }, []);
+
+  const filtered = members.filter(
+    (m) =>
+      m.name.toLowerCase().includes(query.toLowerCase()) ||
+      m.email.toLowerCase().includes(query.toLowerCase())
+  );
+
+  function select(member: TeamMember) {
+    onChange(member);
+    setQuery("");
+    setOpen(false);
+  }
+
+  function clear() {
+    onChange(null);
+    setQuery("");
+  }
+
+  const displayValue = value ? value.name : "";
+
+  return (
+    <div ref={containerRef} className="relative">
+      <div
+        className={`flex items-center w-full px-3 py-2 border rounded-lg text-sm gap-2 cursor-pointer transition-all ${
+          open ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-200 hover:border-gray-300"
+        } ${disabled ? "bg-gray-50 cursor-not-allowed" : "bg-white"}`}
+        onClick={() => !disabled && setOpen((o) => !o)}
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+      >
+        <Search size={13} className="text-gray-400 shrink-0" />
+        {value ? (
+          <span className="flex-1 truncate text-gray-800">{displayValue}</span>
+        ) : (
+          <span className="flex-1 text-gray-400">Search team member…</span>
+        )}
+        {value ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); clear(); }}
+            disabled={disabled}
+            className="text-gray-400 hover:text-gray-600 shrink-0"
+            aria-label="Clear selection"
+          >
+            <X size={13} />
+          </button>
+        ) : (
+          open ? <ChevronUp size={13} className="text-gray-400 shrink-0" /> : <ChevronDown size={13} className="text-gray-400 shrink-0" />
+        )}
+      </div>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          {/* Search input inside dropdown */}
+          <div className="p-2 border-b border-gray-100">
+            <div className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg">
+              <Search size={12} className="text-gray-400 shrink-0" />
+              <input
+                autoFocus
+                type="text"
+                placeholder="Type to filter…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                className="flex-1 bg-transparent text-xs outline-none text-gray-700 placeholder-gray-400"
+              />
+            </div>
+          </div>
+
+          <ul role="listbox" className="max-h-48 overflow-y-auto py-1">
+            {loading ? (
+              <li className="flex items-center justify-center gap-2 py-4 text-xs text-gray-400">
+                <Loader2 size={12} className="animate-spin" />
+                Loading members…
+              </li>
+            ) : filtered.length === 0 ? (
+              <li className="py-3 text-center text-xs text-gray-400">No members found</li>
+            ) : (
+              filtered.map((m) => (
+                <li
+                  key={m.id}
+                  role="option"
+                  aria-selected={value?.id === m.id}
+                  onClick={() => select(m)}
+                  className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-blue-50 transition-colors ${
+                    value?.id === m.id ? "bg-blue-50" : ""
+                  }`}
+                >
+                  {/* Avatar */}
+                  <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-[11px] font-bold flex items-center justify-center shrink-0">
+                    {m.name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase()}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{m.name}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{m.email}</p>
+                  </div>
+                  {m.role && (
+                    <span className="text-[10px] font-medium text-gray-400 shrink-0 capitalize">{m.role}</span>
+                  )}
+                </li>
+              ))
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const LEAD_STATUSES = ["NEW", "WARM", "HOT", "QUALIFIED", "PROPOSAL", "NEGOTIATION", "CLOSED", "DEAD"];
 const LEAD_SOURCES = ["Website", "Referral", "LinkedIn", "Cold Call"];
@@ -55,8 +204,7 @@ function BulkAssignDialog({
   progress: number;
   error: string | null;
 }) {
-  const [assigneeId, setAssigneeId] = useState("");
-  const [assigneeName, setAssigneeName] = useState("");
+  const [selected, setSelected] = useState<TeamMember | null>(null);
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
@@ -79,29 +227,18 @@ function BulkAssignDialog({
           )}
           <div>
             <label className="text-xs font-medium text-gray-600 mb-1.5 block">
-              Assignee Name <span className="text-gray-400">(optional — for display)</span>
+              Assign to <span className="text-red-500">*</span>
             </label>
-            <input
-              type="text"
-              placeholder="e.g. Alex Morgan"
-              value={assigneeName}
-              onChange={(e) => setAssigneeName(e.target.value)}
+            <TeamMemberPicker
+              value={selected}
+              onChange={setSelected}
               disabled={isProcessing}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
             />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-600 mb-1.5 block">
-              Assignee ID <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="text"
-              placeholder="Team member ID"
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              disabled={isProcessing}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
-            />
+            {selected && (
+              <p className="mt-1.5 text-[11px] text-gray-400">
+                ID: <span className="font-mono">{selected.id}</span>
+              </p>
+            )}
           </div>
           {isProcessing && (
             <div className="space-y-1.5">
@@ -118,8 +255,8 @@ function BulkAssignDialog({
             Cancel
           </button>
           <button
-            onClick={() => assigneeId.trim() && onConfirm(assigneeId.trim(), assigneeName.trim())}
-            disabled={!assigneeId.trim() || isProcessing}
+            onClick={() => selected && onConfirm(selected.id, selected.name)}
+            disabled={!selected || isProcessing}
             className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             {isProcessing ? <><Loader2 size={14} className="animate-spin" />Assigning…</> : <><UserCheck size={14} />Assign {count} Leads</>}
