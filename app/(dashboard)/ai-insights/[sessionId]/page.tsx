@@ -14,7 +14,8 @@ import { IntelligenceCenter } from "../components/IntelligenceComponents";
 import { AiCopilotPanel } from "../components/CopilotComponents";
 
 export default function SessionWorkspace() {
-  const { sessionId } = useParams();
+  const params = useParams();
+  const sessionId = params?.sessionId as string;
   const router = useRouter();
   
   const [session, setSession] = useState<any>(null);
@@ -28,6 +29,7 @@ export default function SessionWorkspace() {
 
   useEffect(() => {
     loadSession();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   // Progressive Polling
@@ -42,6 +44,7 @@ export default function SessionWorkspace() {
       }, 2000);
       return () => clearInterval(interval);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.status, sessionId]);
 
   useEffect(() => {
