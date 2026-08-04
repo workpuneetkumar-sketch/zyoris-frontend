@@ -10,7 +10,7 @@ import { DuplicateMergeUI } from "@/components/leads/DuplicateMergeUI";
 import { AdvancedFiltersDrawer } from "@/components/leads/AdvancedFiltersDrawer";
 import { BulkActionsToolbar } from "@/components/leads/BulkActionsToolbar";
 import { AdvancedLeadsFilters, DEFAULT_ADVANCED_FILTERS } from "@/types/savedViews";
-import { filterLeads } from "@/lib/api/savedViewsApi";
+import { fetchLeads } from "@/lib/api/leadsApi";
 import { Lead, LeadsFilters } from "@/types/leads";
 import { GitMerge, SlidersHorizontal, List, Zap, BarChart2, Clock } from "lucide-react";
 import { useBulkOperations } from "@/hooks/useBulkOperations";
@@ -128,19 +128,16 @@ export default function LeadsPage() {
   const loadWithAdvancedFilters = useCallback(async (f: AdvancedLeadsFilters) => {
     setServerLoading(true);
     try {
-      const res = await filterLeads({
-        status: f.status !== "All Status" ? f.status : undefined,
-        source: f.source !== "All Sources" ? f.source : undefined,
-        owner: f.owner !== "All Owners" ? f.owner : undefined,
-        search: f.search || undefined,
-        tags: f.tags.length > 0 ? f.tags : undefined,
-        dateFrom: f.dateFrom || undefined,
-        dateTo: f.dateTo || undefined,
-        sortBy: f.sortBy,
-        sortOrder: f.sortOrder,
-        page: f.page,
-        limit: f.pageSize,
-      });
+      const res = await fetchLeads(
+        f.page ?? 1,
+        {
+          status: f.status,
+          source: f.source,
+          owner: f.owner,
+          search: f.search,
+        },
+        f.pageSize
+      );
       setServerLeads(res.leads);
       setServerTotal(res.total);
     } catch {

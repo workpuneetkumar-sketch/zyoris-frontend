@@ -52,11 +52,12 @@ function isLeadSoftDeleted(lead: Lead): boolean {
 
 export async function fetchLeads(
     page: number,
-    filters: LeadsFilters
+    filters: LeadsFilters,
+    limit: number = PER_PAGE
 ): Promise<LeadsResponse> {
     const params = {
         page,
-        limit: PER_PAGE,
+        limit,
 
         ...(filters.status !== "All Status" && {
             status: filters.status,
