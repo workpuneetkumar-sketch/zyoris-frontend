@@ -112,18 +112,49 @@ export async function getWeeklyBriefing(): Promise<WeeklyBriefingData> {
   try {
     const response = await api.get("/dashboard/briefing", { params: { weekly: true } });
     const raw = response.data?.data || response.data;
+
+    let topPerformerName = undefined;
+    if (raw.kpis?.teamPerformance && Array.isArray(raw.kpis.teamPerformance)) {
+      let maxDeals = 0;
+      for (const p of raw.kpis.teamPerformance) {
+        if (p.dealsWon > maxDeals) {
+          maxDeals = p.dealsWon;
+          topPerformerName = p.name;
+        }
+      }
+    }
+
+    const highlights = Array.isArray(raw.keyAchievements)
+      ? raw.keyAchievements
+      : Array.isArray(raw.highlights)
+      ? raw.highlights
+      : Array.isArray(raw.summaryBullets)
+      ? raw.summaryBullets
+      : [];
+
+    let keyInsights: string[] = [];
+    if (Array.isArray(raw.strategicPriorities)) {
+      keyInsights = keyInsights.concat(raw.strategicPriorities);
+    }
+    if (Array.isArray(raw.criticalRisks)) {
+      keyInsights = keyInsights.concat(raw.criticalRisks);
+    }
+    if (keyInsights.length === 0 && Array.isArray(raw.keyInsights)) {
+      keyInsights = raw.keyInsights;
+    }
+
+    if (raw.summary && typeof raw.summary === "string") {
+      highlights.unshift(raw.summary);
+    }
+
     return {
-      period: raw.period || "Last 7 days",
-      highlights: Array.isArray(raw.highlights)
-        ? raw.highlights
-        : Array.isArray(raw.summaryBullets)
-        ? raw.summaryBullets
-        : [],
-      leadsCreated: raw.leadsCreated,
-      dealsClosed: raw.dealsClosed,
-      revenueGenerated: raw.revenueGenerated,
-      topPerformer: raw.topPerformer,
-      keyInsights: Array.isArray(raw.keyInsights) ? raw.keyInsights : [],
+      period: raw.kpis?.period ? "Last 7 days" : (raw.period || "Last 7 days"),
+      highlights,
+      leadsCreated: raw.kpis?.newLeads ?? raw.leadsCreated,
+      dealsClosed: raw.kpis?.dealsWon ?? raw.dealsClosed,
+      revenueGenerated: raw.kpis?.revenueGenerated ?? raw.revenueGenerated,
+      topPerformer: topPerformerName ?? raw.topPerformer,
+      keyInsights,
       generatedAt: raw.generatedAt || new Date().toISOString(),
       fallback: raw.fallback || false,
     };
