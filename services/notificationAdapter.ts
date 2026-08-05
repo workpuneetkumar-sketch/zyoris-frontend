@@ -1,8 +1,9 @@
-import type { Notification, NotificationType } from "@/types/notifications";
+import type { Notification, NotificationType, NotificationCategory } from "@/types/notifications";
 import {
   fetchNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
+  archiveNotification as archiveNotificationApi,
   deleteNotification as deleteNotificationApi,
   type NotificationDto,
 } from "@/lib/api/notificationsApi";
@@ -135,6 +136,23 @@ function getEntityDeepLink(entityType?: string | null, entityId?: string | null)
   }
 }
 
+function mapCategory(dto: NotificationDto): NotificationCategory {
+  if (dto.category) {
+    const cat = dto.category.toLowerCase();
+    if (["leads", "messages", "deals", "tasks", "system"].includes(cat)) {
+      return cat as NotificationCategory;
+    }
+  }
+
+  const combined = `${dto.type || ""} ${dto.entityType || ""}`.toLowerCase();
+  if (combined.includes("lead")) return "leads";
+  if (combined.includes("message") || combined.includes("chat") || combined.includes("mention") || combined.includes("call")) return "messages";
+  if (combined.includes("deal")) return "deals";
+  if (combined.includes("task")) return "tasks";
+
+  return "system";
+}
+
 // Map API types to app types and generate routes that exist in this frontend.
 function getNotificationTypeAndDeepLink(dto: NotificationDto): { type: NotificationType; deepLink: string | null } {
   const lowerType = dto.type.toLowerCase();
@@ -175,33 +193,63 @@ function getNotificationTypeAndDeepLink(dto: NotificationDto): { type: Notificat
     type = "error";
   }
 
-  // Most automatic notifications have a generic type such as SUCCESS but
-  // include the affected entity. Send those to its valid module page.
   deepLink = deepLink || entityDeepLink || "/notifications";
 
   return { type, deepLink };
 }
 
 // Convert API DTO to our app's Notification type
-function dtoToNotification(dto: NotificationDto): Notification {
+export function dtoToNotification(dto: NotificationDto): Notification {
   const { type, deepLink } = getNotificationTypeAndDeepLink(dto);
   return {
     id: dto.id,
     title: dto.title,
     message: dto.message,
     type,
+    category: mapCategory(dto),
     priority: "medium", // Default priority since API doesn't have it yet
     createdAt: dto.createdAt,
     read: dto.read,
     deepLink,
-    actor: null, // API doesn't have actor yet
-    icon: null, // API doesn't have icon yet
+    actor: null,
+    icon: null,
+    entityType: dto.entityType,
+    entityId: dto.entityId,
+    groupKey: dto.groupKey ?? null,
+    aggregatedCount: dto.aggregatedCount ?? null,
   };
 }
 
-export async function getNotifications(): Promise<Notification[]> {
-  const response = await fetchNotifications({ limit: 50, offset: 0 });
-  return response.data.map(dtoToNotification).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+export interface GetNotificationsResult {
+  notifications: Notification[];
+  nextCursor?: string | null;
+  unreadCount?: number;
+  total?: number;
+}
+
+export async function getNotifications(params?: {
+  category?: string;
+  cursor?: string;
+  limit?: number;
+  read?: string;
+}): Promise<GetNotificationsResult> {
+  const response = await fetchNotifications({
+    category: params?.category === "all" || params?.category === "unread" ? undefined : params?.category,
+    read: params?.category === "unread" ? "false" : params?.read,
+    cursor: params?.cursor,
+    limit: params?.limit || 20,
+  });
+
+  const notifications = (response.data || []).map(dtoToNotification).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return {
+    notifications,
+    nextCursor: response.nextCursor || response.cursor || null,
+    unreadCount: response.unreadCount,
+    total: response.total,
+  };
 }
 
 export async function markAsRead(id: string): Promise<void> {
@@ -212,6 +260,10 @@ export async function markAllRead(): Promise<void> {
   await markAllNotificationsAsRead();
 }
 
-export async function deleteNotification(id: string): Promise<void> {
-  await deleteNotificationApi(id);
+export async function archiveNotification(id: string): Promise<void> {
+  await archiveNotificationApi(id);
 }
+
+export async function deleteNotification(id: string): Promise<void> {
+  await archiveNotificationApi(id);
+}

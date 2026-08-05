@@ -1,3 +1,12 @@
+export type NotificationCategory =
+  | "all"
+  | "unread"
+  | "leads"
+  | "messages"
+  | "deals"
+  | "tasks"
+  | "system";
+
 export type NotificationType =
   | "lead_assigned"
   | "lead_shared"
@@ -23,6 +32,7 @@ export interface Notification {
   title: string;
   message: string;
   type: NotificationType;
+  category?: NotificationCategory | string;
   priority: NotificationPriority;
   createdAt: string;
   read: boolean;
@@ -31,6 +41,22 @@ export interface Notification {
   icon?: string | null;
   entityType?: string | null;
   entityId?: string | null;
+  groupKey?: string | null;
+  aggregatedCount?: number | null;
 }
 
-export type NotificationFilter = "all" | "unread" | "mentions" | "assignments" | "system";
+export type NotificationFilter = NotificationCategory;
+
+export interface UnreadCountData {
+  total: number;
+  categories: Record<string, number>;
+}
+
+export interface NotificationCategoryPreferences {
+  inApp: boolean;
+  email: boolean;
+  push: boolean;
+}
+
+export type NotificationPreferences = Record<string, NotificationCategoryPreferences>;
+

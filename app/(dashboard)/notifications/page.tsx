@@ -2,16 +2,27 @@
 
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
-import { Bell, Check, CheckCheck, Trash2, Search } from "lucide-react";
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  Trash2,
+  Search,
+  Briefcase,
+  MessageSquare,
+  CheckSquare,
+  User,
+  ShieldAlert,
+  Layers,
+  Loader2,
+} from "lucide-react";
 import classNames from "classnames";
 import { useState, useMemo } from "react";
 import { Avatar } from "@/components/ui/Avatar";
-import { PriorityTag } from "@/components/ui/PriorityTag";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
-import type { Notification, NotificationType } from "@/types/notifications";
+import type { Notification, NotificationCategory } from "@/types/notifications";
 
-// Helper functions (reused from NotificationBell)
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
@@ -27,26 +38,49 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function getTypeStyles(type: NotificationType) {
-  switch (type) {
-    case "success":
-      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
-    case "warning":
-      return "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400";
-    case "error":
-      return "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400";
-    case "info":
-    case "system_reminder":
-    case "lead_assigned":
-    case "lead_shared":
-    case "task_assigned":
-    case "mention":
+function getCategoryIcon(category?: string) {
+  const cat = (category || "").toLowerCase();
+  switch (cat) {
+    case "deals":
+      return <Briefcase size={20} className="text-amber-500" />;
+    case "messages":
+      return <MessageSquare size={20} className="text-blue-500" />;
+    case "tasks":
+      return <CheckSquare size={20} className="text-emerald-500" />;
+    case "leads":
+      return <User size={20} className="text-purple-500" />;
+    case "system":
     default:
-      return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+      return <ShieldAlert size={20} className="text-rose-500" />;
   }
 }
 
-type FilterOption = "all" | "unread" | "mentions" | "assignments" | "system";
+function getCategoryStyles(category?: string) {
+  const cat = (category || "").toLowerCase();
+  switch (cat) {
+    case "deals":
+      return "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400";
+    case "messages":
+      return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+    case "tasks":
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
+    case "leads":
+      return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
+    case "system":
+    default:
+      return "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400";
+  }
+}
+
+const CATEGORY_TABS: { id: NotificationCategory; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "unread", label: "Unread" },
+  { id: "leads", label: "Leads" },
+  { id: "messages", label: "Messages" },
+  { id: "deals", label: "Deals" },
+  { id: "tasks", label: "Tasks" },
+  { id: "system", label: "System" },
+];
 
 function NotificationPageItem({
   notification,
@@ -59,6 +93,10 @@ function NotificationPageItem({
   onDelete: (id: string) => void;
   onOpen: (notification: Notification) => void;
 }) {
+  const isAggregated = Boolean(
+    notification.groupKey || (notification.aggregatedCount && notification.aggregatedCount > 1)
+  );
+
   return (
     <div
       className={classNames(
@@ -74,7 +112,7 @@ function NotificationPageItem({
         <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary rounded-r-full" />
       )}
 
-      {/* Avatar / Icon */}
+      {/* Entity Category Icon / Avatar */}
       <div className="shrink-0">
         {notification.actor ? (
           <Avatar
@@ -84,8 +122,13 @@ function NotificationPageItem({
             size="lg"
           />
         ) : (
-          <div className={classNames("w-12 h-12 rounded-full flex items-center justify-center", getTypeStyles(notification.type))}>
-            <Bell size={20} />
+          <div
+            className={classNames(
+              "w-12 h-12 rounded-full flex items-center justify-center",
+              getCategoryStyles(notification.category)
+            )}
+          >
+            {getCategoryIcon(notification.category)}
           </div>
         )}
       </div>
@@ -94,17 +137,32 @@ function NotificationPageItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h3 className={classNames("font-bold text-base truncate", notification.read ? "text-text-secondary" : "text-text")}>
+            <h3
+              className={classNames(
+                "font-bold text-base truncate",
+                notification.read ? "text-text-secondary" : "text-text"
+              )}
+            >
               {notification.title}
             </h3>
-            {!notification.read && <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />}
+            {isAggregated && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-bold">
+                <Layers size={12} />
+                {notification.aggregatedCount ? `${notification.aggregatedCount}` : "Grouped"}
+              </span>
+            )}
+            {!notification.read && (
+              <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <PriorityTag priority={notification.priority} />
             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               {!notification.read && (
                 <button
-                  onClick={(event) => { event.stopPropagation(); onMarkRead(notification.id); }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onMarkRead(notification.id);
+                  }}
                   className="p-2 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
                   title="Mark as read"
                 >
@@ -112,20 +170,30 @@ function NotificationPageItem({
                 </button>
               )}
               <button
-                  onClick={(event) => { event.stopPropagation(); onDelete(notification.id); }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDelete(notification.id);
+                }}
                 className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
-                title="Delete"
+                title="Archive"
               >
                 <Trash2 size={16} />
               </button>
             </div>
           </div>
         </div>
-        <p className={classNames("text-base mt-2 leading-relaxed", notification.read ? "text-text-muted" : "text-text-secondary")}>
+        <p
+          className={classNames(
+            "text-base mt-2 leading-relaxed",
+            notification.read ? "text-text-muted" : "text-text-secondary"
+          )}
+        >
           {notification.message}
         </p>
         <div className="flex items-center mt-3">
-          <span className="text-sm text-text-muted">{formatRelativeTime(notification.createdAt)}</span>
+          <span className="text-sm text-text-muted">
+            {formatRelativeTime(notification.createdAt)}
+          </span>
         </div>
       </div>
     </div>
@@ -134,26 +202,68 @@ function NotificationPageItem({
 
 export default function NotificationsPage() {
   const router = useRouter();
-  const { notifications, loading, error, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
+  const {
+    notifications,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    unreadCount,
+    categoryUnreadCounts,
+    markRead,
+    markAllRead,
+    removeNotification,
+    fetchNextPage,
+  } = useNotifications();
+
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<FilterOption>("all");
+  const [filter, setFilter] = useState<NotificationCategory>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
 
-  // Filter and search
+  // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
-    return notifications.filter(n => {
-      const matchesSearch = n.title.toLowerCase().includes(searchQuery.toLowerCase()) || n.message.toLowerCase().includes(searchQuery.toLowerCase());
+    let result = notifications.filter((n) => {
+      const matchesSearch =
+        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        n.message.toLowerCase().includes(searchQuery.toLowerCase());
+
       const matchesFilter = (() => {
         switch (filter) {
-          case "unread": return !n.read;
-          case "mentions": return n.type === "mention";
-          case "assignments": return n.type === "lead_assigned" || n.type === "task_assigned";
-          case "system": return n.type === "system_reminder" || n.type === "success" || n.type === "warning" || n.type === "error";
-          default: return true;
+          case "unread":
+            return !n.read;
+          case "leads":
+          case "messages":
+          case "deals":
+          case "tasks":
+          case "system":
+            return (n.category || "").toLowerCase() === filter;
+          case "all":
+          default:
+            return true;
         }
       })();
+
       return matchesSearch && matchesFilter;
     });
+
+    const groupedMap = new Map<string, Notification>();
+    const finalItems: Notification[] = [];
+
+    result.forEach((n) => {
+      if (n.groupKey) {
+        if (!groupedMap.has(n.groupKey)) {
+          groupedMap.set(n.groupKey, { ...n, aggregatedCount: 1 });
+          finalItems.push(n);
+        } else {
+          const existing = groupedMap.get(n.groupKey)!;
+          existing.aggregatedCount = (existing.aggregatedCount || 1) + 1;
+        }
+      } else {
+        finalItems.push(n);
+      }
+    });
+
+    return finalItems;
   }, [notifications, searchQuery, filter]);
 
   // Group by date
@@ -171,7 +281,7 @@ export default function NotificationsPage() {
     const lastWeekGroup: Notification[] = [];
     const earlierGroup: Notification[] = [];
 
-    filteredNotifications.forEach(n => {
+    filteredNotifications.forEach((n) => {
       const date = new Date(n.createdAt);
       const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
       if (dateOnly.getTime() === today.getTime()) {
@@ -186,8 +296,10 @@ export default function NotificationsPage() {
     });
 
     if (todayGroup.length > 0) groups.push({ label: "Today", notifications: todayGroup });
-    if (yesterdayGroup.length > 0) groups.push({ label: "Yesterday", notifications: yesterdayGroup });
-    if (lastWeekGroup.length > 0) groups.push({ label: "Last 7 days", notifications: lastWeekGroup });
+    if (yesterdayGroup.length > 0)
+      groups.push({ label: "Yesterday", notifications: yesterdayGroup });
+    if (lastWeekGroup.length > 0)
+      groups.push({ label: "Last 7 days", notifications: lastWeekGroup });
     if (earlierGroup.length > 0) groups.push({ label: "Earlier", notifications: earlierGroup });
 
     return groups;
@@ -204,9 +316,7 @@ export default function NotificationsPage() {
   };
 
   const handleNotificationOpen = (notification: Notification) => {
-    // Navigate FIRST — make it feel fast!
     router.push(notification.deepLink || "/notifications");
-    // Fire-and-forget mark read — don't block navigation
     if (!notification.read) void markRead(notification.id);
   };
 
@@ -244,33 +354,51 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      {/* Search and Filters */}
+      {/* Search and Category Tabs */}
       <div className="bg-surface border border-border rounded-2xl p-4 space-y-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={20} />
+          <Search
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+            size={20}
+          />
           <input
             type="text"
             placeholder="Search notifications..."
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-background-secondary border border-border text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          {(["all", "unread", "mentions", "assignments", "system"] as FilterOption[]).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={classNames(
-                "px-4 py-2 rounded-full text-sm font-medium transition-all",
-                filter === f
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-background-secondary text-text-muted hover:bg-surface-hover"
-              )}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
+          {CATEGORY_TABS.map((tab) => {
+            const count = categoryUnreadCounts[tab.id] || 0;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setFilter(tab.id)}
+                className={classNames(
+                  "px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-2",
+                  filter === tab.id
+                    ? "bg-primary text-primary-foreground font-semibold"
+                    : "bg-background-secondary text-text-muted hover:bg-surface-hover"
+                )}
+              >
+                <span>{tab.label}</span>
+                {count > 0 && (
+                  <span
+                    className={classNames(
+                      "px-2 py-0.5 text-xs rounded-full font-bold",
+                      filter === tab.id
+                        ? "bg-white/20 text-white"
+                        : "bg-primary/10 text-primary"
+                    )}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -290,16 +418,22 @@ export default function NotificationsPage() {
           <EmptyState
             icon={Bell}
             title="All caught up!"
-            description={searchQuery || filter !== "all" ? "No notifications match your filters." : "You don't have any notifications yet."}
+            description={
+              searchQuery || filter !== "all"
+                ? "No notifications match your filters."
+                : "You don't have any notifications yet."
+            }
           />
         ) : (
           <div className="divide-y divide-border">
-            {groupedNotifications.map(group => (
+            {groupedNotifications.map((group) => (
               <div key={group.label}>
                 <div className="px-6 py-3 bg-background-secondary border-b border-border">
-                  <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider">{group.label}</h2>
+                  <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider">
+                    {group.label}
+                  </h2>
                 </div>
-                {group.notifications.map(notification => (
+                {group.notifications.map((notification) => (
                   <NotificationPageItem
                     key={notification.id}
                     notification={notification}
@@ -310,9 +444,23 @@ export default function NotificationsPage() {
                 ))}
               </div>
             ))}
+
+            {hasMore && (
+              <div className="p-4 text-center">
+                <button
+                  onClick={() => fetchNextPage()}
+                  disabled={loadingMore}
+                  className="px-4 py-2 text-sm text-primary font-semibold hover:underline flex items-center justify-center gap-2 mx-auto"
+                >
+                  {loadingMore && <Loader2 size={16} className="animate-spin" />}
+                  {loadingMore ? "Loading more..." : "Load older notifications"}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
   );
 }
+
