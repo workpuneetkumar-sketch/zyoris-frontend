@@ -1,18 +1,54 @@
 "use client";
 
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Bell, Check, CheckCheck, X, Trash2, Search, Filter, BellRing, ChevronRight, User, Volume2, VolumeX, BellOff } from "lucide-react";
+import {
+  Bell,
+  Check,
+  CheckCheck,
+  X,
+  Trash2,
+  Search,
+  BellRing,
+  ChevronRight,
+  User,
+  Volume2,
+  VolumeX,
+  BellOff,
+  Briefcase,
+  MessageSquare,
+  CheckSquare,
+  ShieldAlert,
+  Layers,
+  Loader2,
+} from "lucide-react";
 import classNames from "classnames";
 import { useNotifications } from "@/hooks/useNotifications";
 import { useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
 import { Avatar } from "./ui/Avatar";
-import { PriorityTag } from "./ui/PriorityTag";
 import { EmptyState } from "./ui/EmptyState";
 import { Skeleton } from "./ui/Skeleton";
-import type { Notification, NotificationType, NotificationPriority } from "@/types/notifications";
-import { isSoundEnabled, setSoundEnabled, playNotificationSound, attachAudioUnlock } from "@/lib/notificationSound";
-import { getPushPermissionStatus, requestPushPermission, type PushPermissionStatus } from "@/lib/browserPushPermission";
+import type {
+  Notification,
+  NotificationCategory,
+  NotificationCategoryPreferences,
+  NotificationPreferences,
+} from "@/types/notifications";
+import {
+  isSoundEnabled,
+  setSoundEnabled,
+  playNotificationSound,
+  attachAudioUnlock,
+} from "@/lib/notificationSound";
+import {
+  getPushPermissionStatus,
+  requestPushPermission,
+  type PushPermissionStatus,
+} from "@/lib/browserPushPermission";
+import {
+  fetchNotificationPreferences,
+  updateNotificationPreferences,
+} from "@/lib/api/notificationsApi";
 
 // Helper to format date
 function formatRelativeTime(dateString: string): string {
@@ -30,28 +66,38 @@ function formatRelativeTime(dateString: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-// Get type icon
-function getTypeIcon(type: NotificationType) {
-  // We'll use different background colors based on type instead of different icons
-  return null;
+// Visual category icon mapping
+function getCategoryIcon(category?: string) {
+  const cat = (category || "").toLowerCase();
+  switch (cat) {
+    case "deals":
+      return <Briefcase size={18} className="text-amber-500" />;
+    case "messages":
+      return <MessageSquare size={18} className="text-blue-500" />;
+    case "tasks":
+      return <CheckSquare size={18} className="text-emerald-500" />;
+    case "leads":
+      return <User size={18} className="text-purple-500" />;
+    case "system":
+    default:
+      return <ShieldAlert size={18} className="text-rose-500" />;
+  }
 }
 
-function getTypeStyles(type: NotificationType) {
-  switch (type) {
-    case "success":
-      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
-    case "warning":
+function getCategoryStyles(category?: string) {
+  const cat = (category || "").toLowerCase();
+  switch (cat) {
+    case "deals":
       return "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400";
-    case "error":
-      return "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400";
-    case "info":
-    case "system_reminder":
-    case "lead_assigned":
-    case "lead_shared":
-    case "task_assigned":
-    case "mention":
-    default:
+    case "messages":
       return "bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400";
+    case "tasks":
+      return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400";
+    case "leads":
+      return "bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400";
+    case "system":
+    default:
+      return "bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400";
   }
 }
 
@@ -67,6 +113,10 @@ function NotificationItem({
   onDelete: (id: string) => void;
   onClick: () => void;
 }) {
+  const isAggregated = Boolean(
+    notification.groupKey || (notification.aggregatedCount && notification.aggregatedCount > 1)
+  );
+
   return (
     <div
       className={classNames(
@@ -82,7 +132,7 @@ function NotificationItem({
         <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full" />
       )}
 
-      {/* Avatar / Icon */}
+      {/* Entity Category Icon / Avatar */}
       <div className="shrink-0">
         {notification.actor ? (
           <Avatar
@@ -92,8 +142,13 @@ function NotificationItem({
             size="md"
           />
         ) : (
-          <div className={classNames("w-10 h-10 rounded-full flex items-center justify-center", getTypeStyles(notification.type))}>
-            <User size={18} />
+          <div
+            className={classNames(
+              "w-10 h-10 rounded-full flex items-center justify-center",
+              getCategoryStyles(notification.category)
+            )}
+          >
+            {getCategoryIcon(notification.category)}
           </div>
         )}
       </div>
@@ -102,25 +157,45 @@ function NotificationItem({
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <h4 className={classNames("font-semibold text-sm truncate", notification.read ? "text-text-secondary" : "text-text")}>
+            <h4
+              className={classNames(
+                "font-semibold text-sm truncate",
+                notification.read ? "text-text-secondary" : "text-text"
+              )}
+            >
               {notification.title}
             </h4>
-            {!notification.read && <span className="w-2 h-2 rounded-full bg-primary shrink-0 animate-pulse" />}
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <PriorityTag priority={notification.priority} className="text-[10px] px-1.5 py-0.5" />
+            {isAggregated && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
+                <Layers size={10} />
+                {notification.aggregatedCount ? `${notification.aggregatedCount}` : "Grouped"}
+              </span>
+            )}
+            {!notification.read && (
+              <span className="w-2 h-2 rounded-full bg-primary shrink-0 animate-pulse" />
+            )}
           </div>
         </div>
-        <p className={classNames("text-sm mt-1 line-clamp-2", notification.read ? "text-text-muted" : "text-text-secondary")}>
+        <p
+          className={classNames(
+            "text-sm mt-1 line-clamp-2",
+            notification.read ? "text-text-muted" : "text-text-secondary"
+          )}
+        >
           {notification.message}
         </p>
         <div className="flex items-center justify-between mt-2">
-          <span className="text-xs text-text-muted">{formatRelativeTime(notification.createdAt)}</span>
+          <span className="text-xs text-text-muted">
+            {formatRelativeTime(notification.createdAt)}
+          </span>
           {/* Actions */}
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             {!notification.read && (
               <button
-                onClick={(e) => { e.stopPropagation(); onMarkRead(notification.id); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkRead(notification.id);
+                }}
                 className="p-1.5 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
                 title="Mark as read"
               >
@@ -128,9 +203,12 @@ function NotificationItem({
               </button>
             )}
             <button
-              onClick={(e) => { e.stopPropagation(); onDelete(notification.id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(notification.id);
+              }}
               className="p-1.5 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
-              title="Delete"
+              title="Archive"
             >
               <Trash2 size={14} />
             </button>
@@ -141,10 +219,26 @@ function NotificationItem({
   );
 }
 
-// Filter options
-type FilterOption = "all" | "unread" | "mentions" | "assignments" | "system";
+// Category Tabs Definition
+const CATEGORY_TABS: { id: NotificationCategory; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "unread", label: "Unread" },
+  { id: "leads", label: "Leads" },
+  { id: "messages", label: "Messages" },
+  { id: "deals", label: "Deals" },
+  { id: "tasks", label: "Tasks" },
+  { id: "system", label: "System" },
+];
 
-// Settings Panel Component
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  leads: { inApp: true, email: true, push: true },
+  messages: { inApp: true, email: true, push: false },
+  deals: { inApp: true, email: true, push: true },
+  tasks: { inApp: true, email: false, push: true },
+  system: { inApp: true, email: true, push: false },
+};
+
+// Settings Panel Component with User Preference Matrix
 function NotificationSettings({
   soundEnabled,
   onToggleSound,
@@ -160,6 +254,51 @@ function NotificationSettings({
 }) {
   const [requesting, setRequesting] = useState(false);
   const [testingSound, setTestingSound] = useState(false);
+  const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
+  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [loadingPrefs, setLoadingPrefs] = useState(true);
+
+  // Load preferences from API
+  useEffect(() => {
+    let active = true;
+    fetchNotificationPreferences()
+      .then((res) => {
+        if (active && res && Object.keys(res).length > 0) {
+          setPreferences((prev) => ({ ...prev, ...res }));
+        }
+      })
+      .catch(() => {
+        // use default fallback matrix
+      })
+      .finally(() => {
+        if (active) setLoadingPrefs(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleTogglePreference = async (
+    category: string,
+    channel: keyof NotificationCategoryPreferences
+  ) => {
+    const updated = {
+      ...preferences,
+      [category]: {
+        ...(preferences[category] || { inApp: true, email: true, push: true }),
+        [channel]: !(preferences[category]?.[channel] ?? true),
+      },
+    };
+    setPreferences(updated);
+    setSavingPrefs(true);
+    try {
+      await updateNotificationPreferences(updated);
+    } catch {
+      // Keep optimistic state
+    } finally {
+      setSavingPrefs(false);
+    }
+  };
 
   const handleRequestPush = async () => {
     setRequesting(true);
@@ -174,26 +313,107 @@ function NotificationSettings({
   };
 
   const pushStatusLabel =
-    pushPermission === "granted" ? "Enabled" :
-    pushPermission === "denied" ? "Blocked" :
-    pushPermission === "unsupported" ? "Not supported" : "Not enabled";
+    pushPermission === "granted"
+      ? "Enabled"
+      : pushPermission === "denied"
+      ? "Blocked"
+      : pushPermission === "unsupported"
+      ? "Not supported"
+      : "Not enabled";
+
   const pushStatusColor =
-    pushPermission === "granted" ? "text-success" :
-    pushPermission === "denied" ? "text-error" : "text-text-muted";
+    pushPermission === "granted"
+      ? "text-success"
+      : pushPermission === "denied"
+      ? "text-error"
+      : "text-text-muted";
+
+  const categories = ["leads", "messages", "deals", "tasks", "system"];
 
   return (
-    <div className="p-4 space-y-4">
+    <div className="p-4 space-y-5 overflow-y-auto max-h-[75vh]">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-text">Notification Settings</h3>
-        <button onClick={onClose} className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors">
+        <h3 className="text-sm font-bold text-text flex items-center gap-2">
+          Notification Settings
+          {savingPrefs && <Loader2 size={12} className="animate-spin text-primary" />}
+        </h3>
+        <button
+          onClick={onClose}
+          className="p-1 rounded-lg hover:bg-surface-hover text-text-muted transition-colors"
+        >
           <X size={16} />
         </button>
+      </div>
+
+      {/* User Preference Matrix */}
+      <div className="rounded-xl border border-border bg-background-secondary p-3 space-y-3">
+        <div>
+          <h4 className="text-xs font-bold text-text">Channel Preferences Matrix</h4>
+          <p className="text-[11px] text-text-muted">Customize notifications per category</p>
+        </div>
+
+        {loadingPrefs ? (
+          <div className="py-4 text-center">
+            <Loader2 size={18} className="animate-spin text-primary mx-auto" />
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-border text-text-muted">
+                  <th className="py-2 font-semibold">Category</th>
+                  <th className="py-2 text-center font-semibold">In-App</th>
+                  <th className="py-2 text-center font-semibold">Email</th>
+                  <th className="py-2 text-center font-semibold">Push</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/50">
+                {categories.map((cat) => {
+                  const prefs = preferences[cat] || { inApp: true, email: true, push: false };
+                  return (
+                    <tr key={cat} className="hover:bg-surface-hover/50">
+                      <td className="py-2 font-medium capitalize text-text">{cat}</td>
+                      <td className="py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={prefs.inApp}
+                          onChange={() => handleTogglePreference(cat, "inApp")}
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={prefs.email}
+                          onChange={() => handleTogglePreference(cat, "email")}
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                        />
+                      </td>
+                      <td className="py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={prefs.push}
+                          onChange={() => handleTogglePreference(cat, "push")}
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Sound Toggle */}
       <div className="flex items-center justify-between p-3 rounded-xl bg-background-secondary border border-border">
         <div className="flex items-center gap-3">
-          {soundEnabled ? <Volume2 size={18} className="text-primary" /> : <VolumeX size={18} className="text-text-muted" />}
+          {soundEnabled ? (
+            <Volume2 size={18} className="text-primary" />
+          ) : (
+            <VolumeX size={18} className="text-text-muted" />
+          )}
           <div>
             <p className="text-[13px] font-semibold text-text">Notification Sound</p>
             <p className="text-[11px] text-text-muted">Play sound on new notifications</p>
@@ -228,21 +448,28 @@ function NotificationSettings({
       {/* Push Permission */}
       <div className="p-3 rounded-xl bg-background-secondary border border-border space-y-2">
         <div className="flex items-center gap-3">
-          <BellOff size={18} className={pushPermission === "granted" ? "text-primary" : "text-text-muted"} />
+          <BellOff
+            size={18}
+            className={pushPermission === "granted" ? "text-primary" : "text-text-muted"}
+          />
           <div className="flex-1">
             <p className="text-[13px] font-semibold text-text">Browser Notifications</p>
-            <p className={classNames("text-[11px]", pushStatusColor)}>Status: {pushStatusLabel}</p>
+            <p className={classNames("text-[11px]", pushStatusColor)}>
+              Status: {pushStatusLabel}
+            </p>
           </div>
         </div>
-        {pushPermission !== "granted" && pushPermission !== "denied" && pushPermission !== "unsupported" && (
-          <button
-            onClick={handleRequestPush}
-            disabled={requesting}
-            className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary-dark transition-colors disabled:opacity-60"
-          >
-            {requesting ? "Requesting..." : "Enable Browser Notifications"}
-          </button>
-        )}
+        {pushPermission !== "granted" &&
+          pushPermission !== "denied" &&
+          pushPermission !== "unsupported" && (
+            <button
+              onClick={handleRequestPush}
+              disabled={requesting}
+              className="w-full py-2 rounded-lg bg-primary text-primary-foreground text-[12px] font-semibold hover:bg-primary-dark transition-colors disabled:opacity-60"
+            >
+              {requesting ? "Requesting..." : "Enable Browser Notifications"}
+            </button>
+          )}
         {pushPermission === "denied" && (
           <p className="text-[11px] text-text-muted bg-error-light rounded-lg p-2">
             Notifications are blocked in your browser. Please update your browser settings to allow them.
@@ -256,34 +483,79 @@ function NotificationSettings({
 // Main Notification Panel Component
 export function NotificationBell() {
   const router = useRouter();
-  const { notifications, loading, error, unreadCount, markRead, markAllRead, removeNotification } = useNotifications();
+  const {
+    notifications,
+    loading,
+    loadingMore,
+    hasMore,
+    error,
+    unreadCount,
+    categoryUnreadCounts,
+    markRead,
+    markAllRead,
+    removeNotification,
+    fetchNextPage,
+  } = useNotifications();
+
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filter, setFilter] = useState<FilterOption>("all");
+  const [filter, setFilter] = useState<NotificationCategory>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled());
-  const [pushPermission, setPushPermission] = useState<PushPermissionStatus>(() => getPushPermissionStatus());
-  const { isDark } = useTheme();
+  const [pushPermission, setPushPermission] = useState<PushPermissionStatus>(() =>
+    getPushPermissionStatus()
+  );
+
   const desktopPanelRef = useRef<HTMLDivElement>(null);
   const mobilePanelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Filter and search notifications
+  // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
-    return notifications.filter(n => {
-      const matchesSearch = n.title.toLowerCase().includes(searchQuery.toLowerCase()) || n.message.toLowerCase().includes(searchQuery.toLowerCase());
+    let result = notifications.filter((n) => {
+      const matchesSearch =
+        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        n.message.toLowerCase().includes(searchQuery.toLowerCase());
+
       const matchesFilter = (() => {
         switch (filter) {
-          case "unread": return !n.read;
-          case "mentions": return n.type === "mention";
-          case "assignments": return n.type === "lead_assigned" || n.type === "task_assigned";
-          case "system": return n.type === "system_reminder" || n.type === "success" || n.type === "warning" || n.type === "error";
-          default: return true;
+          case "unread":
+            return !n.read;
+          case "leads":
+          case "messages":
+          case "deals":
+          case "tasks":
+          case "system":
+            return (n.category || "").toLowerCase() === filter;
+          case "all":
+          default:
+            return true;
         }
       })();
+
       return matchesSearch && matchesFilter;
     });
+
+    // Grouping by groupKey client-side if multiple notifications share a groupKey
+    const groupedMap = new Map<string, Notification>();
+    const finalItems: Notification[] = [];
+
+    result.forEach((n) => {
+      if (n.groupKey) {
+        if (!groupedMap.has(n.groupKey)) {
+          groupedMap.set(n.groupKey, { ...n, aggregatedCount: 1 });
+          finalItems.push(n);
+        } else {
+          const existing = groupedMap.get(n.groupKey)!;
+          existing.aggregatedCount = (existing.aggregatedCount || 1) + 1;
+        }
+      } else {
+        finalItems.push(n);
+      }
+    });
+
+    return finalItems;
   }, [notifications, searchQuery, filter]);
 
   // Group notifications by date
@@ -298,7 +570,7 @@ export function NotificationBell() {
     const yesterdayGroup: Notification[] = [];
     const earlierGroup: Notification[] = [];
 
-    filteredNotifications.forEach(n => {
+    filteredNotifications.forEach((n) => {
       const date = new Date(n.createdAt);
       const dateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
       if (dateOnly.getTime() === today.getTime()) {
@@ -311,7 +583,8 @@ export function NotificationBell() {
     });
 
     if (todayGroup.length > 0) groups.push({ label: "Today", notifications: todayGroup });
-    if (yesterdayGroup.length > 0) groups.push({ label: "Yesterday", notifications: yesterdayGroup });
+    if (yesterdayGroup.length > 0)
+      groups.push({ label: "Yesterday", notifications: yesterdayGroup });
     if (earlierGroup.length > 0) groups.push({ label: "Earlier", notifications: earlierGroup });
 
     return groups;
@@ -393,7 +666,6 @@ export function NotificationBell() {
     if (newOpen) {
       attachAudioUnlock();
     }
-    // Reset settings when closing
     if (!newOpen) {
       setShowSettings(false);
     }
@@ -487,33 +759,52 @@ export function NotificationBell() {
                 />
               ) : (
                 <>
-                  {/* Search and Filter */}
+                  {/* Search and Category Tabs */}
                   <div className="p-4 border-b border-border space-y-3 shrink-0">
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                      <Search
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                        size={18}
+                      />
                       <input
                         type="text"
                         placeholder="Search notifications..."
                         value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-3 py-2 rounded-lg bg-background-secondary border border-border text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
                       />
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {(["all", "unread", "mentions", "assignments", "system"] as FilterOption[]).map(f => (
-                        <button
-                          key={f}
-                          onClick={() => setFilter(f)}
-                          className={classNames(
-                            "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
-                            filter === f
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background-secondary text-text-muted hover:bg-surface-hover"
-                          )}
-                        >
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
-                        </button>
-                      ))}
+                    {/* Category Tabs with Badges */}
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                      {CATEGORY_TABS.map((tab) => {
+                        const count = categoryUnreadCounts[tab.id] || 0;
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => setFilter(tab.id)}
+                            className={classNames(
+                              "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5",
+                              filter === tab.id
+                                ? "bg-primary text-primary-foreground font-semibold"
+                                : "bg-background-secondary text-text-muted hover:bg-surface-hover"
+                            )}
+                          >
+                            <span>{tab.label}</span>
+                            {count > 0 && (
+                              <span
+                                className={classNames(
+                                  "px-1.5 py-0.2 text-[10px] rounded-full font-bold",
+                                  filter === tab.id
+                                    ? "bg-white/20 text-white"
+                                    : "bg-primary/10 text-primary"
+                                )}
+                              >
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -533,16 +824,22 @@ export function NotificationBell() {
                       <EmptyState
                         icon={Bell}
                         title="All caught up!"
-                        description={searchQuery || filter !== "all" ? "No notifications match your filters." : "You don't have any notifications yet."}
+                        description={
+                          searchQuery || filter !== "all"
+                            ? "No notifications match your filters."
+                            : "You don't have any notifications yet."
+                        }
                       />
                     ) : (
                       <div className="divide-y divide-border">
-                        {groupedNotifications.map(group => (
+                        {groupedNotifications.map((group) => (
                           <div key={group.label}>
                             <div className="sticky top-0 z-10 bg-surface px-4 py-2 border-b border-border">
-                              <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">{group.label}</h3>
+                              <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">
+                                {group.label}
+                              </h3>
                             </div>
-                            {group.notifications.map(notification => (
+                            {group.notifications.map((notification) => (
                               <NotificationItem
                                 key={notification.id}
                                 notification={notification}
@@ -553,6 +850,20 @@ export function NotificationBell() {
                             ))}
                           </div>
                         ))}
+
+                        {/* Infinite scroll load more button */}
+                        {hasMore && (
+                          <div className="p-3 text-center">
+                            <button
+                              onClick={() => fetchNextPage()}
+                              disabled={loadingMore}
+                              className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1.5 mx-auto"
+                            >
+                              {loadingMore && <Loader2 size={12} className="animate-spin" />}
+                              {loadingMore ? "Loading more..." : "Load older notifications"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -647,33 +958,51 @@ export function NotificationBell() {
                 </div>
               ) : (
                 <>
-                  {/* Search and Filter */}
+                  {/* Search and Category Tabs */}
                   <div className="p-4 border-b border-border space-y-3 shrink-0">
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={18} />
+                      <Search
+                        className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+                        size={18}
+                      />
                       <input
                         type="text"
                         placeholder="Search notifications..."
                         value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-3 py-2 rounded-lg bg-background-secondary border border-border text-text placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-primary/20"
                       />
                     </div>
-                    <div className="flex gap-2 overflow-x-auto pb-1">
-                      {(["all", "unread", "mentions", "assignments", "system"] as FilterOption[]).map(f => (
-                        <button
-                          key={f}
-                          onClick={() => setFilter(f)}
-                          className={classNames(
-                            "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all",
-                            filter === f
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background-secondary text-text-muted hover:bg-surface-hover"
-                          )}
-                        >
-                          {f.charAt(0).toUpperCase() + f.slice(1)}
-                        </button>
-                      ))}
+                    <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+                      {CATEGORY_TABS.map((tab) => {
+                        const count = categoryUnreadCounts[tab.id] || 0;
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => setFilter(tab.id)}
+                            className={classNames(
+                              "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5",
+                              filter === tab.id
+                                ? "bg-primary text-primary-foreground font-semibold"
+                                : "bg-background-secondary text-text-muted hover:bg-surface-hover"
+                            )}
+                          >
+                            <span>{tab.label}</span>
+                            {count > 0 && (
+                              <span
+                                className={classNames(
+                                  "px-1.5 py-0.2 text-[10px] rounded-full font-bold",
+                                  filter === tab.id
+                                    ? "bg-white/20 text-white"
+                                    : "bg-primary/10 text-primary"
+                                )}
+                              >
+                                {count}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
 
@@ -693,16 +1022,22 @@ export function NotificationBell() {
                       <EmptyState
                         icon={Bell}
                         title="All caught up!"
-                        description={searchQuery || filter !== "all" ? "No notifications match your filters." : "You don't have any notifications yet."}
+                        description={
+                          searchQuery || filter !== "all"
+                            ? "No notifications match your filters."
+                            : "You don't have any notifications yet."
+                        }
                       />
                     ) : (
                       <div className="divide-y divide-border">
-                        {groupedNotifications.map(group => (
+                        {groupedNotifications.map((group) => (
                           <div key={group.label}>
                             <div className="sticky top-0 z-10 bg-surface px-4 py-2 border-b border-border">
-                              <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">{group.label}</h3>
+                              <h3 className="text-xs font-bold text-text-muted uppercase tracking-wider">
+                                {group.label}
+                              </h3>
                             </div>
-                            {group.notifications.map(notification => (
+                            {group.notifications.map((notification) => (
                               <NotificationItem
                                 key={notification.id}
                                 notification={notification}
@@ -713,6 +1048,19 @@ export function NotificationBell() {
                             ))}
                           </div>
                         ))}
+
+                        {hasMore && (
+                          <div className="p-3 text-center">
+                            <button
+                              onClick={() => fetchNextPage()}
+                              disabled={loadingMore}
+                              className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1.5 mx-auto"
+                            >
+                              {loadingMore && <Loader2 size={12} className="animate-spin" />}
+                              {loadingMore ? "Loading more..." : "Load older notifications"}
+                            </button>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -724,4 +1072,4 @@ export function NotificationBell() {
       )}
     </div>
   );
-}
+}

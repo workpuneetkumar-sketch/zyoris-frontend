@@ -1,13 +1,15 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import type { Notification } from "@/types/notifications";
+import type { Notification, NotificationCategory } from "@/types/notifications";
 import {
   getNotifications,
   markAsRead,
   markAllRead as markAllReadAdapter,
-  deleteNotification as deleteNotificationAdapter,
+  archiveNotification,
+  dtoToNotification,
 } from "@/services/notificationAdapter";
+import { fetchUnreadCounts } from "@/lib/api/notificationsApi";
 import { useAuth } from "@/context/AuthContext";
 import { playNotificationSound, isSoundEnabled, setSoundEnabled } from "@/lib/notificationSound";
 import {
@@ -20,12 +22,16 @@ import {
 interface NotificationContextValue {
   notifications: Notification[];
   loading: boolean;
+  loadingMore: boolean;
+  hasMore: boolean;
   error: string | null;
   unreadCount: number;
+  categoryUnreadCounts: Record<string, number>;
   markRead: (id: string) => Promise<void>;
   markAllRead: () => Promise<void>;
   removeNotification: (id: string) => Promise<void>;
   refresh: () => Promise<void>;
+  fetchNextPage: () => Promise<void>;
   // Sound
   soundEnabled: boolean;
   toggleSound: () => void;
@@ -36,28 +42,57 @@ interface NotificationContextValue {
 
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
-// Polling interval — refetch notifications every 60 seconds
-const POLL_INTERVAL_MS = 60_000;
-
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<Record<string, number>>({
+    all: 0,
+    unread: 0,
+    leads: 0,
+    messages: 0,
+    deals: 0,
+    tasks: 0,
+    system: 0,
+  });
+
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled());
   const [pushPermission, setPushPermission] = useState<PushPermissionStatus>(() =>
     getPushPermissionStatus()
   );
 
-  // Track previously seen notification IDs to detect new ones
   const knownIdsRef = useRef<Set<string>>(new Set());
   const isFirstLoadRef = useRef(true);
 
+  // Fetch granular unread count
+  const loadUnreadCounts = useCallback(async () => {
+    if (!isAuthenticated || !user) return;
+    try {
+      const res = await fetchUnreadCounts();
+      if (res && res.categories) {
+        setCategoryUnreadCounts((prev) => ({
+          ...prev,
+          ...res.categories,
+          all: res.total ?? res.categories.all ?? prev.all,
+        }));
+      }
+    } catch {
+      // Fallback: derive from state if API unavailable
+    }
+  }, [isAuthenticated, user]);
+
+  // Load initial notifications (Cursor-based)
   const loadNotifications = useCallback(async () => {
     if (!isAuthenticated || !user) {
       setNotifications([]);
       setLoading(false);
       setError(null);
+      setHasMore(false);
+      setNextCursor(null);
       knownIdsRef.current = new Set();
       isFirstLoadRef.current = true;
       return;
@@ -66,56 +101,163 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setLoading(true);
     setError(null);
     try {
-      const data = await getNotifications();
-      setNotifications(data);
+      const res = await getNotifications({ limit: 20 });
+      setNotifications(res.notifications);
+      setNextCursor(res.nextCursor || null);
+      setHasMore(Boolean(res.nextCursor));
 
-      // Detect new unread notifications (only after first load)
-      if (!isFirstLoadRef.current) {
-        const newUnread = data.filter(
-          (n) => !n.read && !knownIdsRef.current.has(n.id)
-        );
-        if (newUnread.length > 0) {
-          // Play sound for new notifications
-          void playNotificationSound();
-          // Show browser push for the latest new notification
-          if (newUnread[0]) {
-            showBrowserNotification(newUnread[0].title, {
-              body: newUnread[0].message,
-              tag: `zyoris-notif-${newUnread[0].id}`,
-            });
-          }
-        }
-      }
-
-      // Update known IDs
-      knownIdsRef.current = new Set(data.map((n) => n.id));
+      knownIdsRef.current = new Set(res.notifications.map((n) => n.id));
       isFirstLoadRef.current = false;
+      void loadUnreadCounts();
     } catch (err: any) {
       console.error("Failed to load notifications:", err);
       setError(err.message || "Failed to load notifications");
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user]);
+  }, [isAuthenticated, user, loadUnreadCounts]);
+
+  // Fetch next page via Cursor
+  const fetchNextPage = useCallback(async () => {
+    if (!isAuthenticated || !user || !nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await getNotifications({ cursor: nextCursor, limit: 20 });
+      setNotifications((prev) => {
+        const existingIds = new Set(prev.map((n) => n.id));
+        const newItems = res.notifications.filter((n) => !existingIds.has(n.id));
+        return [...prev, ...newItems];
+      });
+      setNextCursor(res.nextCursor || null);
+      setHasMore(Boolean(res.nextCursor));
+    } catch (err) {
+      console.error("Failed to fetch next page of notifications:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [isAuthenticated, user, nextCursor, loadingMore]);
 
   // Initial load
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
 
-  // Polling for new notifications
+  // Active WebSocket Listeners for notification.created, notification.read, notification.archived, notification.count.updated
   useEffect(() => {
-    if (!isAuthenticated || !user) return;
-    const timer = setInterval(() => {
-      void loadNotifications();
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [isAuthenticated, user, loadNotifications]);
+    if (!isAuthenticated || !user || typeof window === "undefined") return;
+
+    let socket: any = null;
+    let isSubscribed = true;
+
+    const setupWebSockets = async () => {
+      try {
+        const { io } = await import("socket.io-client");
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || window.location.origin;
+
+        socket = io(wsUrl, {
+          transports: ["websocket", "polling"],
+          reconnection: true,
+          reconnectionDelay: 2000,
+          timeout: 10000,
+        });
+
+        // 1. Listen for notification.created
+        socket.on("notification.created", (data: any) => {
+          if (!isSubscribed) return;
+          const newNotif: Notification = data.id && data.title ? (data as Notification) : dtoToNotification(data);
+
+          setNotifications((prev) => {
+            if (prev.some((n) => n.id === newNotif.id)) return prev;
+            return [newNotif, ...prev];
+          });
+
+          // Update unread count state
+          if (!newNotif.read) {
+            setCategoryUnreadCounts((prev) => {
+              const cat = (newNotif.category || "system").toLowerCase();
+              return {
+                ...prev,
+                all: (prev.all || 0) + 1,
+                unread: (prev.unread || 0) + 1,
+                [cat]: (prev[cat] || 0) + 1,
+              };
+            });
+
+            // Sound & Push
+            void playNotificationSound();
+            showBrowserNotification(newNotif.title, {
+              body: newNotif.message,
+              tag: `zyoris-notif-${newNotif.id}`,
+            });
+          }
+        });
+
+        // 2. Listen for notification.read
+        socket.on("notification.read", (data: { id?: string; notificationId?: string }) => {
+          if (!isSubscribed) return;
+          const id = data.id || data.notificationId;
+          if (!id) return;
+
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+          );
+          void loadUnreadCounts();
+        });
+
+        // 3. Listen for notification.archived
+        socket.on("notification.archived", (data: { id?: string; notificationId?: string }) => {
+          if (!isSubscribed) return;
+          const id = data.id || data.notificationId;
+          if (!id) return;
+
+          setNotifications((prev) => prev.filter((n) => n.id !== id));
+          void loadUnreadCounts();
+        });
+
+        // 4. Listen for notification.count.updated
+        socket.on("notification.count.updated", (data: any) => {
+          if (!isSubscribed || !data) return;
+          if (data.categories) {
+            setCategoryUnreadCounts((prev) => ({
+              ...prev,
+              ...data.categories,
+              all: data.total ?? data.categories.all ?? prev.all,
+            }));
+          }
+        });
+      } catch (wsErr) {
+        console.warn("WebSocket connection unavailable, fallback active:", wsErr);
+      }
+    };
+
+    void setupWebSockets();
+
+    return () => {
+      isSubscribed = false;
+      if (socket) {
+        socket.disconnect();
+      }
+    };
+  }, [isAuthenticated, user, loadUnreadCounts]);
 
   const markRead = useCallback(async (id: string) => {
     try {
       // Optimistic update
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      setNotifications((prev) =>
+        prev.map((n) => {
+          if (n.id === id && !n.read) {
+            const cat = (n.category || "system").toLowerCase();
+            setCategoryUnreadCounts((counts) => ({
+              ...counts,
+              all: Math.max(0, (counts.all || 0) - 1),
+              unread: Math.max(0, (counts.unread || 0) - 1),
+              [cat]: Math.max(0, (counts[cat] || 0) - 1),
+            }));
+            return { ...n, read: true };
+          }
+          return n;
+        })
+      );
       await markAsRead(id);
     } catch (err) {
       console.error("Failed to mark notification as read:", err);
@@ -125,8 +267,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const markAllRead = useCallback(async () => {
     try {
-      // Optimistic update
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      setCategoryUnreadCounts({
+        all: 0,
+        unread: 0,
+        leads: 0,
+        messages: 0,
+        deals: 0,
+        tasks: 0,
+        system: 0,
+      });
       await markAllReadAdapter();
     } catch (err) {
       console.error("Failed to mark all notifications as read:", err);
@@ -136,17 +286,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const removeNotification = useCallback(async (id: string) => {
     try {
-      // Optimistic update
       setNotifications((prev) => prev.filter((n) => n.id !== id));
       knownIdsRef.current.delete(id);
-      await deleteNotificationAdapter(id);
+      await archiveNotification(id);
+      void loadUnreadCounts();
     } catch (err) {
-      console.error("Failed to delete notification:", err);
+      console.error("Failed to archive notification:", err);
       void loadNotifications();
     }
-  }, [loadNotifications]);
+  }, [loadNotifications, loadUnreadCounts]);
 
-  // Sound toggle
   const toggleSound = useCallback(() => {
     const next = !soundEnabled;
     setSoundEnabled(next);
@@ -156,23 +305,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [soundEnabled]);
 
-  // Browser push permission
   const requestPush = useCallback(async () => {
     const status = await requestPushPermission();
     setPushPermission(status);
   }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = categoryUnreadCounts.all ?? notifications.filter((n) => !n.read).length;
 
   const value: NotificationContextValue = {
     notifications,
     loading,
+    loadingMore,
+    hasMore,
     error,
     unreadCount,
+    categoryUnreadCounts,
     markRead,
     markAllRead,
     removeNotification,
     refresh: loadNotifications,
+    fetchNextPage,
     soundEnabled,
     toggleSound,
     pushPermission,
@@ -193,3 +345,4 @@ export function useNotifications() {
   }
   return context;
 }
+
