@@ -7,6 +7,7 @@ import {
   CheckCheck,
   X,
   Trash2,
+  Archive,
   Search,
   BellRing,
   ChevronRight,
@@ -107,11 +108,13 @@ function NotificationItem({
   notification,
   onMarkRead,
   onDelete,
+  onHardDelete,
   onClick,
 }: {
   notification: Notification;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
+  onHardDelete: (id: string) => void;
   onClick: () => void;
 }) {
   const isAggregated = Boolean(
@@ -208,8 +211,18 @@ function NotificationItem({
                 e.stopPropagation();
                 onDelete(notification.id);
               }}
-              className="p-1.5 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
+              className="p-1.5 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-secondary transition-colors"
               title="Archive"
+            >
+              <Archive size={14} />
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onHardDelete(notification.id);
+              }}
+              className="p-1.5 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
+              title="Delete permanently"
             >
               <Trash2 size={14} />
             </button>
@@ -575,6 +588,7 @@ export function NotificationBell() {
     markRead,
     markAllRead,
     removeNotification,
+    hardDeleteNotification,
     fetchNextPage,
   } = useNotifications();
 
@@ -926,6 +940,7 @@ export function NotificationBell() {
                                 notification={notification}
                                 onMarkRead={markRead}
                                 onDelete={removeNotification}
+                                onHardDelete={hardDeleteNotification}
                                 onClick={() => handleNotificationClick(notification)}
                               />
                             ))}
@@ -1124,6 +1139,7 @@ export function NotificationBell() {
                                 notification={notification}
                                 onMarkRead={markRead}
                                 onDelete={removeNotification}
+                                onHardDelete={hardDeleteNotification}
                                 onClick={() => handleNotificationClick(notification)}
                               />
                             ))}

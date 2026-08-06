@@ -9,9 +9,12 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   archiveNotification as archiveNotificationApi,
+  deleteNotification as deleteNotificationApi,
   bulkArchiveNotifications,
+  createNotification as createNotificationApi,
   type NotificationDto,
   type BulkArchivePayload,
+  type CreateNotificationPayload,
 } from "@/lib/api/notificationsApi";
 
 function getEntityDeepLink(entityType?: string | null, entityId?: string | null): string | null {
@@ -140,6 +143,7 @@ function getEntityDeepLink(entityType?: string | null, entityId?: string | null)
 }
 
 function mapCategory(dto: NotificationDto): NotificationCategory {
+  // 1. Explicit category from backend (trusted if it's a known value)
   if (dto.category) {
     const cat = dto.category.toLowerCase();
     if (["leads", "messages", "deals", "tasks", "system"].includes(cat)) {
@@ -147,18 +151,27 @@ function mapCategory(dto: NotificationDto): NotificationCategory {
     }
   }
 
-  const combined = `${dto.type || ""} ${dto.entityType || ""}`.toLowerCase();
-  if (combined.includes("lead")) return "leads";
+  // 2. Infer from entityType first (most reliable signal)
+  if (dto.entityType) {
+    const et = dto.entityType.toLowerCase();
+    if (et === "lead" || et === "leads") return "leads";
+    if (et === "deal" || et === "deals") return "deals";
+    if (et === "task" || et === "tasks") return "tasks";
+    if (
+      et === "message" || et === "messages" ||
+      et === "chat" || et === "whatsapp" || et === "call"
+    ) return "messages";
+  }
+
+  // 3. Infer from type string
+  const t = (dto.type || "").toLowerCase();
+  if (t.includes("lead")) return "leads";
+  if (t.includes("deal")) return "deals";
+  if (t.includes("task")) return "tasks";
   if (
-    combined.includes("message") ||
-    combined.includes("chat") ||
-    combined.includes("mention") ||
-    combined.includes("call") ||
-    combined.includes("whatsapp")
-  )
-    return "messages";
-  if (combined.includes("deal")) return "deals";
-  if (combined.includes("task")) return "tasks";
+    t.includes("message") || t.includes("chat") ||
+    t.includes("mention") || t.includes("call") || t.includes("whatsapp")
+  ) return "messages";
 
   return "system";
 }
@@ -262,7 +275,13 @@ export async function getNotifications(params?: {
     unreadOnly: params?.unreadOnly ?? params?.category === "unread",
   });
 
-  const notifications = (response.data || []).map(dtoToNotification).sort(
+  // Backend may wrap items under "data" or "notifications"
+  const raw: NotificationDto[] =
+    (response.data && response.data.length > 0
+      ? response.data
+      : (response as any).notifications) ?? [];
+
+  const notifications = raw.map(dtoToNotification).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
@@ -284,10 +303,22 @@ export async function archiveNotification(id: string): Promise<void> {
   await archiveNotificationApi(id);
 }
 
+/** Permanently hard-deletes a notification via DELETE /api/notifications/{id}. */
+export async function hardDeleteNotification(id: string): Promise<void> {
+  await deleteNotificationApi(id);
+}
+
 export async function deleteNotification(id: string): Promise<void> {
   await archiveNotificationApi(id);
 }
 
 export async function bulkArchive(payload: BulkArchivePayload = {}): Promise<void> {
   await bulkArchiveNotifications(payload);
+}
+
+export async function createNotification(
+  payload: CreateNotificationPayload
+): Promise<Notification> {
+  const dto = await createNotificationApi(payload);
+  return dtoToNotification(dto);
 }

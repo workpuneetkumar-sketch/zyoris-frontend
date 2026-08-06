@@ -14,10 +14,13 @@ import {
   markAsRead,
   markAllRead as markAllReadAdapter,
   archiveNotification,
+  hardDeleteNotification as hardDeleteNotificationApi,
   bulkArchive,
+  createNotification as createNotificationAdapter,
   dtoToNotification,
 } from "@/services/notificationAdapter";
 import { fetchUnreadCounts } from "@/lib/api/notificationsApi";
+import type { CreateNotificationPayload } from "@/lib/api/notificationsApi";
 import { useAuth } from "@/context/AuthContext";
 import { playNotificationSound, isSoundEnabled, setSoundEnabled } from "@/lib/notificationSound";
 import {
@@ -42,17 +45,19 @@ function normalizeUnreadCounts(res: UnreadCountData | undefined | null): UnreadC
     tasks: 0,
     system: 0,
   };
+  const KNOWN = ["leads", "messages", "deals", "tasks", "system"];
   Object.entries(byCategory).forEach(([rawKey, val]) => {
     const key = String(rawKey).toLowerCase();
-    if (["leads", "messages", "deals", "tasks", "system"].includes(key)) {
-      normalized[key] = typeof val === "number" ? val : 0;
-    } else {
-      // preserve unknown categories too
-      normalized[key] = typeof val === "number" ? val : 0;
+    const count = typeof val === "number" ? val : 0;
+    if (KNOWN.includes(key)) {
+      normalized[key] = count;
     }
+    // Unknown/UNCATEGORIZED keys: only count toward "all"/"unread" totals,
+    // do NOT assign to any named tab — the items themselves will render under
+    // the correct tab based on their entityType / type inference.
   });
-  const sumOfKnown =
-    normalized.leads + normalized.messages + normalized.deals + normalized.tasks + normalized.system;
+  // If server total is 0 but we have known-category counts, recompute
+  const sumOfKnown = KNOWN.reduce((s, k) => s + (normalized[k] || 0), 0);
   if (total <= 0 && sumOfKnown > 0) {
     normalized.all = sumOfKnown;
     normalized.unread = sumOfKnown;
@@ -71,6 +76,8 @@ interface NotificationContextValue {
   markRead: (id: string) => Promise<void>;
   markAllRead: (category?: NotificationCategory | string) => Promise<void>;
   removeNotification: (id: string) => Promise<void>;
+  hardDeleteNotification: (id: string) => Promise<void>;
+  createNotification: (payload: CreateNotificationPayload) => Promise<void>;
   bulkArchiveByIds: (ids: string[]) => Promise<void>;
   bulkArchiveAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -103,6 +110,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   });
   const [markingRead, setMarkingRead] = useState<Set<string>>(new Set());
   const [archiving, setArchiving] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<Set<string>>(new Set());
   const [markingAllRead, setMarkingAllRead] = useState(false);
   const [bulkArchiving, setBulkArchiving] = useState(false);
 
@@ -455,6 +463,86 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     [notifications, categoryUnreadCounts, archiving, refreshUnreadCounts]
   );
 
+  const hardDeleteNotification = useCallback(
+    async (id: string) => {
+      if (deleting.has(id)) return;
+      let notifSnapshot: Notification[] | null = null;
+      let countsSnapshot: UnreadCountsMap | null = null;
+
+      setDeleting((prev) => new Set(prev).add(id));
+      try {
+        const target = notifications.find((n) => n.id === id);
+        notifSnapshot = notifications.slice();
+        countsSnapshot = { ...categoryUnreadCounts };
+
+        // Optimistic remove
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        knownIdsRef.current.delete(id);
+
+        if (target && !target.read) {
+          const cat = (target.category || "system").toLowerCase();
+          setCategoryUnreadCounts((prev) => {
+            const next = { ...prev };
+            next.all = Math.max(0, (next.all || 0) - 1);
+            next.unread = Math.max(0, (next.unread || 0) - 1);
+            if (typeof next[cat] === "number") next[cat] = Math.max(0, next[cat] - 1);
+            return next;
+          });
+        }
+
+        await hardDeleteNotificationApi(id);
+        toast.success("Notification deleted");
+        void refreshUnreadCounts();
+      } catch (err: any) {
+        console.error("Failed to delete notification:", err);
+        if (notifSnapshot) {
+          setNotifications(notifSnapshot);
+          notifSnapshot.forEach((n) => knownIdsRef.current.add(n.id));
+        }
+        if (countsSnapshot) setCategoryUnreadCounts(countsSnapshot);
+        toast.error(err?.message || "Failed to delete notification");
+      } finally {
+        setDeleting((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [notifications, categoryUnreadCounts, deleting, refreshUnreadCounts]
+  );
+
+  const createNotification = useCallback(
+    async (payload: CreateNotificationPayload) => {
+      try {
+        const newNotif = await createNotificationAdapter(payload);
+        // Prepend into feed if it belongs to the current category
+        const currentCategory = feedCategoryRef.current;
+        const cat = (newNotif.category || "system").toLowerCase();
+        const isInFeedCategory =
+          currentCategory === "all" ||
+          (currentCategory === "unread" && !newNotif.read) ||
+          currentCategory === cat;
+
+        if (isInFeedCategory && !knownIdsRef.current.has(newNotif.id)) {
+          knownIdsRef.current.add(newNotif.id);
+          setNotifications((prev) => [newNotif, ...prev]);
+        }
+
+        if (!newNotif.read) {
+          void refreshUnreadCounts();
+        }
+
+        toast.success("Notification created");
+      } catch (err: any) {
+        console.error("Failed to create notification:", err);
+        toast.error(err?.message || "Failed to create notification");
+        throw err;
+      }
+    },
+    [refreshUnreadCounts]
+  );
+
   const bulkArchiveByIds = useCallback(
     async (ids: string[]) => {
       if (bulkArchiving || ids.length === 0) return;
@@ -573,6 +661,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     markRead,
     markAllRead,
     removeNotification,
+    hardDeleteNotification,
+    createNotification,
     bulkArchiveByIds,
     bulkArchiveAllRead,
     refresh: loadNotifications,

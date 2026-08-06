@@ -17,8 +17,12 @@ import {
   saveBoolSetting,
   deleteSetting,
   SettingsMap,
-  patchNotificationPreferences,
 } from "@/lib/api/settingsApi";
+import {
+  fetchNotificationPreferences,
+  updateNotificationPreferences,
+} from "@/lib/api/notificationsApi";
+import type { NotificationCategoryPreferences, NotificationPreferences as NotifMatrix } from "@/types/notifications";
 import {
   updateProfileApi,
   updatePasswordApi,
@@ -63,24 +67,17 @@ export interface SettingsUIProps {
   fallback: { email: string; name: string; role: string };
 }
 
-interface NotificationPreferences {
-  emailNotifications: boolean;
-  pushNotifications: boolean;
-  whatsappNotifications: boolean;
-  dailySummary: boolean;
-  weeklyReport: boolean;
-  marketingUpdates: boolean;
-}
+// ── Notification preference matrix (per-category, per-channel) ──────────────
 
-// ── Settings key constants ────────────────────────────────────────────────────
+const NOTIF_CATEGORIES = ["leads", "messages", "deals", "tasks", "system"] as const;
+type NotifCategory = (typeof NOTIF_CATEGORIES)[number];
 
-const NOTIF_KEYS: Record<keyof NotificationPreferences, string> = {
-  emailNotifications:    "notif.email",
-  pushNotifications:     "notif.push",
-  whatsappNotifications: "notif.whatsapp",
-  dailySummary:          "notif.daily_summary",
-  weeklyReport:          "notif.weekly_report",
-  marketingUpdates:      "notif.marketing",
+const DEFAULT_NOTIF_MATRIX: NotifMatrix = {
+  leads:    { inApp: true,  email: true,  push: true,  sound: false },
+  messages: { inApp: true,  email: true,  push: false, sound: false },
+  deals:    { inApp: true,  email: true,  push: true,  sound: false },
+  tasks:    { inApp: true,  email: false, push: true,  sound: false },
+  system:   { inApp: true,  email: true,  push: false, sound: true  },
 };
 
 const PREF_KEYS = {
@@ -106,14 +103,7 @@ const SETTINGS_NAV: { label: string; icon: any }[] = [
 
 // ── Default values ────────────────────────────────────────────────────────────
 
-const DEFAULT_NOTIFS: NotificationPreferences = {
-  emailNotifications:    true,
-  pushNotifications:     true,
-  whatsappNotifications: true,
-  dailySummary:          true,
-  weeklyReport:          true,
-  marketingUpdates:      false,
-};
+const DEFAULT_NOTIFS = DEFAULT_NOTIF_MATRIX;
 
 const DEFAULT_PREFS = {
   theme:      "light",
@@ -144,8 +134,8 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
   const [settingsError,   setSettingsError]   = useState<string | null>(null);
   const [remoteSettings,  setRemoteSettings]  = useState<SettingsMap>({});
 
-  // Notification prefs (driven by remoteSettings)
-  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>(DEFAULT_NOTIFS);
+  // Notification preference matrix (driven by /api/notifications/preferences)
+  const [notificationPrefs, setNotificationPrefs] = useState<NotifMatrix>(DEFAULT_NOTIF_MATRIX);
   const [savingNotifKey, setSavingNotifKey]       = useState<string | null>(null);
 
   // App preferences (driven by remoteSettings)
@@ -163,13 +153,8 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
       const map = await fetchAllSettings();
       setRemoteSettings(map);
 
-      // Hydrate notification prefs
-      const hydrated: NotificationPreferences = { ...DEFAULT_NOTIFS };
-      (Object.keys(NOTIF_KEYS) as (keyof NotificationPreferences)[]).forEach((k) => {
-        const apiKey = NOTIF_KEYS[k];
-        if (apiKey in map) hydrated[k] = map[apiKey] === "true";
-      });
-      setNotificationPrefs(hydrated);
+      // Notification prefs are loaded separately from /api/notifications/preferences
+      // (done via loadNotificationPrefs below)
 
       // Hydrate app prefs
       const hydratedPrefs = { ...DEFAULT_PREFS };
@@ -187,6 +172,27 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
   }, []);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  // ── Load notification preference matrix from dedicated endpoint ──────────
+  const loadNotificationPrefs = useCallback(async () => {
+    try {
+      const res = await fetchNotificationPreferences();
+      if (res && Object.keys(res).length > 0) {
+        const merged: NotifMatrix = { ...DEFAULT_NOTIF_MATRIX };
+        NOTIF_CATEGORIES.forEach((cat) => {
+          merged[cat] = { ...DEFAULT_NOTIF_MATRIX[cat], ...(res[cat] || {}) };
+        });
+        Object.keys(res).forEach((cat) => {
+          if (!merged[cat]) merged[cat] = { ...res[cat] };
+        });
+        setNotificationPrefs(merged);
+      }
+    } catch (err: any) {
+      console.warn("Failed to load notification preferences:", err);
+    }
+  }, []);
+
+  useEffect(() => { loadNotificationPrefs(); }, [loadNotificationPrefs]);
 
   // Sync name & designation from profile
   useEffect(() => {
@@ -257,22 +263,40 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     setIsEditing(false);
   };
 
-  // ── Notification toggle handler (calls PATCH /settings/notification-preferences) ─
+  // ── Notification toggle handler (PUT /api/notifications/preferences) ───────
   const handleNotificationChange = async (
-    key: keyof NotificationPreferences,
+    category: NotifCategory,
+    channel: keyof NotificationCategoryPreferences,
     value: boolean
   ) => {
-    const apiKey = NOTIF_KEYS[key];
-    setSavingNotifKey(apiKey);
+    const key = `${category}:${String(channel)}`;
+    setSavingNotifKey(key);
     // Optimistic update
-    setNotificationPrefs((prev) => ({ ...prev, [key]: value }));
+    setNotificationPrefs((prev) => ({
+      ...prev,
+      [category]: { ...(prev[category] || {}), [channel]: value },
+    }));
     try {
-      await patchNotificationPreferences({ [apiKey]: value });
-      setRemoteSettings((prev) => ({ ...prev, [apiKey]: String(value) }));
+      const serverRes = await updateNotificationPreferences({
+        [category]: { [channel]: value },
+      });
+      // Merge server response for source of truth
+      if (serverRes && Object.keys(serverRes).length > 0) {
+        setNotificationPrefs((curr) => {
+          const next = { ...curr };
+          Object.keys(serverRes).forEach((cat) => {
+            next[cat] = { ...(next[cat] || {}), ...serverRes[cat] };
+          });
+          return next;
+        });
+      }
       toast.success(`${value ? "Enabled" : "Disabled"} successfully`);
     } catch (err: any) {
       // Rollback
-      setNotificationPrefs((prev) => ({ ...prev, [key]: !value }));
+      setNotificationPrefs((prev) => ({
+        ...prev,
+        [category]: { ...(prev[category] || {}), [channel]: !value },
+      }));
       toast.error(err?.response?.data?.message ?? "Failed to update preference");
     } finally {
       setSavingNotifKey(null);
@@ -373,8 +397,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
             {activeTab === "Security"      && <SecurityTab />}
             {activeTab === "Notifications" && (
               <NotificationsTab prefs={notificationPrefs} loading={settingsLoading}
-                savingKey={savingNotifKey} onPrefChange={handleNotificationChange}
-                onDeleteSetting={handleDeleteSetting} />
+                savingKey={savingNotifKey} onPrefChange={handleNotificationChange} />
             )}
             {activeTab === "Preferences"   && (
               <PreferencesTab prefs={prefs} loading={settingsLoading} saving={prefsSaving}
@@ -643,83 +666,82 @@ function SecurityTab() {
 // ── Notifications Tab (API-integrated) ───────────────────────────────────────
 
 interface NotificationsTabProps {
-  prefs: NotificationPreferences;
+  prefs: NotifMatrix;
   loading: boolean;
   savingKey: string | null;
-  onPrefChange: (key: keyof NotificationPreferences, value: boolean) => Promise<void>;
-  onDeleteSetting: (key: string) => Promise<void>;
+  onPrefChange: (category: NotifCategory, channel: keyof NotificationCategoryPreferences, value: boolean) => Promise<void>;
 }
 
-const NOTIF_ITEMS: { key: keyof NotificationPreferences; apiKey: string; label: string; desc: string; icon: React.ReactNode }[] = [
-  { key: "emailNotifications",    apiKey: "notif.email",          label: "Email Notifications",     desc: "Receive updates and alerts via email",             icon: <Mail size={16} /> },
-  { key: "pushNotifications",     apiKey: "notif.push",           label: "Push Notifications",      desc: "Show alerts within the application",               icon: <Bell size={16} /> },
-  { key: "whatsappNotifications", apiKey: "notif.whatsapp",       label: "WhatsApp Notifications",  desc: "Get updates on your WhatsApp number",              icon: <MessageSquare size={16} /> },
-  { key: "dailySummary",          apiKey: "notif.daily_summary",  label: "Daily Summary",           desc: "Receive a daily activity digest email",            icon: <CalendarDays size={16} /> },
-  { key: "weeklyReport",          apiKey: "notif.weekly_report",  label: "Weekly Report",           desc: "Get a weekly performance and pipeline report",     icon: <FileText size={16} /> },
-  { key: "marketingUpdates",      apiKey: "notif.marketing",      label: "Marketing Updates",       desc: "Receive marketing and promotional communications", icon: <Megaphone size={16} /> },
+const NOTIF_CHANNELS: { key: keyof NotificationCategoryPreferences; label: string }[] = [
+  { key: "inApp", label: "In-App" },
+  { key: "email", label: "Email" },
+  { key: "push",  label: "Push"  },
+  { key: "sound", label: "Sound" },
 ];
 
-function NotificationsTab({ prefs, loading, savingKey, onPrefChange, onDeleteSetting }: NotificationsTabProps) {
+function NotificationsTab({ prefs, loading, savingKey, onPrefChange }: NotificationsTabProps) {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h2 className="text-xl font-bold text-gray-900">Notifications</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Control how and when you get notified — saved instantly via API</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Control how and when you get notified — saved instantly via API
+          </p>
         </div>
         {loading && <Loader2 size={18} className="animate-spin text-blue-400" />}
       </div>
 
-      <div className="space-y-3 max-w-xl">
-        {NOTIF_ITEMS.map((item) => {
-          const isSaving = savingKey === item.apiKey;
-          const isOn     = prefs[item.key];
-          return (
-            <div key={item.key}
-              className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${
-                isOn ? "bg-blue-50 border-blue-200" : "bg-gray-50 border-gray-200"
-              }`}
-            >
-              <div className="flex items-start gap-3 flex-1 pr-4">
-                <div className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                  isOn ? "bg-blue-100 text-blue-600" : "bg-gray-100 text-gray-400"
-                }`}>
-                  {item.icon}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{item.label}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.desc}</p>
-                  <p className="text-[10px] text-gray-400 font-mono mt-1">key: {item.apiKey}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {isSaving
-                  ? <Loader2 size={18} className="animate-spin text-blue-400" />
-                  : isOn
-                    ? <CheckCircle2 size={14} className="text-blue-400" />
-                    : null
-                }
-                <label className="relative inline-flex items-center cursor-pointer">
-                  <input type="checkbox" checked={isOn}
-                    onChange={(e) => onPrefChange(item.key, e.target.checked)}
-                    disabled={loading || isSaving} className="sr-only peer" />
-                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50" />
-                </label>
-                <button title="Reset to default"
-                  onClick={() => onDeleteSetting(item.apiKey)}
-                  disabled={loading || isSaving}
-                  className="w-7 h-7 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 flex items-center justify-center transition-colors disabled:opacity-30">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+      <div className="overflow-x-auto max-w-2xl">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-gray-200 text-gray-500">
+              <th className="py-3 text-left font-semibold pl-1">Category</th>
+              {NOTIF_CHANNELS.map((ch) => (
+                <th key={ch.key} className="py-3 text-center font-semibold px-3">
+                  {ch.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {NOTIF_CATEGORIES.map((cat) => {
+              const catPrefs: NotificationCategoryPreferences = prefs[cat] || {
+                inApp: true, email: true, push: false, sound: false,
+              };
+              return (
+                <tr key={cat} className="hover:bg-gray-50 transition-colors">
+                  <td className="py-3.5 pl-1 font-medium capitalize text-gray-900">{cat}</td>
+                  {NOTIF_CHANNELS.map((ch) => {
+                    const isSaving = savingKey === `${cat}:${String(ch.key)}`;
+                    const isOn = Boolean(catPrefs[ch.key]);
+                    return (
+                      <td key={ch.key} className="py-3.5 text-center px-3">
+                        {isSaving ? (
+                          <Loader2 size={14} className="animate-spin text-blue-400 mx-auto" />
+                        ) : (
+                          <input
+                            type="checkbox"
+                            checked={isOn}
+                            disabled={loading}
+                            onChange={(e) => onPrefChange(cat, ch.key, e.target.checked)}
+                            className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 cursor-pointer disabled:opacity-50"
+                          />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       <p className="mt-6 text-xs text-gray-400 flex items-center gap-1.5">
         <CheckCircle2 size={12} />
-        Changes are persisted immediately via <code className="bg-gray-100 px-1 rounded text-[10px]">PATCH /settings/notification-preferences</code>
+        Changes are persisted immediately via{" "}
+        <code className="bg-gray-100 px-1 rounded text-[10px]">PUT /api/notifications/preferences</code>
       </p>
     </div>
   );

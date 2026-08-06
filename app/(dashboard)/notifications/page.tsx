@@ -15,6 +15,8 @@ import {
   ShieldAlert,
   Layers,
   Loader2,
+  Archive,
+  X,
 } from "lucide-react";
 import classNames from "classnames";
 import { useState, useMemo } from "react";
@@ -86,11 +88,13 @@ function NotificationPageItem({
   notification,
   onMarkRead,
   onDelete,
+  onHardDelete,
   onOpen,
 }: {
   notification: Notification;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
+  onHardDelete: (id: string) => void;
   onOpen: (notification: Notification) => void;
 }) {
   const isAggregated = Boolean(
@@ -174,8 +178,18 @@ function NotificationPageItem({
                   event.stopPropagation();
                   onDelete(notification.id);
                 }}
-                className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
+                className="p-2 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-secondary transition-colors"
                 title="Archive"
+              >
+                <Archive size={16} />
+              </button>
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onHardDelete(notification.id);
+                }}
+                className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
+                title="Delete permanently"
               >
                 <Trash2 size={16} />
               </button>
@@ -213,12 +227,15 @@ export default function NotificationsPage() {
     markRead,
     markAllRead,
     removeNotification,
+    hardDeleteNotification,
+    bulkArchiveAllRead,
     fetchNextPage,
   } = useNotifications();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<NotificationCategory>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
+  const [isArchivingAllRead, setIsArchivingAllRead] = useState(false);
 
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
@@ -315,6 +332,16 @@ export default function NotificationsPage() {
     }
   };
 
+  const handleArchiveAllRead = async () => {
+    if (isArchivingAllRead) return;
+    setIsArchivingAllRead(true);
+    try {
+      await bulkArchiveAllRead();
+    } finally {
+      setIsArchivingAllRead(false);
+    }
+  };
+
   const handleNotificationOpen = (notification: Notification) => {
     router.push(notification.deepLink || "/notifications");
     if (!notification.read) void markRead(notification.id);
@@ -350,6 +377,21 @@ export default function NotificationsPage() {
           >
             <CheckCheck size={18} />
             {isMarkingAllRead ? "Marking all as read..." : "Mark all as read"}
+          </button>
+        )}
+        {notifications.some((n) => n.read) && (
+          <button
+            onClick={handleArchiveAllRead}
+            disabled={isArchivingAllRead}
+            className={classNames(
+              "flex items-center gap-2 px-4 py-2 rounded-xl font-semibold transition-all border",
+              isArchivingAllRead
+                ? "bg-surface text-text-muted cursor-not-allowed border-border"
+                : "bg-surface border-border text-text-secondary hover:bg-surface-hover"
+            )}
+          >
+            <Archive size={18} />
+            {isArchivingAllRead ? "Archiving..." : "Archive all read"}
           </button>
         )}
       </div>
@@ -439,6 +481,7 @@ export default function NotificationsPage() {
                     notification={notification}
                     onMarkRead={markRead}
                     onDelete={removeNotification}
+                    onHardDelete={hardDeleteNotification}
                     onOpen={handleNotificationOpen}
                   />
                 ))}

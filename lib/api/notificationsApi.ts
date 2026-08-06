@@ -33,7 +33,9 @@ export interface CreateNotificationPayload {
 export interface FetchNotificationsResponse {
   limit: number;
   nextCursor: string | null;
-  data: NotificationDto[];
+  // Backend may return items under "data" or "notifications"
+  data?: NotificationDto[];
+  notifications?: NotificationDto[];
 }
 
 export const fetchNotifications = async (params?: {
@@ -49,7 +51,7 @@ export const fetchNotifications = async (params?: {
   if (params?.category && params.category !== "all" && params.category !== "unread") {
     query.category = params.category;
   }
-  if (params?.unreadOnly ?? params?.category === "unread") {
+  if (params?.unreadOnly === true || params?.category === "unread") {
     query.unreadOnly = true;
   }
   const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
@@ -77,8 +79,9 @@ export const archiveNotification = async (id: string) => {
   return response.data;
 };
 
+/** Hard-deletes a notification permanently (DELETE /api/notifications/{id}). */
 export const deleteNotification = async (id: string) => {
-  return archiveNotification(id);
+  await api.delete(`/api/notifications/${id}`);
 };
 
 export interface BulkArchivePayload {
@@ -108,4 +111,4 @@ export const updateNotificationPreferences = async (
     preferences
   );
   return response.data;
-};
+};
