@@ -347,21 +347,13 @@ function NotificationSettings({
     };
 
     try {
-      const serverRes = await updateNotificationPreferences(savePayload);
-      // Merge server response back into local state for source of truth
-      setPreferences((curr) => {
-        const next = { ...curr };
-        if (serverRes && Object.keys(serverRes).length > 0) {
-          Object.keys(serverRes).forEach((cat) => {
-            next[cat] = { ...(next[cat] || {}), ...serverRes[cat] };
-          });
-          originalPrefsRef.current = JSON.parse(JSON.stringify(next));
-        }
-        return next;
-      });
+      await updateNotificationPreferences(savePayload);
+      // Keep the optimistic state — it's already correct.
+      // Just sync the ref so future rollbacks use the saved value.
+      originalPrefsRef.current = JSON.parse(JSON.stringify(updated));
       toast.success("Preference saved");
     } catch (err: any) {
-      // Rollback
+      // Rollback to pre-toggle state
       setPreferences({ ...original, [category]: { ...originalCategory } });
       toast.error(err?.message || "Failed to save preference");
     } finally {

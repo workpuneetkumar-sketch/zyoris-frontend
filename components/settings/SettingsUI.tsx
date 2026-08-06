@@ -277,19 +277,10 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
       [category]: { ...(prev[category] || {}), [channel]: value },
     }));
     try {
-      const serverRes = await updateNotificationPreferences({
+      await updateNotificationPreferences({
         [category]: { [channel]: value },
       });
-      // Merge server response for source of truth
-      if (serverRes && Object.keys(serverRes).length > 0) {
-        setNotificationPrefs((curr) => {
-          const next = { ...curr };
-          Object.keys(serverRes).forEach((cat) => {
-            next[cat] = { ...(next[cat] || {}), ...serverRes[cat] };
-          });
-          return next;
-        });
-      }
+      // Keep the optimistic state — it's already correct.
       toast.success(`${value ? "Enabled" : "Disabled"} successfully`);
     } catch (err: any) {
       // Rollback
