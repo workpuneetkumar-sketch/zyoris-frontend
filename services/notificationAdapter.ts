@@ -1,26 +1,29 @@
-import type { Notification, NotificationType, NotificationCategory } from "@/types/notifications";
+import type {
+  Notification,
+  NotificationType,
+  NotificationCategory,
+  NotificationPriority,
+} from "@/types/notifications";
 import {
   fetchNotifications,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   archiveNotification as archiveNotificationApi,
-  deleteNotification as deleteNotificationApi,
+  bulkArchiveNotifications,
   type NotificationDto,
+  type BulkArchivePayload,
 } from "@/lib/api/notificationsApi";
 
 function getEntityDeepLink(entityType?: string | null, entityId?: string | null): string | null {
   const entity = entityType?.trim().toLowerCase().replace(/[\s_-]/g, "") || "";
 
   switch (entity) {
-    // These are the only notification entities with individual detail routes.
     case "lead":
     case "leads":
       return entityId ? `/leads/${entityId}` : "/leads";
     case "deal":
     case "deals":
       return entityId ? `/deals/${entityId}` : "/deals";
-
-    // The remaining entities are managed from their list or module page.
     case "task":
     case "tasks":
       return "/tasks";
@@ -146,19 +149,35 @@ function mapCategory(dto: NotificationDto): NotificationCategory {
 
   const combined = `${dto.type || ""} ${dto.entityType || ""}`.toLowerCase();
   if (combined.includes("lead")) return "leads";
-  if (combined.includes("message") || combined.includes("chat") || combined.includes("mention") || combined.includes("call")) return "messages";
+  if (
+    combined.includes("message") ||
+    combined.includes("chat") ||
+    combined.includes("mention") ||
+    combined.includes("call") ||
+    combined.includes("whatsapp")
+  )
+    return "messages";
   if (combined.includes("deal")) return "deals";
   if (combined.includes("task")) return "tasks";
 
   return "system";
 }
 
-// Map API types to app types and generate routes that exist in this frontend.
-function getNotificationTypeAndDeepLink(dto: NotificationDto): { type: NotificationType; deepLink: string | null } {
+function mapPriority(dto: NotificationDto): NotificationPriority {
+  if (!dto.priority) return "medium";
+  const p = String(dto.priority).toLowerCase();
+  if (p === "critical" || p === "urgent" || p === "high" || p === "medium" || p === "low") {
+    return p as NotificationPriority;
+  }
+  return "medium";
+}
+
+function getNotificationTypeAndDeepLink(
+  dto: NotificationDto
+): { type: NotificationType; deepLink: string | null } {
   const lowerType = dto.type.toLowerCase();
   const entityDeepLink = getEntityDeepLink(dto.entityType, dto.entityId);
-  
-  // Type mapping first
+
   let type: NotificationType = "info";
   let deepLink: string | null = null;
 
@@ -198,7 +217,6 @@ function getNotificationTypeAndDeepLink(dto: NotificationDto): { type: Notificat
   return { type, deepLink };
 }
 
-// Convert API DTO to our app's Notification type
 export function dtoToNotification(dto: NotificationDto): Notification {
   const { type, deepLink } = getNotificationTypeAndDeepLink(dto);
   return {
@@ -207,11 +225,17 @@ export function dtoToNotification(dto: NotificationDto): Notification {
     message: dto.message,
     type,
     category: mapCategory(dto),
-    priority: "medium", // Default priority since API doesn't have it yet
+    priority: mapPriority(dto),
     createdAt: dto.createdAt,
     read: dto.read,
     deepLink,
-    actor: null,
+    actor: dto.actor
+      ? {
+          id: dto.actor.id,
+          name: dto.actor.name,
+          avatarUrl: dto.actor.avatarUrl,
+        }
+      : null,
     icon: null,
     entityType: dto.entityType,
     entityId: dto.entityId,
@@ -222,22 +246,20 @@ export function dtoToNotification(dto: NotificationDto): Notification {
 
 export interface GetNotificationsResult {
   notifications: Notification[];
-  nextCursor?: string | null;
-  unreadCount?: number;
-  total?: number;
+  nextCursor: string | null;
 }
 
 export async function getNotifications(params?: {
   category?: string;
   cursor?: string;
   limit?: number;
-  read?: string;
+  unreadOnly?: boolean;
 }): Promise<GetNotificationsResult> {
   const response = await fetchNotifications({
-    category: params?.category === "all" || params?.category === "unread" ? undefined : params?.category,
-    read: params?.category === "unread" ? "false" : params?.read,
+    category: params?.category,
     cursor: params?.cursor,
-    limit: params?.limit || 20,
+    limit: params?.limit ?? 20,
+    unreadOnly: params?.unreadOnly ?? params?.category === "unread",
   });
 
   const notifications = (response.data || []).map(dtoToNotification).sort(
@@ -246,9 +268,7 @@ export async function getNotifications(params?: {
 
   return {
     notifications,
-    nextCursor: response.nextCursor || response.cursor || null,
-    unreadCount: response.unreadCount,
-    total: response.total,
+    nextCursor: response.nextCursor ?? null,
   };
 }
 
@@ -256,8 +276,8 @@ export async function markAsRead(id: string): Promise<void> {
   await markNotificationAsRead(id);
 }
 
-export async function markAllRead(): Promise<void> {
-  await markAllNotificationsAsRead();
+export async function markAllRead(category?: string): Promise<void> {
+  await markAllNotificationsAsRead(category);
 }
 
 export async function archiveNotification(id: string): Promise<void> {
@@ -266,4 +286,8 @@ export async function archiveNotification(id: string): Promise<void> {
 
 export async function deleteNotification(id: string): Promise<void> {
   await archiveNotificationApi(id);
-}
+}
+
+export async function bulkArchive(payload: BulkArchivePayload = {}): Promise<void> {
+  await bulkArchiveNotifications(payload);
+}

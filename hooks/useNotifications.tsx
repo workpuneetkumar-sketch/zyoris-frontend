@@ -1,12 +1,20 @@
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from "react";
-import type { Notification, NotificationCategory } from "@/types/notifications";
+import { toast } from "sonner";
+import type {
+  Notification,
+  NotificationCategory,
+  UnreadCountData,
+  WebsocketNotificationPayload,
+  WebsocketCountUpdatedPayload,
+} from "@/types/notifications";
 import {
   getNotifications,
   markAsRead,
   markAllRead as markAllReadAdapter,
   archiveNotification,
+  bulkArchive,
   dtoToNotification,
 } from "@/services/notificationAdapter";
 import { fetchUnreadCounts } from "@/lib/api/notificationsApi";
@@ -19,6 +27,39 @@ import {
   type PushPermissionStatus,
 } from "@/lib/browserPushPermission";
 
+type UnreadCountsMap = Record<string, number>;
+
+function normalizeUnreadCounts(res: UnreadCountData | undefined | null): UnreadCountsMap {
+  if (!res) return { all: 0, unread: 0, leads: 0, messages: 0, deals: 0, tasks: 0, system: 0 };
+  const byCategory = res.byCategory ?? (res as any).categories ?? {};
+  const total = typeof res.total === "number" ? res.total : 0;
+  const normalized: UnreadCountsMap = {
+    all: total,
+    unread: total,
+    leads: 0,
+    messages: 0,
+    deals: 0,
+    tasks: 0,
+    system: 0,
+  };
+  Object.entries(byCategory).forEach(([rawKey, val]) => {
+    const key = String(rawKey).toLowerCase();
+    if (["leads", "messages", "deals", "tasks", "system"].includes(key)) {
+      normalized[key] = typeof val === "number" ? val : 0;
+    } else {
+      // preserve unknown categories too
+      normalized[key] = typeof val === "number" ? val : 0;
+    }
+  });
+  const sumOfKnown =
+    normalized.leads + normalized.messages + normalized.deals + normalized.tasks + normalized.system;
+  if (total <= 0 && sumOfKnown > 0) {
+    normalized.all = sumOfKnown;
+    normalized.unread = sumOfKnown;
+  }
+  return normalized;
+}
+
 interface NotificationContextValue {
   notifications: Notification[];
   loading: boolean;
@@ -28,14 +69,15 @@ interface NotificationContextValue {
   unreadCount: number;
   categoryUnreadCounts: Record<string, number>;
   markRead: (id: string) => Promise<void>;
-  markAllRead: () => Promise<void>;
+  markAllRead: (category?: NotificationCategory | string) => Promise<void>;
   removeNotification: (id: string) => Promise<void>;
+  bulkArchiveByIds: (ids: string[]) => Promise<void>;
+  bulkArchiveAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
   fetchNextPage: () => Promise<void>;
-  // Sound
+  refreshUnreadCounts: () => Promise<void>;
   soundEnabled: boolean;
   toggleSound: () => void;
-  // Browser push
   pushPermission: PushPermissionStatus;
   requestPush: () => Promise<void>;
 }
@@ -50,7 +92,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<Record<string, number>>({
+  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<UnreadCountsMap>({
     all: 0,
     unread: 0,
     leads: 0,
@@ -59,6 +101,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     tasks: 0,
     system: 0,
   });
+  const [markingRead, setMarkingRead] = useState<Set<string>>(new Set());
+  const [archiving, setArchiving] = useState<Set<string>>(new Set());
+  const [markingAllRead, setMarkingAllRead] = useState(false);
+  const [bulkArchiving, setBulkArchiving] = useState(false);
 
   const [soundEnabled, setSoundEnabledState] = useState(() => isSoundEnabled());
   const [pushPermission, setPushPermission] = useState<PushPermissionStatus>(() =>
@@ -66,26 +112,18 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   );
 
   const knownIdsRef = useRef<Set<string>>(new Set());
-  const isFirstLoadRef = useRef(true);
+  const feedCategoryRef = useRef<NotificationCategory | string>("all");
 
-  // Fetch granular unread count
-  const loadUnreadCounts = useCallback(async () => {
+  const refreshUnreadCounts = useCallback(async () => {
     if (!isAuthenticated || !user) return;
     try {
       const res = await fetchUnreadCounts();
-      if (res && res.categories) {
-        setCategoryUnreadCounts((prev) => ({
-          ...prev,
-          ...res.categories,
-          all: res.total ?? res.categories.all ?? prev.all,
-        }));
-      }
-    } catch {
-      // Fallback: derive from state if API unavailable
+      setCategoryUnreadCounts(normalizeUnreadCounts(res));
+    } catch (e: any) {
+      console.warn("Failed to refresh unread counts:", e?.message || e);
     }
   }, [isAuthenticated, user]);
 
-  // Load initial notifications (Cursor-based)
   const loadNotifications = useCallback(async () => {
     if (!isAuthenticated || !user) {
       setNotifications([]);
@@ -94,55 +132,64 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setHasMore(false);
       setNextCursor(null);
       knownIdsRef.current = new Set();
-      isFirstLoadRef.current = true;
       return;
     }
 
     setLoading(true);
     setError(null);
     try {
-      const res = await getNotifications({ limit: 20 });
+      const category = feedCategoryRef.current;
+      const res = await getNotifications({
+        limit: 20,
+        category,
+        unreadOnly: category === "unread",
+      });
       setNotifications(res.notifications);
-      setNextCursor(res.nextCursor || null);
+      setNextCursor(res.nextCursor);
       setHasMore(Boolean(res.nextCursor));
-
       knownIdsRef.current = new Set(res.notifications.map((n) => n.id));
-      isFirstLoadRef.current = false;
-      void loadUnreadCounts();
+      void refreshUnreadCounts();
     } catch (err: any) {
       console.error("Failed to load notifications:", err);
-      setError(err.message || "Failed to load notifications");
+      setError(err?.message || "Failed to load notifications");
+      toast.error(err?.message || "Failed to load notifications");
     } finally {
       setLoading(false);
     }
-  }, [isAuthenticated, user, loadUnreadCounts]);
+  }, [isAuthenticated, user, refreshUnreadCounts]);
 
-  // Fetch next page via Cursor
   const fetchNextPage = useCallback(async () => {
     if (!isAuthenticated || !user || !nextCursor || loadingMore) return;
     setLoadingMore(true);
     try {
-      const res = await getNotifications({ cursor: nextCursor, limit: 20 });
+      const category = feedCategoryRef.current;
+      const res = await getNotifications({
+        cursor: nextCursor,
+        limit: 20,
+        category,
+        unreadOnly: category === "unread",
+      });
       setNotifications((prev) => {
         const existingIds = new Set(prev.map((n) => n.id));
         const newItems = res.notifications.filter((n) => !existingIds.has(n.id));
+        newItems.forEach((n) => knownIdsRef.current.add(n.id));
         return [...prev, ...newItems];
       });
-      setNextCursor(res.nextCursor || null);
+      setNextCursor(res.nextCursor);
       setHasMore(Boolean(res.nextCursor));
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch next page of notifications:", err);
+      toast.error(err?.message || "Failed to load more notifications");
     } finally {
       setLoadingMore(false);
     }
   }, [isAuthenticated, user, nextCursor, loadingMore]);
 
-  // Initial load
   useEffect(() => {
     loadNotifications();
   }, [loadNotifications]);
 
-  // Active WebSocket Listeners for notification.created, notification.read, notification.archived, notification.count.updated
+  /* ---------- WebSocket Event Handlers ---------- */
   useEffect(() => {
     if (!isAuthenticated || !user || typeof window === "undefined") return;
 
@@ -161,140 +208,342 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           timeout: 10000,
         });
 
-        // 1. Listen for notification.created
+        // 1. notification.created -> prepend, play sound, push
         socket.on("notification.created", (data: any) => {
-          if (!isSubscribed) return;
-          const newNotif: Notification = data.id && data.title ? (data as Notification) : dtoToNotification(data);
-
-          setNotifications((prev) => {
-            if (prev.some((n) => n.id === newNotif.id)) return prev;
-            return [newNotif, ...prev];
-          });
-
-          // Update unread count state
-          if (!newNotif.read) {
-            setCategoryUnreadCounts((prev) => {
-              const cat = (newNotif.category || "system").toLowerCase();
-              return {
-                ...prev,
-                all: (prev.all || 0) + 1,
-                unread: (prev.unread || 0) + 1,
-                [cat]: (prev[cat] || 0) + 1,
-              };
-            });
-
-            // Sound & Push
-            void playNotificationSound();
-            showBrowserNotification(newNotif.title, {
-              body: newNotif.message,
-              tag: `zyoris-notif-${newNotif.id}`,
-            });
+          if (!isSubscribed || !data) return;
+          let newNotif: Notification;
+          if (data.id && data.title && typeof data.type === "string" && typeof data.read === "boolean") {
+            newNotif = data as Notification;
+          } else {
+            try {
+              newNotif = dtoToNotification(data);
+            } catch {
+              return;
+            }
           }
+          if (knownIdsRef.current.has(newNotif.id)) return;
+
+          const currentCategory = feedCategoryRef.current;
+          const cat = (newNotif.category || "system").toLowerCase();
+          const isInFeedCategory =
+            currentCategory === "all" ||
+            (currentCategory === "unread" && !newNotif.read) ||
+            currentCategory === cat;
+
+          if (isInFeedCategory) {
+            setNotifications((prev) => {
+              if (prev.some((n) => n.id === newNotif.id)) return prev;
+              knownIdsRef.current.add(newNotif.id);
+              return [newNotif, ...prev];
+            });
+          } else {
+            knownIdsRef.current.add(newNotif.id);
+          }
+
+          if (!newNotif.read) {
+            void playNotificationSound();
+            try {
+              showBrowserNotification(newNotif.title, {
+                body: newNotif.message,
+                tag: `zyoris-notif-${newNotif.id}`,
+              });
+            } catch {
+              /* ignore */
+            }
+          }
+          // Do NOT manually patch counters after ws sync.
+          // Backend will emit notification.count.updated.
+          void refreshUnreadCounts();
         });
 
-        // 2. Listen for notification.read
-        socket.on("notification.read", (data: { id?: string; notificationId?: string }) => {
-          if (!isSubscribed) return;
+        // 2. notification.read -> update item in-place
+        socket.on("notification.read", (data: WebsocketNotificationPayload) => {
+          if (!isSubscribed || !data) return;
           const id = data.id || data.notificationId;
           if (!id) return;
-
           setNotifications((prev) =>
             prev.map((n) => (n.id === id ? { ...n, read: true } : n))
           );
-          void loadUnreadCounts();
+          // Do NOT manually patch counters here. Use server values.
+          void refreshUnreadCounts();
         });
 
-        // 3. Listen for notification.archived
-        socket.on("notification.archived", (data: { id?: string; notificationId?: string }) => {
-          if (!isSubscribed) return;
+        // 3. notification.archived -> remove from feed
+        socket.on("notification.archived", (data: WebsocketNotificationPayload) => {
+          if (!isSubscribed || !data) return;
           const id = data.id || data.notificationId;
           if (!id) return;
-
           setNotifications((prev) => prev.filter((n) => n.id !== id));
-          void loadUnreadCounts();
+          knownIdsRef.current.delete(id);
+          void refreshUnreadCounts();
         });
 
-        // 4. Listen for notification.count.updated
-        socket.on("notification.count.updated", (data: any) => {
+        // 4. notification.count.updated -> server values are the source of truth
+        socket.on("notification.count.updated", (data: WebsocketCountUpdatedPayload | any) => {
           if (!isSubscribed || !data) return;
-          if (data.categories) {
-            setCategoryUnreadCounts((prev) => ({
-              ...prev,
-              ...data.categories,
-              all: data.total ?? data.categories.all ?? prev.all,
-            }));
-          }
+          setCategoryUnreadCounts(normalizeUnreadCounts(data as UnreadCountData));
         });
       } catch (wsErr) {
-        console.warn("WebSocket connection unavailable, fallback active:", wsErr);
+        console.warn("WebSocket connection unavailable, fallback to polling counts:", wsErr);
       }
     };
 
     void setupWebSockets();
 
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    if (typeof window !== "undefined") {
+      pollInterval = setInterval(() => {
+        void refreshUnreadCounts();
+      }, 30000);
+    }
+
     return () => {
       isSubscribed = false;
+      if (pollInterval) clearInterval(pollInterval);
       if (socket) {
-        socket.disconnect();
+        try {
+          socket.disconnect();
+        } catch {
+          /* ignore */
+        }
       }
     };
-  }, [isAuthenticated, user, loadUnreadCounts]);
+  }, [isAuthenticated, user, refreshUnreadCounts]);
 
-  const markRead = useCallback(async (id: string) => {
-    try {
-      // Optimistic update
-      setNotifications((prev) =>
-        prev.map((n) => {
-          if (n.id === id && !n.read) {
+  /* ---------- Mutations with optimistic + rollback ---------- */
+
+  const markRead = useCallback(
+    async (id: string) => {
+      if (markingRead.has(id)) return;
+      let snapshot: Notification[] | null = null;
+      let countsSnapshot: UnreadCountsMap | null = null;
+
+      setMarkingRead((prev) => new Set(prev).add(id));
+      try {
+        const target = notifications.find((n) => n.id === id);
+        if (target && !target.read) {
+          snapshot = notifications.slice();
+          countsSnapshot = { ...categoryUnreadCounts };
+          const cat = (target.category || "system").toLowerCase();
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+          );
+          setCategoryUnreadCounts((prev) => {
+            const next = { ...prev };
+            next.all = Math.max(0, (next.all || 0) - 1);
+            next.unread = Math.max(0, (next.unread || 0) - 1);
+            if (typeof next[cat] === "number") next[cat] = Math.max(0, next[cat] - 1);
+            return next;
+          });
+        }
+        await markAsRead(id);
+        toast.success("Marked as read");
+        void refreshUnreadCounts();
+      } catch (err: any) {
+        console.error("Failed to mark notification as read:", err);
+        if (snapshot) setNotifications(snapshot);
+        if (countsSnapshot) setCategoryUnreadCounts(countsSnapshot);
+        toast.error(err?.message || "Failed to mark as read");
+      } finally {
+        setMarkingRead((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [notifications, categoryUnreadCounts, markingRead, refreshUnreadCounts]
+  );
+
+  const markAllRead = useCallback(
+    async (category?: NotificationCategory | string) => {
+      if (markingAllRead) return;
+      let notifSnapshot: Notification[] | null = null;
+      let countsSnapshot: UnreadCountsMap | null = null;
+
+      setMarkingAllRead(true);
+      try {
+        notifSnapshot = notifications.slice();
+        countsSnapshot = { ...categoryUnreadCounts };
+
+        // Optimistic UI
+        if (!category || category === "all") {
+          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+          setCategoryUnreadCounts((prev) => ({ ...prev, all: 0, unread: 0 }));
+        } else if (category === "unread") {
+          setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+          setCategoryUnreadCounts((prev) => ({ ...prev, all: 0, unread: 0 }));
+        } else {
+          const cat = String(category).toLowerCase();
+          setNotifications((prev) =>
+            prev.map((n) =>
+              (n.category || "system").toLowerCase() === cat ? { ...n, read: true } : n
+            )
+          );
+          setCategoryUnreadCounts((prev) => {
+            const next = { ...prev };
+            if (typeof next[cat] === "number") {
+              const removed = next[cat];
+              next[cat] = 0;
+              next.all = Math.max(0, (next.all || 0) - removed);
+              next.unread = Math.max(0, (next.unread || 0) - removed);
+            }
+            return next;
+          });
+        }
+
+        await markAllReadAdapter(category);
+        toast.success(category && category !== "all" ? `Marked ${category} as read` : "All marked as read");
+        void refreshUnreadCounts();
+      } catch (err: any) {
+        console.error("Failed to mark all as read:", err);
+        if (notifSnapshot) setNotifications(notifSnapshot);
+        if (countsSnapshot) setCategoryUnreadCounts(countsSnapshot);
+        toast.error(err?.message || "Failed to mark all as read");
+      } finally {
+        setMarkingAllRead(false);
+      }
+    },
+    [notifications, categoryUnreadCounts, markingAllRead, refreshUnreadCounts]
+  );
+
+  const removeNotification = useCallback(
+    async (id: string) => {
+      if (archiving.has(id)) return;
+      let notifSnapshot: Notification[] | null = null;
+      let countsSnapshot: UnreadCountsMap | null = null;
+
+      setArchiving((prev) => new Set(prev).add(id));
+      try {
+        const target = notifications.find((n) => n.id === id);
+        notifSnapshot = notifications.slice();
+        countsSnapshot = { ...categoryUnreadCounts };
+
+        setNotifications((prev) => prev.filter((n) => n.id !== id));
+        knownIdsRef.current.delete(id);
+
+        if (target && !target.read) {
+          const cat = (target.category || "system").toLowerCase();
+          setCategoryUnreadCounts((prev) => {
+            const next = { ...prev };
+            next.all = Math.max(0, (next.all || 0) - 1);
+            next.unread = Math.max(0, (next.unread || 0) - 1);
+            if (typeof next[cat] === "number") next[cat] = Math.max(0, next[cat] - 1);
+            return next;
+          });
+        }
+
+        await archiveNotification(id);
+        toast.success("Notification archived");
+        void refreshUnreadCounts();
+      } catch (err: any) {
+        console.error("Failed to archive notification:", err);
+        if (notifSnapshot) {
+          setNotifications(notifSnapshot);
+          notifSnapshot.forEach((n) => knownIdsRef.current.add(n.id));
+        }
+        if (countsSnapshot) setCategoryUnreadCounts(countsSnapshot);
+        toast.error(err?.message || "Failed to archive notification");
+      } finally {
+        setArchiving((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }
+    },
+    [notifications, categoryUnreadCounts, archiving, refreshUnreadCounts]
+  );
+
+  const bulkArchiveByIds = useCallback(
+    async (ids: string[]) => {
+      if (bulkArchiving || ids.length === 0) return;
+      let notifSnapshot: Notification[] | null = null;
+      let countsSnapshot: UnreadCountsMap | null = null;
+
+      setBulkArchiving(true);
+      try {
+        notifSnapshot = notifications.slice();
+        countsSnapshot = { ...categoryUnreadCounts };
+
+        const targeted = notifications.filter((n) => ids.includes(n.id));
+        setNotifications((prev) => prev.filter((n) => !ids.includes(n.id)));
+        ids.forEach((id) => knownIdsRef.current.delete(id));
+
+        let unreadRemovedTotal = 0;
+        const unreadRemovedByCat: Record<string, number> = {};
+        targeted.forEach((n) => {
+          if (!n.read) {
+            unreadRemovedTotal += 1;
             const cat = (n.category || "system").toLowerCase();
-            setCategoryUnreadCounts((counts) => ({
-              ...counts,
-              all: Math.max(0, (counts.all || 0) - 1),
-              unread: Math.max(0, (counts.unread || 0) - 1),
-              [cat]: Math.max(0, (counts[cat] || 0) - 1),
-            }));
-            return { ...n, read: true };
+            unreadRemovedByCat[cat] = (unreadRemovedByCat[cat] || 0) + 1;
           }
-          return n;
-        })
-      );
-      await markAsRead(id);
-    } catch (err) {
-      console.error("Failed to mark notification as read:", err);
-      void loadNotifications();
-    }
-  }, [loadNotifications]);
+        });
+        if (unreadRemovedTotal > 0) {
+          setCategoryUnreadCounts((prev) => {
+            const next = { ...prev };
+            next.all = Math.max(0, (next.all || 0) - unreadRemovedTotal);
+            next.unread = Math.max(0, (next.unread || 0) - unreadRemovedTotal);
+            Object.entries(unreadRemovedByCat).forEach(([cat, val]) => {
+              if (typeof next[cat] === "number") next[cat] = Math.max(0, next[cat] - val);
+            });
+            return next;
+          });
+        }
 
-  const markAllRead = useCallback(async () => {
+        await bulkArchive({ ids });
+        toast.success(`Archived ${ids.length} notification${ids.length === 1 ? "" : "s"}`);
+        void refreshUnreadCounts();
+      } catch (err: any) {
+        console.error("Failed to bulk archive:", err);
+        if (notifSnapshot) {
+          setNotifications(notifSnapshot);
+          notifSnapshot.forEach((n) => knownIdsRef.current.add(n.id));
+        }
+        if (countsSnapshot) setCategoryUnreadCounts(countsSnapshot);
+        toast.error(err?.message || "Failed to archive notifications");
+      } finally {
+        setBulkArchiving(false);
+      }
+    },
+    [notifications, categoryUnreadCounts, bulkArchiving, refreshUnreadCounts]
+  );
+
+  const bulkArchiveAllRead = useCallback(async () => {
+    if (bulkArchiving) return;
+    let notifSnapshot: Notification[] | null = null;
+    let countsSnapshot: UnreadCountsMap | null = null;
+
+    setBulkArchiving(true);
     try {
-      setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-      setCategoryUnreadCounts({
-        all: 0,
-        unread: 0,
-        leads: 0,
-        messages: 0,
-        deals: 0,
-        tasks: 0,
-        system: 0,
+      notifSnapshot = notifications.slice();
+      countsSnapshot = { ...categoryUnreadCounts };
+
+      // Archive all read notifications (empty payload = archive all read on backend)
+      // Optimistic: remove read notifications locally
+      setNotifications((prev) => {
+        const remaining = prev.filter((n) => !n.read);
+        prev
+          .filter((n) => n.read)
+          .forEach((n) => knownIdsRef.current.delete(n.id));
+        return remaining;
       });
-      await markAllReadAdapter();
-    } catch (err) {
-      console.error("Failed to mark all notifications as read:", err);
-      void loadNotifications();
-    }
-  }, [loadNotifications]);
 
-  const removeNotification = useCallback(async (id: string) => {
-    try {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-      knownIdsRef.current.delete(id);
-      await archiveNotification(id);
-      void loadUnreadCounts();
-    } catch (err) {
-      console.error("Failed to archive notification:", err);
-      void loadNotifications();
+      await bulkArchive({});
+      toast.success("Archived read notifications");
+      void refreshUnreadCounts();
+    } catch (err: any) {
+      console.error("Failed to bulk archive read notifications:", err);
+      if (notifSnapshot) {
+        setNotifications(notifSnapshot);
+        notifSnapshot.forEach((n) => knownIdsRef.current.add(n.id));
+      }
+      if (countsSnapshot) setCategoryUnreadCounts(countsSnapshot);
+      toast.error(err?.message || "Failed to archive read notifications");
+    } finally {
+      setBulkArchiving(false);
     }
-  }, [loadNotifications, loadUnreadCounts]);
+  }, [notifications, categoryUnreadCounts, bulkArchiving, refreshUnreadCounts]);
 
   const toggleSound = useCallback(() => {
     const next = !soundEnabled;
@@ -310,7 +559,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setPushPermission(status);
   }, []);
 
-  const unreadCount = categoryUnreadCounts.all ?? notifications.filter((n) => !n.read).length;
+  const unreadCount =
+    typeof categoryUnreadCounts.all === "number" ? categoryUnreadCounts.all : 0;
 
   const value: NotificationContextValue = {
     notifications,
@@ -323,8 +573,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     markRead,
     markAllRead,
     removeNotification,
+    bulkArchiveByIds,
+    bulkArchiveAllRead,
     refresh: loadNotifications,
     fetchNextPage,
+    refreshUnreadCounts,
     soundEnabled,
     toggleSound,
     pushPermission,

@@ -309,7 +309,7 @@ export default function NotificationsPage() {
     if (unreadCount === 0 || isMarkingAllRead) return;
     setIsMarkingAllRead(true);
     try {
-      await markAllRead();
+      await markAllRead(filter);
     } finally {
       setIsMarkingAllRead(false);
     }

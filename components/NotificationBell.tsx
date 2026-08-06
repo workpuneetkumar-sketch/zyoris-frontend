@@ -45,6 +45,7 @@ import {
   requestPushPermission,
   type PushPermissionStatus,
 } from "@/lib/browserPushPermission";
+import { toast } from "sonner";
 import {
   fetchNotificationPreferences,
   updateNotificationPreferences,
@@ -231,11 +232,11 @@ const CATEGORY_TABS: { id: NotificationCategory; label: string }[] = [
 ];
 
 const DEFAULT_PREFERENCES: NotificationPreferences = {
-  leads: { inApp: true, email: true, push: true },
-  messages: { inApp: true, email: true, push: false },
-  deals: { inApp: true, email: true, push: true },
-  tasks: { inApp: true, email: false, push: true },
-  system: { inApp: true, email: true, push: false },
+  leads: { inApp: true, email: true, push: true, sound: false },
+  messages: { inApp: true, email: true, push: false, sound: false },
+  deals: { inApp: true, email: true, push: true, sound: false },
+  tasks: { inApp: true, email: false, push: true, sound: false },
+  system: { inApp: true, email: true, push: false, sound: true },
 };
 
 // Settings Panel Component with User Preference Matrix
@@ -255,20 +256,35 @@ function NotificationSettings({
   const [requesting, setRequesting] = useState(false);
   const [testingSound, setTestingSound] = useState(false);
   const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
-  const [savingPrefs, setSavingPrefs] = useState(false);
+  const [savingPrefs, setSavingPrefs] = useState<Set<string>>(new Set());
   const [loadingPrefs, setLoadingPrefs] = useState(true);
+  const originalPrefsRef = useRef<NotificationPreferences>(DEFAULT_PREFERENCES);
 
   // Load preferences from API
   useEffect(() => {
     let active = true;
     fetchNotificationPreferences()
       .then((res) => {
-        if (active && res && Object.keys(res).length > 0) {
-          setPreferences((prev) => ({ ...prev, ...res }));
+        if (active) {
+          let merged: NotificationPreferences;
+          if (res && Object.keys(res).length > 0) {
+            merged = { ...DEFAULT_PREFERENCES };
+            Object.keys(DEFAULT_PREFERENCES).forEach((cat) => {
+              merged[cat] = { ...DEFAULT_PREFERENCES[cat], ...(res[cat] || {}) };
+            });
+            Object.keys(res).forEach((cat) => {
+              if (!merged[cat]) merged[cat] = { ...res[cat] };
+              else merged[cat] = { ...merged[cat], ...res[cat] };
+            });
+          } else {
+            merged = { ...DEFAULT_PREFERENCES };
+          }
+          setPreferences(merged);
+          originalPrefsRef.current = JSON.parse(JSON.stringify(merged));
         }
       })
-      .catch(() => {
-        // use default fallback matrix
+      .catch((err: any) => {
+        toast.error(err?.message || "Failed to load preferences");
       })
       .finally(() => {
         if (active) setLoadingPrefs(false);
@@ -282,21 +298,65 @@ function NotificationSettings({
     category: string,
     channel: keyof NotificationCategoryPreferences
   ) => {
+    const key = `${category}:${String(channel)}`;
+    if (savingPrefs.has(key)) return;
+
+    const original = JSON.parse(JSON.stringify(preferences)) as NotificationPreferences;
+    const originalCategory = { ...(preferences[category] || {}) };
+    const newChannelValue = !(preferences[category]?.[channel] ?? true);
+
     const updated = {
       ...preferences,
       [category]: {
-        ...(preferences[category] || { inApp: true, email: true, push: true }),
-        [channel]: !(preferences[category]?.[channel] ?? true),
+        ...(preferences[category] || {
+          inApp: true,
+          email: true,
+          push: false,
+          sound: false,
+        }),
+        [channel]: newChannelValue,
       },
     };
+
+    // Optimistic UI update
     setPreferences(updated);
-    setSavingPrefs(true);
+    setSavingPrefs((prev) => new Set(prev).add(key));
+
+    const payloadKey = category;
+    const payloadCategory = {
+      ...updated[category],
+    };
+    Object.entries(payloadCategory).forEach(([k, v]) => {
+      // save-only-changed: only include the channel that actually changed vs original
+    });
+    const savePayload: NotificationPreferences = {
+      [payloadKey]: { [channel]: newChannelValue } as NotificationCategoryPreferences,
+    };
+
     try {
-      await updateNotificationPreferences(updated);
-    } catch {
-      // Keep optimistic state
+      const serverRes = await updateNotificationPreferences(savePayload);
+      // Merge server response back into local state for source of truth
+      setPreferences((curr) => {
+        const next = { ...curr };
+        if (serverRes && Object.keys(serverRes).length > 0) {
+          Object.keys(serverRes).forEach((cat) => {
+            next[cat] = { ...(next[cat] || {}), ...serverRes[cat] };
+          });
+          originalPrefsRef.current = JSON.parse(JSON.stringify(next));
+        }
+        return next;
+      });
+      toast.success("Preference saved");
+    } catch (err: any) {
+      // Rollback
+      setPreferences({ ...original, [category]: { ...originalCategory } });
+      toast.error(err?.message || "Failed to save preference");
     } finally {
-      setSavingPrefs(false);
+      setSavingPrefs((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
   };
 
@@ -335,7 +395,7 @@ function NotificationSettings({
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-text flex items-center gap-2">
           Notification Settings
-          {savingPrefs && <Loader2 size={12} className="animate-spin text-primary" />}
+          {savingPrefs.size > 0 && <Loader2 size={12} className="animate-spin text-primary" />}
         </h3>
         <button
           onClick={onClose}
@@ -365,36 +425,57 @@ function NotificationSettings({
                   <th className="py-2 text-center font-semibold">In-App</th>
                   <th className="py-2 text-center font-semibold">Email</th>
                   <th className="py-2 text-center font-semibold">Push</th>
+                  <th className="py-2 text-center font-semibold">Sound</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/50">
                 {categories.map((cat) => {
-                  const prefs = preferences[cat] || { inApp: true, email: true, push: false };
+                  const prefs = preferences[cat] || {
+                    inApp: true,
+                    email: true,
+                    push: false,
+                    sound: false,
+                  };
+                  const changeKey = (ch: string) => `${cat}:${ch}`;
+                  const isSaving = (ch: keyof NotificationCategoryPreferences) =>
+                    savingPrefs.has(changeKey(String(ch)));
                   return (
                     <tr key={cat} className="hover:bg-surface-hover/50">
                       <td className="py-2 font-medium capitalize text-text">{cat}</td>
                       <td className="py-2 text-center">
                         <input
                           type="checkbox"
-                          checked={prefs.inApp}
+                          checked={Boolean(prefs.inApp)}
+                          disabled={isSaving("inApp")}
                           onChange={() => handleTogglePreference(cat, "inApp")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
                         />
                       </td>
                       <td className="py-2 text-center">
                         <input
                           type="checkbox"
-                          checked={prefs.email}
+                          checked={Boolean(prefs.email)}
+                          disabled={isSaving("email")}
                           onChange={() => handleTogglePreference(cat, "email")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
                         />
                       </td>
                       <td className="py-2 text-center">
                         <input
                           type="checkbox"
-                          checked={prefs.push}
+                          checked={Boolean(prefs.push)}
+                          disabled={isSaving("push")}
                           onChange={() => handleTogglePreference(cat, "push")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer"
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
+                        />
+                      </td>
+                      <td className="py-2 text-center">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(prefs.sound)}
+                          disabled={isSaving("sound")}
+                          onChange={() => handleTogglePreference(cat, "sound")}
+                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
                         />
                       </td>
                     </tr>
@@ -632,12 +713,12 @@ export function NotificationBell() {
     router.push(notification.deepLink || "/notifications");
   };
 
-  // Handle mark all read
+  // Handle mark all read (scoped to current filter category)
   const handleMarkAllRead = async () => {
     if (unreadCount === 0 || isMarkingAllRead) return;
     setIsMarkingAllRead(true);
     try {
-      await markAllRead();
+      await markAllRead(filter);
     } finally {
       setIsMarkingAllRead(false);
     }
@@ -1072,4 +1153,4 @@ export function NotificationBell() {
       )}
     </div>
   );
-}
+}

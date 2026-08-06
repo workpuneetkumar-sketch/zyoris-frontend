@@ -18,7 +18,6 @@ export type NotificationType =
   | "error"
   | "info";
 
-// Extended to include critical as per requirements
 export type NotificationPriority = "critical" | "high" | "medium" | "low" | "urgent";
 
 export interface NotificationActor {
@@ -49,14 +48,32 @@ export type NotificationFilter = NotificationCategory;
 
 export interface UnreadCountData {
   total: number;
-  categories: Record<string, number>;
+  byCategory: Record<string, number>;
 }
 
 export interface NotificationCategoryPreferences {
-  inApp: boolean;
-  email: boolean;
-  push: boolean;
+  inApp?: boolean;
+  email?: boolean;
+  push?: boolean;
+  sound?: boolean;
 }
 
 export type NotificationPreferences = Record<string, NotificationCategoryPreferences>;
+
+export interface CursorPaginationResponse<T> {
+  data: T[];
+  nextCursor: string | null;
+  limit: number;
+}
+
+export interface WebsocketNotificationPayload {
+  id?: string;
+  notificationId?: string;
+  notification?: Notification | Record<string, unknown>;
+}
+
+export interface WebsocketCountUpdatedPayload {
+  total: number;
+  byCategory: Record<string, number>;
+}
 

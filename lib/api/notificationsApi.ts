@@ -13,6 +13,8 @@ export interface NotificationDto {
   entityId?: string | null;
   groupKey?: string | null;
   aggregatedCount?: number | null;
+  priority?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "URGENT" | string | null;
+  actor?: { id: string; name: string; avatarUrl?: string } | null;
   read: boolean;
   readAt?: string | null;
   createdAt: string;
@@ -29,23 +31,28 @@ export interface CreateNotificationPayload {
 }
 
 export interface FetchNotificationsResponse {
-  total: number;
-  unreadCount: number;
   limit: number;
-  offset?: number;
-  cursor?: string | null;
-  nextCursor?: string | null;
+  nextCursor: string | null;
   data: NotificationDto[];
 }
 
 export const fetchNotifications = async (params?: {
-  read?: string;
   category?: string;
+  unreadOnly?: boolean;
   limit?: number;
-  offset?: number;
   cursor?: string;
 }) => {
-  const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params });
+  const query: Record<string, unknown> = {
+    limit: params?.limit ?? 20,
+  };
+  if (params?.cursor) query.cursor = params.cursor;
+  if (params?.category && params.category !== "all" && params.category !== "unread") {
+    query.category = params.category;
+  }
+  if (params?.unreadOnly ?? params?.category === "unread") {
+    query.unreadOnly = true;
+  }
+  const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
   return response.data;
 };
 
@@ -59,65 +66,46 @@ export const markNotificationAsRead = async (id: string) => {
   return response.data;
 };
 
-export const markAllNotificationsAsRead = async () => {
-  const response = await api.patch("/api/notifications/read-all");
+export const markAllNotificationsAsRead = async (category?: string) => {
+  const params = category && category !== "all" && category !== "unread" ? { category } : undefined;
+  const response = await api.patch("/api/notifications/read-all", undefined, { params });
   return response.data;
 };
 
-/**
- * Soft delete / Archive notification via PATCH /notifications/:id/archive
- */
 export const archiveNotification = async (id: string) => {
-  try {
-    const response = await api.patch<NotificationDto>(`/notifications/${id}/archive`);
-    return response.data;
-  } catch {
-    const response = await api.patch<NotificationDto>(`/api/notifications/${id}/archive`);
-    return response.data;
-  }
+  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/archive`);
+  return response.data;
 };
 
 export const deleteNotification = async (id: string) => {
   return archiveNotification(id);
 };
 
-/**
- * Fetch granular unread count per category via GET /notifications/unread-count
- */
+export interface BulkArchivePayload {
+  ids?: string[];
+}
+
+export const bulkArchiveNotifications = async (payload: BulkArchivePayload = {}) => {
+  const response = await api.post("/api/notifications/bulk-archive", payload);
+  return response.data;
+};
+
 export const fetchUnreadCounts = async (): Promise<UnreadCountData> => {
-  try {
-    const response = await api.get<UnreadCountData>("/notifications/unread-count");
-    return response.data;
-  } catch {
-    const response = await api.get<UnreadCountData>("/api/notifications/unread-count");
-    return response.data;
-  }
+  const response = await api.get<UnreadCountData>("/api/notifications/unread-count");
+  return response.data;
 };
 
-/**
- * Fetch user notification preferences matrix via GET /notifications/preferences
- */
 export const fetchNotificationPreferences = async (): Promise<NotificationPreferences> => {
-  try {
-    const response = await api.get<NotificationPreferences>("/notifications/preferences");
-    return response.data;
-  } catch {
-    const response = await api.get<NotificationPreferences>("/api/notifications/preferences");
-    return response.data;
-  }
+  const response = await api.get<NotificationPreferences>("/api/notifications/preferences");
+  return response.data;
 };
 
-/**
- * Update user notification preferences matrix via PUT /notifications/preferences
- */
 export const updateNotificationPreferences = async (
   preferences: NotificationPreferences
 ): Promise<NotificationPreferences> => {
-  try {
-    const response = await api.put<NotificationPreferences>("/notifications/preferences", preferences);
-    return response.data;
-  } catch {
-    const response = await api.put<NotificationPreferences>("/api/notifications/preferences", preferences);
-    return response.data;
-  }
+  const response = await api.put<NotificationPreferences>(
+    "/api/notifications/preferences",
+    preferences
+  );
+  return response.data;
 };
