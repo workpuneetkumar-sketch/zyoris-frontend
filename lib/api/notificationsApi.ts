@@ -98,17 +98,60 @@ export const fetchUnreadCounts = async (): Promise<UnreadCountData> => {
   return response.data;
 };
 
+// Maps frontend category names → backend enum values for preferences API
+const CATEGORY_TO_BACKEND: Record<string, string> = {
+  leads:    "LEAD",
+  messages: "WHATSAPP",   // closest multi-channel match; backend uses WHATSAPP/EMAIL/CALL
+  deals:    "DEAL",
+  tasks:    "TASK",
+  system:   "SYSTEM",
+};
+
+const BACKEND_TO_CATEGORY: Record<string, string> = Object.fromEntries(
+  Object.entries(CATEGORY_TO_BACKEND).map(([k, v]) => [v, k])
+);
+
 export const fetchNotificationPreferences = async (): Promise<NotificationPreferences> => {
-  const response = await api.get<NotificationPreferences>("/api/notifications/preferences");
-  return response.data;
+  try {
+    const response = await api.get<NotificationPreferences>("/api/notifications/preferences");
+    const raw = response.data ?? {};
+    // Remap backend keys (LEAD, DEAL…) to frontend keys (leads, deals…)
+    const mapped: NotificationPreferences = {};
+    Object.entries(raw).forEach(([k, v]) => {
+      const frontKey = BACKEND_TO_CATEGORY[k] ?? k.toLowerCase();
+      mapped[frontKey] = v;
+    });
+    return mapped;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return {};
+    throw err;
+  }
 };
 
 export const updateNotificationPreferences = async (
   preferences: NotificationPreferences
 ): Promise<NotificationPreferences> => {
-  const response = await api.put<NotificationPreferences>(
-    "/api/notifications/preferences",
-    preferences
-  );
-  return response.data;
+  // Remap frontend keys (leads, deals…) → backend enum keys (LEAD, DEAL…)
+  const payload: NotificationPreferences = {};
+  Object.entries(preferences).forEach(([k, v]) => {
+    const backendKey = CATEGORY_TO_BACKEND[k] ?? k.toUpperCase();
+    payload[backendKey] = v;
+  });
+  try {
+    const response = await api.put<NotificationPreferences>(
+      "/api/notifications/preferences",
+      payload
+    );
+    const raw = response.data ?? payload;
+    // Remap response back to frontend keys
+    const mapped: NotificationPreferences = {};
+    Object.entries(raw).forEach(([k, v]) => {
+      const frontKey = BACKEND_TO_CATEGORY[k] ?? k.toLowerCase();
+      mapped[frontKey] = v;
+    });
+    return mapped;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return preferences;
+    throw err;
+  }
 };

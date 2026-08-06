@@ -415,12 +415,13 @@ export default function RegisterForm() {
                     </div>
 
                     {/* ── RIGHT: Brand Panel ── */}
-                    <div className="hidden md:flex w-[320px] bg-[#1a2f6e] flex-col items-center justify-end pb-10 px-8 shrink-0 relative overflow-hidden">
+                    <div className="hidden md:flex w-[320px] bg-[#1a2f6e] flex-col items-center justify-center px-8 py-10 shrink-0 relative overflow-hidden">
                         <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-blue-500/10 pointer-events-none" />
                         <div className="absolute top-1/4 -left-10 w-32 h-32 rounded-full bg-blue-400/10 pointer-events-none" />
                         <div className="absolute bottom-4 right-4 w-40 h-40 rounded-full bg-[#0f1f55]/60 pointer-events-none" />
 
-                        <div className="relative z-10 self-start mt-10 mb-auto flex items-center gap-2">
+                        {/* Logo */}
+                        <div className="relative z-10 w-full flex items-center gap-2 mb-8">
                             <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shrink-0">
                                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                                     <rect x="1" y="1" width="6" height="6" rx="1.5" fill="white" />
@@ -432,24 +433,28 @@ export default function RegisterForm() {
                             <span className="text-white font-bold text-[15px] tracking-tight">zyoris</span>
                         </div>
 
-                        <div className="relative z-10 w-full bg-white/10 border border-white/15 rounded-2xl p-6 mb-8">
-                            <p className="text-blue-200 text-[12px] font-medium mb-1.5">Welcome to</p>
-                            <h2 className="text-white text-[18px] font-bold leading-snug mb-3">
-                                Your Smart Dashboard Platform.
+                        {/* Tagline block */}
+                        <div className="relative z-10 w-full mb-6">
+                            <h2 className="text-white text-[22px] font-bold leading-snug mb-3">
+                                Run your entire business from one place.
                             </h2>
-                            <p className="text-blue-200/70 text-[12px] leading-relaxed">
-                                Track performance, manage teams, and generate real-time insights — all in one place.
+                            <p className="text-blue-200/70 text-[12.5px] leading-relaxed">
+                                Zyoris brings together CRM, HR, finance, and team collaboration into a single intelligent platform — so your teams move faster and your data stays connected.
                             </p>
+                        </div>
 
-                            <div className="mt-5 space-y-3 pt-4 border-t border-white/10">
+                        {/* Feature card */}
+                        <div className="relative z-10 w-full bg-white/10 border border-white/15 rounded-2xl p-5 mb-6">
+                            <div className="space-y-3">
                                 {[
                                     { icon: "✦", text: "Role-based access control" },
-                                    { icon: "✦", text: "Real-time analytics" },
-                                    { icon: "✦", text: "Team collaboration tools" },
+                                    { icon: "✦", text: "Real-time analytics & AI insights" },
+                                    { icon: "✦", text: "Leads, deals & pipeline management" },
+                                    { icon: "✦", text: "HR, payroll & attendance — built in" },
                                 ].map(({ icon, text }) => (
                                     <div key={text} className="flex items-center gap-2.5">
                                         <span className="text-blue-400 text-[10px]">{icon}</span>
-                                        <p className="text-blue-200/70 text-[11.5px]">{text}</p>
+                                        <p className="text-blue-200/75 text-[11.5px]">{text}</p>
                                     </div>
                                 ))}
                             </div>
@@ -464,6 +469,7 @@ export default function RegisterForm() {
                             </div>
                         </div>
 
+                        {/* Step dots */}
                         <div className="relative z-10 flex gap-1.5">
                             <div className={`h-1.5 rounded-full transition-all ${step === 1 ? "w-5 bg-white" : "w-1.5 bg-white/30"}`} />
                             <div className={`h-1.5 rounded-full transition-all ${step === 2 ? "w-5 bg-white" : "w-1.5 bg-white/30"}`} />
