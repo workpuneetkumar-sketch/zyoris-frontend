@@ -107,12 +107,12 @@ export default function AiInsightsLandingPage() {
               onDrop={handleFileDrop}
               onClick={() => fileInputRef.current?.click()}
             >
-              <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => setFile(e.target.files?.[0] || null)} accept=".csv,.xlsx,.xls" />
+              <input type="file" className="hidden" ref={fileInputRef} onChange={(e) => setFile(e.target.files?.[0] || null)} accept=".csv,.xlsx,.xls,.pdf,.doc,.docx" />
               <div className="w-16 h-16 bg-white shadow-sm rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
                 <UploadCloud size={32} className="text-indigo-600" />
               </div>
               <h3 className="text-lg font-bold text-slate-900">New Analysis Session</h3>
-              <p className="text-xs text-slate-500 mt-2">Drag & drop CSV or Excel dataset</p>
+              <p className="text-xs text-slate-500 mt-2">Drag & drop CSV, Excel, PDF, or Word document</p>
             </div>
             
             {file && status !== "UPLOADING" && (
@@ -121,7 +121,11 @@ export default function AiInsightsLandingPage() {
                   <FileSpreadsheet size={24} className="text-indigo-600 shrink-0" />
                   <div className="text-left overflow-hidden flex-1">
                     <p className="text-sm font-semibold text-slate-900 truncate">{file.name}</p>
-                    <p className="text-xs text-slate-500">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                    <p className="text-xs text-slate-500">
+                      {file.size < 1024 * 1024 
+                        ? `${(file.size / 1024).toFixed(2)} KB` 
+                        : `${(file.size / 1024 / 1024).toFixed(2)} MB`}
+                    </p>
                   </div>
                 </div>
                 <button 
