@@ -444,9 +444,5 @@ export async function createActivity(data: CreateActivityRequest): Promise<{ suc
 // ── DELETE activity (not in API spec, keeping for compatibility) ─────────────────
 
 export async function deleteActivity(id: string): Promise<void> {
-  try {
-    await api.delete(`/activities/delete-activity/${id}`);
-  } catch (error) {
-    console.log("Mock delete activity");
-  }
+  await api.delete(`/activities/delete-activity/${id}`);
 }

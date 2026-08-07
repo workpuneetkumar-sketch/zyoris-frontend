@@ -200,6 +200,18 @@ export default function RegisterForm() {
                     {/* ── LEFT: Form Panel ── */}
                     <div className="flex-1 bg-white px-9 py-9 flex flex-col justify-center min-w-0">
 
+                        {/* Back Button */}
+                        <button
+                            type="button"
+                            onClick={() => router.back()}
+                            className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors mb-6 text-[12.5px] font-medium self-start"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                            </svg>
+                            Back
+                        </button>
+
                         {/* Header */}
                         <div className="mb-6">
                             <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-widest mb-1.5">
