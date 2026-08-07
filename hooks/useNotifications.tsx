@@ -35,17 +35,21 @@ type UnreadCountsMap = Record<string, number>;
 function normalizeUnreadCounts(res: UnreadCountData | undefined | null): UnreadCountsMap {
   if (!res) return { all: 0, unread: 0, leads: 0, messages: 0, deals: 0, tasks: 0, system: 0 };
   const byCategory = res.byCategory ?? (res as any).categories ?? {};
-  const total = typeof res.total === "number" ? res.total : 0;
+  const serverTotal = typeof res.total === "number" ? res.total : 0;
+
   const normalized: UnreadCountsMap = {
-    all: total,
-    unread: total,
+    all: 0,
+    unread: 0,
     leads: 0,
     messages: 0,
     deals: 0,
     tasks: 0,
     system: 0,
   };
+
   const KNOWN = ["leads", "messages", "deals", "tasks", "system"];
+
+  // Remap backend category keys (could be uppercase like LEAD, DEAL etc.) to lowercase frontend keys
   Object.entries(byCategory).forEach(([rawKey, val]) => {
     const key = String(rawKey).toLowerCase();
     const count = typeof val === "number" ? val : 0;
@@ -56,12 +60,15 @@ function normalizeUnreadCounts(res: UnreadCountData | undefined | null): UnreadC
     // do NOT assign to any named tab — the items themselves will render under
     // the correct tab based on their entityType / type inference.
   });
-  // If server total is 0 but we have known-category counts, recompute
+
+  // Sum known category counts to get a reliable total
   const sumOfKnown = KNOWN.reduce((s, k) => s + (normalized[k] || 0), 0);
-  if (total <= 0 && sumOfKnown > 0) {
-    normalized.all = sumOfKnown;
-    normalized.unread = sumOfKnown;
-  }
+
+  // Use server total when available and sensible; fall back to sum of known categories
+  const total = serverTotal > 0 ? serverTotal : sumOfKnown;
+  normalized.all = total;
+  normalized.unread = total;
+
   return normalized;
 }
 
@@ -470,15 +477,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       let countsSnapshot: UnreadCountsMap | null = null;
 
       setDeleting((prev) => new Set(prev).add(id));
+
+      // Capture target BEFORE any state updates
+      const target = notifications.find((n) => n.id === id);
+
       try {
-        const target = notifications.find((n) => n.id === id);
         notifSnapshot = notifications.slice();
         countsSnapshot = { ...categoryUnreadCounts };
 
-        // Optimistic remove
+        // Optimistic remove from UI
         setNotifications((prev) => prev.filter((n) => n.id !== id));
         knownIdsRef.current.delete(id);
 
+        // Optimistically decrement unread counts only if it was unread
         if (target && !target.read) {
           const cat = (target.category || "system").toLowerCase();
           setCategoryUnreadCounts((prev) => {
@@ -490,11 +501,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           });
         }
 
+        // Call the DELETE API endpoint
         await hardDeleteNotificationApi(id);
         toast.success("Notification deleted");
+
+        // Sync counts from server after delete to ensure accuracy
         void refreshUnreadCounts();
       } catch (err: any) {
         console.error("Failed to delete notification:", err);
+        // Rollback optimistic update
         if (notifSnapshot) {
           setNotifications(notifSnapshot);
           notifSnapshot.forEach((n) => knownIdsRef.current.add(n.id));
@@ -509,6 +524,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         });
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [notifications, categoryUnreadCounts, deleting, refreshUnreadCounts]
   );
 

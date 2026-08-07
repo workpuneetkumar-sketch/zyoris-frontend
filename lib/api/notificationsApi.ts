@@ -80,8 +80,17 @@ export const archiveNotification = async (id: string) => {
 };
 
 /** Hard-deletes a notification permanently (DELETE /api/notifications/{id}). */
-export const deleteNotification = async (id: string) => {
-  await api.delete(`/api/notifications/${id}`);
+export const deleteNotification = async (id: string): Promise<void> => {
+  try {
+    await api.delete(`/api/notifications/${id}`);
+  } catch (err: any) {
+    const message =
+      err?.response?.data?.message ||
+      err?.response?.data?.error ||
+      err?.message ||
+      "Failed to delete notification";
+    throw new Error(message);
+  }
 };
 
 export interface BulkArchivePayload {
