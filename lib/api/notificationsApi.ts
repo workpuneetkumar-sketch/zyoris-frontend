@@ -105,11 +105,23 @@ export const bulkArchiveNotifications = async (payload: BulkArchivePayload = {})
 /**
  * Derives unread counts from a fresh fetch of the notification feed.
  * The GET /api/notifications response includes a top-level `unreadCount`.
+ * We also cross-check by counting items with read: false in the response.
  */
 export const fetchUnreadCounts = async (): Promise<UnreadCountData> => {
-  const response = await fetchNotifications({ limit: 1, offset: 0 });
+  const response = await fetchNotifications({ limit: 50, offset: 0 });
+  // Count unread items directly from the data array for accuracy
+  const items: NotificationDto[] = Array.isArray((response as any).data)
+    ? (response as any).data
+    : Array.isArray(response)
+    ? (response as any)
+    : [];
+  const unreadFromItems = items.filter((n) => n.read === false).length;
+  // Prefer the server-reported unreadCount, fall back to counting items
+  const unreadCount = typeof (response as any).unreadCount === "number"
+    ? (response as any).unreadCount
+    : unreadFromItems;
   return {
-    total: response.unreadCount ?? 0,
+    total: unreadCount,
     byCategory: {},
   } as UnreadCountData;
 };

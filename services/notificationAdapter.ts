@@ -289,21 +289,39 @@ export async function getNotifications(params?: {
   });
 
   // API returns { total, unreadCount, limit, offset, data: [...] }
-  const raw: NotificationDto[] = Array.isArray(response.data) ? response.data : [];
+  // Handle both { data: [...] } and direct array responses defensively
+  let raw: NotificationDto[] = [];
+  if (Array.isArray(response)) {
+    // Bare array response
+    raw = response as NotificationDto[];
+  } else if (Array.isArray((response as any).data)) {
+    raw = (response as any).data;
+  } else if (Array.isArray((response as any).notifications)) {
+    raw = (response as any).notifications;
+  } else if (Array.isArray((response as any).items)) {
+    raw = (response as any).items;
+  }
+
+  // Log in dev so we can see the real shape
+  if (process.env.NODE_ENV === "development") {
+    console.log("[NotificationAdapter] raw response keys:", Object.keys(response as any));
+    console.log("[NotificationAdapter] raw items count:", raw.length);
+    if (raw.length > 0) console.log("[NotificationAdapter] first item:", raw[0]);
+  }
 
   const notifications = raw.map(dtoToNotification).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
   const limit = params?.limit ?? 20;
-  const hasMore = offset + raw.length < (response.total ?? 0);
-  // Encode next offset as cursor string for compatibility with existing hook interface
+  const total = (response as any).total ?? raw.length;
+  const hasMore = offset + raw.length < total;
   const nextCursor = hasMore ? String(offset + raw.length) : null;
 
   return {
     notifications,
     nextCursor,
-    total: response.total ?? 0,
+    total,
     offset,
   };
 }

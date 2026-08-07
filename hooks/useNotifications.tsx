@@ -166,6 +166,23 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setCurrentOffset(res.notifications.length);
       setHasMore(Boolean(res.nextCursor));
       knownIdsRef.current = new Set(res.notifications.map((n) => n.id));
+
+      // Compute unread counts directly from loaded data — always in sync with the list
+      const unreadTotal = res.notifications.filter((n) => !n.read).length;
+      const byCat: Record<string, number> = { leads: 0, messages: 0, deals: 0, tasks: 0, system: 0 };
+      res.notifications.forEach((n) => {
+        if (!n.read) {
+          const cat = (n.category || "system").toLowerCase();
+          if (cat in byCat) byCat[cat] = (byCat[cat] || 0) + 1;
+        }
+      });
+      setCategoryUnreadCounts({
+        all: unreadTotal,
+        unread: unreadTotal,
+        ...byCat,
+      });
+
+      // Also refresh from server in background in case there are more pages
       void refreshUnreadCounts();
     } catch (err: any) {
       console.error("Failed to load notifications:", err);
