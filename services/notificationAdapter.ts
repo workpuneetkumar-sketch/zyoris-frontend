@@ -179,9 +179,11 @@ function mapCategory(dto: NotificationDto): NotificationCategory {
 function mapPriority(dto: NotificationDto): NotificationPriority {
   if (!dto.priority) return "medium";
   const p = String(dto.priority).toLowerCase();
-  if (p === "critical" || p === "urgent" || p === "high" || p === "medium" || p === "low") {
-    return p as NotificationPriority;
-  }
+  // API uses: normal, reminder, critical
+  if (p === "critical") return "critical";
+  if (p === "high" || p === "urgent") return "high";
+  if (p === "medium" || p === "reminder") return "medium";
+  if (p === "low" || p === "normal") return "low";
   return "medium";
 }
 
@@ -231,7 +233,9 @@ function getNotificationTypeAndDeepLink(
 }
 
 export function dtoToNotification(dto: NotificationDto): Notification {
-  const { type, deepLink } = getNotificationTypeAndDeepLink(dto);
+  const { type, deepLink: inferredDeepLink } = getNotificationTypeAndDeepLink(dto);
+  // Prefer the backend-provided deepLink over the inferred one
+  const deepLink = dto.deepLink || inferredDeepLink || "/notifications";
   return {
     id: dto.id,
     title: dto.title,
@@ -260,34 +264,47 @@ export function dtoToNotification(dto: NotificationDto): Notification {
 export interface GetNotificationsResult {
   notifications: Notification[];
   nextCursor: string | null;
+  total: number;
+  offset: number;
 }
 
 export async function getNotifications(params?: {
   category?: string;
   cursor?: string;
+  offset?: number;
   limit?: number;
   unreadOnly?: boolean;
 }): Promise<GetNotificationsResult> {
+  // Convert legacy cursor param to offset (cursor was stored as stringified offset)
+  let offset = params?.offset ?? 0;
+  if (params?.cursor && !params.offset) {
+    const parsed = parseInt(params.cursor, 10);
+    if (!isNaN(parsed)) offset = parsed;
+  }
+
   const response = await fetchNotifications({
-    category: params?.category,
-    cursor: params?.cursor,
     limit: params?.limit ?? 20,
+    offset,
     unreadOnly: params?.unreadOnly ?? params?.category === "unread",
   });
 
-  // Backend may wrap items under "data" or "notifications"
-  const raw: NotificationDto[] =
-    (response.data && response.data.length > 0
-      ? response.data
-      : (response as any).notifications) ?? [];
+  // API returns { total, unreadCount, limit, offset, data: [...] }
+  const raw: NotificationDto[] = Array.isArray(response.data) ? response.data : [];
 
   const notifications = raw.map(dtoToNotification).sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
+  const limit = params?.limit ?? 20;
+  const hasMore = offset + raw.length < (response.total ?? 0);
+  // Encode next offset as cursor string for compatibility with existing hook interface
+  const nextCursor = hasMore ? String(offset + raw.length) : null;
+
   return {
     notifications,
-    nextCursor: response.nextCursor ?? null,
+    nextCursor,
+    total: response.total ?? 0,
+    offset,
   };
 }
 

@@ -105,6 +105,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [currentOffset, setCurrentOffset] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<UnreadCountsMap>({
     all: 0,
@@ -146,6 +147,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setError(null);
       setHasMore(false);
       setNextCursor(null);
+      setCurrentOffset(0);
       knownIdsRef.current = new Set();
       return;
     }
@@ -156,11 +158,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const category = feedCategoryRef.current;
       const res = await getNotifications({
         limit: 20,
-        category,
+        offset: 0,
         unreadOnly: category === "unread",
       });
       setNotifications(res.notifications);
       setNextCursor(res.nextCursor);
+      setCurrentOffset(res.notifications.length);
       setHasMore(Boolean(res.nextCursor));
       knownIdsRef.current = new Set(res.notifications.map((n) => n.id));
       void refreshUnreadCounts();
@@ -174,14 +177,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [isAuthenticated, user, refreshUnreadCounts]);
 
   const fetchNextPage = useCallback(async () => {
-    if (!isAuthenticated || !user || !nextCursor || loadingMore) return;
+    if (!isAuthenticated || !user || !hasMore || loadingMore) return;
     setLoadingMore(true);
     try {
       const category = feedCategoryRef.current;
       const res = await getNotifications({
-        cursor: nextCursor,
+        offset: currentOffset,
         limit: 20,
-        category,
         unreadOnly: category === "unread",
       });
       setNotifications((prev) => {
@@ -191,6 +193,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         return [...prev, ...newItems];
       });
       setNextCursor(res.nextCursor);
+      setCurrentOffset((prev) => prev + res.notifications.length);
       setHasMore(Boolean(res.nextCursor));
     } catch (err: any) {
       console.error("Failed to fetch next page of notifications:", err);
@@ -198,7 +201,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } finally {
       setLoadingMore(false);
     }
-  }, [isAuthenticated, user, nextCursor, loadingMore]);
+  }, [isAuthenticated, user, hasMore, currentOffset, loadingMore]);
 
   useEffect(() => {
     loadNotifications();

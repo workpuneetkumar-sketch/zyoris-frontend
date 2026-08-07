@@ -11,9 +11,10 @@ export interface NotificationDto {
   category?: string | null;
   entityType?: string | null;
   entityId?: string | null;
+  deepLink?: string | null;
   groupKey?: string | null;
   aggregatedCount?: number | null;
-  priority?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "URGENT" | string | null;
+  priority?: "normal" | "reminder" | "critical" | string | null;
   actor?: { id: string; name: string; avatarUrl?: string } | null;
   read: boolean;
   readAt?: string | null;
@@ -31,28 +32,25 @@ export interface CreateNotificationPayload {
 }
 
 export interface FetchNotificationsResponse {
+  total: number;
+  unreadCount: number;
   limit: number;
-  nextCursor: string | null;
-  // Backend may return items under "data" or "notifications"
-  data?: NotificationDto[];
-  notifications?: NotificationDto[];
+  offset: number;
+  data: NotificationDto[];
 }
 
 export const fetchNotifications = async (params?: {
-  category?: string;
   unreadOnly?: boolean;
   limit?: number;
-  cursor?: string;
+  offset?: number;
 }) => {
   const query: Record<string, unknown> = {
     limit: params?.limit ?? 20,
+    offset: params?.offset ?? 0,
   };
-  if (params?.cursor) query.cursor = params.cursor;
-  if (params?.category && params.category !== "all" && params.category !== "unread") {
-    query.category = params.category;
-  }
-  if (params?.unreadOnly === true || params?.category === "unread") {
-    query.unreadOnly = true;
+  // Filter to unread only if requested
+  if (params?.unreadOnly === true) {
+    query.read = false;
   }
   const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
   return response.data;
@@ -68,15 +66,14 @@ export const markNotificationAsRead = async (id: string) => {
   return response.data;
 };
 
-export const markAllNotificationsAsRead = async (category?: string) => {
-  const params = category && category !== "all" && category !== "unread" ? { category } : undefined;
-  const response = await api.patch("/api/notifications/read-all", undefined, { params });
+export const markAllNotificationsAsRead = async (_category?: string) => {
+  const response = await api.patch("/api/notifications/read-all");
   return response.data;
 };
 
-export const archiveNotification = async (id: string) => {
-  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/archive`);
-  return response.data;
+/** Archive = delete (no dedicated archive endpoint on this API) */
+export const archiveNotification = async (id: string): Promise<void> => {
+  await deleteNotification(id);
 };
 
 /** Hard-deletes a notification permanently (DELETE /api/notifications/{id}). */
@@ -97,20 +94,30 @@ export interface BulkArchivePayload {
   ids?: string[];
 }
 
-export const bulkArchiveNotifications = async (payload: BulkArchivePayload = {}) => {
-  const response = await api.post("/api/notifications/bulk-archive", payload);
-  return response.data;
+/** Bulk archive = bulk delete (no dedicated bulk-archive endpoint on this API) */
+export const bulkArchiveNotifications = async (payload: BulkArchivePayload = {}): Promise<void> => {
+  if (payload.ids && payload.ids.length > 0) {
+    await Promise.all(payload.ids.map((id) => deleteNotification(id)));
+  }
+  // empty payload = "archive all read" — no-op since we have no bulk endpoint
 };
 
+/**
+ * Derives unread counts from a fresh fetch of the notification feed.
+ * The GET /api/notifications response includes a top-level `unreadCount`.
+ */
 export const fetchUnreadCounts = async (): Promise<UnreadCountData> => {
-  const response = await api.get<UnreadCountData>("/api/notifications/unread-count");
-  return response.data;
+  const response = await fetchNotifications({ limit: 1, offset: 0 });
+  return {
+    total: response.unreadCount ?? 0,
+    byCategory: {},
+  } as UnreadCountData;
 };
 
 // Maps frontend category names → backend enum values for preferences API
 const CATEGORY_TO_BACKEND: Record<string, string> = {
   leads:    "LEAD",
-  messages: "WHATSAPP",   // closest multi-channel match; backend uses WHATSAPP/EMAIL/CALL
+  messages: "WHATSAPP",
   deals:    "DEAL",
   tasks:    "TASK",
   system:   "SYSTEM",
@@ -120,47 +127,14 @@ const BACKEND_TO_CATEGORY: Record<string, string> = Object.fromEntries(
   Object.entries(CATEGORY_TO_BACKEND).map(([k, v]) => [v, k])
 );
 
+/** Preferences are not supported by this API — return empty object */
 export const fetchNotificationPreferences = async (): Promise<NotificationPreferences> => {
-  try {
-    const response = await api.get<NotificationPreferences>("/api/notifications/preferences");
-    const raw = response.data ?? {};
-    // Remap backend keys (LEAD, DEAL…) to frontend keys (leads, deals…)
-    const mapped: NotificationPreferences = {};
-    Object.entries(raw).forEach(([k, v]) => {
-      const frontKey = BACKEND_TO_CATEGORY[k] ?? k.toLowerCase();
-      mapped[frontKey] = v;
-    });
-    return mapped;
-  } catch (err: any) {
-    if (err?.response?.status === 404) return {};
-    throw err;
-  }
+  return {};
 };
 
+/** Preferences are not supported by this API — no-op */
 export const updateNotificationPreferences = async (
   preferences: NotificationPreferences
 ): Promise<NotificationPreferences> => {
-  // Remap frontend keys (leads, deals…) → backend enum keys (LEAD, DEAL…)
-  const payload: NotificationPreferences = {};
-  Object.entries(preferences).forEach(([k, v]) => {
-    const backendKey = CATEGORY_TO_BACKEND[k] ?? k.toUpperCase();
-    payload[backendKey] = v;
-  });
-  try {
-    const response = await api.put<NotificationPreferences>(
-      "/api/notifications/preferences",
-      payload
-    );
-    const raw = response.data ?? payload;
-    // Remap response back to frontend keys
-    const mapped: NotificationPreferences = {};
-    Object.entries(raw).forEach(([k, v]) => {
-      const frontKey = BACKEND_TO_CATEGORY[k] ?? k.toLowerCase();
-      mapped[frontKey] = v;
-    });
-    return mapped;
-  } catch (err: any) {
-    if (err?.response?.status === 404) return preferences;
-    throw err;
-  }
+  return preferences;
 };
