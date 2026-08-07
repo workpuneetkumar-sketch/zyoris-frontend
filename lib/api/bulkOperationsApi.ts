@@ -28,26 +28,6 @@ import {
   BulkOperationResult,
 } from "@/types/bulkOperations";
 
-// ── Simulated progress helper ─────────────────────────────────────────────────
-
-async function simulateProgress(
-  onProgress: ((pct: number) => void) | undefined,
-  steps: number,
-  stepDelayMs: number
-): Promise<void> {
-  for (let i = 0; i <= steps; i++) {
-    onProgress?.(Math.round((i / steps) * 100));
-    await new Promise<void>((resolve) => setTimeout(resolve, stepDelayMs));
-  }
-}
-
-// ── Generic error handler with mock fallback ──────────────────────────────────
-
-function isFallbackStatus(err: unknown): boolean {
-  const status = (err as { response?: { status?: number } })?.response?.status;
-  return !status || [404, 405, 501].includes(status);
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // LEADS BULK OPERATIONS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -69,17 +49,6 @@ export async function bulkAssignLeads(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkAssignLeads] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 5, 150);
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} lead(s) assigned to ${
-          payload.assignedToName ?? "selected user"
-        }.`,
-      };
-    }
     throw err;
   }
 }
@@ -99,20 +68,6 @@ export async function bulkUpdateLeads(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkUpdateLeads] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 4, 150);
-      const updatedFields = Object.keys(payload.data)
-        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
-        .join(", ");
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} lead(s) updated (fields: ${
-          updatedFields || "none"
-        }).`,
-      };
-    }
     throw err;
   }
 }
@@ -132,15 +87,6 @@ export async function bulkDeleteLeads(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkDeleteLeads] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 5, 120);
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} lead(s) deleted.`,
-      };
-    }
     throw err;
   }
 }
@@ -164,18 +110,6 @@ export async function bulkUpdateContacts(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkUpdateContacts] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 4, 150);
-      const fields = Object.keys(payload.data)
-        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
-        .join(", ");
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} contact(s) updated (fields: ${fields || "none"}).`,
-      };
-    }
     throw err;
   }
 }
@@ -195,15 +129,6 @@ export async function bulkDeleteContacts(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkDeleteContacts] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 5, 120);
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} contact(s) deleted.`,
-      };
-    }
     throw err;
   }
 }
@@ -229,17 +154,6 @@ export async function bulkAssignDeals(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkAssignDeals] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 5, 150);
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} deal(s) assigned to ${
-          payload.assignedToName ?? "selected user"
-        }.`,
-      };
-    }
     throw err;
   }
 }
@@ -259,18 +173,6 @@ export async function bulkUpdateDeals(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkUpdateDeals] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 4, 150);
-      const fields = Object.keys(payload.data)
-        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
-        .join(", ");
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} deal(s) updated (fields: ${fields || "none"}).`,
-      };
-    }
     throw err;
   }
 }
@@ -290,15 +192,6 @@ export async function bulkDeleteDeals(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkDeleteDeals] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 5, 120);
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} deal(s) deleted.`,
-      };
-    }
     throw err;
   }
 }
@@ -322,18 +215,6 @@ export async function bulkUpdateCompanies(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkUpdateCompanies] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 4, 150);
-      const fields = Object.keys(payload.data)
-        .filter((k) => payload.data[k as keyof typeof payload.data] != null)
-        .join(", ");
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} company/companies updated (fields: ${fields || "none"}).`,
-      };
-    }
     throw err;
   }
 }
@@ -353,15 +234,6 @@ export async function bulkDeleteCompanies(
     return res.data;
   } catch (err: unknown) {
     console.error('[bulkDeleteCompanies] Error:', err);
-    if (isFallbackStatus(err)) {
-      await simulateProgress(onProgress, 5, 120);
-      return {
-        success: true,
-        processedCount: payload.ids.length,
-        failedCount: 0,
-        message: `${payload.ids.length} company/companies deleted.`,
-      };
-    }
     throw err;
   }
 }
