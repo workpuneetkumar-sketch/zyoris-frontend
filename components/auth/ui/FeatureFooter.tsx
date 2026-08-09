@@ -26,13 +26,13 @@ export default function FeatureFooter() {
   ];
 
   return (
-    <div className="w-full flex flex-wrap justify-center items-center gap-6 sm:gap-12 py-8 text-center text-sm">
+    <div className="w-full flex flex-nowrap justify-center items-center gap-2.5 sm:gap-6 md:gap-10 py-6 text-center text-sm overflow-x-auto scrollbar-hide">
       {features.map((feature, index) => (
-        <div key={index} className="flex items-center gap-3">
-          <div className="flex-shrink-0">{feature.icon}</div>
-          <div className="flex flex-col text-left">
-            <span className="font-semibold text-gray-900">{feature.title}</span>
-            <span className="text-gray-500 text-xs">{feature.desc}</span>
+        <div key={index} className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap shrink-0">
+          <div className="flex-shrink-0 scale-90 sm:scale-100">{feature.icon}</div>
+          <div className="flex items-baseline gap-1 sm:gap-1.5">
+            <span className="font-semibold text-gray-900 text-[11px] sm:text-sm">{feature.title}</span>
+            <span className="text-gray-500 text-[10px] sm:text-xs">{feature.desc}</span>
           </div>
         </div>
       ))}

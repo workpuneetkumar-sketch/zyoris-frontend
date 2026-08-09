@@ -10,7 +10,7 @@ function buildSystemPrompt(context: {
 }): string {
   const { org, roleContext, role } = context;
   
-  return `You are ZII BOT, the intelligent performance assistant for Zyoris.
+  return `You are ZY BOT, the intelligent performance assistant for Zyoris.
 
 ## Organization Data:
 - Company: ${org?.name || 'Zyoris'}
@@ -75,7 +75,7 @@ function normalizeMessage(m: string): string {
 function getFallbackReply(messages: { role: string; content: string }[], context?: any): string {
   const last = messages[messages.length - 1];
   if (!last || last.role !== "user") {
-    return "Hi 👋 I'm **ZII BOT**. Ask me about leads, deals, revenue, or anything about your business!";
+    return "Hi 👋 I'm **ZY BOT**. Ask me about leads, deals, revenue, or anything about your business!";
   }
   
   const text = normalizeMessage(last.content);
@@ -184,7 +184,7 @@ function getFallbackReply(messages: { role: string; content: string }[], context
 
   // Hi/Hello
   if (text.includes("hi") || text.includes("hello") || text.includes("hey")) {
-    return `Hi 👋 I'm **ZII BOT**. I'm here to help you grow ${orgName}.\n\n📊 **Quick Snapshot:**\n• Company: ${orgName}\n• Your Role: ${role}\n• Active Deals: ${deals}\n• Total Leads: ${leads}\n\n💡 Try asking: "Show me my deals" or "What's our revenue?"`;
+    return `Hi 👋 I'm **ZY BOT**. I'm here to help you grow ${orgName}.\n\n📊 **Quick Snapshot:**\n• Company: ${orgName}\n• Your Role: ${role}\n• Active Deals: ${deals}\n• Total Leads: ${leads}\n\n💡 Try asking: "Show me my deals" or "What's our revenue?"`;
   }
 
   // Default

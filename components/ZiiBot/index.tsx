@@ -116,7 +116,7 @@ export function ZiiBot() {
           type="button"
           className={`zii-fab${pathname === "/whatsapp" || pathname?.startsWith("/whatsapp") ? " zii-fab--whatsapp" : ""}`}
           onClick={panelOpen || closing ? closePanel : openPanel}
-          aria-label={panelOpen || closing ? "Close chat" : "Open ZII BOT"}
+          aria-label={panelOpen || closing ? "Close chat" : "Open ZY BOT"}
           initial={false}
           animate={{
             scale: 1,

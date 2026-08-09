@@ -89,7 +89,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#F8FAFC] relative overflow-hidden">
+    <div className="min-h-screen w-full flex flex-col bg-[#F8FAFC] relative overflow-y-auto">
       {/* Abstract Background Waves (CSS based) */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden flex justify-center items-center opacity-40">
         <div className="absolute top-[-10%] right-[-5%] w-[800px] h-[800px] rounded-full border-[1px] border-blue-200/50 blur-3xl"></div>
@@ -98,13 +98,13 @@ export default function LoginPage() {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col justify-center w-full max-w-7xl mx-auto px-4 py-8 sm:py-12 z-10">
-        <div className="flex-1 flex items-center justify-center transition-all duration-300 ease-in-out">
+      <div className="flex-1 flex flex-col justify-center w-full max-w-7xl mx-auto px-4 py-6 sm:py-10 z-10">
+        <div className="flex items-center justify-center transition-all duration-300 ease-in-out">
           {renderCurrentScreen()}
         </div>
         
         {/* Footer */}
-        <div className="mt-8 sm:mt-16">
+        <div className="mt-8 sm:mt-12">
           <FeatureFooter />
         </div>
       </div>

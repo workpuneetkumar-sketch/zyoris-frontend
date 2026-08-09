@@ -10,7 +10,7 @@ export default function BrandPanel() {
       <div className="absolute bottom-0 left-0 w-full h-1/3 bg-gradient-to-t from-[#0044CC]/20 to-transparent z-0"></div>
 
       <div className="relative z-10 flex flex-col items-center text-center">
-        <div className="w-24 h-24 mb-6 relative flex justify-center">
+        <div className="w-20 h-20 mb-5 relative flex justify-center">
           <img 
             src="/logo.jpeg" 
             alt="Zyoris Logo" 
@@ -18,7 +18,7 @@ export default function BrandPanel() {
           />
         </div>
         
-        <h2 className="text-3xl uppercase mb-4 tracking-widest" style={{ fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif' }}>zyoris</h2>
+        <h2 className="text-2xl uppercase mb-3 tracking-widest" style={{ fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif' }}>zyoris</h2>
         <p className="text-[#8FB3FF] text-sm max-w-[200px] leading-relaxed">
           Smart solutions.<br />
           Stronger tomorrow.

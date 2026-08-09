@@ -4,6 +4,7 @@ import { registerApi } from "@/lib/api/authApi";
 import { createOrganization } from "@/lib/api/organizationsApi";
 import { useRouter } from "next/navigation";
 import { useState, FormEvent, useEffect } from "react";
+import FeatureFooter from "./ui/FeatureFooter";
 
 const ROLES = [
     { value: "ADMIN",                   label: "Administrator" },
@@ -180,211 +181,138 @@ export default function RegisterForm() {
     const displayError = localError || error;
 
     const inputClass =
-        "w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-[13.5px] text-slate-800 placeholder-slate-300 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all bg-white";
+        "w-full px-4 py-3 rounded-lg border border-slate-200 text-[14px] text-slate-800 placeholder-slate-300 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all bg-white";
 
-    const labelClass = "block text-[12.5px] font-semibold text-slate-600 mb-1.5";
+    const labelClass = "block text-[13px] font-semibold text-slate-600 mb-1.5";
 
     return (
-        <div className="min-h-screen flex flex-col bg-[#1a2f6e] relative">
-            {/* Background blobs */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-blue-500/10" />
-                <div className="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-blue-400/10" />
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[300px] rounded-full bg-blue-600/5" />
+        <div className="min-h-screen w-full flex flex-col bg-[#F8FAFC] relative overflow-y-auto">
+            {/* Abstract Background Waves — same as login page */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden flex justify-center items-center opacity-40">
+                <div className="absolute top-[-10%] right-[-5%] w-[800px] h-[800px] rounded-full border-[1px] border-blue-200/50 blur-3xl"></div>
+                <div className="absolute bottom-[-20%] left-[-10%] w-[1000px] h-[1000px] rounded-full border-[1px] border-blue-200/50 blur-3xl"></div>
             </div>
 
             {/* Center Card */}
-            <div className="relative z-10 flex-1 flex items-center justify-center px-4 py-10">
-                <div className="w-full max-w-[920px] flex rounded-2xl overflow-hidden shadow-2xl shadow-black/50">
+            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-10">
+                <div className="w-full max-w-[700px] bg-white rounded-2xl shadow-2xl shadow-blue-900/10 border border-gray-100 px-6 sm:px-10 py-7 sm:py-9 flex flex-col">
 
-                    {/* ── LEFT: Form Panel ── */}
-                    <div className="flex-1 bg-white px-9 py-9 flex flex-col justify-center min-w-0">
-
-                        {/* Back Button */}
+                    {/* Header row: Back — Logo */}
+                    <div className="grid grid-cols-3 items-center mb-6">
                         <button
                             type="button"
                             onClick={() => router.back()}
-                            className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors mb-6 text-[12.5px] font-medium self-start"
+                            className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors text-sm font-medium justify-self-start"
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                             </svg>
                             Back
                         </button>
-
-                        {/* Header */}
-                        <div className="mb-6">
-                            <p className="text-[11px] font-semibold text-blue-600 uppercase tracking-widest mb-1.5">
-                                {step === 1 ? "Step 1 of 2" : "Step 2 of 2"}
-                            </p>
-                            <h1 className="text-[21px] font-bold text-[#1a2f6e] mb-1">
-                                {step === 1 ? "Create your account" : "Company details"}
-                            </h1>
-                            <p className="text-[12.5px] text-slate-400">
-                                {step === 1
-                                    ? "Set up your personal credentials"
-                                    : "Tell us about your organization"}
-                            </p>
+                        <div className="col-start-2 justify-self-center flex items-center gap-2">
+                            <img src="/logo.jpeg" alt="Zyoris Logo" className="w-8 h-8 object-contain rounded" />
+                            <span className="text-2xl uppercase text-[#002B7F]" style={{ fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif' }}>zyoris</span>
                         </div>
+                    </div>
 
-                        {/* Step pills */}
-                        <div className="flex items-center gap-2 mb-6">
-                            {[1, 2].map((s) => (
-                                <div key={s} className="flex items-center gap-2">
-                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold transition-all ${step === s
-                                        ? "bg-blue-700 text-white"
-                                        : step > s
-                                            ? "bg-emerald-500 text-white"
-                                            : "bg-slate-100 text-slate-400"
-                                        }`}>
-                                        {step > s ? (
-                                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                            </svg>
-                                        ) : s}
-                                    </div>
-                                    <span className={`text-[11px] font-medium ${step === s ? "text-blue-700" : "text-slate-400"}`}>
-                                        {s === 1 ? "Account" : "Company"}
-                                    </span>
-                                    {s < 2 && <div className="w-8 h-px bg-slate-200 ml-1" />}
+                    {/* Step label + Title */}
+                    <div className="mb-6">
+                        <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1.5">
+                            {step === 1 ? "Step 1 of 2" : "Step 2 of 2"}
+                        </p>
+                        <h1 className="text-[26px] font-bold text-[#1a2f6e] mb-1">
+                            {step === 1 ? "Create your account" : "Company details"}
+                        </h1>
+                        <p className="text-sm text-slate-400">
+                            {step === 1
+                                ? "Set up your personal credentials"
+                                : "Tell us about your organization"}
+                        </p>
+                    </div>
+
+                    {/* Step pills */}
+                    <div className="flex items-center gap-2 mb-7">
+                        {[1, 2].map((s) => (
+                            <div key={s} className="flex items-center gap-2">
+                                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[12px] font-bold transition-all ${step === s
+                                    ? "bg-blue-700 text-white"
+                                    : step > s
+                                        ? "bg-emerald-500 text-white"
+                                        : "bg-slate-100 text-slate-400"
+                                    }`}>
+                                    {step > s ? (
+                                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    ) : s}
                                 </div>
-                            ))}
+                                <span className={`text-[13px] font-medium ${step === s ? "text-blue-700" : "text-slate-400"}`}>
+                                    {s === 1 ? "Account" : "Company"}
+                                </span>
+                                {s < 2 && <div className="w-10 h-px bg-slate-200 ml-1" />}
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Success banner */}
+                    {success && (
+                        <div className="mb-4 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-[13px] text-emerald-600 flex items-center gap-2">
+                            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Organization created! Redirecting to login…
                         </div>
+                    )}
 
-                        {/* Success banner */}
-                        {success && (
-                            <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[12px] text-emerald-600 flex items-center gap-2">
-                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                                </svg>
-                                Organization created! Redirecting to login…
-                            </div>
-                        )}
+                    {displayError && (
+                        <div className="mb-4 px-4 py-3 rounded-lg bg-red-50 border border-red-200 text-[13px] text-red-500">
+                            {displayError}
+                        </div>
+                    )}
 
-                        {displayError && (
-                            <div className="mb-4 px-3.5 py-2.5 rounded-lg bg-red-50 border border-red-200 text-[12px] text-red-500">
-                                {displayError}
-                            </div>
-                        )}
-
-                        {/* ── STEP 1 ── */}
-                        {step === 1 && (
-                            <form onSubmit={handleStep1} className="space-y-3.5">
-                                <div className="grid grid-cols-2 gap-3.5">
-                                    <div>
-                                        <label className={labelClass}>Full name</label>
+                    {/* ── STEP 1 ── */}
+                    {step === 1 && (
+                        <form onSubmit={handleStep1} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className={labelClass}>Full name</label>
+                                    <div className="relative">
                                         <input
                                             type="text" required placeholder="Jane Smith"
                                             value={name} onChange={(e) => setName(e.target.value)}
-                                            className={inputClass}
+                                            className={inputClass + " pr-9"}
                                         />
+                                        <svg className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                        </svg>
                                     </div>
-                                    <div>
-                                        <label className={labelClass}>Email address</label>
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Email address</label>
+                                    <div className="relative">
                                         <input
                                             type="email" required autoComplete="email"
                                             placeholder="you@company.com"
                                             value={email} onChange={(e) => setEmail(e.target.value)}
-                                            className={inputClass}
+                                            className={inputClass + " pr-9"}
                                         />
+                                        <svg className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                                        </svg>
                                     </div>
                                 </div>
+                            </div>
 
-                                <div className="grid grid-cols-2 gap-3.5">
-                                    <div>
-                                        <label className={labelClass}>Role</label>
-                                        <div className="relative">
-                                            <select
-                                                value={role} onChange={(e) => setRole(e.target.value)}
-                                                className={inputClass + " appearance-none cursor-pointer pr-9"}
-                                            >
-                                                {ROLES.map((r) => (
-                                                    <option key={r.value} value={r.value}>{r.label}</option>
-                                                ))}
-                                            </select>
-                                            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                                                <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className={labelClass}>Designation</label>
-                                        <input
-                                            type="text" placeholder="e.g. Senior Manager"
-                                            value={designation} onChange={(e) => setDesignation(e.target.value)}
-                                            className={inputClass}
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-3.5">
-                                    <div>
-                                        <label className={labelClass}>Password</label>
-                                        <div className="relative">
-                                            <input
-                                                type={showPw ? "text" : "password"} required minLength={8}
-                                                placeholder="Min. 8 characters"
-                                                value={password} onChange={(e) => setPassword(e.target.value)}
-                                                className={inputClass + " pr-10"}
-                                            />
-                                            <button type="button" onClick={() => setShowPw((p) => !p)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                                                <EyeIcon open={showPw} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className={labelClass}>Confirm password</label>
-                                        <div className="relative">
-                                            <input
-                                                type={showConfirmPw ? "text" : "password"} required
-                                                placeholder="Re-enter password"
-                                                value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
-                                                className={inputClass + " pr-10"}
-                                            />
-                                            <button type="button" onClick={() => setShowConfirmPw((p) => !p)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
-                                                <EyeIcon open={showConfirmPw} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <button type="submit" disabled={isLoading}
-                                    className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors mt-1">
-                                    {isLoading ? (
-                                        <>
-                                            <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                                            Registering…
-                                        </>
-                                    ) : "Register"}
-                                </button>
-                            </form>
-                        )}
-
-                        {/* ── STEP 2 ── */}
-                        {step === 2 && (
-                            <form onSubmit={handleStep2} className="space-y-3.5">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className={labelClass}>Company name</label>
-                                    <input
-                                        type="text" required placeholder="Acme Corp"
-                                        value={companyName} onChange={(e) => setCompanyName(e.target.value)}
-                                        className={inputClass}
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className={labelClass}>Business type</label>
+                                    <label className={labelClass}>Role</label>
                                     <div className="relative">
                                         <select
-                                            value={businessType} onChange={(e) => setBusinessType(e.target.value)}
+                                            value={role} onChange={(e) => setRole(e.target.value)}
                                             className={inputClass + " appearance-none cursor-pointer pr-9"}
                                         >
-                                            {BUSINESS_TYPES.map((b) => (
-                                                <option key={b} value={b}>{b}</option>
+                                            {ROLES.map((r) => (
+                                                <option key={r.value} value={r.value}>{r.label}</option>
                                             ))}
                                         </select>
                                         <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -394,109 +322,133 @@ export default function RegisterForm() {
                                         </div>
                                     </div>
                                 </div>
-
                                 <div>
-                                    <label className={labelClass}>About the company</label>
-                                    <textarea
-                                        rows={3} placeholder="Brief description of what your company does…"
-                                        value={companyAbout} onChange={(e) => setCompanyAbout(e.target.value)}
-                                        className={inputClass + " resize-none"}
-                                    />
-                                </div>
-
-                                <div className="flex gap-3 pt-1">
-                                    <button type="submit" disabled={isLoading || success}
-                                        className="w-full py-2.5 bg-blue-700 hover:bg-blue-800 disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[13.5px] font-semibold flex items-center justify-center gap-2 transition-colors">
-                                        {isLoading ? (
-                                            <>
-                                                <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                                                Creating organization…
-                                            </>
-                                        ) : "Continue"}
-                                    </button>
-                                </div>
-                            </form>
-                        )}
-
-                        <p className="text-center text-[12.5px] text-slate-400 mt-5">
-                            Already have an account?{" "}
-                            <a href="/login" className="text-blue-600 font-semibold hover:underline">
-                                Sign in
-                            </a>
-                        </p>
-                    </div>
-
-                    {/* ── RIGHT: Brand Panel ── */}
-                    <div className="hidden md:flex w-[320px] bg-[#1a2f6e] flex-col items-center justify-center px-8 py-10 shrink-0 relative overflow-hidden">
-                        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-blue-500/10 pointer-events-none" />
-                        <div className="absolute top-1/4 -left-10 w-32 h-32 rounded-full bg-blue-400/10 pointer-events-none" />
-                        <div className="absolute bottom-4 right-4 w-40 h-40 rounded-full bg-[#0f1f55]/60 pointer-events-none" />
-
-                        {/* Logo */}
-                        <div className="relative z-10 w-full flex items-center gap-2 mb-8">
-                            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center shrink-0">
-                                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                                    <rect x="1" y="1" width="6" height="6" rx="1.5" fill="white" />
-                                    <rect x="9" y="1" width="6" height="6" rx="1.5" fill="white" opacity="0.6" />
-                                    <rect x="1" y="9" width="6" height="6" rx="1.5" fill="white" opacity="0.6" />
-                                    <rect x="9" y="9" width="6" height="6" rx="1.5" fill="white" opacity="0.3" />
-                                </svg>
-                            </div>
-                            <span className="text-white font-bold text-[15px] tracking-tight">zyoris</span>
-                        </div>
-
-                        {/* Tagline block */}
-                        <div className="relative z-10 w-full mb-6">
-                            <h2 className="text-white text-[22px] font-bold leading-snug mb-3">
-                                Run your entire business from one place.
-                            </h2>
-                            <p className="text-blue-200/70 text-[12.5px] leading-relaxed">
-                                Zyoris brings together CRM, HR, finance, and team collaboration into a single intelligent platform — so your teams move faster and your data stays connected.
-                            </p>
-                        </div>
-
-                        {/* Feature card */}
-                        <div className="relative z-10 w-full bg-white/10 border border-white/15 rounded-2xl p-5 mb-6">
-                            <div className="space-y-3">
-                                {[
-                                    { icon: "✦", text: "Role-based access control" },
-                                    { icon: "✦", text: "Real-time analytics & AI insights" },
-                                    { icon: "✦", text: "Leads, deals & pipeline management" },
-                                    { icon: "✦", text: "HR, payroll & attendance — built in" },
-                                ].map(({ icon, text }) => (
-                                    <div key={text} className="flex items-center gap-2.5">
-                                        <span className="text-blue-400 text-[10px]">{icon}</span>
-                                        <p className="text-blue-200/75 text-[11.5px]">{text}</p>
+                                    <label className={labelClass}>Designation</label>
+                                    <div className="relative">
+                                        <input
+                                            type="text" placeholder="e.g. Senior Manager"
+                                            value={designation} onChange={(e) => setDesignation(e.target.value)}
+                                            className={inputClass + " pr-9"}
+                                        />
+                                        <svg className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v11a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9V5z" />
+                                        </svg>
                                     </div>
-                                ))}
+                                </div>
                             </div>
 
-                            <div className="grid grid-cols-3 gap-2 mt-5 pt-4 border-t border-white/10">
-                                {[["12.5k", "Users"], ["98%", "Uptime"], ["4.9★", "Rating"]].map(([val, lbl]) => (
-                                    <div key={lbl} className="text-center">
-                                        <p className="text-white text-[13px] font-bold">{val}</p>
-                                        <p className="text-blue-300/60 text-[10px] mt-0.5">{lbl}</p>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className={labelClass}>Password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showPw ? "text" : "password"} required minLength={8}
+                                            placeholder="Min. 8 characters"
+                                            value={password} onChange={(e) => setPassword(e.target.value)}
+                                            className={inputClass + " pr-10"}
+                                        />
+                                        <button type="button" onClick={() => setShowPw((p) => !p)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            <EyeIcon open={showPw} />
+                                        </button>
                                     </div>
-                                ))}
+                                </div>
+                                <div>
+                                    <label className={labelClass}>Confirm password</label>
+                                    <div className="relative">
+                                        <input
+                                            type={showConfirmPw ? "text" : "password"} required
+                                            placeholder="Re-enter password"
+                                            value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)}
+                                            className={inputClass + " pr-10"}
+                                        />
+                                        <button type="button" onClick={() => setShowConfirmPw((p) => !p)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
+                                            <EyeIcon open={showConfirmPw} />
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
 
-                        {/* Step dots */}
-                        <div className="relative z-10 flex gap-1.5">
-                            <div className={`h-1.5 rounded-full transition-all ${step === 1 ? "w-5 bg-white" : "w-1.5 bg-white/30"}`} />
-                            <div className={`h-1.5 rounded-full transition-all ${step === 2 ? "w-5 bg-white" : "w-1.5 bg-white/30"}`} />
-                        </div>
-                    </div>
+                            <button type="submit" disabled={isLoading}
+                                className="w-full py-3.5 bg-[#0B1D51] hover:bg-[#0a1840] disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[15px] font-semibold flex items-center justify-center gap-2 transition-colors">
+                                {isLoading ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                        Registering…
+                                    </>
+                                ) : "Register"}
+                            </button>
+                        </form>
+                    )}
+
+                    {/* ── STEP 2 ── */}
+                    {step === 2 && (
+                        <form onSubmit={handleStep2} className="space-y-4">
+                            <div>
+                                <label className={labelClass}>Company name</label>
+                                <input
+                                    type="text" required placeholder="Acme Corp"
+                                    value={companyName} onChange={(e) => setCompanyName(e.target.value)}
+                                    className={inputClass}
+                                />
+                            </div>
+
+                            <div>
+                                <label className={labelClass}>Business type</label>
+                                <div className="relative">
+                                    <select
+                                        value={businessType} onChange={(e) => setBusinessType(e.target.value)}
+                                        className={inputClass + " appearance-none cursor-pointer pr-9"}
+                                    >
+                                        {BUSINESS_TYPES.map((b) => (
+                                            <option key={b} value={b}>{b}</option>
+                                        ))}
+                                    </select>
+                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                                        <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className={labelClass}>About the company</label>
+                                <textarea
+                                    rows={4} placeholder="Brief description of what your company does…"
+                                    value={companyAbout} onChange={(e) => setCompanyAbout(e.target.value)}
+                                    className={inputClass + " resize-none"}
+                                />
+                            </div>
+
+                            <button type="submit" disabled={isLoading || success}
+                                className="w-full py-3.5 bg-[#0B1D51] hover:bg-[#0a1840] disabled:opacity-55 disabled:cursor-not-allowed rounded-lg text-white text-[15px] font-semibold flex items-center justify-center gap-2 transition-colors">
+                                {isLoading ? (
+                                    <>
+                                        <span className="w-3.5 h-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                                        Creating organization…
+                                    </>
+                                ) : "Continue"}
+                            </button>
+                        </form>
+                    )}
+
+                    <p className="text-center text-sm text-slate-400 mt-6">
+                        Already have an account?{" "}
+                        <a href="/login" className="text-blue-600 font-semibold hover:underline">
+                            Sign in
+                        </a>
+                    </p>
                 </div>
-            </div>
 
-            {/* Footer */}
-            <div className="relative z-10 py-4 text-center">
-                <p className="text-[12px] text-blue-200/40">
-                    Copyright © {new Date().getFullYear()}{" "}
-                    <a href="#" className="text-blue-300/60 hover:text-blue-200 transition-colors">zyoris</a>
-                    . All Rights Reserved.
-                </p>
+                {/* Footer */}
+                <div className="w-full max-w-5xl mx-auto">
+                    <FeatureFooter />
+                    <p className="text-center text-xs text-slate-400 pb-2">
+                        Copyright © {new Date().getFullYear()} <span className="font-semibold text-slate-500">ZYORIS</span>. All rights reserved.
+                    </p>
+                </div>
             </div>
         </div>
     );

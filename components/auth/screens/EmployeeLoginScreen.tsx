@@ -22,13 +22,13 @@ export default function EmployeeLoginScreen({ onBack, onLogin, isLoading }: Empl
   };
 
   return (
-    <div className="flex w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl shadow-blue-900/10 min-h-[600px] border border-gray-100">
+    <div className="flex w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl shadow-blue-900/10 min-h-[560px] border border-gray-100">
       <BrandPanel />
       
       <div className="flex-1 flex flex-col p-8 sm:p-12">
-        <BackButton onClick={onBack} className="mb-8" />
+        <BackButton onClick={onBack} className="mb-6" />
         
-        <div className="mb-10">
+        <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Employee Sign In</h2>
           <p className="text-gray-500 text-sm">Welcome back! Please sign in to continue</p>
         </div>

@@ -206,7 +206,7 @@ export function ZiiBotPanel({
                 <div>
                   <p className="text-xs text-blue-100 opacity-90 font-medium mb-0.5">Chat with</p>
                   <h3 className="font-bold text-[17px] leading-tight flex items-center gap-1.5">
-                    ZII BOT
+                    ZY BOT
                   </h3>
                 </div>
               </div>
@@ -258,7 +258,7 @@ export function ZiiBotPanel({
                 <div className="flex items-end gap-3 w-full">
                   <div className={`px-[18px] py-[12px] text-[14px] leading-relaxed shadow-sm bg-[#F2F2F2] text-gray-800 rounded-3xl rounded-bl-sm`}>
                     <div className="font-medium">
-                      Hey{userName ? ` ${userName.split(' ')[0]}` : ''} 👋 I'm ZII BOT. How can I help you today?
+                      Hey{userName ? ` ${userName.split(' ')[0]}` : ''} 👋 I'm ZY BOT. How can I help you today?
                     </div>
                   </div>
                 </div>

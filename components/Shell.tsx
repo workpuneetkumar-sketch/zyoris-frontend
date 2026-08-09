@@ -44,6 +44,7 @@ import {
   Video,
   Bell,
   Inbox,
+  ChevronDown,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -66,24 +67,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM",
     items: [
       {
-        href: "/dashboard",
-        label: "Dashboard",
-        icon: LayoutDashboard,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
-      },
-      {
-        href: "/dashboard/reminders",
-        label: "Reminders",
-        icon: Bell,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
-      },
-      {
-        href: "/ai-insights",
-        label: "AI Insights",
-        icon: Brain,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
-      },
-      {
         href: "/leads",
         label: "Leads",
         icon: Users,
@@ -94,6 +77,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Deals",
         icon: Briefcase,
         roles: ["ADMIN", "CEO", "SALES_HEAD", "CFO"],
+      },
+      {
+        href: "/ai-insights",
+        label: "AI Insights",
+        icon: Brain,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
         href: "/contacts",
@@ -113,10 +102,16 @@ const NAV_GROUPS: NavGroup[] = [
         icon: CheckSquare,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
+      {
+        href: "/dashboard/reminders",
+        label: "Reminders",
+        icon: Bell,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
     ],
   },
   {
-    label: "Comms",
+    label: "Communication",
     items: [
       {
         href: "/communications",
@@ -237,16 +232,21 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
-        href: "/settings",
-        label: "Settings",
-        icon: Settings,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
-      },
-      {
         href: "/automation",
         label: "Automation",
         icon: Zap,
         roles: ["ADMIN", "CEO"],
+      },
+    ],
+  },
+  {
+    label: "Management",
+    items: [
+      {
+        href: "/settings",
+        label: "Settings",
+        icon: Settings,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
     ],
   },
@@ -316,6 +316,17 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
+const GROUP_ICONS: Record<string, LucideIcon> = {
+  CRM: Layers,
+  Communication: Inbox,
+  Business: Briefcase,
+  Platform: Grid3X3,
+  Management: Settings,
+  "Role Dashboards": Crown,
+  "Admin Tools": Shield,
+  Navigation: Layers,
+};
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -323,9 +334,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
+  // Tracks which sidebar module groups (CRM, Comms, Business, ...) are expanded.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (label: string) =>
+    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
   const logoutTriggeredRef = useRef(false);
   const sidebarNavRef = useRef<HTMLDivElement>(null);
   const SIDEBAR_SCROLL_KEY = "sidebar-scroll-position";
+  const hasMountedSidebarRef = useRef(false);
 
   // Save sidebar scroll position when scrolling
   const handleSidebarScroll = () => {
@@ -334,12 +350,27 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   };
 
-  // Restore sidebar scroll position on mount or path change
+  // On first load, restore the last known scroll position (e.g. after a page refresh).
+  // On in-app navigation between modules, don't restore a stale pixel offset — instead
+  // just make sure the newly active link is visible, without jumping the list elsewhere.
   useEffect(() => {
-    const savedScrollTop = localStorage.getItem(SIDEBAR_SCROLL_KEY);
-    if (sidebarNavRef.current && savedScrollTop) {
-      sidebarNavRef.current.scrollTop = parseInt(savedScrollTop, 10);
+    if (!sidebarNavRef.current) return;
+
+    if (!hasMountedSidebarRef.current) {
+      hasMountedSidebarRef.current = true;
+      const savedScrollTop = localStorage.getItem(SIDEBAR_SCROLL_KEY);
+      if (savedScrollTop) {
+        sidebarNavRef.current.scrollTop = parseInt(savedScrollTop, 10);
+      }
+      return;
     }
+
+    requestAnimationFrame(() => {
+      const activeEl = sidebarNavRef.current?.querySelector<HTMLElement>(
+        '[data-active-link="true"]'
+      );
+      activeEl?.scrollIntoView({ block: "nearest" });
+    });
   }, [pathname]);
 
   const closeLogoutModal = useCallback(() => {
@@ -494,43 +525,198 @@ export function AppShell({ children }: { children: ReactNode }) {
     })).filter((group) => group.items.length > 0);
   })();
 
+  // Auto-expand whichever module group contains the currently active page,
+  // without collapsing a group the user has already opened/closed manually.
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      visibleNavGroups.forEach((group) => {
+        if (next[group.label] !== undefined) return;
+        const hasActiveItem = group.items.some(
+          (item) =>
+            pathname === item.href ||
+            (item.href !== "/dashboard" && pathname?.startsWith(item.href))
+        );
+        if (hasActiveItem) {
+          next[group.label] = true;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  const MANAGEMENT_GROUP_LABELS = new Set(["Management", "Role Dashboards", "Admin Tools"]);
+
+  const DashboardLink = () => {
+    const isActive = pathname === "/dashboard";
+    return (
+      <Link
+        href="/dashboard"
+        onClick={() => setDrawerOpen(false)}
+        className={classNames(
+          "flex items-center gap-2.5 px-2.5 py-2 mb-1 rounded-xl text-[13.5px] font-semibold transition-all duration-150 select-none",
+          isActive
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-text-secondary hover:bg-surface-hover"
+        )}
+      >
+        <span
+          className={classNames(
+            "flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors",
+            isActive
+              ? "bg-white/20 text-primary-foreground"
+              : "bg-surface border border-border text-text-secondary"
+          )}
+        >
+          <LayoutDashboard size={15} strokeWidth={2} />
+        </span>
+        <span>Dashboard</span>
+      </Link>
+    );
+  };
+
   const NavLinks = () => (
     <>
-      {visibleNavGroups.map((group) => (
-        <div key={group.label} className="space-y-2">
-          <p className="px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-text-muted">
-            {group.label}
-          </p>
-          <div className="space-y-1">
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname?.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setDrawerOpen(false)}
+      <DashboardLink />
+      {visibleNavGroups.map((group, idx) => {
+        const isOpen = openGroups[group.label] ?? false;
+        const GroupIcon = GROUP_ICONS[group.label] ?? Layers;
+        const prevGroup = visibleNavGroups[idx - 1];
+        const showManagementLabel =
+          MANAGEMENT_GROUP_LABELS.has(group.label) &&
+          (!prevGroup || !MANAGEMENT_GROUP_LABELS.has(prevGroup.label));
+
+        // Groups with just one item (e.g. "Management" → "Settings") skip the
+        // expand/collapse step entirely — the group button links straight to
+        // that single item instead of hiding it behind a dropdown.
+        const isSingleItem = group.items.length === 1;
+        const onlyItem = group.items[0];
+        const isSingleItemActive =
+          isSingleItem &&
+          (pathname === onlyItem.href ||
+            (onlyItem.href !== "/dashboard" && pathname?.startsWith(onlyItem.href)));
+
+        if (isSingleItem) {
+          return (
+            <div key={group.label} className={classNames(idx !== 0 && "mt-1")}>
+              {showManagementLabel && (
+                <p className="px-3 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-text-muted">
+                  Management
+                </p>
+              )}
+              <Link
+                href={onlyItem.href}
+                onClick={() => setDrawerOpen(false)}
+                data-active-link={isSingleItemActive ? "true" : undefined}
+                className={classNames(
+                  "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13.5px] font-semibold transition-colors select-none",
+                  isSingleItemActive
+                    ? "bg-primary/[0.07] text-primary"
+                    : "text-text-secondary hover:bg-surface-hover"
+                )}
+              >
+                <span
                   className={classNames(
-                    "flex items-center gap-3 px-3 py-[9px] rounded-lg text-[13.5px] font-medium transition-all duration-150 select-none",
-                    isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-text-secondary hover:bg-surface-hover"
+                    "flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors",
+                    isSingleItemActive
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-surface border border-border text-text-secondary"
                   )}
                 >
-                  <Icon
-                    size={17}
-                    strokeWidth={isActive ? 2 : 1.75}
-                    className={isActive ? "text-primary-foreground" : "text-text-secondary"}
-                  />
-                  <span>{item.label}</span>
-                </Link>
-              );
-            })}
+                  <GroupIcon size={15} strokeWidth={2} />
+                </span>
+                <span className="truncate">{onlyItem.label}</span>
+              </Link>
+            </div>
+          );
+        }
+
+        return (
+          <div key={group.label} className={classNames(idx !== 0 && "mt-1")}>
+            {showManagementLabel && (
+              <p className="px-3 pt-3 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.22em] text-text-muted">
+                Management
+              </p>
+            )}
+            <div
+              className={classNames(
+                "rounded-xl transition-colors duration-150",
+                isOpen && "bg-primary/[0.07]"
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.label)}
+                aria-expanded={isOpen}
+                className={classNames(
+                  "w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-[13.5px] font-semibold transition-colors select-none",
+                  isOpen
+                    ? "text-primary"
+                    : "text-text-secondary hover:bg-surface-hover"
+                )}
+              >
+                <span className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className={classNames(
+                      "flex items-center justify-center w-7 h-7 rounded-lg shrink-0 transition-colors",
+                      isOpen
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-surface border border-border text-text-secondary"
+                    )}
+                  >
+                    <GroupIcon size={15} strokeWidth={2} />
+                  </span>
+                  <span className="truncate">{group.label}</span>
+                </span>
+                <ChevronDown
+                  size={15}
+                  className={classNames(
+                    "transition-transform duration-200 shrink-0",
+                    isOpen ? "rotate-180 text-primary" : "text-text-muted rotate-0"
+                  )}
+                />
+              </button>
+              {isOpen && (
+                <div className="mt-1 mb-1.5 mx-1 p-1.5 rounded-xl bg-surface border border-border shadow-lg shadow-black/[0.06] space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive =
+                      pathname === item.href ||
+                      (item.href !== "/dashboard" && pathname?.startsWith(item.href));
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setDrawerOpen(false)}
+                        data-active-link={isActive ? "true" : undefined}
+                        className={classNames(
+                          "flex items-center gap-2.5 px-2.5 py-[7px] rounded-lg text-[13px] font-medium transition-all duration-150 select-none relative",
+                          isActive
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-text-secondary hover:bg-surface-hover"
+                        )}
+                      >
+                        <Icon
+                          size={15.5}
+                          strokeWidth={isActive ? 2 : 1.75}
+                          className={classNames(
+                            "shrink-0",
+                            isActive ? "text-primary-foreground" : "text-text-muted"
+                          )}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </>
   );
 
@@ -590,20 +776,23 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const LogoMark = ({ small = false }: { small?: boolean }) => (
     <div className="flex items-center gap-2.5">
-      <div
+      <img
+        src="/logo.jpeg"
+        alt="Zyoris"
         className={classNames(
-          "bg-primary rounded-lg flex items-center justify-center shrink-0",
+          "object-contain rounded-lg shrink-0",
           small ? "w-6 h-6" : "w-8 h-8"
         )}
-      >
-        <Layers className={small ? "w-3.5 h-3.5 text-white" : "w-5 h-5 text-white"} strokeWidth={2.5} />
-      </div>
+      />
       <span
         className={classNames(
-          "font-extrabold tracking-tight",
-          small ? "text-base" : "text-[1.25rem]"
+          "font-bold uppercase tracking-wider",
+          small ? "text-sm" : "text-lg"
         )}
-        style={{ color: "var(--color-text)" }}
+        style={{
+          fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif',
+          color: "var(--color-primary)",
+        }}
       >
         zyoris
       </span>

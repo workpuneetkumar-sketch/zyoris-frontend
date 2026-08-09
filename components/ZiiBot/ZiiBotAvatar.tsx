@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 
-const GREETING = "Hi 👋 I'm ZII BOT. Want to see how we can increase your revenue?";
+const GREETING = "Hi 👋 I'm ZY BOT. Want to see how we can increase your revenue?";
 
 interface ZiiBotAvatarProps {
   isIdle?: boolean;

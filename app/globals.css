@@ -1093,3 +1093,12 @@ a {
   width: 100vw !important;
   height: 100vh !important;
 }
+
+/* Hide scrollbar (used as a safety net for the single-line auth footer) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

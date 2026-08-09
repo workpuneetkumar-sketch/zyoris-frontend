@@ -18,6 +18,11 @@ export const metadata: Metadata = {
   keywords: ["Business Intelligence", "CRM", "Autonomous AI", "Analytics", "Enterprise Software", "Zyoris", "Dashboard", "Management", "SaaS", "B2B"],
   authors: [{ name: "Zyoris Team" }],
   robots: { index: true, follow: true },
+  icons: {
+    icon: "/logo.jpeg",
+    shortcut: "/logo.jpeg",
+    apple: "/logo.jpeg",
+  },
   openGraph: {
     title: "Zyoris - Central Intelligence Layer",
     description: "Advanced Autonomous Business Intelligence Platform for modern enterprises. Streamline operations and enhance CRM with AI.",
