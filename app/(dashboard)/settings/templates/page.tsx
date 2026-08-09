@@ -13,24 +13,10 @@ interface Template {
     body: string;
 }
 
-const mockTemplates: Template[] = [
-    {
-        id: "1",
-        type: "email",
-        name: "Welcome Email",
-        subject: "Welcome to our platform, {{name}}!",
-        body: "Hi {{name}},\n\nWe are excited to have you on board. Your company, {{company}}, is now setup.\n\nBest,\nTeam"
-    },
-    {
-        id: "2",
-        type: "whatsapp",
-        name: "Meeting Reminder",
-        body: "Hi {{name}}, just a reminder about our meeting tomorrow. Reply to {{email}} if you need to reschedule."
-    }
-];
+const mockTemplates: Template[] = [];
 
 export default function TemplatesPage() {
-    const [templates, setTemplates] = useState<Template[]>(mockTemplates);
+    const [templates, setTemplates] = useState<Template[]>([]);
     const [filter, setFilter] = useState<TemplateType | "all">("all");
     const [isEditing, setIsEditing] = useState(false);
     const [currentTemplate, setCurrentTemplate] = useState<Partial<Template>>({});

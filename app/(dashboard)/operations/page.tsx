@@ -34,36 +34,7 @@ interface OpsResponse {
   optimizationSuggestions?: string[];
 }
 
-function isOperationsDataEmpty(data: OpsResponse | null | undefined): boolean {
-  if (!data) return true;
-  const hasAlerts = (data.inventoryRiskAlerts?.length ?? 0) > 0;
-  const hasSuggestions = (data.optimizationSuggestions?.length ?? 0) > 0;
-  return !hasAlerts && !hasSuggestions;
-}
 
-const OPERATIONS_MOCK_DATA: OpsResponse = {
-  demandForecast: "increasing",
-  inventoryRiskAlerts: [
-    { sku: "SKU-1042", name: "Industrial Valve Assembly", quantity: 42, safetyStock: 80, coverageRatio: 0.53, risk: "HIGH" },
-    { sku: "SKU-2087", name: "Precision Bearing Kit", quantity: 156, safetyStock: 120, coverageRatio: 1.30, risk: "LOW" },
-    { sku: "SKU-3156", name: "Hydraulic Pump Module", quantity: 28, safetyStock: 50, coverageRatio: 0.56, risk: "HIGH" },
-    { sku: "SKU-4021", name: "Control Panel Enclosure", quantity: 67, safetyStock: 60, coverageRatio: 1.12, risk: "MEDIUM" },
-    { sku: "SKU-5093", name: "Servo Motor 2.4kW", quantity: 19, safetyStock: 35, coverageRatio: 0.54, risk: "HIGH" },
-  ],
-  optimizationSuggestions: [
-    "Reallocate 20% production capacity from SKU-2087 to SKU-1042 to reduce stockout risk.",
-    "Trigger expedited PO for hydraulic pump modules — lead time exceeds coverage window.",
-    "Bundle slow-moving enclosures with high-velocity valve assemblies to accelerate turnover.",
-  ],
-};
-
-function DemoDataBadge() {
-  return (
-    <span className="px-2 py-0.5 text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-md">
-      Demo Data
-    </span>
-  );
-}
 
 function riskBadgeClasses(risk: InventoryRisk["risk"]) {
   switch (risk) {
@@ -148,7 +119,6 @@ export default function OperationsDashboardPage() {
   const [ops, setOps] = useState<OpsResponse | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [demandTrendLabel, setDemandTrendLabel] = useState<string | null>(null);
-  const [dataLoaded, setDataLoaded] = useState(false);
 
   useEffect(() => {
     if (!user) {
@@ -178,20 +148,15 @@ export default function OperationsDashboardPage() {
         }
       } catch {
         // ignore
-      } finally {
-        setDataLoaded(true);
       }
     }
     load();
   }, []);
 
-  const usingDemoData = dataLoaded && isOperationsDataEmpty(ops);
-  
-  const finalOps = useMemo(() => {
-    return usingDemoData
-      ? OPERATIONS_MOCK_DATA
-      : (ops ?? { demandForecast: "stable", inventoryRiskAlerts: [], optimizationSuggestions: [] });
-  }, [usingDemoData, ops]);
+  const finalOps = useMemo(
+    () => ops ?? { demandForecast: "stable", inventoryRiskAlerts: [] as InventoryRisk[], optimizationSuggestions: [] as string[] },
+    [ops]
+  );
 
   const { alerts, suggestions, hasRiskLevels } = useMemo(() => {
     const a = finalOps.inventoryRiskAlerts ?? [];
@@ -222,7 +187,6 @@ export default function OperationsDashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
               Operations · Demand &amp; Inventory
             </h1>
-            {usingDemoData && <DemoDataBadge />}
           </div>
           <p className="text-sm text-gray-500 mt-1">
             Align production, inventory, and demand using unified telemetry.

@@ -13,15 +13,6 @@ import {
     DriverResponse,
     Recommendation,
 } from "../lib/api/analyticsApi";
-import {
-    DEMO_FORECAST_7D,
-    DEMO_FORECAST_30D,
-    DEMO_FORECAST_90D,
-    DEMO_FORECAST_1Y,
-    DEMO_DEMAND,
-    DEMO_SEGMENTS,
-    DEMO_DRIVERS,
-} from "../constants/analytics.constants";
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -50,36 +41,7 @@ interface AnalyticsState {
 }
 
 // ─────────────────────────────────────────────────────────
-// Helpers to check if data is empty/zero
-// ─────────────────────────────────────────────────────────
-
-function isForecastEmpty(f: Forecast | null): boolean {
-    if (!f || !f.datapoints || f.datapoints.length === 0) return true;
-    const allZero = f.datapoints.every(d =>
-        d.forecast === 0 && d.upper === 0 && d.lower === 0
-    );
-    return allZero;
-}
-
-function isDemandEmpty(d: Demand | null): boolean {
-    if (!d || !d.months || d.months.length === 0) return true;
-    const allZero = d.demand.every(v => v === 0) && d.inventory.every(v => v === 0);
-    return allZero;
-}
-
-function isSegmentsEmpty(s: Segment[] | null): boolean {
-    return !s || s.length === 0;
-}
-
-function isDriversEmpty(d: DriverResponse | null): boolean {
-    if (!d || !d.totals || !d.channels) return true;
-    if (d.channels.length === 0) return true;
-    const totals = d.totals;
-    return totals.totalRevenue === 0 && totals.totalMarketing === 0 && totals.totalExpenses === 0;
-}
-
-// ─────────────────────────────────────────────────────────
-// Derive KPI (only from conversion scores)
+// Derive KPI (only from real conversion scores)
 // ─────────────────────────────────────────────────────────
 
 function deriveKPI(conversion: Conversion[] | null): KPI {
@@ -87,10 +49,9 @@ function deriveKPI(conversion: Conversion[] | null): KPI {
     let highProbDeals: number | "—" = "—";
 
     if (conversion && conversion.length > 0) {
-        const sum = conversion.reduce((sum, c) => sum + c.conversionProbability, 0);
+        const sum = conversion.reduce((acc, c) => acc + c.conversionProbability, 0);
         avgScore = Math.round((sum / conversion.length) * 100);
         if (isNaN(avgScore) || !isFinite(avgScore)) avgScore = "—";
-
         highProbDeals = conversion.filter(c => c.conversionProbability >= 0.7).length;
     }
 
@@ -153,13 +114,13 @@ export function useAnalytics() {
         try {
             const data = await fetchAllAnalytics();
             const kpi = deriveKPI(data.conversion);
-            setState({
+            setState(prev => ({
                 loading: false,
                 error: null,
-                dateRange: state.dateRange,
+                dateRange: prev.dateRange,
                 realData: data,
                 kpi,
-            });
+            }));
         } catch (err: any) {
             setState(prev => ({
                 ...prev,
@@ -167,7 +128,7 @@ export function useAnalytics() {
                 error: err.message ?? "Unknown error",
             }));
         }
-    }, [state.dateRange]);
+    }, []);
 
     useEffect(() => {
         load();
@@ -177,78 +138,23 @@ export function useAnalytics() {
         setState(prev => ({ ...prev, dateRange: range }));
     }, []);
 
-    // Get demo data based on date range
-    const getDemoForecast = (range: DateRange) => {
-        switch (range) {
-            case "7D": return DEMO_FORECAST_7D;
-            case "30D": return DEMO_FORECAST_30D;
-            case "1Y": return DEMO_FORECAST_1Y;
-            case "90D":
-            default: return DEMO_FORECAST_90D;
-        }
-    };
-
-    // Compute filtered/demo data based on date range
-    const {
-        filteredForecast,
-        isForecastDemo,
-        filteredDemand,
-        isDemandDemo,
-        filteredSegments,
-        isSegmentsDemo,
-        filteredDrivers,
-        isDriversDemo,
-    } = useMemo(() => {
-        let f = state.realData.forecast;
-        const isFDemo = isForecastEmpty(f);
-        let filteredF = f ? filterForecastByDateRange(f, state.dateRange) : null;
-        if (isFDemo) {
-            filteredF = getDemoForecast(state.dateRange);
-        }
-
-        let d = state.realData.demand;
-        const isDDemo = isDemandEmpty(d);
-        let filteredD = d;
-        if (isDDemo) {
-            filteredD = DEMO_DEMAND;
-        }
-
-        let s = state.realData.segments;
-        const isSDemo = isSegmentsEmpty(s);
-        let filteredS = s;
-        if (isSDemo) {
-            filteredS = DEMO_SEGMENTS;
-        }
-
-        let dr = state.realData.drivers;
-        const isDrDemo = isDriversEmpty(dr);
-        let filteredDr = dr;
-        if (isDrDemo) {
-            filteredDr = DEMO_DRIVERS;
-        }
-
-        return {
-            filteredForecast: filteredF,
-            isForecastDemo: isFDemo,
-            filteredDemand: filteredD,
-            isDemandDemo: isDDemo,
-            filteredSegments: filteredS,
-            isSegmentsDemo: isSDemo,
-            filteredDrivers: filteredDr,
-            isDriversDemo: isDrDemo,
-        };
-    }, [state.realData, state.dateRange]);
+    // Filter real forecast by selected date range (no demo fallback)
+    const filteredForecast = useMemo(() => {
+        const f = state.realData.forecast;
+        if (!f) return null;
+        return filterForecastByDateRange(f, state.dateRange);
+    }, [state.realData.forecast, state.dateRange]);
 
     return {
         ...state,
         forecast: filteredForecast,
-        isForecastDemo,
-        demand: filteredDemand,
-        isDemandDemo,
-        segments: filteredSegments,
-        isSegmentsDemo,
-        drivers: filteredDrivers,
-        isDriversDemo,
+        isForecastDemo: false,
+        demand: state.realData.demand,
+        isDemandDemo: false,
+        segments: state.realData.segments,
+        isSegmentsDemo: false,
+        drivers: state.realData.drivers,
+        isDriversDemo: false,
         conversion: state.realData.conversion,
         recommendations: state.realData.recommendations,
         refetch: load,
