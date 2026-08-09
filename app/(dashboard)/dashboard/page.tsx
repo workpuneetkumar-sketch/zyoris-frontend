@@ -69,14 +69,14 @@ function BriefCard({ icon: Icon, label, text }: {
   icon: LucideIcon; label: string; text: string;
 }) {
   return (
-    <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-4 hover:bg-blue-50 hover:border-blue-200 transition-all duration-200 group">
+    <div className="bg-black border border-gray-800 rounded-xl p-4 hover:bg-gray-900 hover:border-gray-700 transition-all duration-200 group">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold text-blue-500 uppercase tracking-widest">{label}</p>
-          <p className="mt-1.5 text-xs font-medium text-gray-700 leading-relaxed line-clamp-3">{text}</p>
+          <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">{label}</p>
+          <p className="mt-1.5 text-xs font-medium text-white leading-relaxed line-clamp-3">{text}</p>
         </div>
-        <div className="p-1.5 rounded-lg bg-blue-100 border border-blue-200 group-hover:scale-110 transition-transform duration-200 shrink-0">
-          <Icon size={13} className="text-blue-600" />
+        <div className="p-1.5 rounded-lg bg-gray-800 border border-gray-700 group-hover:scale-110 transition-transform duration-200 shrink-0">
+          <Icon size={13} className="text-blue-400" />
         </div>
       </div>
     </div>
@@ -172,8 +172,8 @@ export default function DashboardPage() {
             onClick={() => setShowWeeklyBriefing((v) => !v)}
             className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
               showWeeklyBriefing
-                ? "bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200"
-                : "bg-white hover:bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm"
+                ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-200"
+                : "bg-white hover:bg-blue-50 text-blue-700 border-blue-200 shadow-sm"
             }`}
           >
             <CalendarDays size={14} />
@@ -182,7 +182,7 @@ export default function DashboardPage() {
             {/* Toggle pill */}
             <span
               className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                showWeeklyBriefing ? "bg-indigo-400" : "bg-gray-300"
+                showWeeklyBriefing ? "bg-blue-400" : "bg-gray-300"
               }`}
             >
               <span
