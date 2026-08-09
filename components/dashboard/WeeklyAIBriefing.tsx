@@ -23,15 +23,15 @@ interface StatCardProps {
 
 function StatCard({ icon: Icon, label, value, color }: StatCardProps) {
   const colorMap = {
-    blue:    { bg: "bg-gray-900",    border: "border-gray-700",    text: "text-blue-400"    },
-    emerald: { bg: "bg-gray-900", border: "border-gray-700", text: "text-emerald-400" },
-    violet:  { bg: "bg-gray-900",  border: "border-gray-700",  text: "text-blue-400"  },
-    amber:   { bg: "bg-gray-900",   border: "border-gray-700",   text: "text-amber-400"   },
+    blue:    { bg: "bg-blue-50",    border: "border-blue-100",    text: "text-blue-600"    },
+    emerald: { bg: "bg-emerald-50", border: "border-emerald-100", text: "text-emerald-600" },
+    violet:  { bg: "bg-violet-50",  border: "border-violet-100",  text: "text-violet-600"  },
+    amber:   { bg: "bg-amber-50",   border: "border-amber-100",   text: "text-amber-600"   },
   }[color];
 
   return (
     <div className={`flex items-center gap-3 p-3 rounded-xl border ${colorMap.bg} ${colorMap.border}`}>
-      <div className={`p-2 rounded-lg bg-gray-800 border ${colorMap.border} shrink-0`}>
+      <div className={`p-2 rounded-lg bg-white border ${colorMap.border} shrink-0`}>
         <Icon size={15} className={colorMap.text} />
       </div>
       <div className="min-w-0">
@@ -65,21 +65,21 @@ export function WeeklyAIBriefing() {
   }, [load]);
 
   return (
-    <div className="bg-black rounded-2xl border border-gray-800 shadow-sm overflow-hidden">
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-800 bg-gray-950">
+      <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-blue-50/60">
         <div className="flex items-center gap-2.5">
-          <div className="p-1.5 bg-gray-800 rounded-lg shrink-0">
-            <CalendarDays size={15} className="text-blue-400" />
+          <div className="p-1.5 bg-white border border-blue-100 rounded-lg shrink-0">
+            <CalendarDays size={15} className="text-blue-600" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <p className="text-sm font-bold text-white">Weekly AI Briefing</p>
-              <span className="text-[10px] font-bold text-blue-400 bg-gray-800 border border-gray-700 px-1.5 py-0.5 rounded-full">
+              <p className="text-sm font-bold text-gray-900">Weekly AI Briefing</p>
+              <span className="text-[10px] font-bold text-blue-600 bg-white border border-blue-200 px-1.5 py-0.5 rounded-full">
                 7-Day Rollup
               </span>
               {data?.fallback && (
-                <span className="text-[10px] font-bold text-amber-400 bg-gray-800 border border-gray-700 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
                   Fallback
                 </span>
               )}
@@ -92,7 +92,7 @@ export function WeeklyAIBriefing() {
         <button
           onClick={load}
           disabled={loading}
-          className="p-1.5 text-gray-500 hover:text-blue-400 hover:bg-gray-800 rounded-lg transition-colors disabled:opacity-50"
+          className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
           title="Refresh weekly briefing"
         >
           <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
@@ -105,10 +105,10 @@ export function WeeklyAIBriefing() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="h-16 animate-pulse bg-gray-800 rounded-xl" />
+                <div key={i} className="h-16 animate-pulse bg-gray-100 rounded-xl" />
               ))}
             </div>
-            <div className="h-24 animate-pulse bg-gray-800 rounded-xl" />
+            <div className="h-24 animate-pulse bg-gray-100 rounded-xl" />
           </div>
         ) : error ? (
           <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-red-50 border border-red-100">
@@ -157,10 +157,10 @@ export function WeeklyAIBriefing() {
                 {data.highlights.map((bullet, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start gap-3 p-3.5 rounded-xl bg-gray-900 border border-gray-700 hover:bg-gray-800 transition-colors"
+                    className="flex items-start gap-3 p-3.5 rounded-xl bg-gray-50 border border-gray-100 hover:bg-blue-50 transition-colors"
                   >
-                    <CheckCircle2 size={15} className="text-blue-400 shrink-0 mt-0.5" />
-                    <p className="text-xs font-medium text-white leading-relaxed">{bullet}</p>
+                    <CheckCircle2 size={15} className="text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-xs font-medium text-gray-700 leading-relaxed">{bullet}</p>
                   </div>
                 ))}
               </div>
@@ -175,10 +175,10 @@ export function WeeklyAIBriefing() {
                 {data.keyInsights.map((insight, idx) => (
                   <div
                     key={idx}
-                    className="flex items-start gap-3 p-3.5 rounded-xl bg-gray-900 border border-gray-700 hover:bg-gray-800 transition-colors"
+                    className="flex items-start gap-3 p-3.5 rounded-xl bg-gray-50 border border-gray-100 hover:bg-blue-50 transition-colors"
                   >
-                    <Sparkles size={14} className="text-blue-400 shrink-0 mt-0.5" />
-                    <p className="text-xs font-medium text-white leading-relaxed">{insight}</p>
+                    <Sparkles size={14} className="text-blue-600 shrink-0 mt-0.5" />
+                    <p className="text-xs font-medium text-gray-700 leading-relaxed">{insight}</p>
                   </div>
                 ))}
               </div>

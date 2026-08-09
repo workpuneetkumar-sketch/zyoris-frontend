@@ -69,14 +69,14 @@ function BriefCard({ icon: Icon, label, text }: {
   icon: LucideIcon; label: string; text: string;
 }) {
   return (
-    <div className="bg-black border border-gray-800 rounded-xl p-4 hover:bg-gray-900 hover:border-gray-700 transition-all duration-200 group">
+    <div className="bg-white border border-gray-100 rounded-xl p-4 hover:bg-blue-50 hover:border-blue-100 transition-all duration-200 group">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">{label}</p>
-          <p className="mt-1.5 text-xs font-medium text-white leading-relaxed line-clamp-3">{text}</p>
+          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-widest">{label}</p>
+          <p className="mt-1.5 text-xs font-medium text-gray-700 leading-relaxed line-clamp-3">{text}</p>
         </div>
-        <div className="p-1.5 rounded-lg bg-gray-800 border border-gray-700 group-hover:scale-110 transition-transform duration-200 shrink-0">
-          <Icon size={13} className="text-blue-400" />
+        <div className="p-1.5 rounded-lg bg-blue-50 border border-blue-100 group-hover:scale-110 transition-transform duration-200 shrink-0">
+          <Icon size={13} className="text-blue-600" />
         </div>
       </div>
     </div>
