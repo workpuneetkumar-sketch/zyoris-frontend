@@ -464,58 +464,195 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Use dynamic RBAC sidebar when available; fall back to static role-based filtering
   const visibleNavGroups = (() => {
     if (sidebarItems && sidebarItems.length > 0) {
-      // Group dynamic sidebar items by their key prefix (before the first dot or slash)
-      // For now, render them as a single "Navigation" group
+
+      // ── Icon map (key/route slug → Lucide component) ──────────────────
       const iconMap: Record<string, LucideIcon> = {
-        dashboard: LayoutDashboard,
-        reminders: Bell,
-        leads: Users,
-        deals: Briefcase,
+        dashboard: LayoutDashboard, "layout-dashboard": LayoutDashboard,
+        reminders: Bell, bell: Bell,
+        leads: Users, users: Users,
+        deals: Briefcase, briefcase: Briefcase,
         contacts: Users,
         companies: Building2,
-        communications: Inbox,
-        activities: CheckSquare,
-        email: Mail,
-        whatsapp: MessageSquare,
-        calls: Phone,
-        tasks: ListTodo,
-        calendar: Calendar,
-        messages: MessageSquare,
-        meetings: Video,
-        hr: UsersRound,
-        finance: DollarSign,
-        marketing: Megaphone,
-        projects: Folder,
-        documents: FileText,
-        "knowledge-base": BookOpen,
-        notes: StickyNote,
-        analytics: BarChart2,
-        reports: FileText,
+        "ai-insights": Brain, brain: Brain,
+        activities: CheckSquare, "check-square": CheckSquare,
+        communications: Inbox, inbox: Inbox,
+        email: Mail, mail: Mail,
+        whatsapp: MessageSquare, "message-square": MessageSquare, messages: MessageSquare,
+        calls: Phone, phone: Phone,
+        tasks: ListTodo, "list-todo": ListTodo,
+        calendar: Calendar, "calendar-check": Calendar, "calendar-x": Calendar,
+        meetings: Video, video: Video,
+        hr: UsersRound, "users-round": UsersRound, employees: UsersRound,
+        attendance: Calendar, leaves: Calendar, payslips: FileText, shifts: Calendar,
+        finance: DollarSign, "dollar-sign": DollarSign, "wallet": DollarSign,
+        invoices: CreditCard, "credit-card": CreditCard, expenses: DollarSign, payment: CreditCard,
+        marketing: Megaphone, megaphone: Megaphone, campaigns: Megaphone,
+        projects: Folder, "folder-kanban": Folder, folder: Folder,
+        documents: FileText, "file-text": FileText,
+        "knowledge-base": BookOpen, knowledge: BookOpen, "book-open": BookOpen,
+        notes: StickyNote, "sticky-note": StickyNote,
+        analytics: BarChart2, "bar-chart-2": BarChart2, "bar-chart-3": BarChart2, "line-chart": TrendingUp,
+        reports: FileText, "file-search": FileSearch,
         settings: Settings,
-        automation: Zap,
-        ceo: Crown,
+        automation: Zap, bot: Zap, zap: Zap,
+        ceo: Crown, crown: Crown,
         cfo: DollarSign,
-        sales: TrendingUp,
-        operations: Cog,
-        admin: Shield,
-        roles: KeyRound,
-        "user-roles": UserCog,
+        sales: TrendingUp, "trending-up": TrendingUp,
+        operations: Cog, cog: Cog,
+        admin: Shield, shield: Shield,
+        roles: KeyRound, "key-round": KeyRound,
+        "permission-matrix": Grid3X3,
+        "user-roles": UserCog, "user-cog": UserCog,
         audit: FileSearch,
+        crm: Layers,
+        notifications: Bell,
       };
-      const dynamicItems = sidebarItems
-        .filter((item) => item.visible)
-        .map((item) => {
-          const keySlug = item.key?.toLowerCase().replace(/[^a-z0-9-]/g, "-");
-          return {
-            href: item.route,
-            label: item.label,
-            icon: iconMap[keySlug] ?? iconMap[item.route?.split("/").pop() ?? ""] ?? Settings,
-          };
+
+      // ── Route normalization: API route → real Next.js page route ──────
+      // The permissions API may return aggregate routes like /crm that don't
+      // exist as Next.js pages. Map them to real pages.
+      const ROUTE_NORMALIZE: Record<string, string> = {
+        "/crm": "/leads",
+        "/hr/employees": "/hr/employees",
+        "/hr/attendance": "/hr/attendance",
+        "/hr/leaves": "/hr/leaves",
+        "/finance/invoices": "/payment/invoices",
+        "/finance/expenses": "/finance/expenses",
+      };
+
+      // ── Key → expanded items (when a single API key represents a whole module) ──
+      // If the API returns key:"crm" it means the user can access the CRM module.
+      // We expand this into the real CRM sub-pages based on what permissions exist.
+      const KEY_EXPANSION: Record<string, { href: string; label: string; iconKey: string }[]> = {
+        crm: [
+          { href: "/leads",      label: "Leads",      iconKey: "leads"      },
+          { href: "/deals",      label: "Deals",      iconKey: "deals"      },
+          { href: "/contacts",   label: "Contacts",   iconKey: "contacts"   },
+          { href: "/companies",  label: "Companies",  iconKey: "companies"  },
+          { href: "/activities", label: "Activities", iconKey: "activities" },
+          { href: "/ai-insights",label: "AI Insights",iconKey: "ai-insights"},
+        ],
+        communication: [
+          { href: "/communications", label: "Communication Hub", iconKey: "communications" },
+          { href: "/email",          label: "Email",             iconKey: "email"      },
+          { href: "/whatsapp",       label: "WhatsApp",          iconKey: "whatsapp"   },
+          { href: "/calls",          label: "Calls",             iconKey: "calls"      },
+          { href: "/messages",       label: "Messages",          iconKey: "messages"   },
+          { href: "/meetings",       label: "Meetings",          iconKey: "meetings"   },
+        ],
+      };
+
+      // ── Group buckets (key/route → category label) ────────────────────
+      const KEY_TO_GROUP: Record<string, string> = {
+        // CRM
+        leads: "CRM", deals: "CRM", "ai-insights": "CRM",
+        contacts: "CRM", companies: "CRM", activities: "CRM",
+        reminders: "CRM", crm: "CRM",
+        // Communication
+        communications: "Communication", communication: "Communication",
+        email: "Communication", whatsapp: "Communication", calls: "Communication",
+        tasks: "Communication", calendar: "Communication",
+        messages: "Communication", meetings: "Communication",
+        // Business
+        hr: "Business", employees: "Business", attendance: "Business",
+        leaves: "Business", payslips: "Business", shifts: "Business",
+        finance: "Business", invoices: "Business", expenses: "Business",
+        payment: "Business", marketing: "Business", campaigns: "Business",
+        projects: "Business", documents: "Business",
+        "knowledge-base": "Business", knowledge: "Business", notes: "Business",
+        // Platform
+        analytics: "Platform", reports: "Platform", automation: "Platform",
+        // Management
+        settings: "Management",
+        // Role Dashboards
+        ceo: "Role Dashboards", cfo: "Role Dashboards",
+        sales: "Role Dashboards", operations: "Role Dashboards", admin: "Role Dashboards",
+        // Admin Tools
+        roles: "Admin Tools", "permission-matrix": "Admin Tools",
+        "user-roles": "Admin Tools", audit: "Admin Tools",
+      };
+
+      const ROUTE_TO_GROUP: Record<string, string> = {
+        "/leads": "CRM", "/deals": "CRM", "/ai-insights": "CRM",
+        "/contacts": "CRM", "/companies": "CRM", "/activities": "CRM",
+        "/dashboard/reminders": "CRM", "/crm": "CRM",
+        "/communications": "Communication", "/email": "Communication",
+        "/whatsapp": "Communication", "/calls": "Communication",
+        "/tasks": "Communication", "/calendar": "Communication",
+        "/messages": "Communication", "/meetings": "Communication",
+        "/hr": "Business", "/hr/employees": "Business", "/hr/attendance": "Business",
+        "/hr/leaves": "Business", "/hr/payroll": "Business",
+        "/finance": "Business", "/finance/expenses": "Business",
+        "/payment": "Business", "/payment/invoices": "Business",
+        "/marketing": "Business", "/projects": "Business",
+        "/documents": "Business", "/knowledge-base": "Business", "/notes": "Business",
+        "/analytics": "Platform", "/reports": "Platform", "/automation": "Platform",
+        "/settings": "Management",
+        "/ceo": "Role Dashboards", "/cfo": "Role Dashboards",
+        "/sales": "Role Dashboards", "/operations": "Role Dashboards", "/admin": "Role Dashboards",
+        "/admin/roles": "Admin Tools", "/admin/permission-matrix": "Admin Tools",
+        "/admin/user-roles": "Admin Tools", "/admin/audit": "Admin Tools",
+      };
+
+      const GROUP_ORDER = [
+        "CRM", "Communication", "Business", "Platform",
+        "Management", "Role Dashboards", "Admin Tools",
+      ];
+
+      const getIcon = (iconKey: string, item?: (typeof sidebarItems)[number]): LucideIcon => {
+        const apiIconSlug = (item?.icon ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "-");
+        return iconMap[apiIconSlug] ?? iconMap[iconKey] ?? Settings;
+      };
+
+      // ── Process each sidebar item ─────────────────────────────────────
+      const itemsByGroup: Record<string, { href: string; label: string; icon: LucideIcon }[]> = {};
+
+      const addItem = (groupLabel: string, href: string, label: string, icon: LucideIcon) => {
+        if (!itemsByGroup[groupLabel]) itemsByGroup[groupLabel] = [];
+        if (!itemsByGroup[groupLabel].some((x) => x.href === href)) {
+          itemsByGroup[groupLabel].push({ href, label, icon });
+        }
+      };
+
+      sidebarItems
+        .filter((item) => item.visible !== false)
+        .forEach((item) => {
+          const keySlug = (item.key ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "-");
+          const rawRoute = item.route ?? "";
+
+          // Skip the bare /dashboard — it's always rendered by DashboardLink above
+          if (keySlug === "dashboard" || rawRoute === "/dashboard") return;
+
+          // If this key expands into multiple sub-pages, expand it
+          if (KEY_EXPANSION[keySlug]) {
+            const groupLabel = KEY_TO_GROUP[keySlug] ?? "Platform";
+            KEY_EXPANSION[keySlug].forEach((sub) => {
+              addItem(groupLabel, sub.href, sub.label, getIcon(sub.iconKey));
+            });
+            return;
+          }
+
+          // Normalize route if needed (e.g. /crm already handled above, but others)
+          const href = ROUTE_NORMALIZE[rawRoute] ?? rawRoute;
+
+          // Find group
+          const groupLabel =
+            KEY_TO_GROUP[keySlug] ??
+            ROUTE_TO_GROUP[href] ??
+            ROUTE_TO_GROUP[rawRoute] ??
+            "Platform";
+
+          addItem(groupLabel, href, item.label, getIcon(keySlug, item));
         });
-      if (dynamicItems.length > 0) {
-        return [{ label: "Navigation", items: dynamicItems }];
-      }
+
+      // ── Build groups in display order ─────────────────────────────────
+      const groups = GROUP_ORDER
+        .filter((label) => itemsByGroup[label]?.length)
+        .map((label) => ({ label, items: itemsByGroup[label] }));
+
+      if (groups.length > 0) return groups;
     }
+
     // Fallback: static role-based filtering
     return NAV_GROUPS.map((group) => ({
       ...group,

@@ -119,7 +119,7 @@ export default function LeadsPage() {
     } else if (activeTab === "assignment-rules") {
       void rulesHook.refresh();
     }
-  }, [activeTab]);
+  }, [activeTab, analyticsHook, historyHook, rulesHook]);
 
   const displayLeads = usingAdvanced ? serverLeads : leads;
   const displayTotal = usingAdvanced ? serverTotal : total;

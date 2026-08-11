@@ -3,14 +3,10 @@
 import { AppShell } from "@/components/Shell";
 import { isPathAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { attachAudioUnlock } from "@/lib/notificationSound";
 
-// Helper: check if localStorage has a token (runs client-side only).
-// This is used to suppress the redirect-to-login while AuthContext is
-// still initialising on a hard refresh — if a token exists in storage,
-// we know the user was logged in and should wait for restore to complete.
 function hasStoredToken(): boolean {
   if (typeof window === "undefined") return false;
   try {
@@ -24,40 +20,56 @@ function hasStoredToken(): boolean {
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, isInitializing, permissionsLoaded, sidebarItems, visibleDashboards } = useAuth();
+  const {
+    user,
+    isAuthenticated,
+    isInitializing,
+    permissionsLoaded,
+    sidebarItems,
+    visibleDashboards,
+  } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
-  // Attach audio unlock listeners early to comply with browser autoplay policies
   useEffect(() => {
     attachAudioUnlock();
   }, []);
 
-  // Only redirect to /login when:
-  //   1. AuthContext has finished initializing (isInitializing = false), AND
-  //   2. The user is genuinely not authenticated, AND
-  //   3. There is no stored token in localStorage (i.e. not a hard-refresh race)
+  // Redirect to login only when definitively unauthenticated
   useEffect(() => {
     if (isInitializing) return;
     if (isAuthenticated) return;
-    // Double-check: if there's still a token in storage, don't redirect yet —
-    // the background validation may still be in flight.
-    if (hasStoredToken()) return;
+    if (hasStoredToken()) return; // still restoring — wait
     router.replace("/login");
   }, [isAuthenticated, isInitializing, router]);
 
-  // Route access guard — only runs after full auth + permissions are loaded
+  // Route access guard — runs only after permissions are fully loaded
+  // Uses the RBAC sidebar from the API as single source of truth
   useEffect(() => {
+    // Wait until everything is ready
     if (isInitializing || !permissionsLoaded || !isAuthenticated || !user) return;
 
-    const allowed = isPathAllowed(window.location.pathname, sidebarItems, visibleDashboards);
+    // If sidebar is empty the API hasn't returned yet — don't block
+    if (!sidebarItems || sidebarItems.length === 0) return;
+
+    const allowed = isPathAllowed(pathname ?? window.location.pathname, sidebarItems, visibleDashboards);
 
     if (!allowed) {
-      const fallback = visibleDashboards.find((d) => d.visible)?.route || "/dashboard";
-      router.replace(fallback);
+      // Redirect to /dashboard (universally allowed) instead of trying to
+      // infer a fallback from visibleDashboards which may also be empty
+      router.replace("/dashboard");
     }
-  }, [isInitializing, permissionsLoaded, isAuthenticated, router, user, sidebarItems, visibleDashboards]);
+  }, [
+    isInitializing,
+    permissionsLoaded,
+    isAuthenticated,
+    user,
+    sidebarItems,
+    visibleDashboards,
+    pathname,
+    router,
+  ]);
 
-  // Show spinner while restoring session
   if (isInitializing) {
     return (
       <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
