@@ -22,6 +22,8 @@ export interface LeadsFilters {
     source: string;
     owner: string;
     search: string;
+    dateFrom?: string;
+    dateTo?: string;
 }
 
 export interface LeadsResponse {
@@ -36,7 +38,7 @@ export const DEFAULT_FILTERS: LeadsFilters = {
     search: "",
 };
 
-export const PER_PAGE = 8;
+export const PER_PAGE = 10;
 
 // ── Lead score computation ─────────────────────────────────────────────────
 // Client-side score (0-100) used when backend returns 0/null.

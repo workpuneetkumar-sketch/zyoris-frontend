@@ -114,6 +114,14 @@ async function _fetchLeadsPage(
         ...(filters.search && {
             search: filters.search,
         }),
+
+        ...(filters.dateFrom && {
+            createdFrom: filters.dateFrom,
+        }),
+
+        ...(filters.dateTo && {
+            createdTo: filters.dateTo,
+        }),
     };
 
     const res = await api.get("/leads/get-leads", {
