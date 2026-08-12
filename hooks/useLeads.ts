@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
-import { Lead, LeadsFilters, DEFAULT_FILTERS } from "@/types/leads";
+import { Lead, LeadsFilters, DEFAULT_FILTERS, PER_PAGE } from "@/types/leads";
 import { fetchLeads, deleteLead, convertLeadToDeal } from "@/lib/api/leadsApi";
 
 function quoteCsv(value: unknown) {
@@ -61,6 +61,7 @@ export function useLeads() {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(PER_PAGE);
     const [filters, setFilters] = useState<LeadsFilters>(DEFAULT_FILTERS);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -77,7 +78,7 @@ export function useLeads() {
         setLoading(true);
         setError(null);
         try {
-            const data = await fetchLeads(page, filters);
+            const data = await fetchLeads(page, filters, pageSize);
             // Filter out any deleted leads just in case
             const activeLeads = data.leads.filter((lead: Lead) => !lead.deleted);
             setLeads(activeLeads);
@@ -87,7 +88,7 @@ export function useLeads() {
         } finally {
             setLoading(false);
         }
-    }, [page, filters]);
+    }, [page, filters, pageSize]);
 
     useEffect(() => {
         loadLeads();
@@ -208,6 +209,7 @@ export function useLeads() {
         leads,
         total,
         page,
+        pageSize,
         filters,
         loading,
         error,
@@ -217,6 +219,7 @@ export function useLeads() {
         confirmAction,
         // setters
         setPage,
+        setPageSize,
         setOpenMenu,
         setConfirmAction,
         // handlers
