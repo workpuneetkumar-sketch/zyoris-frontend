@@ -4,13 +4,15 @@ export interface SidebarItem {
   key: string;
   label: string;
   route: string;
-  visible: boolean;
+  icon?: string;
+  permission?: string;
+  visible?: boolean; // optional — absence means visible
 }
 
 export interface DashboardItem {
   key: string;
   route: string;
-  visible: boolean;
+  visible?: boolean;
 }
 
 export interface FrontendPermissionsResponse {

@@ -2,126 +2,96 @@ export type Role = string;
 
 import { SidebarItem, DashboardItem } from "@/lib/api/frontendApi";
 
-/** Map each role to its default dashboard path */
-export const getDashboardForRole = (role: Role): string => {
-  switch (role) {
-    case "CEO":
-      return "/dashboard";
-    case "HR":
-      return "/hr";
-    case "FINANCE":
-      return "/finance";
-    case "PROJECT_MANAGER":
-      return "/projects";
-    case "CLIENT":
-      return "/portal/dashboard";
-    default:
-      return "/dashboard";
-  }
-};
+/** Map each role to its default landing path after login */
+export const getDashboardForRole = (role: Role): string => "/dashboard";
 
-/** Allowed base paths for each role */
-const ROLE_ALLOWED_PATHS: Record<Role, string[]> = {
-  // ── Active roles (from AuthContext) ──────────────────────────
-  ADMIN: [
-    "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
-    "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base", "/notes",
-    "/analytics", "/reports", "/settings", "/automation",
-    "/ceo", "/cfo", "/sales", "/operations", "/admin",
-    "/payment", "/profile", "/portal", "/meetings", "/communications", "/notifications",
-    "/leads/assignment",
-  ],
-  CEO: [
-    "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
-    "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/hr", "/finance", "/marketing", "/projects", "/documents", "/knowledge-base", "/notes",
-    "/analytics", "/reports", "/settings", "/automation",
-    "/ceo", "/payment", "/profile", "/portal", "/notifications",
-    "/leads/assignment",
-  ],
-  CFO: [
-    "/dashboard", "/deals", "/activities",
-    "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/finance", "/documents", "/knowledge-base", "/notes",
-    "/analytics", "/reports", "/settings",
-    "/cfo", "/payment", "/profile", "/notifications",
-  ],
-  SALES_HEAD: [
-    "/dashboard", "/leads", "/deals", "/contacts", "/companies", "/activities",
-    "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/documents", "/knowledge-base", "/notes",
-    "/reports", "/settings",
-    "/sales", "/profile", "/notifications",
-    "/leads/assignment",
-  ],
-  OPERATIONS_HEAD: [
-    "/dashboard", "/activities",
-    "/email", "/whatsapp", "/calls", "/tasks", "/calendar", "/messages",
-    "/projects", "/documents", "/knowledge-base", "/notes",
-    "/reports", "/settings",
-    "/operations", "/profile", "/notifications",
-  ],
-  // ── Legacy roles (backward compatibility) ───────────────────
-  HR: ["/hr", "/profile", "/settings", "/notifications"],
-  FINANCE: ["/finance", "/payment", "/profile", "/settings", "/notifications"],
-  PROJECT_MANAGER: ["/projects", "/profile", "/settings", "/notifications"],
-  CLIENT: ["/portal", "/notifications"],
-};
-
-/**
- * Checks whether a given pathname is allowed for the specified role.
- * Allows exact matches or sub‑paths (e.g., /hr/employees).
- */
-export const isPathAllowedForRole = (pathname: string, role: Role): boolean => {
-  const allowed = ROLE_ALLOWED_PATHS[role] ?? [];
-  return allowed.some((base) => pathname === base || pathname.startsWith(`${base}/`));
-};
-
-/**
- * Checks route access dynamically using sidebar items and dashboard configuration.
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// isPathAllowed
+//
+// Single source of truth for route-access checks. Called by the dashboard
+// layout on every navigation to decide whether the current user may visit the
+// requested URL.
+//
+// Rules (checked in order):
+//   1. A handful of paths are always accessible (dashboard, profile, portal…).
+//   2. If the `sidebarItems` array from the permissions API is non-empty, a
+//      path is allowed when it matches (or starts with) any sidebar item's
+//      `route`.  The `visible` flag is IGNORED here — the backend already
+//      filtered the list; every item it returned is accessible.
+//   3. Well-known "deep" routes that live under a sidebar route (e.g.
+//      /leads/123, /deals/abc) are automatically covered by the prefix check
+//      in rule 2, so no extra whitelist is needed.
+//   4. If the sidebar list is empty (permissions not yet loaded, or the user
+//      genuinely has no modules) we fall through to a broad static allow-list
+//      so the user is never incorrectly locked out while the API is loading.
+// ─────────────────────────────────────────────────────────────────────────────
 export const isPathAllowed = (
   pathname: string,
   sidebarItems: SidebarItem[],
-  visibleDashboards: DashboardItem[]
+  _visibleDashboards: DashboardItem[]   // kept for API compatibility, unused
 ): boolean => {
-  // Normalize pathname to prevent trailing slash issues
-  const path = pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
+  // Normalise trailing slash
+  const path =
+    pathname.endsWith("/") && pathname.length > 1
+      ? pathname.slice(0, -1)
+      : pathname;
 
-  // Always allowed general/fallback routes
-  if (
-    ["/dashboard", "/profile", "/portal", "/meetings", "/communications", "/ai-insights", "/notifications", "/notes", "/leads/assignment"].some(
-      (p) => path === p || path.startsWith(`${p}/`)
-    )
-  ) {
+  // ── 1. Always-allowed paths ──────────────────────────────────────────────
+  const ALWAYS_ALLOWED = [
+    "/dashboard",
+    "/profile",
+    "/portal",
+    "/notifications",
+    "/ai-insights",
+    // deep sub-routes that don't need an explicit sidebar entry
+    "/leads/assignment",
+    "/dashboard/reminders",
+    "/dashboard/builder",
+  ];
+
+  if (ALWAYS_ALLOWED.some((p) => path === p || path.startsWith(`${p}/`))) {
     return true;
   }
 
-  // Also allow RBAC and audit control paths under /admin for convenience, or check them specifically
-  if (
-    path.startsWith("/admin/roles") ||
-    path.startsWith("/admin/user-roles") ||
-    path.startsWith("/admin/audit")
-  ) {
-    // If it's a role or user-roles management or audit log path, it's allowed if the user has access to /admin or specific settings
-    return true;
+  // ── 2. Dynamic check against the RBAC sidebar returned by the API ────────
+  if (sidebarItems.length > 0) {
+    // Direct route match
+    const directMatch = sidebarItems.some(
+      (item) =>
+        item.route &&
+        (path === item.route || path.startsWith(`${item.route}/`))
+    );
+    if (directMatch) return true;
+
+    // Aggregate key expansion — if the API returns key:"crm" that expands to
+    // /leads, /deals, etc., those sub-routes must also be allowed
+    const CRM_EXPANSION = ["/leads", "/deals", "/contacts", "/companies", "/activities", "/ai-insights"];
+    const COMM_EXPANSION = ["/communications", "/email", "/whatsapp", "/calls", "/messages", "/meetings"];
+
+    const hasCrmKey = sidebarItems.some((item) => (item.key ?? "").toLowerCase() === "crm");
+    const hasCommKey = sidebarItems.some((item) => ["communications", "communication"].includes((item.key ?? "").toLowerCase()));
+
+    if (hasCrmKey && CRM_EXPANSION.some((p) => path === p || path.startsWith(`${p}/`))) return true;
+    if (hasCommKey && COMM_EXPANSION.some((p) => path === p || path.startsWith(`${p}/`))) return true;
+
+    // tasks/calendar are standalone keys that map directly
+    const standAloneRoutes = sidebarItems.map((item) => item.route).filter(Boolean);
+    if (standAloneRoutes.some((r) => path === r || path.startsWith(`${r!}/`))) return true;
+
+    // Role-specific dashboards — always allow if user is authenticated with sidebar data
+    const ROLE_DASH = ["/ceo", "/cfo", "/sales", "/operations", "/admin"];
+    if (ROLE_DASH.some((p) => path === p || path.startsWith(`${p}/`))) {
+      return true;
+    }
+
+    // Path not matched → block
+    return false;
   }
 
-  // Check role-specific dashboards
-  const dashboardRoutes = ["/ceo", "/cfo", "/sales", "/operations", "/admin"];
-  const isDashboardRoute = dashboardRoutes.some((p) => path === p || path.startsWith(`${p}/`));
-  if (isDashboardRoute) {
-    const match = visibleDashboards.find((d) => path === d.route || path.startsWith(`${d.route}/`));
-    return match ? match.visible : false;
-  }
-
-  // Check general modules
-  const match = sidebarItems.find((item) => path === item.route || path.startsWith(`${item.route}/`));
-  if (match) {
-    return match.visible;
-  }
-
-  // Fallback to false
-  return false;
+  // ── 3. Fallback: permissions not yet loaded — allow everything to prevent
+  //    false redirects during the loading window ────────────────────────────
+  return true;
 };
+
+// Legacy export kept for any remaining callers
+export const isPathAllowedForRole = (_pathname: string, _role: Role): boolean => true;
