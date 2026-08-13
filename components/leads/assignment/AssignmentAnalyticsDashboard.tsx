@@ -237,7 +237,7 @@ export function AssignmentAnalyticsDashboard({
                   layout="vertical"
                   verticalAlign="middle"
                   align="right"
-                  payload={processedDistribution.map((d, i) => ({ value: d.assigneeName, type: 'square', color: COLORS[i % COLORS.length], payload: d }))}
+                  payload={processedDistribution.map((d, i) => ({ value: d.assigneeName, type: 'square' as const, color: COLORS[i % COLORS.length], payload: d })) as any}
                   content={(p) => renderLegend(p)}
                 />
               </div>
