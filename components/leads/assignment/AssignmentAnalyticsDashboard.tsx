@@ -87,6 +87,47 @@ export function AssignmentAnalyticsDashboard({
   // Detect if the backend returned data but it's all zeros (no assignments run yet)
   const hasNoData = !data || (data.totalAssignments === 0 && data.distribution.length === 0 && data.overTime.length === 0);
 
+  // Prepare distribution data: show top N assignees and group the rest into "Others" for readability
+  const DIST_TOP_N = 5;
+  const rawDist = data?.distribution ?? [];
+  const sortedDist = [...rawDist].sort((a, b) => b.count - a.count);
+  const topDist = sortedDist.slice(0, DIST_TOP_N);
+  const others = sortedDist.slice(DIST_TOP_N);
+  const othersCount = others.reduce((s, r) => s + (r.count ?? 0), 0);
+  const processedDistribution = othersCount > 0 ? [...topDist, { assigneeId: "others", assigneeName: "Others", count: othersCount }] : topDist;
+  const totalDist = processedDistribution.reduce((s, r) => s + (r.count ?? 0), 0) || 1;
+
+  const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
+    // only label sufficiently large slices to avoid overlap
+    if (percent == null || percent < 0.07) return null;
+    const RAD = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RAD);
+    const y = cy + radius * Math.sin(-midAngle * RAD);
+    return (
+      <text x={x} y={y} fill="#ffffff" textAnchor={x > cx ? "start" : "end"} dominantBaseline="central" style={{ fontSize: 12, fontWeight: 700 }}>
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  const renderLegend = (props: any) => {
+    const { payload } = props;
+    return (
+      <div className="flex flex-col gap-3">
+        {payload?.map((entry: any, i: number) => (
+          <div key={i} className="flex items-center gap-3">
+            <div style={{ background: entry.color }} className="w-3 h-3 rounded-sm shrink-0" />
+            <div className="text-sm">
+              <div className="font-semibold text-text">{entry.value}</div>
+              <div className="text-xs text-text-secondary">{entry.payload.count} • {((entry.payload.count / totalDist) * 100).toFixed(0)}%</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Date range + filters toolbar */}
@@ -148,17 +189,59 @@ export function AssignmentAnalyticsDashboard({
       {/* Charts row 1: Distribution + Response Time */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ChartCard title="Assignment Distribution">
-          {!data?.distribution?.length ? (
+          {!processedDistribution?.length ? (
             <div className="h-64 flex items-center justify-center text-text-muted text-sm">No data available</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={data.distribution} dataKey="count" nameKey="assigneeName" cx="50%" cy="50%" outerRadius={85} label={({ assigneeName, percentage }) => `${assigneeName} (${percentage?.toFixed(0)}%)`} labelLine={true}>
-                  {data.distribution.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }} formatter={(v) => [`${v} leads`, "Assigned"]} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="flex flex-col lg:flex-row items-start gap-4">
+              <div className="flex-1 min-w-0 relative" style={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={processedDistribution}
+                      dataKey="count"
+                      nameKey="assigneeName"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={90}
+                      label={renderPieLabel}
+                      labelLine={false}
+                    >
+                      {processedDistribution.map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: "#ffffff", borderRadius: "12px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)" }}
+                      formatter={(value: any, name: any, props: any) => {
+                        const pct = ((value / totalDist) * 100).toFixed(0);
+                        return [`${value} leads`, `${props.payload.assigneeName} • ${pct}%`];
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+
+                {/* Center summary overlay: top assignee and total */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <div className="text-sm text-text-muted">Top</div>
+                    <div className="text-lg font-bold text-text">{processedDistribution[0]?.assigneeName ?? "—"}</div>
+                    <div className="text-xs text-text-secondary">{processedDistribution[0] ? `${Math.round((processedDistribution[0].count / totalDist) * 100)}% • ${processedDistribution[0].count}` : ""}</div>
+                    <div className="text-[11px] text-text-muted mt-1">of {totalDist} assignments</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-full lg:w-64 max-h-64 overflow-auto pr-2">
+                <Legend
+                  layout="vertical"
+                  verticalAlign="middle"
+                  align="right"
+                  payload={processedDistribution.map((d, i) => ({ value: d.assigneeName, type: 'square', color: COLORS[i % COLORS.length], payload: d }))}
+                  content={(p) => renderLegend(p)}
+                />
+              </div>
+            </div>
           )}
         </ChartCard>
 
