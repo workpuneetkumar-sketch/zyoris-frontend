@@ -463,6 +463,27 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Use dynamic RBAC sidebar when available; fall back to static role-based filtering
   const visibleNavGroups = (() => {
+    const COMMUNICATION_FORCE_ITEMS = new Set([
+      "/communications",
+      "/email",
+      "/whatsapp",
+      "/calls",
+      "/messages",
+      "/meetings",
+    ]);
+
+    const COMMUNICATION_FORCE_GROUP = {
+      label: "Communication",
+      items: [
+        { href: "/communications", label: "Communication Hub", icon: Inbox },
+        { href: "/email", label: "Email", icon: Mail },
+        { href: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
+        { href: "/calls", label: "Calls", icon: Phone },
+        { href: "/messages", label: "Messages", icon: MessageSquare },
+        { href: "/meetings", label: "Meetings", icon: Video },
+      ],
+    };
+
     if (sidebarItems && sidebarItems.length > 0) {
 
       // ── Icon map (key/route slug → Lucide component) ──────────────────
@@ -650,16 +671,30 @@ export function AppShell({ children }: { children: ReactNode }) {
         .filter((label) => itemsByGroup[label]?.length)
         .map((label) => ({ label, items: itemsByGroup[label] }));
 
+      const hasCommunicationGroup = groups.some((group) => group.label === "Communication");
+      if (!hasCommunicationGroup) {
+        groups.push(COMMUNICATION_FORCE_GROUP);
+      }
+
       if (groups.length > 0) return groups;
     }
 
     // Fallback: static role-based filtering
     return NAV_GROUPS.map((group) => ({
       ...group,
-      items: group.items.filter((item) =>
-        user ? item.roles.includes(user.role) : item.href === "/dashboard"
-      ),
+      items: group.items.filter((item) => {
+        if (COMMUNICATION_FORCE_ITEMS.has(item.href)) return true;
+        return user ? item.roles.includes(user.role) : item.href === "/dashboard";
+      }),
     })).filter((group) => group.items.length > 0);
+  })();
+
+  const visibleNavGroupsWithCommunication = (() => {
+    const communicationGroup = NAV_GROUPS.find((group) => group.label === "Communication");
+    if (!communicationGroup) return visibleNavGroups;
+
+    const alreadyIncluded = visibleNavGroups.some((group) => group.label === "Communication");
+    return alreadyIncluded ? visibleNavGroups : [communicationGroup, ...visibleNavGroups];
   })();
 
   // Auto-expand whichever module group contains the currently active page,
@@ -668,7 +703,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setOpenGroups((prev) => {
       let changed = false;
       const next = { ...prev };
-      visibleNavGroups.forEach((group) => {
+      visibleNavGroupsWithCommunication.forEach((group) => {
         if (next[group.label] !== undefined) return;
         const hasActiveItem = group.items.some(
           (item) =>
@@ -718,10 +753,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const NavLinks = () => (
     <>
       <DashboardLink />
-      {visibleNavGroups.map((group, idx) => {
+      {visibleNavGroupsWithCommunication.map((group, idx) => {
         const isOpen = openGroups[group.label] ?? false;
         const GroupIcon = GROUP_ICONS[group.label] ?? Layers;
-        const prevGroup = visibleNavGroups[idx - 1];
+        const prevGroup = visibleNavGroupsWithCommunication[idx - 1];
         const showManagementLabel =
           MANAGEMENT_GROUP_LABELS.has(group.label) &&
           (!prevGroup || !MANAGEMENT_GROUP_LABELS.has(prevGroup.label));

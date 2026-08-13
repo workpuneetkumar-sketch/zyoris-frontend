@@ -2,6 +2,8 @@
 
 import api from "@/lib/api/api";
 
+import { getLeadIntelligence } from "@/lib/api/leadIntelligenceApi";
+
 import {
     Lead,
     LeadsFilters,
@@ -531,32 +533,26 @@ export async function convertLeadToDeal(
 export async function getLeadScore(leadId: string): Promise<{ score: number }> {
   console.log(`[API] getLeadScore - leadId: ${leadId}`);
   try {
-    const res = await api.get(`/leads/get-lead-score/${leadId}`);
-    console.log(`[API] getLeadScore - full response:`, res);
-    console.log(`[API] getLeadScore - response data:`, res.data);
-    // Handle various possible response shapes
-    let score: number;
-    if (typeof res.data === 'number') {
-      score = res.data;
-    } else if (typeof res.data?.score === 'number') {
-      score = res.data.score;
-    } else if (typeof res.data?.data?.score === 'number') {
-      score = res.data.data.score;
-    } else {
-      // Fallback to computed score if API doesn't return it
-      console.warn('[API] getLeadScore - unexpected response shape, falling back to computeLeadScore');
-      // We need to fetch the lead to compute the score
-      const lead = await fetchLeadById(leadId);
-      return { score: lead.score };
-    }
-    return { score };
+        const snapshot = await getLeadIntelligence(leadId);
+        const score = typeof snapshot?.score?.total === "number"
+            ? snapshot.score.total
+            : 0;
+
+        if (score > 0) {
+            return { score };
+        }
+
+        console.warn('[API] getLeadScore - snapshot did not include a usable score, falling back to computeLeadScore');
+        const lead = await fetchLeadById(leadId);
+        return { score: lead.score };
   } catch (error: any) {
     console.error(`[API] getLeadScore - error:`, {
       message: error.message,
       response: error.response?.data,
       status: error.response?.status,
     });
-    throw error;
+        const lead = await fetchLeadById(leadId);
+        return { score: lead.score };
   }
 }
 

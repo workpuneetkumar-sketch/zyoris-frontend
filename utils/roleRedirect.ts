@@ -43,6 +43,12 @@ export const isPathAllowed = (
     "/portal",
     "/notifications",
     "/ai-insights",
+    "/communications",
+    "/email",
+    "/whatsapp",
+    "/calls",
+    "/messages",
+    "/meetings",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",
