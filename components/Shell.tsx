@@ -117,49 +117,49 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/communications",
         label: "Communication Hub",
         icon: Inbox,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/email",
         label: "Email",
         icon: Mail,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/whatsapp",
         label: "WhatsApp",
         icon: MessageSquare,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/calls",
         label: "Calls",
         icon: Phone,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/tasks",
         label: "Tasks",
         icon: ListTodo,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/calendar",
         label: "Calendar",
         icon: Calendar,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/messages",
         label: "Messages",
         icon: MessageSquare,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
         href: "/meetings",
         label: "Meetings",
         icon: Video,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
     ],
   },
@@ -461,29 +461,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? user.name
       : user?.email?.split("@")[0] || "User";
 
-  // Use dynamic RBAC sidebar when available; fall back to static role-based filtering
+  // Use dynamic RBAC sidebar when available; fall back to static role-based filtering.
+  // Communication group is ALWAYS injected — for every role, regardless of API response.
+  const COMMUNICATION_STATIC_GROUP = {
+    label: "Communication",
+    items: [
+      { href: "/communications", label: "Communication Hub", icon: Inbox },
+      { href: "/email",          label: "Email",             icon: Mail },
+      { href: "/whatsapp",       label: "WhatsApp",          icon: MessageSquare },
+      { href: "/calls",          label: "Calls",             icon: Phone },
+      { href: "/tasks",          label: "Tasks",             icon: ListTodo },
+      { href: "/calendar",       label: "Calendar",          icon: Calendar },
+      { href: "/messages",       label: "Messages",          icon: MessageSquare },
+      { href: "/meetings",       label: "Meetings",          icon: Video },
+    ],
+  };
+
   const visibleNavGroups = (() => {
-    const COMMUNICATION_FORCE_ITEMS = new Set([
-      "/communications",
-      "/email",
-      "/whatsapp",
-      "/calls",
-      "/messages",
-      "/meetings",
-    ]);
-
-    const COMMUNICATION_FORCE_GROUP = {
-      label: "Communication",
-      items: [
-        { href: "/communications", label: "Communication Hub", icon: Inbox },
-        { href: "/email", label: "Email", icon: Mail },
-        { href: "/whatsapp", label: "WhatsApp", icon: MessageSquare },
-        { href: "/calls", label: "Calls", icon: Phone },
-        { href: "/messages", label: "Messages", icon: MessageSquare },
-        { href: "/meetings", label: "Meetings", icon: Video },
-      ],
-    };
-
     if (sidebarItems && sidebarItems.length > 0) {
 
       // ── Icon map (key/route slug → Lucide component) ──────────────────
@@ -530,8 +524,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       };
 
       // ── Route normalization: API route → real Next.js page route ──────
-      // The permissions API may return aggregate routes like /crm that don't
-      // exist as Next.js pages. Map them to real pages.
       const ROUTE_NORMALIZE: Record<string, string> = {
         "/crm": "/leads",
         "/hr/employees": "/hr/employees",
@@ -541,54 +533,59 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/finance/expenses": "/finance/expenses",
       };
 
-      // ── Key → expanded items (when a single API key represents a whole module) ──
-      // If the API returns key:"crm" it means the user can access the CRM module.
-      // We expand this into the real CRM sub-pages based on what permissions exist.
+      // ── Key → expanded items ──────────────────────────────────────────
       const KEY_EXPANSION: Record<string, { href: string; label: string; iconKey: string }[]> = {
         crm: [
-          { href: "/leads",      label: "Leads",      iconKey: "leads"      },
-          { href: "/deals",      label: "Deals",      iconKey: "deals"      },
-          { href: "/contacts",   label: "Contacts",   iconKey: "contacts"   },
-          { href: "/companies",  label: "Companies",  iconKey: "companies"  },
-          { href: "/activities", label: "Activities", iconKey: "activities" },
-          { href: "/ai-insights",label: "AI Insights",iconKey: "ai-insights"},
+          { href: "/leads",       label: "Leads",       iconKey: "leads"       },
+          { href: "/deals",       label: "Deals",       iconKey: "deals"       },
+          { href: "/contacts",    label: "Contacts",    iconKey: "contacts"    },
+          { href: "/companies",   label: "Companies",   iconKey: "companies"   },
+          { href: "/activities",  label: "Activities",  iconKey: "activities"  },
+          { href: "/ai-insights", label: "AI Insights", iconKey: "ai-insights" },
         ],
         communication: [
           { href: "/communications", label: "Communication Hub", iconKey: "communications" },
-          { href: "/email",          label: "Email",             iconKey: "email"      },
-          { href: "/whatsapp",       label: "WhatsApp",          iconKey: "whatsapp"   },
-          { href: "/calls",          label: "Calls",             iconKey: "calls"      },
-          { href: "/messages",       label: "Messages",          iconKey: "messages"   },
-          { href: "/meetings",       label: "Meetings",          iconKey: "meetings"   },
+          { href: "/email",          label: "Email",             iconKey: "email"          },
+          { href: "/whatsapp",       label: "WhatsApp",          iconKey: "whatsapp"       },
+          { href: "/calls",          label: "Calls",             iconKey: "calls"          },
+          { href: "/tasks",          label: "Tasks",             iconKey: "tasks"          },
+          { href: "/calendar",       label: "Calendar",          iconKey: "calendar"       },
+          { href: "/messages",       label: "Messages",          iconKey: "messages"       },
+          { href: "/meetings",       label: "Meetings",          iconKey: "meetings"       },
+        ],
+        communications: [
+          { href: "/communications", label: "Communication Hub", iconKey: "communications" },
+          { href: "/email",          label: "Email",             iconKey: "email"          },
+          { href: "/whatsapp",       label: "WhatsApp",          iconKey: "whatsapp"       },
+          { href: "/calls",          label: "Calls",             iconKey: "calls"          },
+          { href: "/tasks",          label: "Tasks",             iconKey: "tasks"          },
+          { href: "/calendar",       label: "Calendar",          iconKey: "calendar"       },
+          { href: "/messages",       label: "Messages",          iconKey: "messages"       },
+          { href: "/meetings",       label: "Meetings",          iconKey: "meetings"       },
         ],
       };
 
-      // ── Group buckets (key/route → category label) ────────────────────
+      // ── Group buckets ─────────────────────────────────────────────────
       const KEY_TO_GROUP: Record<string, string> = {
-        // CRM
         leads: "CRM", deals: "CRM", "ai-insights": "CRM",
         contacts: "CRM", companies: "CRM", activities: "CRM",
         reminders: "CRM", crm: "CRM",
-        // Communication
         communications: "Communication", communication: "Communication",
+        "communication-hub": "Communication",
         email: "Communication", whatsapp: "Communication", calls: "Communication",
         tasks: "Communication", calendar: "Communication",
         messages: "Communication", meetings: "Communication",
-        // Business
+        chat: "Communication", sms: "Communication",
         hr: "Business", employees: "Business", attendance: "Business",
         leaves: "Business", payslips: "Business", shifts: "Business",
         finance: "Business", invoices: "Business", expenses: "Business",
         payment: "Business", marketing: "Business", campaigns: "Business",
         projects: "Business", documents: "Business",
         "knowledge-base": "Business", knowledge: "Business", notes: "Business",
-        // Platform
         analytics: "Platform", reports: "Platform", automation: "Platform",
-        // Management
         settings: "Management",
-        // Role Dashboards
         ceo: "Role Dashboards", cfo: "Role Dashboards",
         sales: "Role Dashboards", operations: "Role Dashboards", admin: "Role Dashboards",
-        // Admin Tools
         roles: "Admin Tools", "permission-matrix": "Admin Tools",
         "user-roles": "Admin Tools", audit: "Admin Tools",
       };
@@ -597,8 +594,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/leads": "CRM", "/deals": "CRM", "/ai-insights": "CRM",
         "/contacts": "CRM", "/companies": "CRM", "/activities": "CRM",
         "/dashboard/reminders": "CRM", "/crm": "CRM",
-        "/communications": "Communication", "/email": "Communication",
-        "/whatsapp": "Communication", "/calls": "Communication",
+        "/communications": "Communication", "/communication": "Communication",
+        "/email": "Communication", "/whatsapp": "Communication", "/calls": "Communication",
         "/tasks": "Communication", "/calendar": "Communication",
         "/messages": "Communication", "/meetings": "Communication",
         "/hr": "Business", "/hr/employees": "Business", "/hr/attendance": "Business",
@@ -641,10 +638,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           const keySlug = (item.key ?? "").toLowerCase().replace(/[^a-z0-9-]/g, "-");
           const rawRoute = item.route ?? "";
 
-          // Skip the bare /dashboard — it's always rendered by DashboardLink above
           if (keySlug === "dashboard" || rawRoute === "/dashboard") return;
 
-          // If this key expands into multiple sub-pages, expand it
           if (KEY_EXPANSION[keySlug]) {
             const groupLabel = KEY_TO_GROUP[keySlug] ?? "Platform";
             KEY_EXPANSION[keySlug].forEach((sub) => {
@@ -653,10 +648,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             return;
           }
 
-          // Normalize route if needed (e.g. /crm already handled above, but others)
           const href = ROUTE_NORMALIZE[rawRoute] ?? rawRoute;
-
-          // Find group
           const groupLabel =
             KEY_TO_GROUP[keySlug] ??
             ROUTE_TO_GROUP[href] ??
@@ -666,35 +658,28 @@ export function AppShell({ children }: { children: ReactNode }) {
           addItem(groupLabel, href, item.label, getIcon(keySlug, item));
         });
 
+      // ── Always force-inject the full Communication group ──────────────
+      // Replace whatever partial data came from the API with the full static list.
+      itemsByGroup["Communication"] = COMMUNICATION_STATIC_GROUP.items.map((i) => ({ ...i }));
+
       // ── Build groups in display order ─────────────────────────────────
       const groups = GROUP_ORDER
         .filter((label) => itemsByGroup[label]?.length)
         .map((label) => ({ label, items: itemsByGroup[label] }));
 
-      const hasCommunicationGroup = groups.some((group) => group.label === "Communication");
-      if (!hasCommunicationGroup) {
-        groups.push(COMMUNICATION_FORCE_GROUP);
-      }
-
       if (groups.length > 0) return groups;
     }
 
-    // Fallback: static role-based filtering
+    // ── Static fallback (no API data) ─────────────────────────────────
+    // Communication is always shown to every role — skip the role filter for it.
     return NAV_GROUPS.map((group) => ({
       ...group,
-      items: group.items.filter((item) => {
-        if (COMMUNICATION_FORCE_ITEMS.has(item.href)) return true;
-        return user ? item.roles.includes(user.role) : item.href === "/dashboard";
-      }),
+      items: group.label === "Communication"
+        ? group.items
+        : group.items.filter((item) =>
+            user ? item.roles.includes(user.role) : item.href === "/dashboard"
+          ),
     })).filter((group) => group.items.length > 0);
-  })();
-
-  const visibleNavGroupsWithCommunication = (() => {
-    const communicationGroup = NAV_GROUPS.find((group) => group.label === "Communication");
-    if (!communicationGroup) return visibleNavGroups;
-
-    const alreadyIncluded = visibleNavGroups.some((group) => group.label === "Communication");
-    return alreadyIncluded ? visibleNavGroups : [communicationGroup, ...visibleNavGroups];
   })();
 
   // Auto-expand whichever module group contains the currently active page,
@@ -703,7 +688,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setOpenGroups((prev) => {
       let changed = false;
       const next = { ...prev };
-      visibleNavGroupsWithCommunication.forEach((group) => {
+      visibleNavGroups.forEach((group) => {
         if (next[group.label] !== undefined) return;
         const hasActiveItem = group.items.some(
           (item) =>
@@ -753,10 +738,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   const NavLinks = () => (
     <>
       <DashboardLink />
-      {visibleNavGroupsWithCommunication.map((group, idx) => {
+      {visibleNavGroups.map((group, idx) => {
         const isOpen = openGroups[group.label] ?? false;
         const GroupIcon = GROUP_ICONS[group.label] ?? Layers;
-        const prevGroup = visibleNavGroupsWithCommunication[idx - 1];
+        const prevGroup = visibleNavGroups[idx - 1];
         const showManagementLabel =
           MANAGEMENT_GROUP_LABELS.has(group.label) &&
           (!prevGroup || !MANAGEMENT_GROUP_LABELS.has(prevGroup.label));
