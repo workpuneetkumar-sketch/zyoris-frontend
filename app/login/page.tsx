@@ -13,6 +13,40 @@ import { useAuth } from "../../context/AuthContext";
 
 type AuthState = "landing" | "employee" | "admin-1" | "admin-2" | "admin-3";
 
+function getLoginErrorMessage(error: any) {
+  const status = error?.response?.status;
+  const responseMessage = String(
+    error?.response?.data?.message ||
+      error?.response?.data?.error ||
+      error?.message ||
+      ""
+  ).toLowerCase();
+
+  if (
+    status === 401 ||
+    responseMessage.includes("unauthoriz") ||
+    responseMessage.includes("invalid credentials") ||
+    responseMessage.includes("invalid email or password")
+  ) {
+    return "Invalid credentials. Try again!";
+  }
+
+  if (
+    status === 404 ||
+    responseMessage.includes("user not found") ||
+    responseMessage.includes("no sign up") ||
+    responseMessage.includes("sign up first")
+  ) {
+    return "No sign up found. Please sign up first.";
+  }
+
+  if (responseMessage.includes("network") || responseMessage.includes("timeout")) {
+    return "Login unavailable. Please check your connection and try again.";
+  }
+
+  return "Failed to login. Please try again.";
+}
+
 export default function LoginPage() {
   const [authState, setAuthState] = useState<AuthState>("landing");
   const [isLoading, setIsLoading] = useState(false);
@@ -32,7 +66,7 @@ export default function LoginPage() {
       toast.success("Employee signed in successfully!");
       router.push("/dashboard");
     } catch (error: any) {
-      toast.error(error?.message || "Failed to login. Please try again.");
+      toast.error(getLoginErrorMessage(error));
     } finally {
       setIsLoading(false);
     }

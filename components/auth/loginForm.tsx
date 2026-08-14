@@ -6,6 +6,40 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardForRole } from "@/utils/roleRedirect";
 
+function getLoginErrorMessage(error: any) {
+    const status = error?.response?.status;
+    const responseMessage = String(
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        ""
+    ).toLowerCase();
+
+    if (
+        status === 401 ||
+        responseMessage.includes("unauthoriz") ||
+        responseMessage.includes("invalid credentials") ||
+        responseMessage.includes("invalid email or password")
+    ) {
+        return "Invalid credentials. Try again!";
+    }
+
+    if (
+        status === 404 ||
+        responseMessage.includes("user not found") ||
+        responseMessage.includes("no sign up") ||
+        responseMessage.includes("sign up first")
+    ) {
+        return "No sign up found. Please sign up first.";
+    }
+
+    if (responseMessage.includes("network") || responseMessage.includes("timeout")) {
+        return "Login unavailable. Please check your connection and try again.";
+    }
+
+    return "Failed to login. Please try again.";
+}
+
 export default function LoginForm() {
     const router = useRouter();
     const { login } = useAuth();
@@ -52,11 +86,7 @@ router.push(target);
       if (!err.response) {
         setError("Login unavailable. Please check your connection and try again later.");
       } else {
-        setError(
-          err?.response?.data?.error ??
-          err?.response?.data?.message ??
-          "Login failed. Please try again."
-        );
+                setError(getLoginErrorMessage(err));
       }
     } finally {
       setIsLoading(false);
