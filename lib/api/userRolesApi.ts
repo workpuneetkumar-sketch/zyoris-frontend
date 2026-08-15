@@ -45,7 +45,14 @@ export const assignUserRole = async (userId: string, roleId: string): Promise<an
   return res.data;
 };
 
-export const getUsersByRole = async (roleId: string): Promise<UserByRoleItem[]> => {
+export const getUsersByRole = async (
+  roleId: string,
+  organizationId?: string | null
+): Promise<UserByRoleItem[]> => {
   const res = await api.get<UserByRoleItem[]>(`/user-roles/role/${roleId}`);
-  return res.data;
+  const users = Array.isArray(res.data) ? res.data : [];
+
+  if (!organizationId) return users;
+
+  return users.filter((user) => user.organizationId === organizationId);
 };

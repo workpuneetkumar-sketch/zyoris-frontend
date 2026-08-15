@@ -74,7 +74,13 @@ function ErrorBanner({ message }: { message: string }) {
 
 /* ─── By Role View ───────────────────────────────────────────────────── */
 
-function UsersByRoleView({ roles }: { roles: RbacRoleMatrixItem[] }) {
+function UsersByRoleView({
+  roles,
+  organizationId,
+}: {
+  roles: RbacRoleMatrixItem[];
+  organizationId?: string | null;
+}) {
   const [selectedRoleId, setSelectedRoleId] = useState<string>(roles[0]?.id ?? "");
   const [users, setUsers] = useState<UserByRoleItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -85,14 +91,14 @@ function UsersByRoleView({ roles }: { roles: RbacRoleMatrixItem[] }) {
     setLoading(true);
     setError(null);
     try {
-      const data = await getUsersByRole(roleId);
+      const data = await getUsersByRole(roleId, organizationId);
       setUsers(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err?.response?.data?.message || "Failed to load users for this role.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     if (selectedRoleId) loadUsers(selectedRoleId);
@@ -304,7 +310,7 @@ export default function UserRolesPage() {
 
       // 2. Fan-out: fetch users for every role concurrently, then deduplicate
       const results = await Promise.allSettled(
-        allRoles.map((r) => getUsersByRole(r.id))
+        allRoles.map((r) => getUsersByRole(r.id, user?.organizationId))
       );
 
       const seen = new Set<string>();
@@ -367,7 +373,7 @@ export default function UserRolesPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?.organizationId]);
 
   useEffect(() => {
     fetchData();
@@ -453,7 +459,7 @@ export default function UserRolesPage() {
 
       {/* ── Users by Role Tab (GET /user-roles/role/:roleId) ── */}
       {tab === "byRole" && (
-        <UsersByRoleView roles={roles} />
+        <UsersByRoleView roles={roles} organizationId={user?.organizationId} />
       )}
 
       {/* ── Assign Roles Tab ── */}
