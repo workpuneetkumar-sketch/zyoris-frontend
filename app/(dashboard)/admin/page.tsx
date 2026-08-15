@@ -286,13 +286,6 @@ export default function AdminDashboardPage() {
             <Shield size={13} />
             Role: ADMIN
           </div>
-          <button
-            onClick={() => router.push("/settings")}
-            className="p-2 rounded-xl bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700 hover:shadow transition-all"
-            title="Settings"
-          >
-            <Settings size={16} />
-          </button>
         </div>
       </div>
 
@@ -326,51 +319,6 @@ export default function AdminDashboardPage() {
           color="amber"
           sub="Distinct roles in org"
         />
-      </div>
-
-      {/* Data Ingestion Summary */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Database size={16} className="text-blue-600" />
-            <h3 className="text-sm font-bold text-gray-800">Data Warehouse Summary</h3>
-          </div>
-          <button
-            onClick={() => router.push("/ai-insights")}
-            className="text-xs text-blue-600 hover:underline font-semibold"
-          >
-            Manage →
-          </button>
-        </div>
-        {ingestionCards.length > 0 ? (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {ingestionCards.map((card) => {
-              const colorMap = {
-                blue: "bg-blue-50 text-blue-600",
-                violet: "bg-violet-50 text-violet-600",
-                amber: "bg-amber-50 text-amber-600",
-                emerald: "bg-emerald-50 text-emerald-600",
-              };
-              return (
-                <div key={card.label} className={`rounded-xl p-4 ${colorMap[card.color]}`}>
-                  <p className="text-xs font-semibold opacity-70 mb-1">{card.label}</p>
-                  <p className="text-2xl font-extrabold">{card.value.toLocaleString()}</p>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center py-8 text-gray-400">
-            <Database size={28} className="text-gray-200 mb-2" />
-            <p className="text-sm">No ingestion data available yet.</p>
-            <button
-              onClick={() => router.push("/ai-insights")}
-              className="mt-3 text-xs text-blue-600 hover:underline font-semibold"
-            >
-              Upload data →
-            </button>
-          </div>
-        )}
       </div>
 
       {/* Team Directory + Role Distribution */}

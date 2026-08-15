@@ -330,7 +330,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, sidebarItems } = useAuth();
+  const { user, logout, sidebarItems, visibleDashboards, visibleModules } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
@@ -477,6 +477,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     ],
   };
 
+  const ADMIN_TOOL_ITEMS = [
+    { href: "/admin", label: "Admin", icon: Shield },
+    { href: "/admin/roles", label: "Roles", icon: KeyRound },
+    { href: "/admin/permission-matrix", label: "Permission Matrix", icon: Grid3X3 },
+    { href: "/admin/user-roles", label: "User Roles", icon: UserCog },
+    { href: "/admin/audit", label: "Audit Logs", icon: FileSearch },
+  ];
+
+  const ROLE_DASHBOARD_LABELS: Record<string, string> = {
+    ceo: "CEO",
+    cfo: "CFO",
+    sales: "Sales",
+    operations: "Operations",
+    admin: "Admin",
+  };
+
   const visibleNavGroups = (() => {
     if (sidebarItems && sidebarItems.length > 0) {
 
@@ -531,6 +547,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/hr/leaves": "/hr/leaves",
         "/finance/invoices": "/payment/invoices",
         "/finance/expenses": "/finance/expenses",
+        "/dashboard/ceo": "/ceo",
+        "/dashboard/cfo": "/cfo",
+        "/dashboard/sales": "/sales",
+        "/dashboard/operations": "/operations",
       };
 
       // ── Key → expanded items ──────────────────────────────────────────
@@ -631,6 +651,38 @@ export function AppShell({ children }: { children: ReactNode }) {
           itemsByGroup[groupLabel].push({ href, label, icon });
         }
       };
+
+      const adminModules = new Set([
+        "users",
+        "roles",
+        "audit",
+        "settings",
+        "notifications",
+        "admin",
+      ]);
+
+      visibleDashboards
+        .filter((item) => item.visible !== false && item.route)
+        .forEach((item) => {
+          const key = (item.key ?? "").toLowerCase();
+          const href = ROUTE_NORMALIZE[item.route] ?? item.route;
+          const label =
+            ROLE_DASHBOARD_LABELS[key] ??
+            key.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+
+          if (href) addItem("Role Dashboards", href, label, Crown);
+        });
+
+      const hasAdminToolAccess =
+        sidebarItems.some((item) => {
+          const key = (item.key ?? "").toLowerCase();
+          const route = (item.route ?? "").toLowerCase();
+          return key === "settings" || key === "roles" || key === "users" || key === "audit" || route.startsWith("/admin");
+        }) || visibleModules.some((module) => adminModules.has((module ?? "").toLowerCase()));
+
+      if (hasAdminToolAccess) {
+        ADMIN_TOOL_ITEMS.forEach((item) => addItem("Admin Tools", item.href, item.label, item.icon));
+      }
 
       sidebarItems
         .filter((item) => item.visible !== false)

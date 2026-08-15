@@ -43,12 +43,25 @@ export const isPathAllowed = (
     "/portal",
     "/notifications",
     "/ai-insights",
+    "/analytics",
+    "/leads",
+    "/deals",
+    "/contacts",
+    "/companies",
+    "/finance",
+    "/hr",
+    "/settings",
     "/communications",
     "/email",
     "/whatsapp",
     "/calls",
     "/messages",
     "/meetings",
+    "/admin",
+    "/admin/rbac",
+    "/admin/roles",
+    "/admin/user-roles",
+    "/admin/audit",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",
@@ -85,8 +98,27 @@ export const isPathAllowed = (
     if (standAloneRoutes.some((r) => path === r || path.startsWith(`${r!}/`))) return true;
 
     // Role-specific dashboards — always allow if user is authenticated with sidebar data
+    const normalizedPath = [
+      "/dashboard/ceo",
+      "/dashboard/cfo",
+      "/dashboard/sales",
+      "/dashboard/operations",
+    ].includes(path)
+      ? path.replace("/dashboard/", "/")
+      : path;
+
     const ROLE_DASH = ["/ceo", "/cfo", "/sales", "/operations", "/admin"];
-    if (ROLE_DASH.some((p) => path === p || path.startsWith(`${p}/`))) {
+    if (ROLE_DASH.some((p) => normalizedPath === p || normalizedPath.startsWith(`${p}/`))) {
+      return true;
+    }
+
+    const ADMIN_SUBROUTES = [
+      "/admin/rbac",
+      "/admin/roles",
+      "/admin/user-roles",
+      "/admin/audit",
+    ];
+    if (ADMIN_SUBROUTES.some((p) => normalizedPath === p || normalizedPath.startsWith(`${p}/`))) {
       return true;
     }
 
