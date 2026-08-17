@@ -7,7 +7,6 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid,
   BarChart, Bar,
   AreaChart, Area,
-  Legend,
 } from "recharts";
 import { RefreshCw, TrendingUp, Clock, Users, Zap, AlertCircle } from "lucide-react";
 import classNames from "classnames";
@@ -97,15 +96,23 @@ export function AssignmentAnalyticsDashboard({
   const processedDistribution = othersCount > 0 ? [...topDist, { assigneeId: "others", assigneeName: "Others", count: othersCount }] : topDist;
   const totalDist = processedDistribution.reduce((s, r) => s + (r.count ?? 0), 0) || 1;
 
-  const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }: any) => {
-    // only label sufficiently large slices to avoid overlap
-    if (percent == null || percent < 0.07) return null;
+  const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
+    // Skip slices too small to label cleanly
+    if (percent == null || percent < 0.05) return null;
     const RAD = Math.PI / 180;
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    // Place label at 65% between inner and outer radius — centred in the arc band
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.65;
     const x = cx + radius * Math.cos(-midAngle * RAD);
     const y = cy + radius * Math.sin(-midAngle * RAD);
     return (
-      <text x={x} y={y} fill="#ffffff" textAnchor={x > cx ? "start" : "end"} dominantBaseline="central" style={{ fontSize: 12, fontWeight: 700 }}>
+      <text
+        x={x}
+        y={y}
+        fill="#ffffff"
+        textAnchor="middle"
+        dominantBaseline="central"
+        style={{ fontSize: 9, fontWeight: 700, pointerEvents: "none" }}
+      >
         {`${(percent * 100).toFixed(0)}%`}
       </text>
     );
@@ -233,13 +240,7 @@ export function AssignmentAnalyticsDashboard({
               </div>
 
               <div className="w-full lg:w-64 max-h-64 overflow-auto pr-2">
-                <Legend
-                  layout="vertical"
-                  verticalAlign="middle"
-                  align="right"
-                  payload={processedDistribution.map((d, i) => ({ value: d.assigneeName, type: 'square' as const, color: COLORS[i % COLORS.length], payload: d })) as any}
-                  content={(p) => renderLegend(p)}
-                />
+                {renderLegend({ payload: processedDistribution.map((d, i) => ({ value: d.assigneeName, type: 'square', color: COLORS[i % COLORS.length], payload: d })) })}
               </div>
             </div>
           )}
