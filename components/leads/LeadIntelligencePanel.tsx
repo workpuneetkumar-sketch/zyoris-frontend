@@ -22,12 +22,14 @@ import { Lead } from "@/types/leads";
 import {
   getLeadIntelligence,
   getLeadScoreConfig,
+  getLeadScorePreview,
   postLeadSignal,
   updateLeadScoreConfig,
   LeadIntelligenceSnapshot,
   LeadScoreConfig,
   LeadScoreConfigDimension,
   LeadScoreConfigPayload,
+  LeadScorePreviewResponse,
 } from "@/lib/api/leadIntelligenceApi";
 
 type WeightRow = { key: string; value: number };
@@ -160,6 +162,10 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
   const [configError, setConfigError] = useState<string | null>(null);
   const [savingConfig, setSavingConfig] = useState(false);
 
+  const [scorePreview, setScorePreview] = useState<LeadScorePreviewResponse | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
   const [signalStatus, setSignalStatus] = useState<"idle" | "sending" | "sent" | "failed">("idle");
 
   useEffect(() => {
@@ -169,8 +175,10 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
 
     setIntelligenceLoading(true);
     setConfigLoading(true);
+    setPreviewLoading(true);
     setIntelligenceError(null);
     setConfigError(null);
+    setPreviewError(null);
     setSignalStatus("sending");
 
     void postLeadSignal({
@@ -194,8 +202,12 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
         if (active) setSignalStatus("failed");
       });
 
-    void Promise.allSettled([getLeadIntelligence(lead.id), getLeadScoreConfig()])
-      .then(([intelligenceResult, configResult]) => {
+    void Promise.allSettled([
+      getLeadIntelligence(lead.id),
+      getLeadScoreConfig(),
+      getLeadScorePreview(lead.id, "weekly"),
+    ])
+      .then(([intelligenceResult, configResult, previewResult]) => {
         if (!active) return;
 
         if (intelligenceResult.status === "fulfilled") {
@@ -217,11 +229,20 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
           setConfigDraft((current) => current ?? configToDraft(null));
           setOriginalConfigDraft((current) => current ?? configToDraft(null));
         }
+
+        if (previewResult.status === "fulfilled") {
+          setScorePreview(previewResult.value);
+        } else {
+          setPreviewError(
+            previewResult.reason?.message || "Unable to load lead score preview."
+          );
+        }
       })
       .finally(() => {
         if (!active) return;
         setIntelligenceLoading(false);
         setConfigLoading(false);
+        setPreviewLoading(false);
       });
 
     return () => {
@@ -351,6 +372,7 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
   const score = intelligence?.score.total ?? lead.score ?? 0;
   const total = intelligence?.score.max ?? 100;
   const tone = scoreTone(score);
+  const livePreview = scorePreview?.data;
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -379,6 +401,98 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
       <div className="p-5 space-y-5 bg-gray-50/20">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                  <Brain size={14} className="text-sky-500" /> Live Score Preview
+                </p>
+                <p className="text-[11px] text-gray-400 mt-0.5">Weekly cadence snapshot without persisting</p>
+              </div>
+              {previewLoading ? (
+                <Loader2 size={14} className="animate-spin text-sky-500" />
+              ) : (
+                <span className="px-2 py-1 rounded-full bg-sky-50 text-sky-700 text-[10px] font-semibold border border-sky-200">
+                  {livePreview?.momentum?.trend ?? "N/A"}
+                </span>
+              )}
+            </div>
+
+            {previewError ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 flex items-start gap-2">
+                <AlertCircle size={13} className="shrink-0 mt-0.5" />
+                <span>{previewError}</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Fit</div>
+                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.fit?.score ?? "—"}</div>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Engagement</div>
+                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.engagement?.score ?? "—"}</div>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Intent</div>
+                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.intent?.score ?? "—"}</div>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Momentum</div>
+                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.momentum?.change ?? "—"}</div>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Risk</div>
+                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.risk?.score ?? "—"}</div>
+                </div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Total</div>
+                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.total ?? "—"}</div>
+                </div>
+              </div>
+            )}
+
+            {livePreview && (
+              <div className="space-y-3 text-xs text-gray-600">
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="font-semibold text-gray-700 mb-1">Risk</div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-gray-500">Level</span>
+                    <span className="font-semibold text-gray-800">{livePreview.risk.level}</span>
+                  </div>
+                  {livePreview.risk.reasons?.length ? (
+                    <ul className="mt-2 list-disc list-inside space-y-1 text-gray-600">
+                      {livePreview.risk.reasons.map((reason, idx) => (
+                        <li key={`${reason}-${idx}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="font-semibold text-gray-700 mb-1">Intent evidence</div>
+                  {livePreview.intent.reasons?.length ? (
+                    <ul className="list-disc list-inside space-y-1 text-gray-600">
+                      {livePreview.intent.reasons.map((reason, idx) => (
+                        <li key={`${reason}-${idx}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <span className="text-gray-500">No accepted evidence yet.</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="rounded-xl border border-gray-100 bg-white p-3 text-[11px] text-gray-500">
+              {livePreview ? (
+                <span>
+                  λ={livePreview.engagement.lambda ?? "—"} · trend={livePreview.momentum.trend ?? "—"} · risk={livePreview.risk.level ?? "—"}
+                </span>
+              ) : (
+                <span>Preview data is not available yet.</span>
+              )}
+            </div>
+
             <div className="flex items-start gap-4">
               <div
                 className="relative w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-2xl"
