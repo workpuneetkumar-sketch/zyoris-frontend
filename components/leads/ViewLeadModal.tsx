@@ -427,8 +427,8 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
             </div>
           )}
 
-          {/* AI Conversation Extraction */}
-          <AiExtractionPanel />
+          {/* AI Conversation Extraction — leadId keeps history per lead */}
+          <AiExtractionPanel leadId={lead.id} />
         </div>
 
           {/* Footer */}

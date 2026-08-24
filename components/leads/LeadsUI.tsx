@@ -647,9 +647,13 @@ export function LeadsTable({
                                     const isDeleting = deletingId === lead.id;
                                     const { date, time } = formatTableDate(lead.createdAt);
                                     return (
-                                        <tr key={lead.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                                            {/* Checkbox */}
-                                            <td className="px-4 py-3.5">
+                                        <tr
+                                            key={lead.id}
+                                            onClick={() => { setViewingLead(lead); setIsViewOpen(true); }}
+                                            className="border-b border-gray-50 hover:bg-blue-50/40 transition-colors cursor-pointer"
+                                        >
+                                            {/* Checkbox — stop propagation so selecting doesn't open modal */}
+                                            <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                                                 <LeadCheckbox
                                                     leadId={lead.id}
                                                     isSelected={isSelected(lead.id)}
@@ -657,18 +661,12 @@ export function LeadsTable({
                                                 />
                                             </td>
 
-                                            {/* Lead name + avatar + source — CLICKABLE to open view modal */}
+                                            {/* Lead name + avatar + source */}
                                             <td className="px-4 py-3.5 whitespace-nowrap">
-                                                <button
-                                                    onClick={() => {
-                                                        setViewingLead(lead);
-                                                        setIsViewOpen(true);
-                                                    }}
-                                                    className="flex items-center gap-2.5 hover:opacity-80 transition-opacity text-left w-full"
-                                                >
+                                                <div className="flex items-center gap-2.5">
                                                     <LeadAvatar name={lead.name} />
                                                     <div className="min-w-0">
-                                                        <p className="text-sm font-semibold text-blue-600 leading-tight truncate max-w-[180px] hover:underline">
+                                                        <p className="text-sm font-semibold text-blue-600 leading-tight truncate max-w-[180px] underline-offset-2 hover:underline">
                                                             {lead.name}
                                                         </p>
                                                         {lead.source && String(lead.source).toLowerCase() !== "whatsapp_ai_detection" && (
@@ -678,7 +676,7 @@ export function LeadsTable({
                                                             <AiBadge label="🤖 Auto-Detected via WhatsApp AI" />
                                                         )}
                                                     </div>
-                                                </button>
+                                                </div>
                                             </td>
 
                                             {/* Company */}
@@ -725,8 +723,8 @@ export function LeadsTable({
                                                 </div>
                                             </td>
 
-                                            {/* Actions */}
-                                            <td className="px-4 py-3.5 whitespace-nowrap">
+                                            {/* Actions — stop propagation so menu click doesn't open modal */}
+                                            <td className="px-4 py-3.5 whitespace-nowrap" onClick={e => e.stopPropagation()}>
                                                 {convertingId === lead.id ? (
                                                     <div className="w-8 h-8 flex items-center justify-center">
                                                         <span className="w-4 h-4 border-2 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
