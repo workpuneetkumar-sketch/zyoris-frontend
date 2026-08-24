@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Lead, computeLeadScore } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
 import { getLeadScore as fetchLeadScore } from "@/lib/api/leadsApi";
+import { AiExtractionPanel } from "@/components/ai/AiExtractionPanel";
 import {
   Mail,
   Phone,
@@ -425,10 +426,13 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
               </p>
             </div>
           )}
+
+          {/* AI Conversation Extraction */}
+          <AiExtractionPanel />
         </div>
 
-        {/* Footer */}
-        <div className="px-6 py-4 bg-white border-t border-gray-100 flex justify-end">
+          {/* Footer */}
+          <div className="px-6 py-4 bg-white border-t border-gray-100 flex justify-end">
           <button
             onClick={onClose}
             className="px-5 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium transition-colors"

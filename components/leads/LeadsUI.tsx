@@ -657,12 +657,18 @@ export function LeadsTable({
                                                 />
                                             </td>
 
-                                            {/* Lead name + avatar + source */}
+                                            {/* Lead name + avatar + source — CLICKABLE to open view modal */}
                                             <td className="px-4 py-3.5 whitespace-nowrap">
-                                                <div className="flex items-center gap-2.5">
+                                                <button
+                                                    onClick={() => {
+                                                        setViewingLead(lead);
+                                                        setIsViewOpen(true);
+                                                    }}
+                                                    className="flex items-center gap-2.5 hover:opacity-80 transition-opacity text-left w-full"
+                                                >
                                                     <LeadAvatar name={lead.name} />
                                                     <div className="min-w-0">
-                                                        <p className="text-sm font-semibold text-gray-800 leading-tight truncate max-w-[180px]">
+                                                        <p className="text-sm font-semibold text-blue-600 leading-tight truncate max-w-[180px] hover:underline">
                                                             {lead.name}
                                                         </p>
                                                         {lead.source && String(lead.source).toLowerCase() !== "whatsapp_ai_detection" && (
@@ -672,7 +678,7 @@ export function LeadsTable({
                                                             <AiBadge label="🤖 Auto-Detected via WhatsApp AI" />
                                                         )}
                                                     </div>
-                                                </div>
+                                                </button>
                                             </td>
 
                                             {/* Company */}

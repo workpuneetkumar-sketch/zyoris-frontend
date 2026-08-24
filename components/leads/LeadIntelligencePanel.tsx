@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { Lead } from "@/types/leads";
+import { AiExtractionPanel } from "@/components/ai/AiExtractionPanel";
 import {
   getLeadIntelligence,
   getLeadScoreConfig,
@@ -791,6 +792,9 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
             </div>
           </div>
         </div>
+
+        {/* ── AI Conversation Extraction ───────────────────────────── */}
+        <AiExtractionPanel />
 
         <div className="rounded-xl border border-gray-100 bg-white px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs text-gray-500">
           <div className="flex items-center gap-2">
