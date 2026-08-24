@@ -50,9 +50,13 @@ api.interceptors.request.use(
             }
         }
 
-        // ✅ FIX: Remove Content-Type for FormData
+        // ✅ FIX: Remove Content-Type for FormData so browser sets it with boundary
         if (config.data instanceof FormData) {
             delete config.headers['Content-Type'];
+            // Mark FormData requests so the retry interceptor can skip them.
+            // FormData bodies are consumed/streamed on the first send — retrying
+            // them results in an empty body and a 400 from the server.
+            (config as any)._isFormData = true;
         }
 
         return config;
@@ -140,12 +144,17 @@ api.interceptors.response.use(
         // Check if it's a network error or timeout
         const isNetworkError = !error.response || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
         
-        // Retry logic for network errors
-        if (isNetworkError && !originalRequest?._retryCount) {
+        // Retry logic for network errors.
+        // IMPORTANT: Never retry FormData (file upload) requests — the body stream
+        // is already consumed after the first attempt, so a retry sends an empty
+        // body and the server returns 400 "Invalid CSV / no file".
+        const isFormDataRequest = !!(originalRequest as any)?._isFormData;
+        
+        if (isNetworkError && !isFormDataRequest && !originalRequest?._retryCount) {
             originalRequest._retryCount = 1;
         }
         
-        if (isNetworkError && originalRequest._retryCount && originalRequest._retryCount < 3) {
+        if (isNetworkError && !isFormDataRequest && originalRequest._retryCount && originalRequest._retryCount < 3) {
             originalRequest._retryCount += 1;
             // Exponential backoff: 1s, 2s, 4s
             const backoffTime = Math.pow(2, originalRequest._retryCount - 1) * 1000;

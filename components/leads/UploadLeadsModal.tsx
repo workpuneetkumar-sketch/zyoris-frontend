@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, DragEvent, ChangeEvent } from
 import {
   Upload, X, FileText, CheckCircle2, AlertCircle, Loader2,
   Eye, FileSpreadsheet, SkipForward, AlertTriangle, RefreshCw,
-  Download,
+  Download, Info, ChevronDown, ChevronUp,
 } from "lucide-react";
 import {
   startLeadImport,
@@ -114,6 +114,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   const [duplicatesInFile, setDuplicatesInFile] = useState(0);
   const [hasErrorCsv,      setHasErrorCsv]      = useState(false);
   const [downloadingErrors,setDownloadingErrors]= useState(false);
+  const [showFormatGuide,  setShowFormatGuide]  = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -328,12 +329,137 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   CSV only · max 10 MB / 5 000 rows
                 </p>
               </div>
+
               {error && (
                 <div className="p-3 bg-red-50 border border-red-100 rounded-xl flex items-start gap-2">
                   <AlertCircle size={15} className="text-red-500 shrink-0 mt-0.5" />
                   <p className="text-xs font-semibold text-red-700">{error}</p>
                 </div>
               )}
+
+              {/* ── CSV Format Guide ─────────────────────────────────────── */}
+              <div className="border border-blue-100 rounded-2xl overflow-hidden">
+                {/* Collapsible header */}
+                <button
+                  type="button"
+                  onClick={() => setShowFormatGuide((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-blue-50 hover:bg-blue-100/70 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <Info size={14} className="text-blue-500 shrink-0" />
+                    <span className="text-xs font-bold text-blue-700">What should my CSV look like?</span>
+                  </div>
+                  {showFormatGuide
+                    ? <ChevronUp size={14} className="text-blue-400" />
+                    : <ChevronDown size={14} className="text-blue-400" />}
+                </button>
+
+                {showFormatGuide && (
+                  <div className="px-4 py-4 space-y-4 bg-white">
+
+                    {/* Required / Optional columns */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
+                          Required columns
+                        </p>
+                        <div className="space-y-1.5">
+                          {[
+                            { col: "name",  desc: "Full name of the lead" },
+                            { col: "email", desc: "Email address" },
+                          ].map(({ col, desc }) => (
+                            <div key={col} className="flex items-start gap-2">
+                              <span className="font-mono text-[11px] bg-red-50 text-red-600 border border-red-100 rounded px-1.5 py-0.5 shrink-0">
+                                {col}
+                              </span>
+                              <span className="text-[11px] text-gray-500 leading-tight pt-0.5">{desc}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
+                          Optional columns
+                        </p>
+                        <div className="space-y-1.5">
+                          {[
+                            { col: "phone",          desc: "Phone number" },
+                            { col: "company",        desc: "Company name" },
+                            { col: "owner",          desc: "Assigned rep name" },
+                            { col: "status",         desc: "NEW · WARM · HOT · COLD · DEAD" },
+                            { col: "source",         desc: "Website · LinkedIn · Referral…" },
+                            { col: "estimatedValue", desc: "Deal value (number)" },
+                            { col: "score",          desc: "Lead score 0–100" },
+                          ].map(({ col, desc }) => (
+                            <div key={col} className="flex items-start gap-2">
+                              <span className="font-mono text-[11px] bg-gray-50 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">
+                                {col}
+                              </span>
+                              <span className="text-[11px] text-gray-500 leading-tight pt-0.5">{desc}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Divider */}
+                    <div className="border-t border-gray-100" />
+
+                    {/* Sample row */}
+                    <div>
+                      <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
+                        Sample row
+                      </p>
+                      <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
+                        <table className="w-full text-[11px] min-w-max">
+                          <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                              {["name","email","phone","company","owner","status","source","estimatedValue","score"].map((h) => (
+                                <th key={h} className="text-left px-2.5 py-1.5 font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                                  {h}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">John Smith</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">john@techcorp.com</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">+1-555-0192</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">TechCorp Inc.</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Sarah Johnson</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">HOT</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Website</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">15000</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">85</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Rules list */}
+                    <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 space-y-1">
+                      <p className="text-[10px] font-extrabold text-amber-700 uppercase tracking-widest mb-1">
+                        Good to know
+                      </p>
+                      {[
+                        "Column headers are case-insensitive (Name, name, NAME all work).",
+                        "Duplicate rows (same email) are detected and skipped automatically.",
+                        "The owner column must match an existing team member's name.",
+                        "status must be one of: NEW, WARM, HOT, COLD, DEAD, QUALIFIED, PROPOSAL, NEGOTIATION, CLOSED.",
+                        "Maximum 5 000 rows and 10 MB per file.",
+                      ].map((rule, i) => (
+                        <p key={i} className="text-[11px] text-amber-700 leading-snug flex items-start gap-1.5">
+                          <span className="shrink-0 mt-0.5">•</span>
+                          <span>{rule}</span>
+                        </p>
+                      ))}
+                    </div>
+
+                  </div>
+                )}
+              </div>
             </>
           )}
 
@@ -502,60 +628,134 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           )}
 
           {/* ── COMPLETED ────────────────────────────────────────────────── */}
-          {phase === "completed" && jobStatus && (
-            <div className="flex flex-col items-center text-center py-4 space-y-4">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center border border-emerald-100">
-                <CheckCircle2 size={32} className="text-emerald-500" />
-              </div>
-              <div>
-                <h4 className="text-base font-extrabold text-gray-900 mb-1">Import Completed</h4>
-                <p className="text-xs text-gray-400">{file?.name}</p>
-              </div>
+          {phase === "completed" && jobStatus && (() => {
+            const allDuplicates = jobStatus.successRows === 0 && jobStatus.failedRows > 0;
+            const partialSuccess = jobStatus.successRows > 0 && jobStatus.failedRows > 0;
 
-              {/* Result summary grid */}
-              <div className="w-full grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-extrabold text-gray-800">{jobStatus.totalRows}</p>
-                  <p className="text-xs text-gray-500 font-semibold mt-0.5">Total Rows</p>
+            return (
+              <div className="flex flex-col items-center text-center py-4 space-y-4">
+                {/* Icon — amber for all-duplicates, green for success */}
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center border ${
+                  allDuplicates
+                    ? "bg-amber-50 border-amber-100"
+                    : "bg-emerald-50 border-emerald-100"
+                }`}>
+                  {allDuplicates
+                    ? <SkipForward size={32} className="text-amber-500" />
+                    : <CheckCircle2 size={32} className="text-emerald-500" />}
                 </div>
-                <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-extrabold text-emerald-700">{jobStatus.successRows}</p>
-                  <p className="text-xs text-emerald-600 font-semibold mt-0.5">Imported</p>
-                </div>
-                <div className="bg-red-50 border border-red-100 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-extrabold text-red-700">{jobStatus.failedRows}</p>
-                  <p className="text-xs text-red-600 font-semibold mt-0.5">Failed Rows</p>
-                </div>
-                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
-                  <p className="text-2xl font-extrabold text-blue-700">{Math.round(jobStatus.progress)}%</p>
-                  <p className="text-xs text-blue-600 font-semibold mt-0.5">Completion</p>
-                </div>
-              </div>
 
-              {/* Download error CSV if there were failures */}
-              {hasErrorCsv && (
+                <div>
+                  <h4 className="text-base font-extrabold text-gray-900 mb-1">
+                    {allDuplicates ? "All Rows Already Exist" : "Import Completed"}
+                  </h4>
+                  <p className="text-xs text-gray-400">{file?.name}</p>
+                </div>
+
+                {/* All-duplicates explanation banner */}
+                {allDuplicates && (
+                  <div className="w-full bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-left space-y-1">
+                    <p className="text-xs font-bold text-amber-800">
+                      Every lead in this file is already in your database.
+                    </p>
+                    <p className="text-xs text-amber-700 leading-snug">
+                      The server skipped all {jobStatus.failedRows} row{jobStatus.failedRows !== 1 ? "s" : ""} because their email addresses already exist.
+                      This is not an error — duplicate detection is working correctly.
+                    </p>
+                    <p className="text-xs text-amber-600 leading-snug mt-1">
+                      To import new leads, use a CSV with different email addresses.
+                    </p>
+                  </div>
+                )}
+
+                {/* Partial success explanation */}
+                {partialSuccess && (
+                  <div className="w-full bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-left">
+                    <p className="text-xs font-bold text-blue-800 mb-0.5">Partial import completed.</p>
+                    <p className="text-xs text-blue-700 leading-snug">
+                      {jobStatus.successRows} lead{jobStatus.successRows !== 1 ? "s" : ""} imported successfully.{" "}
+                      {jobStatus.failedRows} row{jobStatus.failedRows !== 1 ? "s" : ""} were skipped — download the error report to see why.
+                    </p>
+                  </div>
+                )}
+
+                {/* Result summary grid */}
+                <div className="w-full grid grid-cols-2 gap-3">
+                  <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-extrabold text-gray-800">{jobStatus.totalRows}</p>
+                    <p className="text-xs text-gray-500 font-semibold mt-0.5">Total Rows</p>
+                  </div>
+                  <div className={`border rounded-xl p-3 text-center ${
+                    jobStatus.successRows === 0
+                      ? "bg-gray-50 border-gray-100"
+                      : "bg-emerald-50 border-emerald-100"
+                  }`}>
+                    <p className={`text-2xl font-extrabold ${jobStatus.successRows === 0 ? "text-gray-400" : "text-emerald-700"}`}>
+                      {jobStatus.successRows}
+                    </p>
+                    <p className={`text-xs font-semibold mt-0.5 ${jobStatus.successRows === 0 ? "text-gray-400" : "text-emerald-600"}`}>
+                      Imported
+                    </p>
+                  </div>
+                  <div className={`border rounded-xl p-3 text-center ${
+                    jobStatus.failedRows === 0
+                      ? "bg-gray-50 border-gray-100"
+                      : allDuplicates
+                        ? "bg-amber-50 border-amber-100"
+                        : "bg-red-50 border-red-100"
+                  }`}>
+                    <p className={`text-2xl font-extrabold ${
+                      jobStatus.failedRows === 0 ? "text-gray-400" : allDuplicates ? "text-amber-600" : "text-red-700"
+                    }`}>
+                      {jobStatus.failedRows}
+                    </p>
+                    <p className={`text-xs font-semibold mt-0.5 ${
+                      jobStatus.failedRows === 0 ? "text-gray-400" : allDuplicates ? "text-amber-600" : "text-red-600"
+                    }`}>
+                      {allDuplicates ? "Duplicates Skipped" : "Failed Rows"}
+                    </p>
+                  </div>
+                  <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 text-center">
+                    <p className="text-2xl font-extrabold text-blue-700">{Math.round(jobStatus.progress)}%</p>
+                    <p className="text-xs text-blue-600 font-semibold mt-0.5">Completion</p>
+                  </div>
+                </div>
+
+                {/* Download error CSV — shown for failures and duplicates alike */}
+                {hasErrorCsv && (
+                  <button
+                    onClick={handleDownloadErrors}
+                    disabled={downloadingErrors}
+                    className={`w-full flex items-center justify-center gap-2 py-3 text-sm font-bold rounded-2xl border transition-all disabled:opacity-50 ${
+                      allDuplicates
+                        ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border-amber-200"
+                        : "bg-red-50 hover:bg-red-100 text-red-700 border-red-200"
+                    }`}
+                  >
+                    {downloadingErrors ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
+                    {downloadingErrors
+                      ? "Downloading…"
+                      : allDuplicates
+                        ? `Download Duplicate Report (${jobStatus.failedRows} rows)`
+                        : `Download Error Report (${jobStatus.failedRows} rows)`}
+                  </button>
+                )}
+
+                {!allDuplicates && (
+                  <p className="text-sm text-gray-500">
+                    Imported leads are now visible in your Leads list.
+                  </p>
+                )}
+
                 <button
-                  onClick={handleDownloadErrors}
-                  disabled={downloadingErrors}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-bold rounded-2xl border border-red-200 transition-all disabled:opacity-50"
+                  onClick={onClose}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all"
                 >
-                  {downloadingErrors ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
-                  {downloadingErrors ? "Downloading…" : `Download Error Report (${jobStatus.failedRows} rows)`}
+                  Done
                 </button>
-              )}
-
-              <p className="text-sm text-gray-500">
-                Imported leads are now visible in your Leads list.
-              </p>
-
-              <button
-                onClick={onClose}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all"
-              >
-                Done
-              </button>
-            </div>
-          )}
+              </div>
+            );
+          })()}
 
           {/* ── FAILED (job failed) ───────────────────────────────────────── */}
           {phase === "failed" && (

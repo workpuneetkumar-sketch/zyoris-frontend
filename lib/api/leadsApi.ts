@@ -401,10 +401,20 @@ export async function startLeadImport(file: File): Promise<LeadImportStartRespon
     });
     
     const formData = new FormData();
-    formData.append("file", file);
+    // Always send as "file" with an explicit MIME type of text/csv so the server's
+    // multer/busboy parser correctly recognises it, even when the OS sets an empty
+    // or wrong MIME type (common on Windows / some browsers).
+    const csvFile = file.type === "text/csv" || file.name.endsWith(".csv")
+        ? new File([file], file.name, { type: "text/csv" })
+        : file;
+    formData.append("file", csvFile);
     
     try {
-        const res = await api.post<LeadImportStartResponse>("/leads/import", formData);
+        // Use a longer timeout for file uploads — Render.com cold starts can add 10-30s
+        // on top of the actual upload time, so 30 s is too tight.
+        const res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
+            timeout: 120_000, // 2 minutes
+        });
         console.log('[startLeadImport] Response:', res.data);
         return res.data;
     } catch (error: any) {
