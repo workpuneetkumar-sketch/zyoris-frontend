@@ -195,7 +195,9 @@ export async function getAssignmentAnalytics(
     }
     if (filters?.dateTo) {
       try {
-        params.to = new Date(filters.dateTo).toISOString();
+        const d = new Date(filters.dateTo);
+        d.setHours(23, 59, 59, 999);
+        params.to = d.toISOString();
       } catch {
         params.to = filters.dateTo;
       }
