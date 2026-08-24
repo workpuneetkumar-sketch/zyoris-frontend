@@ -62,6 +62,9 @@ export const isPathAllowed = (
     "/admin/roles",
     "/admin/user-roles",
     "/admin/audit",
+    "/calendar",
+    "/tasks",
+    "/projects",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",
@@ -85,7 +88,7 @@ export const isPathAllowed = (
     // Aggregate key expansion — if the API returns key:"crm" that expands to
     // /leads, /deals, etc., those sub-routes must also be allowed
     const CRM_EXPANSION = ["/leads", "/deals", "/contacts", "/companies", "/activities", "/ai-insights"];
-    const COMM_EXPANSION = ["/communications", "/email", "/whatsapp", "/calls", "/messages", "/meetings"];
+    const COMM_EXPANSION = ["/communications", "/email", "/whatsapp", "/calls", "/messages", "/meetings", "/calendar", "/tasks", "/projects"];
 
     const hasCrmKey = sidebarItems.some((item) => (item.key ?? "").toLowerCase() === "crm");
     const hasCommKey = sidebarItems.some((item) => ["communications", "communication"].includes((item.key ?? "").toLowerCase()));

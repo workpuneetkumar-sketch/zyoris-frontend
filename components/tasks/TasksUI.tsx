@@ -19,6 +19,7 @@ import {
     LayoutList,
     CalendarDays,
     ChevronLeft,
+    GripVertical,
 } from "lucide-react";
 import { Task, TaskPriority, TaskStatus, CreateTaskPayload } from "@/lib/api/tasksApi";
 import { fetchTeamMembers } from "@/lib/api/leadsApi";
@@ -325,6 +326,7 @@ export interface TasksUIProps {
     onCreateTask: (data: CreateTaskPayload) => Promise<boolean>;
     onOpenDetail: (task: Task) => void;
     onCycleStatus: (task: Task) => void;
+    onUpdateTask?: (id: string, data: { status: TaskStatus }) => Promise<boolean>;
     onRetry: () => void;
 }
 
@@ -351,12 +353,18 @@ export function TasksUI({
     onCreateTask,
     onOpenDetail,
     onCycleStatus,
+    onUpdateTask,
     onRetry,
 }: TasksUIProps) {
     const [viewMode, setViewMode] = useState<ViewMode>("KANBAN"); // Default Kanban for modern feel
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
     const [currentMonth, setCurrentMonth] = useState(new Date());
+
+    // Drag and drop states & microanimations for Kanban
+    const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
+    const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
+    const [justDroppedId, setJustDroppedId] = useState<string | null>(null);
 
     const todoCount     = tasks.filter((t) => t.status === "TODO").length;
     const inProgressCount = tasks.filter((t) => t.status === "IN_PROGRESS").length;
@@ -652,8 +660,48 @@ export function TasksUI({
                                 <div className="flex gap-5 min-w-[900px] h-full items-stretch">
                                     {(["TODO", "IN_PROGRESS", "DONE"] as TaskStatus[]).map((colStatus) => {
                                         const colTasks = filteredTasks.filter(t => t.status === colStatus);
+                                        const isColOver = dragOverCol === colStatus;
                                         return (
-                                            <div key={colStatus} className="flex-1 flex flex-col bg-gray-50/50 rounded-2xl border border-gray-100 p-3 min-h-[500px]">
+                                            <div 
+                                                key={colStatus} 
+                                                onDragOver={(e) => {
+                                                    e.preventDefault();
+                                                    e.dataTransfer.dropEffect = "move";
+                                                }}
+                                                onDragEnter={(e) => {
+                                                    e.preventDefault();
+                                                    setDragOverCol(colStatus);
+                                                }}
+                                                onDragLeave={(e) => {
+                                                    e.preventDefault();
+                                                    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                                                        setDragOverCol(null);
+                                                    }
+                                                }}
+                                                onDrop={(e) => {
+                                                    e.preventDefault();
+                                                    setDragOverCol(null);
+                                                    const taskId = e.dataTransfer.getData("text/plain") || draggedTaskId;
+                                                    if (taskId) {
+                                                        if (onUpdateTask) {
+                                                            onUpdateTask(taskId, { status: colStatus });
+                                                        } else {
+                                                            const foundTask = tasks.find(t => t.id === taskId);
+                                                            if (foundTask && foundTask.status !== colStatus) {
+                                                                onCycleStatus(foundTask);
+                                                            }
+                                                        }
+                                                        setJustDroppedId(taskId);
+                                                        setTimeout(() => setJustDroppedId(null), 600);
+                                                    }
+                                                    setDraggedTaskId(null);
+                                                }}
+                                                className={`flex-1 flex flex-col rounded-2xl border p-3 min-h-[500px] transition-all duration-300 ${
+                                                    isColOver 
+                                                        ? "bg-blue-50/80 border-blue-400 ring-4 ring-blue-400/20 scale-[1.01] shadow-lg shadow-blue-100/50" 
+                                                        : "bg-gray-50/50 border-gray-100"
+                                                }`}
+                                            >
                                                 {/* Column Header */}
                                                 <div className="flex items-center justify-between px-2 mb-4">
                                                     <div className="flex items-center gap-2">
@@ -666,19 +714,41 @@ export function TasksUI({
                                                 </div>
                                                 
                                                 {/* Column Tasks */}
-                                                <div className="flex flex-col gap-3">
+                                                <div className="flex flex-col gap-3 flex-1">
                                                     {colTasks.map(task => {
                                                         const isOverdue = task.dueDate && task.status !== "DONE" && new Date(task.dueDate) < new Date();
+                                                        const isDraggingThis = draggedTaskId === task.id;
+                                                        const isJustDropped = justDroppedId === task.id;
+
                                                         return (
                                                             <div 
                                                                 key={task.id} 
+                                                                draggable={true}
+                                                                onDragStart={(e) => {
+                                                                    e.dataTransfer.setData("text/plain", task.id);
+                                                                    e.dataTransfer.effectAllowed = "move";
+                                                                    setDraggedTaskId(task.id);
+                                                                }}
+                                                                onDragEnd={() => {
+                                                                    setDraggedTaskId(null);
+                                                                    setDragOverCol(null);
+                                                                }}
                                                                 onClick={() => onOpenDetail(task)}
-                                                                className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
+                                                                className={`bg-white p-4 rounded-xl border transition-all duration-200 cursor-grab active:cursor-grabbing group ${
+                                                                    isDraggingThis 
+                                                                        ? "opacity-40 scale-95 rotate-2 border-blue-400 shadow-2xl ring-4 ring-blue-500/20" 
+                                                                        : isJustDropped
+                                                                        ? "border-emerald-400 ring-2 ring-emerald-400/50 animate-in zoom-in-95 duration-300 shadow-md"
+                                                                        : "border-gray-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-blue-300"
+                                                                }`}
                                                             >
                                                                 <div className="flex justify-between items-start mb-2">
-                                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-widest ${PRIORITY_STYLES[task.priority]}`}>
-                                                                        {task.priority}
-                                                                    </span>
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <GripVertical size={13} className="text-gray-300 group-hover:text-blue-500 transition-colors shrink-0" />
+                                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold tracking-widest ${PRIORITY_STYLES[task.priority]}`}>
+                                                                            {task.priority}
+                                                                        </span>
+                                                                    </div>
                                                                     {task.assignedTo ? (
                                                                         <Avatar name={task.assignedTo.name} />
                                                                     ) : (
@@ -699,7 +769,12 @@ export function TasksUI({
                                                             </div>
                                                         );
                                                     })}
-                                                    {colTasks.length === 0 && (
+                                                    {isColOver && draggedTaskId && (
+                                                        <div className="border-2 border-dashed border-blue-400 rounded-xl p-3 bg-blue-100/40 text-blue-600 text-xs font-bold text-center animate-pulse transition-all">
+                                                            Drop task here
+                                                        </div>
+                                                    )}
+                                                    {colTasks.length === 0 && !isColOver && (
                                                         <div className="text-center p-6 rounded-xl border-2 border-dashed border-gray-200">
                                                             <p className="text-xs text-gray-400 font-medium tracking-wide">No tasks</p>
                                                         </div>

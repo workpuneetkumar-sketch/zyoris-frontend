@@ -53,6 +53,7 @@ export default function TasksPage() {
                 onCreateTask={handleCreate}
                 onOpenDetail={openDetail}
                 onCycleStatus={cycleStatus}
+                onUpdateTask={handleUpdate}
                 onRetry={retry}
             />
 

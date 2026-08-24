@@ -69,6 +69,10 @@ const COLUMNS: {
 
 function ProjectCard({
   project,
+  isDragging,
+  isJustDropped,
+  onDragStart,
+  onDragEnd,
   onEdit,
   onDelete,
   onTeam,
@@ -76,6 +80,10 @@ function ProjectCard({
   onMoveStatus,
 }: {
   project: Project;
+  isDragging: boolean;
+  isJustDropped: boolean;
+  onDragStart: (e: React.DragEvent) => void;
+  onDragEnd: () => void;
   onEdit: () => void;
   onDelete: () => void;
   onTeam: () => void;
@@ -88,14 +96,25 @@ function ProjectCard({
   const otherStatuses = COLUMNS.filter((c) => c.key !== project.status);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 group">
+    <div
+      draggable={true}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      className={`bg-white rounded-xl border transition-all duration-200 cursor-grab active:cursor-grabbing group ${
+        isDragging
+          ? "opacity-40 scale-95 rotate-2 border-indigo-400 shadow-2xl ring-4 ring-indigo-500/20"
+          : isJustDropped
+          ? "border-emerald-400 ring-2 ring-emerald-400/50 animate-in zoom-in-95 duration-300 shadow-md"
+          : "border-gray-100 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-300"
+      }`}
+    >
       {/* Card Header */}
       <div className="p-4 pb-2">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
             <GripVertical
               size={14}
-              className="text-gray-300 mt-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+              className="text-gray-300 mt-1 shrink-0 group-hover:text-indigo-500 transition-colors"
             />
             <div className="min-w-0">
               <h4 className="text-sm font-semibold text-gray-900 truncate">
@@ -110,7 +129,10 @@ function ProjectCard({
           </div>
           <div className="relative shrink-0">
             <button
-              onClick={() => setShowMenu(!showMenu)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowMenu(!showMenu);
+              }}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <MoreHorizontal size={14} className="text-gray-400" />
@@ -119,11 +141,15 @@ function ProjectCard({
               <>
                 <div
                   className="fixed inset-0 z-10"
-                  onClick={() => setShowMenu(false)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMenu(false);
+                  }}
                 />
                 <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-40">
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMenu(false);
                       onEdit();
                     }}
@@ -132,7 +158,8 @@ function ProjectCard({
                     <Edit size={14} /> Edit
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMenu(false);
                       onTeam();
                     }}
@@ -141,7 +168,8 @@ function ProjectCard({
                     <Users size={14} /> Team
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMenu(false);
                       onMilestones();
                     }}
@@ -151,7 +179,8 @@ function ProjectCard({
                   </button>
                   <div className="border-t border-gray-100 my-1" />
                   <button
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMenu(false);
                       onDelete();
                     }}
@@ -186,7 +215,10 @@ function ProjectCard({
         {/* Move Status */}
         <div className="relative">
           <button
-            onClick={() => setShowMoveMenu(!showMoveMenu)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMoveMenu(!showMoveMenu);
+            }}
             className="flex items-center gap-1 px-2 py-1 text-[10px] font-semibold text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-md transition-colors"
           >
             <ArrowRight size={11} />
@@ -197,13 +229,17 @@ function ProjectCard({
             <>
               <div
                 className="fixed inset-0 z-10"
-                onClick={() => setShowMoveMenu(false)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMoveMenu(false);
+                }}
               />
               <div className="absolute right-0 bottom-7 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-36">
                 {otherStatuses.map((col) => (
                   <button
                     key={col.key}
-                    onClick={() => {
+                    onClick={(e) => {
+                      e.stopPropagation();
                       setShowMoveMenu(false);
                       onMoveStatus(col.key);
                     }}
@@ -232,14 +268,49 @@ export default function KanbanView({
   onMilestones,
   onUpdateStatus,
 }: KanbanViewProps) {
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<StatusColumn | null>(null);
+  const [justDroppedProjectId, setJustDroppedProjectId] = useState<string | null>(null);
+
   return (
     <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2">
       {COLUMNS.map((col) => {
         const colProjects = projects.filter((p) => p.status === col.key);
+        const isColOver = dragOverCol === col.key;
+
         return (
           <div
             key={col.key}
-            className="flex-1 min-w-[280px] max-w-[340px] flex flex-col"
+            onDragOver={(e) => {
+              e.preventDefault();
+              e.dataTransfer.dropEffect = "move";
+            }}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              setDragOverCol(col.key);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOverCol(null);
+              }
+            }}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOverCol(null);
+              const projId = e.dataTransfer.getData("text/plain") || draggedProjectId;
+              if (projId) {
+                onUpdateStatus(projId, { status: col.key });
+                setJustDroppedProjectId(projId);
+                setTimeout(() => setJustDroppedProjectId(null), 600);
+              }
+              setDraggedProjectId(null);
+            }}
+            className={`flex-1 min-w-[280px] max-w-[340px] flex flex-col rounded-xl border transition-all duration-300 ${
+              isColOver
+                ? "bg-indigo-50/80 border-indigo-400 ring-4 ring-indigo-400/20 scale-[1.01] shadow-lg shadow-indigo-100/50"
+                : "bg-gray-50/50 border-gray-100"
+            }`}
           >
             {/* Column Header */}
             <div
@@ -263,25 +334,42 @@ export default function KanbanView({
             </div>
 
             {/* Column Body */}
-            <div className="flex-1 bg-gray-50/50 rounded-b-xl border border-t-0 border-gray-100 p-3 space-y-3 min-h-[200px]">
-              {colProjects.length === 0 ? (
+            <div className="flex-1 p-3 space-y-3 min-h-[200px] flex flex-col">
+              {colProjects.map((project) => (
+                <ProjectCard
+                  key={project.id}
+                  project={project}
+                  isDragging={draggedProjectId === project.id}
+                  isJustDropped={justDroppedProjectId === project.id}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/plain", project.id);
+                    e.dataTransfer.effectAllowed = "move";
+                    setDraggedProjectId(project.id);
+                  }}
+                  onDragEnd={() => {
+                    setDraggedProjectId(null);
+                    setDragOverCol(null);
+                  }}
+                  onEdit={() => onEdit(project)}
+                  onDelete={() => onDelete(project)}
+                  onTeam={() => onTeam(project)}
+                  onMilestones={() => onMilestones(project)}
+                  onMoveStatus={(status) =>
+                    onUpdateStatus(project.id, { status })
+                  }
+                />
+              ))}
+
+              {isColOver && draggedProjectId && (
+                <div className="border-2 border-dashed border-indigo-400 rounded-xl p-3 bg-indigo-100/40 text-indigo-700 text-xs font-bold text-center animate-pulse transition-all">
+                  Drop project here
+                </div>
+              )}
+
+              {colProjects.length === 0 && !isColOver && (
                 <div className="flex items-center justify-center h-24 text-xs text-gray-400 border-2 border-dashed border-gray-200 rounded-lg">
                   No projects
                 </div>
-              ) : (
-                colProjects.map((project) => (
-                  <ProjectCard
-                    key={project.id}
-                    project={project}
-                    onEdit={() => onEdit(project)}
-                    onDelete={() => onDelete(project)}
-                    onTeam={() => onTeam(project)}
-                    onMilestones={() => onMilestones(project)}
-                    onMoveStatus={(status) =>
-                      onUpdateStatus(project.id, { status })
-                    }
-                  />
-                ))
               )}
             </div>
           </div>
