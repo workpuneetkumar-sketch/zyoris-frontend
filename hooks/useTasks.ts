@@ -104,12 +104,15 @@ export function useTasks(currentUserId?: string) {
     async function handleUpdate(id: string, data: UpdateTaskPayload): Promise<boolean> {
         setSaving(true);
         setSaveError(null);
+        // Optimistic update for instant 0ms feedback
+        setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
         try {
             const updated = await updateTask(id, data);
             setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
             setSelectedTask(updated);
             return true;
         } catch (err) {
+            loadTasks(); // rollback on failure
             const msg = axios.isAxiosError(err)
                 ? err.response?.data?.error ?? err.response?.data?.message ?? err.message
                 : err instanceof Error

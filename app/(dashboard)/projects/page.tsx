@@ -131,15 +131,16 @@ export default function ProjectsPage() {
     id: string,
     payload: UpdateProjectPayload
   ) => {
+    // Optimistic update for instant 0ms UI feedback
+    setProjects((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, ...payload } : p))
+    );
     try {
-      const updated = await updateProject(id, payload);
-      setProjects((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
-      );
-      showToast("success", "Status updated");
+      await updateProject(id, payload);
     } catch (err: any) {
+      loadProjects(); // rollback on error
       const message =
-        err?.response?.data?.message || err.message || "Failed to update status";
+        err?.response?.data?.message || err.message || "Something went wrong";
       showToast("error", message);
     }
   };
