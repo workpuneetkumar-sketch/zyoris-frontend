@@ -209,8 +209,10 @@ function GroupListStep({
         <div className="w-14 h-14 rounded-full bg-green-50 flex items-center justify-center">
           <CheckCircle2 size={28} className="text-green-500" />
         </div>
-        <p className="text-sm font-medium text-gray-700">No duplicates found</p>
-        <p className="text-xs text-gray-400">Your CRM data is clean!</p>
+        <p className="text-sm font-medium text-gray-700">No similar leads found</p>
+        <p className="text-xs text-gray-400 text-center max-w-xs">
+          This scanner looks for leads with similar names, phones, or companies — not email-exact matches.
+        </p>
         <button
           onClick={onLoad}
           className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline mt-1"
@@ -543,7 +545,7 @@ function SuccessStep({
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DuplicateMergeUI() {
+export function DuplicateMergeUI({ onGroupCountChange }: { onGroupCountChange?: (count: number) => void }) {
   const {
     groups,
     loading,
@@ -569,6 +571,11 @@ export function DuplicateMergeUI() {
     handleMergeAnother,
   } = useDuplicates();
 
+  // Notify parent of group count whenever it changes (used for tab badge)
+  useEffect(() => {
+    if (!loading) onGroupCountChange?.(groups.length);
+  }, [groups.length, loading, onGroupCountChange]);
+
   return (
     <div className="max-w-2xl mx-auto">
       {/* Page header */}
@@ -579,7 +586,7 @@ export function DuplicateMergeUI() {
         <div>
           <h2 className="text-lg font-bold text-gray-900">Duplicate Lead Merge</h2>
           <p className="text-xs text-gray-400">
-            Identify and merge duplicate leads to keep your CRM clean
+            Find leads with similar names, phones, or companies and merge them into one
           </p>
         </div>
       </div>

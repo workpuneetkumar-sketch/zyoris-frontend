@@ -11,7 +11,6 @@ import {
     MoreHorizontal,
     LayoutGrid,
     Table2,
-    Filter,
     TrendingUp,
     CheckCircle2,
     XCircle,
@@ -516,11 +515,6 @@ export function DealsUI({
                             <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
                     </div>
-
-                    {/* Filter icon button */}
-                    <button className="w-9 h-9 rounded-xl border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 hover:border-gray-300 transition-colors shadow-sm">
-                        <Filter size={15} />
-                    </button>
 
                     {/* New Deal — primary action */}
                     <button

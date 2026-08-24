@@ -747,12 +747,28 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   </p>
                 )}
 
-                <button
-                  onClick={onClose}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all"
-                >
-                  Done
-                </button>
+                {/* When all rows were duplicates (email already exists) — just close.
+                    Do NOT show "Review & Merge Duplicates" — the Duplicates tab scans
+                    for fuzzy/similar leads, not email-exact blocks. These rows were
+                    prevented from entering the DB, so nothing to merge. */}
+                {allDuplicates && (
+                  <button
+                    onClick={onClose}
+                    className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white text-sm font-extrabold rounded-2xl transition-all"
+                  >
+                    Got it, Close
+                  </button>
+                )}
+
+                {/* When partial/full success, just show Done */}
+                {!allDuplicates && (
+                  <button
+                    onClick={onClose}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all"
+                  >
+                    Done
+                  </button>
+                )}
               </div>
             );
           })()}

@@ -110,23 +110,39 @@ const TABS: { id: LeadsTab; label: string }[] = [
   { id: "duplicates",            label: "Duplicates" },
 ];
 
-function TabBar({ active, onChange }: { active: LeadsTab; onChange: (t: LeadsTab) => void }) {
+function TabBar({ active, onChange, badges }: {
+  active: LeadsTab;
+  onChange: (t: LeadsTab) => void;
+  badges?: Partial<Record<LeadsTab, number>>;
+}) {
   return (
     <div className="flex items-center gap-0 border-b border-gray-200 bg-white px-4 pt-1 overflow-x-auto">
-      {TABS.map((tab) => (
-        <button
-          key={tab.id}
-          onClick={() => onChange(tab.id)}
-          className={`px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors ${
-            active === tab.id
-              ? "border-blue-600 text-blue-600"
-              : "border-transparent text-gray-500 hover:text-gray-700"
-          }`}
-          aria-current={active === tab.id ? "page" : undefined}
-        >
-          {tab.label}
-        </button>
-      ))}
+      {TABS.map((tab) => {
+        const badgeCount = badges?.[tab.id];
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onChange(tab.id)}
+            className={`px-4 py-2.5 text-[13px] font-medium border-b-2 -mb-px whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+              active === tab.id
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+            }`}
+            aria-current={active === tab.id ? "page" : undefined}
+          >
+            {tab.label}
+            {badgeCount != null && badgeCount > 0 && (
+              <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold leading-none ${
+                active === tab.id
+                  ? "bg-blue-600 text-white"
+                  : "bg-red-100 text-red-600"
+              }`}>
+                {badgeCount}
+              </span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -157,6 +173,9 @@ export default function LeadsPage() {
   // Upload modal (import)
   const [isUploadOpen, setIsUploadOpen] = useState(false);
 
+  // Duplicate group count — drives the badge on the Duplicates tab
+  const [duplicateGroupCount, setDuplicateGroupCount] = useState<number | null>(null);
+
   // Stats for summary cards
   const [statsLoading, setStatsLoading] = useState(true);
   const [leadsStats, setLeadsStats] = useState<LeadsStats>({
@@ -175,9 +194,8 @@ export default function LeadsPage() {
   }, []);
 
   // ── Load summary stats from /leads/stats ──────────────────────────────────
-  // The endpoint returns: { statusStats: [{ status, count }], sourceStats: [...] }
-  // There is no total, averageScore, or change-percentage in this response.
-  useEffect(() => {
+  // Extracted into a named function so it can be called on mount AND after import.
+  const refreshStats = useCallback(() => {
     setStatsLoading(true);
     api
       .get("/leads/stats")
@@ -199,6 +217,8 @@ export default function LeadsPage() {
       })
       .finally(() => setStatsLoading(false));
   }, []);
+
+  useEffect(() => { refreshStats(); }, []);
 
   // ── Leads hook ────────────────────────────────────────────────────────────
   const {
@@ -448,7 +468,7 @@ export default function LeadsPage() {
 
         {/* ── Tabbed card ─────────────────────────────────────────────────── */}
         <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm bg-white">
-          <TabBar active={activeTab} onChange={setActiveTab} />
+          <TabBar active={activeTab} onChange={setActiveTab} badges={{ duplicates: duplicateGroupCount ?? 0 }} />
 
           {/* ── Leads tab ──────────────────────────────────── */}
           {activeTab === "leads" && (
@@ -559,7 +579,7 @@ export default function LeadsPage() {
           {/* ── Duplicates tab ──────────────────────────────── */}
           {activeTab === "duplicates" && (
             <div className="bg-gray-50/50 p-4 md:p-6">
-              <DuplicateMergeUI />
+              <DuplicateMergeUI onGroupCountChange={setDuplicateGroupCount} />
             </div>
           )}
         </div>
@@ -602,6 +622,7 @@ export default function LeadsPage() {
           onClose={() => setIsUploadOpen(false)}
           onSuccess={async () => {
             await retry();
+            refreshStats(); // refresh summary cards after import
             toast.success("Leads imported! Applying assignment rules…");
             try {
               const { fetchLeads: fetchLeadsApi, executeAssignmentRule } = await import("@/lib/api/leadsApi");
