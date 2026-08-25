@@ -132,6 +132,22 @@ a {
   --color-info: #2563eb;
   --color-info-light: #dbeafe;
   --color-info-foreground: #2563eb;
+
+  /* Category tokens (Light) */
+  --color-cat-crm: #0284c7;
+  --color-cat-crm-bg: #e0f2fe;
+  --color-cat-finance: #059669;
+  --color-cat-finance-bg: #d1fae5;
+  --color-cat-marketing: #d97706;
+  --color-cat-marketing-bg: #fef3c7;
+  --color-cat-comm: #7c3aed;
+  --color-cat-comm-bg: #ede9fe;
+  --color-cat-hr: #db2777;
+  --color-cat-hr-bg: #fce7f3;
+  --color-cat-projects: #2563eb;
+  --color-cat-projects-bg: #dbeafe;
+  --color-cat-custom: #4b5563;
+  --color-cat-custom-bg: #f3f4f6;
 }
 
 /* Dark theme variables - Production quality, user requested */
@@ -163,6 +179,22 @@ a {
   --color-info: #3b82f6;
   --color-info-light: #1e3a8a;
   --color-info-foreground: #3b82f6;
+
+  /* Category tokens (Dark) */
+  --color-cat-crm: #38bdf8;
+  --color-cat-crm-bg: rgba(14, 165, 233, 0.15);
+  --color-cat-finance: #34d399;
+  --color-cat-finance-bg: rgba(16, 185, 129, 0.15);
+  --color-cat-marketing: #fbbf24;
+  --color-cat-marketing-bg: rgba(245, 158, 11, 0.15);
+  --color-cat-comm: #a78bfa;
+  --color-cat-comm-bg: rgba(139, 92, 246, 0.15);
+  --color-cat-hr: #f472b6;
+  --color-cat-hr-bg: rgba(236, 72, 153, 0.15);
+  --color-cat-projects: #60a5fa;
+  --color-cat-projects-bg: rgba(59, 130, 246, 0.15);
+  --color-cat-custom: #9ca3af;
+  --color-cat-custom-bg: rgba(107, 114, 128, 0.15);
 }
 
 

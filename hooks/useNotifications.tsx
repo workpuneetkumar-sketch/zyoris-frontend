@@ -233,8 +233,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const setupWebSockets = async () => {
       try {
+        const wsUrl = process.env.NEXT_PUBLIC_WS_URL;
+        if (!wsUrl) {
+          // If no custom WebSocket server URL is specified in env, skip Socket.IO to prevent connection refused warnings
+          return;
+        }
+
         const { io } = await import("socket.io-client");
-        const wsUrl = process.env.NEXT_PUBLIC_WS_URL || window.location.origin;
 
         socket = io(wsUrl, {
           transports: ["websocket", "polling"],
