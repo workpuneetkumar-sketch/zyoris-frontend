@@ -3,9 +3,10 @@ import axios, {
     InternalAxiosRequestConfig,
 } from "axios";
 
-const BASE_URL =
+const BASE_URL = (
     process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "https://zyoris.onrender.com";
+    "https://zyoris.onrender.com"
+).replace(/\/+$/, ""); // strip trailing slash to prevent double-slash URLs
 
 const api = axios.create({
     baseURL: BASE_URL,
