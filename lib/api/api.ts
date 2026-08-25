@@ -80,7 +80,7 @@ api.interceptors.response.use(
         if (typeof window !== "undefined" && response.config && response.status >= 200 && response.status < 300) {
             const method = response.config.method?.toUpperCase() || "";
             const url = response.config.url || "";
-            
+
             // Only act on state-changing methods, exclude notifications API and auth endpoints
             if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !url.includes("/api/notifications") && !url.includes("/auth")) {
                 try {
@@ -93,12 +93,12 @@ api.interceptors.response.use(
                             const payloadBase64 = token.split(".")[1];
                             const decoded = JSON.parse(atob(payloadBase64));
                             const userId = decoded?.userId || decoded?.id;
-                            
+
                             if (userId) {
                                 let action = "Updated";
                                 if (method === "POST") action = "Created";
                                 if (method === "DELETE") action = "Deleted";
-                                
+
                                 let entityName = "Item";
                                 let path = url.replace(/^https?:\/\/[^\/]+/, '');
                                 if (path.startsWith('/api/')) path = path.substring(4);
@@ -113,7 +113,7 @@ api.interceptors.response.use(
                                     }
                                     entityName = str.charAt(0).toUpperCase() + str.slice(1);
                                 }
-                                
+
                                 // Fire and forget
                                 axios.post(`${BASE_URL}/api/notifications`, {
                                     userId,
@@ -127,7 +127,7 @@ api.interceptors.response.use(
                                     if (typeof window !== "undefined") {
                                         window.dispatchEvent(new CustomEvent('zyoris:notification-created', { detail: res.data }));
                                     }
-                                }).catch(() => {});
+                                }).catch(() => { });
                             }
                         }
                     }
@@ -140,25 +140,25 @@ api.interceptors.response.use(
     },
     async (error: AxiosError<any>) => {
         const originalRequest: any = error.config;
-        
+
         // Check if it's a network error or timeout
         const isNetworkError = !error.response || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT';
-        
+
         // Retry logic for network errors.
         // IMPORTANT: Never retry FormData (file upload) requests — the body stream
         // is already consumed after the first attempt, so a retry sends an empty
         // body and the server returns 400 "Invalid CSV / no file".
         const isFormDataRequest = !!(originalRequest as any)?._isFormData;
-        
+
         if (isNetworkError && !isFormDataRequest && !originalRequest?._retryCount) {
             originalRequest._retryCount = 1;
         }
-        
+
         if (isNetworkError && !isFormDataRequest && originalRequest._retryCount && originalRequest._retryCount < 3) {
             originalRequest._retryCount += 1;
             // Exponential backoff: 1s, 2s, 4s
             const backoffTime = Math.pow(2, originalRequest._retryCount - 1) * 1000;
-            console.log(`Network error, retrying in ${backoffTime/1000}s... (attempt ${originalRequest._retryCount}/3)`);
+            console.log(`Network error, retrying in ${backoffTime / 1000}s... (attempt ${originalRequest._retryCount}/3)`);
             await delay(backoffTime);
             return api(originalRequest);
         }

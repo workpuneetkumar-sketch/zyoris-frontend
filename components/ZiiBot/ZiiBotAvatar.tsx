@@ -56,18 +56,25 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
         </defs>
         {/* Head / body blob - rounded mascot shape */}
         <motion.ellipse
-          cx="32"
-          cy="36"
-          rx="26"
-          ry="24"
+          cx={32}
+          cy={36}
+          rx={26}
+          ry={24}
           fill="url(#zii-head-grad)"
           filter="url(#zii-glow)"
           animate={
-            isIdle && !isTyping
-              ? { rx: [26, 27, 26], ry: [24, 25, 24], transition: { repeat: Infinity, duration: 2.2, ease: "easeInOut" } }
-              : isTyping
-              ? { rx: [26, 28, 26], ry: [24, 22, 24], transition: { repeat: Infinity, duration: 0.5 } }
-              : {}
+            isTyping
+              ? { rx: [26, 28, 26], ry: [24, 22, 24] }
+              : isIdle
+              ? { rx: [26, 27, 26], ry: [24, 25, 24] }
+              : { rx: 26, ry: 24 }
+          }
+          transition={
+            isTyping
+              ? { repeat: Infinity, duration: 0.5 }
+              : isIdle
+              ? { repeat: Infinity, duration: 2.2, ease: "easeInOut" }
+              : { duration: 0.2 }
           }
         />
         {/* Left cheek */}
@@ -77,31 +84,45 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
         {/* Eyes */}
         <motion.g>
           <motion.ellipse
-            cx="26"
-            cy="32"
-            rx="4"
-            ry="5"
+            cx={26}
+            cy={32}
+            rx={4}
+            ry={5}
             fill="#1e1b4b"
             animate={
-              isIdle && !isTyping
-                ? { ry: [5, 0.8, 5], transition: { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 } }
-                : isTyping
-                ? { ry: [5, 2, 5], transition: { repeat: Infinity, duration: 0.25 } }
-                : {}
+              isTyping
+                ? { ry: [5, 2, 5] }
+                : isIdle
+                ? { ry: [5, 0.8, 5] }
+                : { ry: 5 }
+            }
+            transition={
+              isTyping
+                ? { repeat: Infinity, duration: 0.25 }
+                : isIdle
+                ? { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 }
+                : { duration: 0.1 }
             }
           />
           <motion.ellipse
-            cx="38"
-            cy="32"
-            rx="4"
-            ry="5"
+            cx={38}
+            cy={32}
+            rx={4}
+            ry={5}
             fill="#1e1b4b"
             animate={
-              isIdle && !isTyping
-                ? { ry: [5, 0.8, 5], transition: { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 } }
-                : isTyping
-                ? { ry: [5, 2, 5], transition: { repeat: Infinity, duration: 0.25 } }
-                : {}
+              isTyping
+                ? { ry: [5, 2, 5] }
+                : isIdle
+                ? { ry: [5, 0.8, 5] }
+                : { ry: 5 }
+            }
+            transition={
+              isTyping
+                ? { repeat: Infinity, duration: 0.25 }
+                : isIdle
+                ? { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 }
+                : { duration: 0.1 }
             }
           />
         </motion.g>

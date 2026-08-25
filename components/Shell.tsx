@@ -40,6 +40,7 @@ import {
   FileSearch,
   Brain,
   Layers,
+  Plug,
   Grid3X3,
   Video,
   Bell,
@@ -240,6 +241,17 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Integration",
+    items: [
+      {
+        href: "/integrations",
+        label: "Integration",
+        icon: Layers,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
+      },
+    ],
+  },
+  {
     label: "Management",
     items: [
       {
@@ -321,6 +333,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
   Communication: Inbox,
   Business: Briefcase,
   Platform: Grid3X3,
+  Integration: Plug,
   Management: Settings,
   "Role Dashboards": Crown,
   "Admin Tools": Shield,
@@ -634,7 +647,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       const GROUP_ORDER = [
         "CRM", "Communication", "Business", "Platform",
-        "Management", "Role Dashboards", "Admin Tools",
+        "Integration", "Management", "Role Dashboards", "Admin Tools",
       ];
 
       const getIcon = (iconKey: string, item?: (typeof sidebarItems)[number]): LucideIcon => {
@@ -710,9 +723,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           addItem(groupLabel, href, item.label, getIcon(keySlug, item));
         });
 
-      // ── Always force-inject the full Communication group ──────────────
-      // Replace whatever partial data came from the API with the full static list.
+      // ── Always force-inject the full Communication and Integration groups ──
       itemsByGroup["Communication"] = COMMUNICATION_STATIC_GROUP.items.map((i) => ({ ...i }));
+      itemsByGroup["Integration"] = [
+        { href: "/integrations", label: "Integration", icon: Layers },
+      ];
 
       // ── Build groups in display order ─────────────────────────────────
       const groups = GROUP_ORDER
