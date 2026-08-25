@@ -1,4 +1,5 @@
 "use client";
+// NotificationBell: displays unread count badge and notification dropdown
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import {
