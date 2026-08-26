@@ -12,6 +12,7 @@ import {
   Settings,
   MoreVertical,
   Key,
+  KeyRound,
   ShieldCheck,
   ExternalLink,
   Zap,
@@ -26,11 +27,12 @@ interface ConnectorCardProps {
   connector: Connector;
   onConnect: (connector: Connector) => void;
   onConfigure: (connector: Connector) => void;
+  onRotateCredentials?: (connector: Connector) => void;
   onSyncNow?: (connector: Connector) => Promise<void>;
   onTestConnection?: (connector: Connector) => Promise<void>;
   onViewSchema?: (connector: Connector) => void;
   onTogglePause?: (connector: Connector) => Promise<void>;
-  onReconnect?: (connector: Connector) => Promise<void>;
+  onReconnect?: (connector: Connector) => void | Promise<void>;
   onDisconnect?: (connector: Connector) => void;
   canManage?: boolean;
 }
@@ -39,6 +41,7 @@ export function ConnectorCard({
   connector,
   onConnect,
   onConfigure,
+  onRotateCredentials,
   onSyncNow,
   onTestConnection,
   onViewSchema,
@@ -302,28 +305,32 @@ export function ConnectorCard({
               </button>
 
               {isMenuOpen && (
-                <div className="absolute right-0 bottom-full mb-1 w-48 rounded-xl border border-border bg-surface shadow-xl py-1.5 z-20 text-xs">
-                  {onTestConnection && (
-                    <button
-                      onClick={handleTestClick}
-                      disabled={isTesting || !canManage}
-                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
-                    >
-                      <Zap className="w-3.5 h-3.5 text-primary" />
-                      <span>{isTesting ? "Testing..." : "Test Connection"}</span>
-                    </button>
-                  )}
-
-                  {onViewSchema && (
+                <div className="absolute right-0 bottom-full mb-1 w-52 rounded-xl border border-border bg-surface shadow-xl py-1.5 z-20 text-xs">
+                  {onRotateCredentials && (
                     <button
                       onClick={() => {
                         setIsMenuOpen(false);
-                        onViewSchema(connector);
+                        onRotateCredentials(connector);
                       }}
-                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                      disabled={!canManage}
+                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
-                      <Database className="w-3.5 h-3.5 text-info" />
-                      <span>View Schema</span>
+                      <KeyRound className="w-3.5 h-3.5 text-warning" />
+                      <span>Rotate Credentials</span>
+                    </button>
+                  )}
+
+                  {onReconnect && (
+                    <button
+                      onClick={async () => {
+                        setIsMenuOpen(false);
+                        await onReconnect(connector);
+                      }}
+                      disabled={!canManage}
+                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-primary" />
+                      <span>Reconnect</span>
                     </button>
                   )}
 
@@ -350,17 +357,27 @@ export function ConnectorCard({
                     </button>
                   )}
 
-                  {isError && onReconnect && (
+                  {onTestConnection && (
                     <button
-                      onClick={async () => {
-                        setIsMenuOpen(false);
-                        await onReconnect(connector);
-                      }}
-                      disabled={!canManage}
-                      className="w-full text-left px-3 py-2 text-warning hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
+                      onClick={handleTestClick}
+                      disabled={isTesting || !canManage}
+                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Reconnect</span>
+                      <Zap className="w-3.5 h-3.5 text-primary" />
+                      <span>{isTesting ? "Testing..." : "Test Connection"}</span>
+                    </button>
+                  )}
+
+                  {onViewSchema && (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onViewSchema(connector);
+                      }}
+                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                    >
+                      <Database className="w-3.5 h-3.5 text-info" />
+                      <span>View Schema</span>
                     </button>
                   )}
 
