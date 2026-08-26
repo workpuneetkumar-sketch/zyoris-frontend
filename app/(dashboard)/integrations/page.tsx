@@ -13,6 +13,8 @@ import { IntegrationWizardModal } from "@/components/integrations/IntegrationWiz
 import { SchemaViewerModal } from "@/components/integrations/SchemaViewerModal";
 import { DisconnectConfirmationModal } from "@/components/integrations/DisconnectConfirmationModal";
 import { EditIntegrationModal } from "@/components/integrations/EditIntegrationModal";
+import { RotateCredentialsModal } from "@/components/integrations/RotateCredentialsModal";
+import { ReconnectModal } from "@/components/integrations/ReconnectModal";
 import {
   Layers,
   Plus,
@@ -23,12 +25,17 @@ import {
   FolderPlus,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  RotateCredentialsPayload,
+  RotateCredentialsResponse,
+  ReconnectPayload,
+} from "@/types/integrations";
 
 export default function IntegrationsPage() {
   const { user } = useAuth();
   const { hasPermission } = useRBAC();
 
-  // Check management permission (Admins, CEOs, or roles with integration permissions)
+  // Check management and configuration permissions
   const canManageIntegrations =
     user?.role === "ADMIN" ||
     user?.role === "CEO" ||
@@ -37,6 +44,12 @@ export default function IntegrationsPage() {
     hasPermission("manage_integrations") ||
     hasPermission("integrations:manage") ||
     hasPermission("admin");
+
+  const canConfigureIntegrations =
+    canManageIntegrations ||
+    hasPermission("configure") ||
+    hasPermission("integrations:configure") ||
+    hasPermission("integrations:rotate");
 
   const {
     connectors,
@@ -56,6 +69,7 @@ export default function IntegrationsPage() {
     updateIntegration,
     deleteIntegration,
     reconnectIntegration,
+    rotateCredentials,
     triggerSync,
     pauseIntegration,
     resumeIntegration,
@@ -81,6 +95,14 @@ export default function IntegrationsPage() {
   const [selectedConnectorForEdit, setSelectedConnectorForEdit] =
     useState<Connector | null>(null);
 
+  const [isRotateOpen, setIsRotateOpen] = useState(false);
+  const [selectedConnectorForRotate, setSelectedConnectorForRotate] =
+    useState<Connector | null>(null);
+
+  const [isReconnectOpen, setIsReconnectOpen] = useState(false);
+  const [selectedConnectorForReconnect, setSelectedConnectorForReconnect] =
+    useState<Connector | null>(null);
+
   // Actions Handlers
   const handleOpenConnect = (connector: Connector) => {
     setSelectedConnectorForWizard(connector);
@@ -90,6 +112,16 @@ export default function IntegrationsPage() {
   const handleOpenConfigure = (connector: Connector) => {
     setSelectedConnectorForEdit(connector);
     setIsEditOpen(true);
+  };
+
+  const handleOpenRotate = (connector: Connector) => {
+    setSelectedConnectorForRotate(connector);
+    setIsRotateOpen(true);
+  };
+
+  const handleOpenReconnectModal = (connector: Connector) => {
+    setSelectedConnectorForReconnect(connector);
+    setIsReconnectOpen(true);
   };
 
   const handleViewSchema = (connector: Connector) => {
@@ -323,11 +355,12 @@ export default function IntegrationsPage() {
                   connector={connector}
                   onConnect={handleOpenConnect}
                   onConfigure={handleOpenConfigure}
+                  onRotateCredentials={handleOpenRotate}
                   onSyncNow={handleSyncNow}
                   onTestConnection={handleTestConnection}
                   onViewSchema={handleViewSchema}
                   onTogglePause={handleTogglePause}
-                  onReconnect={handleReconnect}
+                  onReconnect={handleOpenReconnectModal}
                   onDisconnect={handleOpenDisconnect}
                   canManage={canManageIntegrations}
                 />
@@ -366,6 +399,35 @@ export default function IntegrationsPage() {
         onUpdate={async (id: string, payload: UpdateIntegrationPayload) => {
           await updateIntegration(id, payload);
         }}
+        canConfigure={canConfigureIntegrations}
+      />
+
+      {/* Rotate Credentials Modal */}
+      <RotateCredentialsModal
+        isOpen={isRotateOpen}
+        onClose={() => {
+          setIsRotateOpen(false);
+          setSelectedConnectorForRotate(null);
+        }}
+        connector={selectedConnectorForRotate}
+        onRotate={async (id: string, payload: RotateCredentialsPayload) => {
+          return await rotateCredentials(id, payload);
+        }}
+        canConfigure={canConfigureIntegrations}
+      />
+
+      {/* Reconnect Modal */}
+      <ReconnectModal
+        isOpen={isReconnectOpen}
+        onClose={() => {
+          setIsReconnectOpen(false);
+          setSelectedConnectorForReconnect(null);
+        }}
+        connector={selectedConnectorForReconnect}
+        onReconnect={async (id: string, payload?: ReconnectPayload | Record<string, any>) => {
+          return await reconnectIntegration(id, payload);
+        }}
+        canManage={canManageIntegrations}
       />
 
       {/* Schema Viewer Modal */}

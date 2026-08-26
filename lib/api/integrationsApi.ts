@@ -9,7 +9,10 @@ import {
   DiscoveredSchemaResponse,
   SyncResponse,
   ReconnectResponse,
+  ReconnectPayload,
   StatusToggleResponse,
+  RotateCredentialsPayload,
+  RotateCredentialsResponse,
 } from "@/types/integrations";
 
 /**
@@ -143,16 +146,31 @@ export async function callbackOAuthApi(
 }
 
 /**
- * Reconnect an integration and reset error counters.
+ * Reconnect an integration and re-encrypt updated credentials in the vault.
  * POST /api/integrations/{id}/reconnect
  */
 export async function reconnectIntegrationApi(
   id: string,
-  payload?: Record<string, any>
+  payload?: ReconnectPayload | Record<string, any>
 ): Promise<ReconnectResponse> {
   const response = await api.post(
     `/api/integrations/${encodeURIComponent(id)}/reconnect`,
     payload || {}
+  );
+  return response.data;
+}
+
+/**
+ * Rotate and encrypt credentials in the vault for an integration.
+ * POST /api/integrations/{id}/rotate-credentials
+ */
+export async function rotateCredentialsApi(
+  id: string,
+  payload: RotateCredentialsPayload
+): Promise<RotateCredentialsResponse> {
+  const response = await api.post(
+    `/api/integrations/${encodeURIComponent(id)}/rotate-credentials`,
+    payload
   );
   return response.data;
 }

@@ -10,6 +10,9 @@ import {
   TestConnectionResponse,
   OAuthConnectResponse,
   DiscoveredSchemaResponse,
+  RotateCredentialsPayload,
+  RotateCredentialsResponse,
+  ReconnectPayload,
 } from "@/types/integrations";
 import {
   getConnectorsApi,
@@ -18,6 +21,7 @@ import {
   updateIntegrationApi,
   deleteIntegrationApi,
   reconnectIntegrationApi,
+  rotateCredentialsApi,
   triggerSyncApi,
   getIntegrationSchemaApi,
   testIntegrationConnectionApi,
@@ -322,7 +326,7 @@ export function useIntegrations() {
 
   const reconnectIntegration = async (
     id: string,
-    payload?: Record<string, any>
+    payload?: ReconnectPayload | Record<string, any>
   ) => {
     const res = await reconnectIntegrationApi(id, payload);
     setConnectors((prev) =>
@@ -339,6 +343,15 @@ export function useIntegrations() {
         return c;
       })
     );
+    await fetchData();
+    return res;
+  };
+
+  const rotateCredentials = async (
+    id: string,
+    payload: RotateCredentialsPayload
+  ): Promise<RotateCredentialsResponse> => {
+    const res = await rotateCredentialsApi(id, payload);
     await fetchData();
     return res;
   };
@@ -442,6 +455,7 @@ export function useIntegrations() {
     updateIntegration,
     deleteIntegration,
     reconnectIntegration,
+    rotateCredentials,
     triggerSync,
     pauseIntegration,
     resumeIntegration,

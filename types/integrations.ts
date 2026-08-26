@@ -234,6 +234,35 @@ export interface SyncResponse {
   syncedAt?: string;
 }
 
+export interface RotateCredentialsPayload {
+  apiKey?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  webhookSecret?: string;
+  clientSecret?: string;
+  password?: string;
+  customSecrets?: Record<string, any>;
+  tokenExpiresAt?: string;
+}
+
+export interface RotateCredentialsResponse {
+  success: boolean;
+  integrationId: string;
+  message: string;
+  rotatedAt: string;
+}
+
+export interface ReconnectPayload {
+  apiKey?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  webhookSecret?: string;
+  clientSecret?: string;
+  password?: string;
+  customSecrets?: Record<string, any>;
+  config?: Record<string, any>;
+}
+
 export interface ReconnectResponse {
   success: boolean;
   message?: string;
