@@ -30,6 +30,10 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { WizardProgress } from "./wizard/WizardProgress";
+import { WizardFooter } from "./wizard/WizardFooter";
+import { integrationWizardSteps } from "./wizard/wizardSteps";
+
 interface IntegrationWizardModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -416,37 +420,13 @@ export function IntegrationWizardModal({
           </button>
         </div>
 
-        {/* Step Progress Indicator */}
-        <div className="grid grid-cols-4 border-b border-border bg-surface-secondary/30 text-xs">
-          {[
-            { num: 1, label: "Connector" },
-            { num: 2, label: "Endpoint" },
-            { num: 3, label: "Authentication" },
-            { num: 4, label: "Verify & Connect" },
-          ].map((s) => (
-            <button
-              key={s.num}
-              type="button"
-              onClick={() => {
-                if (s.num === 1 || selectedConnector) {
-                  setStep(s.num as any);
-                }
-              }}
-              className={`py-2.5 px-3 text-center border-b-2 font-medium transition-all ${
-                step === s.num
-                  ? "border-primary text-primary bg-primary/5"
-                  : step > s.num
-                  ? "border-success text-success"
-                  : "border-transparent text-text-muted"
-              }`}
-            >
-              <span className="hidden sm:inline">
-                {s.num}. {s.label}
-              </span>
-              <span className="sm:hidden">Step {s.num}</span>
-            </button>
-          ))}
-        </div>
+       <WizardProgress
+  steps={integrationWizardSteps}
+  currentStep={step}
+  onStepChange={(nextStep) => {
+    setStep(nextStep as 1 | 2 | 3 | 4);
+  }}
+/>
 
         {/* Form Body */}
         <form
