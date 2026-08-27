@@ -198,13 +198,79 @@ export async function getIntegrationSchemaApi(
   );
   const data = response.data;
   if (Array.isArray(data)) {
-    return { entities: data };
+    return { entities: data, recordCount: data.length };
   }
   if (Array.isArray(data?.entities)) {
-    return data;
+    return {
+      ...data,
+      entities: data.entities,
+      recordCount: data.recordCount ?? data.totalRecords ?? data.total,
+      pagination: data.pagination,
+      sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
+    };
   }
   if (data?.data) {
-    return Array.isArray(data.data) ? { entities: data.data } : data.data;
+    if (Array.isArray(data.data)) {
+      return { entities: data.data, recordCount: data.data.length };
+    }
+    if (Array.isArray(data.data?.entities)) {
+      return {
+        ...data.data,
+        entities: data.data.entities,
+        recordCount:
+          data.data.recordCount ??
+          data.data.totalRecords ??
+          data.recordCount ??
+          data.totalRecords,
+        pagination: data.data.pagination ?? data.pagination,
+        sampleRecords:
+          data.data.sampleRecords ??
+          data.data.sampleData ??
+          data.data.records ??
+          data.sampleRecords,
+      };
+    }
+    if (Array.isArray(data.data?.fields)) {
+      return {
+        entities: [
+          {
+            name: data.data.name || "DefaultEntity",
+            label: data.data.label || data.data.name || "Entity",
+            fields: data.data.fields,
+            recordCount: data.data.recordCount ?? data.data.totalRecords,
+            pagination: data.data.pagination,
+            sampleRecords:
+              data.data.sampleRecords ??
+              data.data.sampleData ??
+              data.data.records,
+          },
+        ],
+        recordCount: data.data.recordCount ?? data.data.totalRecords,
+        pagination: data.data.pagination,
+        sampleRecords:
+          data.data.sampleRecords ??
+          data.data.sampleData ??
+          data.data.records,
+      };
+    }
+    return data.data;
+  }
+  if (Array.isArray(data?.fields)) {
+    return {
+      entities: [
+        {
+          name: data.name || "DefaultEntity",
+          label: data.label || data.name || "Entity",
+          fields: data.fields,
+          recordCount: data.recordCount ?? data.totalRecords,
+          pagination: data.pagination,
+          sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
+        },
+      ],
+      recordCount: data.recordCount ?? data.totalRecords,
+      pagination: data.pagination,
+      sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
+    };
   }
   return { entities: [] };
 }

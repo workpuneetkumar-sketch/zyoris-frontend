@@ -235,13 +235,34 @@ export interface OAuthConnectResponse {
   message?: string;
 }
 
+export interface DiscoveredPagination {
+  page?: number;
+  limit?: number;
+  pageSize?: number;
+  total?: number;
+  totalRecords?: number;
+  totalPages?: number;
+  hasMore?: boolean;
+  nextCursor?: string;
+  [key: string]: any;
+}
+
 export interface DiscoveredField {
   name: string;
+  path?: string;
   label?: string;
   type: string;
+  required?: boolean;
   nullable?: boolean;
   readOnly?: boolean;
   description?: string;
+  sampleValue?: any;
+  sample?: any;
+  example?: any;
+  fields?: DiscoveredField[];
+  children?: DiscoveredField[];
+  properties?: Record<string, DiscoveredField>;
+  [key: string]: any;
 }
 
 export interface DiscoveredEntity {
@@ -251,6 +272,13 @@ export interface DiscoveredEntity {
   description?: string;
   fields: DiscoveredField[];
   supportedOperations?: ("READ" | "WRITE" | "SYNC")[];
+  recordCount?: number;
+  totalRecords?: number;
+  sampleRecords?: Record<string, any>[];
+  sampleData?: Record<string, any>[];
+  records?: Record<string, any>[];
+  pagination?: DiscoveredPagination;
+  [key: string]: any;
 }
 
 export interface DiscoveredSchemaResponse {
@@ -258,6 +286,13 @@ export interface DiscoveredSchemaResponse {
   discoveredAt?: string;
   version?: string;
   provider?: string;
+  recordCount?: number;
+  totalRecords?: number;
+  pagination?: DiscoveredPagination;
+  sampleRecords?: Record<string, any>[];
+  sampleData?: Record<string, any>[];
+  rawSchema?: any;
+  [key: string]: any;
 }
 
 export interface SyncResponse {

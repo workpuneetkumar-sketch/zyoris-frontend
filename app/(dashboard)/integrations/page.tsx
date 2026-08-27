@@ -392,6 +392,9 @@ export default function IntegrationsPage() {
         onUpdateIntegration={async (id: string, payload: UpdateIntegrationPayload) => {
           return await updateIntegration(id, payload);
         }}
+        onFetchSchema={async (id: string) => {
+          return await fetchSchema(id);
+        }}
         onViewSchema={(connector: Connector) => {
           handleViewSchema(connector);
         }}
