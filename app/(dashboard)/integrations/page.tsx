@@ -381,10 +381,19 @@ export default function IntegrationsPage() {
         connector={selectedConnectorForWizard}
         availableConnectors={connectors}
         onSubmit={async (payload: CreateIntegrationPayload) => {
-          await createIntegration(payload);
+          return await createIntegration(payload);
         }}
         onOAuthConnect={async (provider: string, payload?: Record<string, any>) => {
           return await initiateOAuth(provider, payload);
+        }}
+        onTestConnection={async (id: string, payload?: Record<string, any>) => {
+          return await testConnection(id, payload);
+        }}
+        onUpdateIntegration={async (id: string, payload: UpdateIntegrationPayload) => {
+          return await updateIntegration(id, payload);
+        }}
+        onViewSchema={(connector: Connector) => {
+          handleViewSchema(connector);
         }}
       />
 
