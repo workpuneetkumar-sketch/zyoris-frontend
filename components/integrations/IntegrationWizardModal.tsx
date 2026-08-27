@@ -38,7 +38,15 @@ import {
   Check,
 } from "lucide-react";
 import { toast } from "sonner";
-import { testIntegrationConnectionApi } from "@/lib/api/integrationsApi";
+
+import { WizardProgress } from "./wizard/WizardProgress";
+import { WizardFooter } from "./wizard/WizardFooter";
+import { integrationWizardSteps } from "./wizard/wizardSteps";
+import {
+  DEFAULT_REST_CONFIGURATION,
+  REST_CONTENT_TYPES,
+  parseRequestBody,
+} from "./wizard/restConfiguration";
 
 interface IntegrationWizardModalProps {
   isOpen: boolean;
@@ -46,8 +54,11 @@ interface IntegrationWizardModalProps {
   connector: Connector | null;
   availableConnectors: Connector[];
   onSubmit: (payload: CreateIntegrationPayload) => Promise<any>;
+  onTestConnection?: (
+    id: string,
+    payload?: Record<string, any>
+  ) => Promise<TestConnectionResponse>;
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
-  onTestConnection?: (id: string, payload?: Record<string, any>) => Promise<TestConnectionResponse>;
   onUpdateIntegration?: (id: string, payload: UpdateIntegrationPayload) => Promise<any>;
   onViewSchema?: (connector: Connector) => void;
 }
@@ -112,6 +123,26 @@ const integrationFormSchema = z.object({
       })
     )
     .optional(),
+  contentType: z.enum(REST_CONTENT_TYPES),
+  queryParams: z
+    .array(
+      z.object({
+        key: z.string().min(1, "Parameter name required"),
+        value: z.string().min(1, "Parameter value required"),
+      })
+    )
+    .optional(),
+  requestBody: z.string().refine(
+    (value) => {
+      try {
+        parseRequestBody(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Request body must contain valid JSON" }
+  ),
   // Additional dynamic config
   dynamicFields: z.record(z.string(), z.any()).optional(),
 });
@@ -263,8 +294,8 @@ export function IntegrationWizardModal({
   connector: initialConnector,
   availableConnectors,
   onSubmit,
-  onOAuthConnect,
   onTestConnection,
+  onOAuthConnect,
   onUpdateIntegration,
   onViewSchema,
 }: IntegrationWizardModalProps) {
@@ -332,6 +363,9 @@ export function IntegrationWizardModal({
     syncDirection: "BIDIRECTIONAL",
     syncFrequency: "HOURLY",
     headers: [],
+    contentType: DEFAULT_REST_CONFIGURATION.contentType,
+    queryParams: DEFAULT_REST_CONFIGURATION.queryParams,
+    requestBody: DEFAULT_REST_CONFIGURATION.requestBody,
     dynamicFields: {},
   };
 
@@ -352,6 +386,14 @@ export function IntegrationWizardModal({
   const { fields, append, remove } = useFieldArray({
     control,
     name: "headers",
+  });
+  const {
+    fields: queryParamFields,
+    append: appendQueryParam,
+    remove: removeQueryParam,
+  } = useFieldArray({
+    control,
+    name: "queryParams",
   });
 
   // Keep form values updated when selected connector changes
@@ -402,6 +444,62 @@ export function IntegrationWizardModal({
 
   const currentAuthType = watch("authType");
   const currentTargetModule = watch("targetModule");
+  const currentHttpMethod = watch("httpMethod");
+  const supportsRequestBody = ["POST", "PUT", "PATCH"].includes(
+    currentHttpMethod
+  );
+  const existingIntegrationId =
+    selectedConnector?.connectionId || selectedConnector?.connectionState?.id;
+
+  const buildPayload = (data: FormValues): CreateIntegrationPayload => {
+    if (!selectedConnector) {
+      throw new Error("Please select a connector first.");
+    }
+
+    const credentials: Record<string, any> = {};
+    if (data.authType === "API_KEY") {
+      credentials.headerName = data.apiKeyName || "X-API-Key";
+      credentials.apiKey = data.apiKeyValue;
+    } else if (data.authType === "BEARER_TOKEN") {
+      credentials.token = data.bearerToken;
+    } else if (data.authType === "BASIC_AUTH") {
+      credentials.username = data.basicUsername;
+      credentials.password = data.basicPassword;
+    } else if (data.authType === "WEBHOOK_SECRET") {
+      credentials.secret = data.webhookSecret;
+    }
+
+    const headers: Record<string, string> = {};
+    data.headers?.forEach((header) => {
+      if (header.key.trim() && header.value.trim()) {
+        headers[header.key.trim()] = header.value.trim();
+      }
+    });
+
+    return {
+      connectorId: selectedConnector.id,
+      provider: selectedConnector.provider,
+      name: data.displayName,
+      displayName: data.displayName,
+      targetModule: data.targetModule,
+      targetEntity: data.targetEntity,
+      apiUrl: data.apiUrl,
+      httpMethod: data.httpMethod,
+      authType: data.authType,
+      credentials,
+      syncDirection: data.syncDirection,
+      syncFrequency: data.syncFrequency,
+      headers,
+      config: {
+        ...(data.dynamicFields || {}),
+        contentType: data.contentType,
+        queryParams: data.queryParams?.filter(
+          (param) => param.key.trim() && param.value.trim()
+        ),
+        requestBody: parseRequestBody(data.requestBody),
+      },
+    };
+  };
 
   const toggleSecretVisibility = (key: string) => {
     setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -416,41 +514,7 @@ export function IntegrationWizardModal({
     }
   };
 
-  // Helper to compile credentials payload
-  const buildCredentialsObject = (values: FormValues): Record<string, any> => {
-    const credentials: Record<string, any> = {};
-    if (values.authType === "API_KEY") {
-      credentials.headerName = values.apiKeyName || "X-API-Key";
-      credentials.apiKey = values.apiKeyValue;
-    } else if (values.authType === "BEARER_TOKEN") {
-      credentials.token = values.bearerToken;
-    } else if (values.authType === "BASIC_AUTH") {
-      credentials.username = values.basicUsername;
-      credentials.password = values.basicPassword;
-    } else if (values.authType === "WEBHOOK_SECRET") {
-      credentials.secret = values.webhookSecret;
-    }
-    return credentials;
-  };
-
-  // Helper to compile headers object
-  const buildHeadersObject = (
-    headersList?: Array<{ key: string; value: string }>
-  ): Record<string, string> => {
-    const headerObject: Record<string, string> = {};
-    headersList?.forEach((h) => {
-      if (h.key.trim() && h.value.trim()) {
-        headerObject[h.key.trim()] = h.value.trim();
-      }
-    });
-    return headerObject;
-  };
-
-  /**
-   * Real Connection Test Handler
-   * Calls REAL backend API: POST /api/integrations/{id}/test
-   * Prevents duplicate simultaneous requests, provides loading state & normalized feedback
-   */
+  // Real connection test handler for the existing integration test endpoint.
   const handleTestConnection = async () => {
     if (isTesting) return; // Prevent duplicate requests
 
@@ -467,103 +531,25 @@ export function IntegrationWizardModal({
     const startTime = performance.now();
 
     try {
-      let targetId =
-        activeIntegrationId ||
-        selectedConnector?.connectionId ||
-        selectedConnector?.connectionState?.id;
-
-      // If no integration instance ID exists yet (newly created in wizard),
-      // create it in backend first so we have a valid integration ID to test against
-      if (!targetId) {
-        setTestProgress("Saving integration instance before live test...");
-        const credentials = buildCredentialsObject(values);
-        const headerObject = buildHeadersObject(values.headers);
-
-        const createPayload: CreateIntegrationPayload = {
-          connectorId: selectedConnector?.id,
-          provider: selectedConnector?.provider || "custom",
-          name: values.displayName || `${selectedConnector?.name || "New"} Integration`,
-          displayName:
-            values.displayName || `${selectedConnector?.name || "New"} Integration`,
-          targetModule: values.targetModule,
-          targetEntity: values.targetEntity,
-          apiUrl: values.apiUrl,
-          httpMethod: values.httpMethod,
-          authType: values.authType,
-          credentials,
-          syncDirection: values.syncDirection,
-          syncFrequency: values.syncFrequency,
-          headers: headerObject,
-          config: values.dynamicFields || {},
-        };
-
-        const createdInstance = await onSubmit(createPayload);
-        targetId =
-          createdInstance?.id ||
-          createdInstance?.integration?.id ||
-          createdInstance?.data?.id;
-
-        if (targetId) {
-          setActiveIntegrationId(targetId);
-        }
-      } else if (onUpdateIntegration) {
-        // If integration already exists and form values were updated, sync before testing
-        setTestProgress("Updating configuration parameters...");
-        const headerObject = buildHeadersObject(values.headers);
-        const credentials = buildCredentialsObject(values);
-
-        const updatePayload: UpdateIntegrationPayload = {
-          displayName: values.displayName,
-          syncFrequency: values.syncFrequency,
-          syncDirection: values.syncDirection,
-          apiUrl: values.apiUrl,
-          httpMethod: values.httpMethod,
-          headers: headerObject,
-        };
-
-        if (Object.keys(credentials).length > 0) {
-          updatePayload.credentials = credentials;
-        }
-
-        try {
-          await onUpdateIntegration(targetId, updatePayload);
-        } catch {
-          // Continue to test even if update returns warning
-        }
-      }
-
-      if (!targetId) {
+      if (!existingIntegrationId || !onTestConnection) {
         throw new Error(
-          "Could not obtain a valid integration ID to perform connection test."
+          "Test Connection requires an existing integration. Save this configuration first."
         );
       }
 
-      setTestProgress("Testing connection...");
-
-      // Call the REAL backend API: POST /api/integrations/{id}/test
-      const res = onTestConnection
-        ? await onTestConnection(targetId)
-        : await testIntegrationConnectionApi(targetId);
-
+      const result = await onTestConnection(
+        existingIntegrationId,
+        buildPayload(values)
+      );
       const latencyMs = Math.round(performance.now() - startTime);
-
-      if (
-        res &&
-        (res.success ||
-          (res.statusCode && res.statusCode >= 200 && res.statusCode < 300))
-      ) {
-        const normalizedSuccess = parseConnectionSuccess(res, latencyMs);
-        setTestResult(normalizedSuccess);
+      if (result.success) {
+        setTestResult(parseConnectionSuccess(result as TestConnectionResponse, latencyMs));
         setIsSchemaUnlocked(true);
         toast.success("Connection test passed!");
       } else {
-        const normalizedFail = parseConnectionError(
-          { response: { status: res?.statusCode || 400, data: res } },
-          latencyMs
-        );
-        setTestResult(normalizedFail);
+        setTestResult(parseConnectionError({ response: { status: result.statusCode || 400, data: result } }, latencyMs));
         setIsSchemaUnlocked(false);
-        toast.error("Connection test failed.");
+        toast.error(result.message || "Connection test failed.");
       }
     } catch (err: any) {
       const latencyMs = Math.round(performance.now() - startTime);
@@ -640,18 +626,17 @@ export function IntegrationWizardModal({
     if (activeIntegrationId && onUpdateIntegration) {
       setIsSubmitting(true);
       try {
-        const headerObject = buildHeadersObject(data.headers);
-        const credentials = buildCredentialsObject(data);
+        const payload = buildPayload(data);
 
         await onUpdateIntegration(activeIntegrationId, {
-          displayName: data.displayName,
-          syncDirection: data.syncDirection,
-          syncFrequency: data.syncFrequency,
-          apiUrl: data.apiUrl,
-          httpMethod: data.httpMethod,
-          headers: headerObject,
-          credentials:
-            Object.keys(credentials).length > 0 ? credentials : undefined,
+          displayName: payload.displayName,
+          syncDirection: payload.syncDirection,
+          syncFrequency: payload.syncFrequency,
+          apiUrl: payload.apiUrl,
+          httpMethod: payload.httpMethod,
+          headers: payload.headers,
+          credentials: payload.credentials,
+          config: payload.config,
         });
         toast.success(`Successfully configured ${selectedConnector.name}!`);
         reset();
@@ -670,25 +655,7 @@ export function IntegrationWizardModal({
 
     setIsSubmitting(true);
     try {
-      const credentials = buildCredentialsObject(data);
-      const headerObject = buildHeadersObject(data.headers);
-
-      const payload: CreateIntegrationPayload = {
-        connectorId: selectedConnector.id,
-        provider: selectedConnector.provider,
-        name: data.displayName,
-        displayName: data.displayName,
-        targetModule: data.targetModule,
-        targetEntity: data.targetEntity,
-        apiUrl: data.apiUrl,
-        httpMethod: data.httpMethod,
-        authType: data.authType,
-        credentials,
-        syncDirection: data.syncDirection,
-        syncFrequency: data.syncFrequency,
-        headers: headerObject,
-        config: data.dynamicFields || {},
-      };
+      const payload = buildPayload(data);
 
       await onSubmit(payload);
       toast.success(`Successfully connected ${selectedConnector.name}!`);
@@ -922,6 +889,89 @@ export function IntegrationWizardModal({
                     <option value="PATCH">PATCH</option>
                     <option value="DELETE">DELETE</option>
                   </select>
+                </div>
+              </div>
+
+              {/* REST request configuration */}
+              <div className="space-y-3 rounded-xl border border-border bg-surface-secondary/30 p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                      Content Type
+                    </label>
+                    <select
+                      {...register("contentType")}
+                      className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                    >
+                      {REST_CONTENT_TYPES.map((contentType) => (
+                        <option key={contentType} value={contentType}>
+                          {contentType}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {supportsRequestBody ? (
+                    <div>
+                      <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                        Request Body (JSON)
+                      </label>
+                      <textarea
+                        {...register("requestBody")}
+                        rows={3}
+                        placeholder={'{"field": "value"}'}
+                        className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      {errors.requestBody && (
+                        <p className="text-xs text-error mt-1">
+                          {errors.requestBody.message}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="self-end text-xs text-text-muted pb-2">
+                      {currentHttpMethod} requests do not send a request body.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-text uppercase tracking-wider">
+                      Query Parameters
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => appendQueryParam({ key: "", value: "" })}
+                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark font-medium transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Parameter</span>
+                    </button>
+                  </div>
+                  {queryParamFields.map((field, idx) => (
+                    <div key={field.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        {...register(`queryParams.${idx}.key` as const)}
+                        placeholder="Parameter name"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      <input
+                        type="text"
+                        {...register(`queryParams.${idx}.value` as const)}
+                        placeholder="Parameter value"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeQueryParam(idx)}
+                        className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
+                        aria-label="Remove query parameter"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
