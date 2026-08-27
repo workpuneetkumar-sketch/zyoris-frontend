@@ -80,6 +80,12 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "CEO", "SALES_HEAD", "CFO"],
       },
       {
+        href: "/customers",
+        label: "Customers",
+        icon: UsersRound,
+        roles: ["ADMIN", "CEO", "SALES_HEAD"],
+      },
+      {
         href: "/ai-insights",
         label: "AI Insights",
         icon: Brain,
@@ -517,6 +523,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         deals: Briefcase, briefcase: Briefcase,
         contacts: Users,
         companies: Building2,
+        customers: UsersRound,
         "ai-insights": Brain, brain: Brain,
         activities: CheckSquare, "check-square": CheckSquare,
         communications: Inbox, inbox: Inbox,
@@ -571,6 +578,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         crm: [
           { href: "/leads",       label: "Leads",       iconKey: "leads"       },
           { href: "/deals",       label: "Deals",       iconKey: "deals"       },
+          { href: "/customers",   label: "Customers",   iconKey: "customers"   },
           { href: "/contacts",    label: "Contacts",    iconKey: "contacts"    },
           { href: "/companies",   label: "Companies",   iconKey: "companies"   },
           { href: "/activities",  label: "Activities",  iconKey: "activities"  },
@@ -600,7 +608,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       // ── Group buckets ─────────────────────────────────────────────────
       const KEY_TO_GROUP: Record<string, string> = {
-        leads: "CRM", deals: "CRM", "ai-insights": "CRM",
+        leads: "CRM", deals: "CRM", customers: "CRM", "ai-insights": "CRM",
         contacts: "CRM", companies: "CRM", activities: "CRM",
         reminders: "CRM", crm: "CRM",
         communications: "Communication", communication: "Communication",
@@ -624,7 +632,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       };
 
       const ROUTE_TO_GROUP: Record<string, string> = {
-        "/leads": "CRM", "/deals": "CRM", "/ai-insights": "CRM",
+        "/leads": "CRM", "/deals": "CRM", "/customers": "CRM", "/ai-insights": "CRM",
         "/contacts": "CRM", "/companies": "CRM", "/activities": "CRM",
         "/dashboard/reminders": "CRM", "/crm": "CRM",
         "/communications": "Communication", "/communication": "Communication",
