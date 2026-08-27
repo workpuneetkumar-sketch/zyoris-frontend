@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import {
@@ -9,6 +9,10 @@ import {
   SyncFrequency,
   HttpMethod,
   CreateIntegrationPayload,
+  UpdateIntegrationPayload,
+  TestConnectionResponse,
+  NormalizedConnectionTestResult,
+  ConnectionErrorCategory,
 } from "@/types/integrations";
 import {
   X,
@@ -25,8 +29,13 @@ import {
   ArrowLeft,
   Globe,
   Lock,
-  Layers,
   Sparkles,
+  Database,
+  RefreshCw,
+  Clock,
+  Activity,
+  Layers,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -48,8 +57,10 @@ interface IntegrationWizardModalProps {
   onTestConnection?: (
     id: string,
     payload?: Record<string, any>
-  ) => Promise<{ success: boolean; latencyMs?: number; message?: string }>;
+  ) => Promise<TestConnectionResponse>;
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
+  onUpdateIntegration?: (id: string, payload: UpdateIntegrationPayload) => Promise<any>;
+  onViewSchema?: (connector: Connector) => void;
 }
 
 // Zod Validation Schema
@@ -151,6 +162,132 @@ const AVAILABLE_MODULES = [
   { id: "custom", label: "Custom Entity", entity: "CustomRecord" },
 ];
 
+/**
+ * Sanitizes any diagnostic or error message by removing sensitive tokens, passwords, keys, and paths
+ */
+function sanitizeDiagnosticMessage(rawMessage?: string): string {
+  if (!rawMessage || typeof rawMessage !== "string") return "";
+
+  return rawMessage
+    // Redact JWT tokens
+    .replace(/ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g, "[TOKEN_REDACTED]")
+    // Redact Bearer tokens
+    .replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, "Bearer [REDACTED]")
+    // Redact sensitive key/value pairs
+    .replace(
+      /(api_?key|password|secret|client_secret|access_token|refresh_token|authorization|auth|token)[=:\s]+[^\s,;&]+/gi,
+      "$1: [REDACTED]"
+    )
+    // Redact credentials in URLs
+    .replace(/:\/\/[^:]+:[^@]+@/g, "://[REDACTED]@")
+    // Redact internal file system paths
+    .replace(
+      /([a-zA-Z]:\\[^\s:<>|"?*]+|\/(var|etc|usr|home|app|root|tmp)\/[^\s:<>|"?*]+)/gi,
+      "[SERVER_PATH]"
+    )
+    .trim();
+}
+
+/**
+ * Normalizes error responses into a typed error structure
+ */
+function parseConnectionError(
+  err: any,
+  calculatedLatencyMs?: number
+): NormalizedConnectionTestResult {
+  const errResponse = err?.response;
+  const status = errResponse?.status;
+  const errData = errResponse?.data;
+
+  let errorCategory: ConnectionErrorCategory = "UNKNOWN";
+  let fallbackMessage = "Failed to establish connection to the remote integration endpoint.";
+
+  if (
+    err?.code === "ECONNABORTED" ||
+    status === 408 ||
+    status === 504 ||
+    (err?.message && err.message.toLowerCase().includes("timeout"))
+  ) {
+    errorCategory = "TIMEOUT";
+    fallbackMessage =
+      "Connection timed out. The remote endpoint did not respond within the allocated time.";
+  } else if (status === 401 || status === 403) {
+    errorCategory = "AUTH";
+    fallbackMessage =
+      "Authentication failed. The remote service rejected the provided credentials or permissions are insufficient.";
+  } else if (status === 429) {
+    errorCategory = "RATE_LIMIT";
+    fallbackMessage =
+      "Rate limit exceeded. The remote provider has temporarily throttled connection requests.";
+  } else if (status === 400 || status === 422) {
+    errorCategory = "CONFIG";
+    fallbackMessage =
+      "Invalid configuration. The provider endpoint URL, headers, or parameters were rejected.";
+  } else if (
+    !errResponse ||
+    err?.code === "ERR_NETWORK" ||
+    (err?.message && err.message.toLowerCase().includes("network"))
+  ) {
+    errorCategory = "NETWORK";
+    fallbackMessage =
+      "Network failure. Unable to reach the target server or host name is invalid.";
+  } else if (status && status >= 500) {
+    errorCategory = "SERVER";
+    fallbackMessage = `Remote server error (HTTP ${status}). The target provider encountered an internal service error.`;
+  }
+
+  const rawMsg =
+    errData?.message ||
+    errData?.error ||
+    errData?.details?.message ||
+    err?.message;
+  const sanitizedMsg = sanitizeDiagnosticMessage(rawMsg) || fallbackMessage;
+  const rawDiag =
+    errData?.diagnostics ||
+    (typeof errData?.details === "string" ? errData.details : undefined);
+  const sanitizedDiag = rawDiag ? sanitizeDiagnosticMessage(rawDiag) : undefined;
+
+  return {
+    success: false,
+    statusCode: status || undefined,
+    latencyMs: calculatedLatencyMs,
+    message: sanitizedMsg,
+    diagnostics: sanitizedDiag,
+    errorCategory,
+  };
+}
+
+/**
+ * Normalizes successful API responses into a typed structure
+ */
+function parseConnectionSuccess(
+  res: TestConnectionResponse,
+  calculatedLatencyMs: number
+): NormalizedConnectionTestResult {
+  const latency = res.latencyMs ?? res.responseTime ?? calculatedLatencyMs;
+  const rawMsg =
+    res.message || "Connection established and verified successfully with the remote service.";
+  const sanitizedMsg = sanitizeDiagnosticMessage(rawMsg);
+  const rawDiag =
+    res.diagnostics ||
+    (typeof res.details?.message === "string" ? res.details.message : undefined);
+  const sanitizedDiag = rawDiag ? sanitizeDiagnosticMessage(rawDiag) : undefined;
+
+  const records = res.recordsDetected ?? res.detectedRecords ?? res.recordsCount;
+  const entities = res.entitiesDetected ?? res.entitiesCount;
+
+  return {
+    success: true,
+    statusCode: res.statusCode || res.httpStatus || 200,
+    latencyMs: latency,
+    message: sanitizedMsg,
+    diagnostics: sanitizedDiag,
+    recordsDetected: typeof records === "number" ? records : undefined,
+    entitiesDetected: typeof entities === "number" ? entities : undefined,
+    testedAt: res.testedAt || new Date().toISOString(),
+  };
+}
+
 export function IntegrationWizardModal({
   isOpen,
   onClose,
@@ -159,6 +296,8 @@ export function IntegrationWizardModal({
   onSubmit,
   onTestConnection,
   onOAuthConnect,
+  onUpdateIntegration,
+  onViewSchema,
 }: IntegrationWizardModalProps) {
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(
     initialConnector
@@ -166,20 +305,30 @@ export function IntegrationWizardModal({
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Live Connection Test & Schema Discovery state
+  const [activeIntegrationId, setActiveIntegrationId] = useState<string | null>(null);
   const [isTesting, setIsTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{
-    success: boolean;
-    latencyMs?: number;
-    message?: string;
-  } | null>(null);
+  const [testProgress, setTestProgress] = useState<string>("");
+  const [testResult, setTestResult] = useState<NormalizedConnectionTestResult | null>(null);
+  const [isSchemaUnlocked, setIsSchemaUnlocked] = useState(false);
 
   useEffect(() => {
     setSelectedConnector(initialConnector);
     if (initialConnector) {
+      const existingId =
+        initialConnector.connectionId ||
+        initialConnector.connectionState?.id ||
+        (initialConnector.isConnected ? initialConnector.id : null);
+      setActiveIntegrationId(existingId);
       setStep(2); // Jump straight to configuration if a connector was clicked directly
     } else {
+      setActiveIntegrationId(null);
       setStep(1); // Select connector first if opened without pre-selection
     }
+    setTestResult(null);
+    setIsSchemaUnlocked(false);
+    setTestProgress("");
   }, [initialConnector, isOpen]);
 
   const defaultValues: Partial<FormValues> = {
@@ -257,8 +406,39 @@ export function IntegrationWizardModal({
       if (selectedConnector.authType) {
         setValue("authType", selectedConnector.authType as AuthType);
       }
+      const existingId =
+        selectedConnector.connectionId ||
+        selectedConnector.connectionState?.id ||
+        (selectedConnector.isConnected ? selectedConnector.id : null);
+      setActiveIntegrationId(existingId);
     }
   }, [selectedConnector, setValue]);
+
+  // Invalidate previous test result when sensitive credentials/endpoint change in step 2 or 3
+  const watchedApiUrl = watch("apiUrl");
+  const watchedHttpMethod = watch("httpMethod");
+  const watchedAuthType = watch("authType");
+  const watchedApiKeyValue = watch("apiKeyValue");
+  const watchedBearerToken = watch("bearerToken");
+  const watchedBasicPassword = watch("basicPassword");
+  const watchedWebhookSecret = watch("webhookSecret");
+
+  useEffect(() => {
+    if (step < 4 && testResult) {
+      setTestResult(null);
+      setIsSchemaUnlocked(false);
+    }
+  }, [
+    step,
+    testResult,
+    watchedApiUrl,
+    watchedHttpMethod,
+    watchedAuthType,
+    watchedApiKeyValue,
+    watchedBearerToken,
+    watchedBasicPassword,
+    watchedWebhookSecret,
+  ]);
 
   if (!isOpen) return null;
 
@@ -334,45 +514,52 @@ export function IntegrationWizardModal({
     }
   };
 
-  // The backend test endpoint accepts an existing integration ID only.
+  // Real connection test handler for the existing integration test endpoint.
   const handleTestConnection = async () => {
+    if (isTesting) return; // Prevent duplicate requests
+
     const values = watch();
     if (!values.apiUrl) {
       toast.error("Please enter a valid API URL before testing connectivity.");
       return;
     }
+
     setIsTesting(true);
+    setTestProgress("Testing connection...");
     setTestResult(null);
+
+    const startTime = performance.now();
 
     try {
       if (!existingIntegrationId || !onTestConnection) {
         throw new Error(
-          "Test Connection is available after this integration is saved; the backend does not provide a test endpoint for unsaved configurations."
+          "Test Connection requires an existing integration. Save this configuration first."
         );
       }
 
-      const startTime = Date.now();
       const result = await onTestConnection(
         existingIntegrationId,
         buildPayload(values)
       );
-      setTestResult({
-        ...result,
-        latencyMs: result.latencyMs ?? Date.now() - startTime,
-      });
-      if (result.success) toast.success("Connection test passed!");
-      else toast.error(result.message || "Connection test failed.");
+      const latencyMs = Math.round(performance.now() - startTime);
+      if (result.success) {
+        setTestResult(parseConnectionSuccess(result as TestConnectionResponse, latencyMs));
+        setIsSchemaUnlocked(true);
+        toast.success("Connection test passed!");
+      } else {
+        setTestResult(parseConnectionError({ response: { status: result.statusCode || 400, data: result } }, latencyMs));
+        setIsSchemaUnlocked(false);
+        toast.error(result.message || "Connection test failed.");
+      }
     } catch (err: any) {
-      setTestResult({
-        success: false,
-        message:
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to reach target integration endpoint.",
-      });
-      toast.error("Connection test failed.");
+      const latencyMs = Math.round(performance.now() - startTime);
+      const normalizedErr = parseConnectionError(err, latencyMs);
+      setTestResult(normalizedErr);
+      setIsSchemaUnlocked(false);
+      toast.error(normalizedErr.message || "Connection test failed.");
     } finally {
       setIsTesting(false);
+      setTestProgress("");
     }
   };
 
@@ -435,6 +622,37 @@ export function IntegrationWizardModal({
       return;
     }
 
+    // If integration was already created during the connection test, update if needed and close
+    if (activeIntegrationId && onUpdateIntegration) {
+      setIsSubmitting(true);
+      try {
+        const payload = buildPayload(data);
+
+        await onUpdateIntegration(activeIntegrationId, {
+          displayName: payload.displayName,
+          syncDirection: payload.syncDirection,
+          syncFrequency: payload.syncFrequency,
+          apiUrl: payload.apiUrl,
+          httpMethod: payload.httpMethod,
+          headers: payload.headers,
+          credentials: payload.credentials,
+          config: payload.config,
+        });
+        toast.success(`Successfully configured ${selectedConnector.name}!`);
+        reset();
+        onClose();
+      } catch (err: any) {
+        const errorMsg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to finalize integration.";
+        toast.error(errorMsg);
+      } finally {
+        setIsSubmitting(false);
+      }
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const payload = buildPayload(data);
@@ -474,7 +692,7 @@ export function IntegrationWizardModal({
                 {step === 1 && "Select Connector"}
                 {step === 2 && "Endpoint & Module Mapping"}
                 {step === 3 && "Authentication & Security"}
-                {step === 4 && "Review & Verification"}
+                {step === 4 && "Review & Connection Test"}
               </p>
             </div>
           </div>
@@ -487,13 +705,37 @@ export function IntegrationWizardModal({
           </button>
         </div>
 
-       <WizardProgress
-  steps={integrationWizardSteps}
-  currentStep={step}
-  onStepChange={(nextStep) => {
-    setStep(nextStep as 1 | 2 | 3 | 4);
-  }}
-/>
+        {/* Step Progress Indicator */}
+        <div className="grid grid-cols-4 border-b border-border bg-surface-secondary/30 text-xs">
+          {[
+            { num: 1, label: "Connector" },
+            { num: 2, label: "Endpoint" },
+            { num: 3, label: "Authentication" },
+            { num: 4, label: "Verify & Test" },
+          ].map((s) => (
+            <button
+              key={s.num}
+              type="button"
+              onClick={() => {
+                if (s.num === 1 || selectedConnector) {
+                  setStep(s.num as any);
+                }
+              }}
+              className={`py-2.5 px-3 text-center border-b-2 font-medium transition-all ${
+                step === s.num
+                  ? "border-primary text-primary bg-primary/5"
+                  : step > s.num
+                  ? "border-success text-success"
+                  : "border-transparent text-text-muted"
+              }`}
+            >
+              <span className="hidden sm:inline">
+                {s.num}. {s.label}
+              </span>
+              <span className="sm:hidden">Step {s.num}</span>
+            </button>
+          ))}
+        </div>
 
         {/* Form Body */}
         <form
@@ -514,6 +756,11 @@ export function IntegrationWizardModal({
                       key={c.id ? `conn-${c.id}` : `conn-${c.provider || idx}`}
                       onClick={() => {
                         setSelectedConnector(c);
+                        const existingId =
+                          c.connectionId ||
+                          c.connectionState?.id ||
+                          (c.isConnected ? c.id : null);
+                        setActiveIntegrationId(existingId);
                         setStep(2);
                       }}
                       className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
@@ -980,7 +1227,10 @@ export function IntegrationWizardModal({
                         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
                       >
                         <Zap className="w-4 h-4" />
-                        <span>Authorize Directly via {selectedConnector?.name || "OAuth Provider"}</span>
+                        <span>
+                          Authorize Directly via{" "}
+                          {selectedConnector?.name || "OAuth Provider"}
+                        </span>
                       </button>
                     </div>
                   </div>
@@ -1073,9 +1323,10 @@ export function IntegrationWizardModal({
             </div>
           )}
 
-          {/* STEP 4: REVIEW & VERIFY */}
+          {/* STEP 4: REVIEW & LIVE CONNECTION TEST */}
           {step === 4 && (
             <div className="space-y-5">
+              {/* Configuration Summary Card */}
               <div className="p-4 rounded-xl border border-border bg-surface-secondary/30 space-y-3">
                 <h4 className="text-xs font-bold text-text uppercase tracking-wider">
                   Configuration Summary
@@ -1126,70 +1377,259 @@ export function IntegrationWizardModal({
                 </div>
               </div>
 
-              {/* Test Connection Action */}
-              <div className="p-4 rounded-xl border border-border bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-                <div>
-                  <h5 className="text-xs font-bold text-text">
-                    Verify Connectivity
-                  </h5>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    Test saved integration credentials against the remote service.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={isTesting}
-                  className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-semibold transition-colors disabled:opacity-50 flex-shrink-0"
-                >
-                  {isTesting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                      <span>Testing...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Zap className="w-3.5 h-3.5 text-primary" />
-                      <span>Test Connection</span>
-                    </>
-                  )}
-                </button>
-              </div>
-              {!existingIntegrationId && (
-                <p className="text-xs text-text-muted">
-                  The backend test endpoint accepts an existing integration ID. Save this configuration first, then test it from the integration list.
-                </p>
-              )}
-
-              {/* Test Result Box */}
-              {testResult && (
-                <div
-                  className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 ${
-                    testResult.success
-                      ? "bg-success/10 border-success/20 text-success"
-                      : "bg-error/10 border-error/20 text-error"
-                  }`}
-                >
-                  {testResult.success ? (
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  ) : (
-                    <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  )}
+              {/* Live Connection Test Action & Result Card */}
+              <div className="p-4 rounded-xl border border-border bg-surface flex flex-col gap-3 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <p className="font-semibold">
-                      {testResult.success
-                        ? "Connection Test Succeeded"
-                        : "Connection Test Failed"}
+                    <div className="flex items-center gap-2">
+                      <h5 className="text-xs font-bold text-text">
+                        Live Connection Test
+                      </h5>
+                      {testResult ? (
+                        testResult.success ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/10 text-success border border-success/20 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Connection Verified
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-error/10 text-error border border-error/20 flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" /> Connection Failed
+                          </span>
+                        )
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-warning/10 text-warning border border-warning/20">
+                          Pending Test
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      Verify live connectivity and authentication credentials against the remote provider (POST /api/integrations/{"{id}"}/test).
                     </p>
-                    <p className="mt-0.5 opacity-90">{testResult.message}</p>
-                    {testResult.latencyMs && (
-                      <p className="text-[11px] mt-1 opacity-75 font-mono">
-                        Latency: {testResult.latencyMs}ms
-                      </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    {testResult && !testResult.success && (
+                      <button
+                        type="button"
+                        onClick={handleTestConnection}
+                        disabled={isTesting}
+                        className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20 text-xs font-semibold transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw
+                          className={`w-3.5 h-3.5 ${isTesting ? "animate-spin" : ""}`}
+                        />
+                        <span>Retry Test</span>
+                      </button>
                     )}
+
+                    <button
+                      type="button"
+                      onClick={handleTestConnection}
+                      disabled={isTesting}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50"
+                    >
+                      {isTesting ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Testing connection...</span>
+                        </>
+                      ) : testResult?.success ? (
+                        <>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Re-test Connection</span>
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="w-3.5 h-3.5" />
+                          <span>Test Connection</span>
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
-              )}
+
+                {/* Progress / Testing State */}
+                {isTesting && (
+                  <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/5 text-xs text-text space-y-1.5 animate-in fade-in duration-150">
+                    <div className="flex items-center gap-2 font-semibold text-primary">
+                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      <span>Testing connection...</span>
+                    </div>
+                    <p className="text-[11px] text-text-secondary pl-6">
+                      {testProgress || "Contacting remote endpoint and validating credentials..."}
+                    </p>
+                  </div>
+                )}
+
+                {/* Test Result Feedback Box */}
+                {!isTesting && testResult && (
+                  <div
+                    className={`p-4 rounded-xl border text-xs space-y-2.5 transition-all animate-in fade-in duration-150 ${
+                      testResult.success
+                        ? "bg-success/10 border-success/20 text-success"
+                        : "bg-error/10 border-error/20 text-error"
+                    }`}
+                  >
+                    <div className="flex items-start gap-2.5">
+                      {testResult.success ? (
+                        <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-success" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-error" />
+                      )}
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <p className="font-bold text-sm">
+                            {testResult.success
+                              ? "Connection successful"
+                              : "Connection failed"}
+                          </p>
+                          <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px]">
+                            {testResult.statusCode && (
+                              <span className="px-2 py-0.5 rounded bg-surface/60 border border-current">
+                                HTTP {testResult.statusCode}
+                              </span>
+                            )}
+                            {typeof testResult.latencyMs === "number" && (
+                              <span className="px-2 py-0.5 rounded bg-surface/60 border border-current flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                {testResult.latencyMs}ms
+                              </span>
+                            )}
+                            {testResult.errorCategory && (
+                              <span className="px-2 py-0.5 rounded bg-error/20 font-sans uppercase font-bold text-[10px]">
+                                {testResult.errorCategory === "AUTH" && "Auth Error"}
+                                {testResult.errorCategory === "TIMEOUT" && "Timeout"}
+                                {testResult.errorCategory === "NETWORK" && "Network Failure"}
+                                {testResult.errorCategory === "RATE_LIMIT" && "Rate Limited"}
+                                {testResult.errorCategory === "CONFIG" && "Config Error"}
+                                {testResult.errorCategory === "SERVER" && "Server Error"}
+                                {testResult.errorCategory === "UNKNOWN" && "Error"}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <p className="text-xs opacity-90 leading-relaxed font-sans">
+                          {testResult.message}
+                        </p>
+
+                        {/* Normalized detected records / entities metrics if present in real response */}
+                        {testResult.success &&
+                          (typeof testResult.recordsDetected === "number" ||
+                            typeof testResult.entitiesDetected === "number") && (
+                            <div className="pt-2 flex items-center gap-3 text-[11px] font-sans font-medium">
+                              {typeof testResult.recordsDetected === "number" && (
+                                <div className="flex items-center gap-1">
+                                  <Activity className="w-3.5 h-3.5" />
+                                  <span>{testResult.recordsDetected} records detected</span>
+                                </div>
+                              )}
+                              {typeof testResult.entitiesDetected === "number" && (
+                                <div className="flex items-center gap-1">
+                                  <Layers className="w-3.5 h-3.5" />
+                                  <span>{testResult.entitiesDetected} entities available</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                        {/* Sanitized diagnostics if present */}
+                        {testResult.diagnostics && (
+                          <div className="pt-2 mt-2 border-t border-current/20 text-[11px] opacity-80 font-mono break-all">
+                            <span className="font-bold font-sans">Diagnostic details: </span>
+                            {testResult.diagnostics}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Schema Discovery Gating Card */}
+              <div
+                className={`p-4 rounded-xl border transition-all ${
+                  isSchemaUnlocked
+                    ? "bg-surface border-primary/30 shadow-sm"
+                    : "bg-surface-secondary/40 border-border opacity-85"
+                }`}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                        isSchemaUnlocked
+                          ? "bg-primary/10 text-primary border border-primary/20"
+                          : "bg-surface-secondary text-text-muted border border-border"
+                      }`}
+                    >
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h5 className="text-xs font-bold text-text">
+                          Schema Discovery & Entity Mapping
+                        </h5>
+                        {isSchemaUnlocked ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/10 text-success border border-success/20 flex items-center gap-1">
+                            <Check className="w-3 h-3" /> Unlocked
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-surface-secondary text-text-muted border border-border flex items-center gap-1">
+                            <Lock className="w-3 h-3" /> Gated
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-text-secondary mt-1">
+                        {isSchemaUnlocked
+                          ? "Connection verified! You can now explore remote schema, discovered entities, and field structures."
+                          : "Schema Discovery is locked. Test connection successfully to discover available entities and field definitions."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <button
+                      type="button"
+                      disabled={!isSchemaUnlocked}
+                      onClick={() => {
+                        if (isSchemaUnlocked && onViewSchema) {
+                          const connectorToView: Connector = {
+                            ...(selectedConnector || {
+                              id: activeIntegrationId || "custom",
+                              provider: "custom",
+                              name: watch("displayName") || "Integration",
+                              description: "",
+                              category: "CUSTOM",
+                            }),
+                            connectionId:
+                              activeIntegrationId || selectedConnector?.connectionId,
+                            isConnected: true,
+                            status: "ACTIVE",
+                          };
+                          onViewSchema(connectorToView);
+                        }
+                      }}
+                      className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        isSchemaUnlocked
+                          ? "bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
+                          : "bg-surface-secondary text-text-muted border border-border cursor-not-allowed opacity-60"
+                      }`}
+                    >
+                      {isSchemaUnlocked ? (
+                        <>
+                          <Database className="w-3.5 h-3.5" />
+                          <span>Discover Schema</span>
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Schema Locked</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
@@ -1235,7 +1675,7 @@ export function IntegrationWizardModal({
               ) : (
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isTesting}
                   className="flex items-center gap-1.5 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
