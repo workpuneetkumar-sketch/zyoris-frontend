@@ -55,6 +55,11 @@ import {
 } from "@/lib/api/integrationsApi";
 import { WizardProgress } from "./wizard/WizardProgress";
 import { integrationWizardSteps } from "./wizard/wizardSteps";
+import {
+  DEFAULT_REST_CONFIGURATION,
+  REST_CONTENT_TYPES,
+  parseRequestBody,
+} from "./wizard/restConfiguration";
 
 interface IntegrationWizardModalProps {
   isOpen: boolean;
@@ -62,8 +67,11 @@ interface IntegrationWizardModalProps {
   connector: Connector | null;
   availableConnectors: Connector[];
   onSubmit: (payload: CreateIntegrationPayload) => Promise<any>;
+  onTestConnection?: (
+    id: string,
+    payload?: Record<string, any>
+  ) => Promise<TestConnectionResponse>;
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
-  onTestConnection?: (id: string, payload?: Record<string, any>) => Promise<TestConnectionResponse>;
   onUpdateIntegration?: (id: string, payload: UpdateIntegrationPayload) => Promise<any>;
   onFetchSchema?: (id: string) => Promise<DiscoveredSchemaResponse>;
   onViewSchema?: (connector: Connector) => void;
@@ -92,6 +100,29 @@ const integrationFormSchema = z.object({
       { message: "Please enter a valid HTTP/HTTPS URL" }
     ),
   httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"] as const),
+  contentType: z.enum(REST_CONTENT_TYPES).optional(),
+  queryParams: z
+    .array(
+      z.object({
+        key: z.string().min(1, "Parameter name required"),
+        value: z.string().min(1, "Parameter value required"),
+      })
+    )
+    .optional(),
+  requestBody: z
+    .string()
+    .refine(
+      (value) => {
+        try {
+          parseRequestBody(value);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      { message: "Request body must contain valid JSON" }
+    )
+    .optional(),
   authType: z.enum([
     "OAUTH2",
     "API_KEY",
@@ -434,8 +465,8 @@ export function IntegrationWizardModal({
   connector: initialConnector,
   availableConnectors,
   onSubmit,
-  onOAuthConnect,
   onTestConnection,
+  onOAuthConnect,
   onUpdateIntegration,
   onFetchSchema,
   onViewSchema,
@@ -518,6 +549,9 @@ export function IntegrationWizardModal({
     syncDirection: "BIDIRECTIONAL",
     syncFrequency: "HOURLY",
     headers: [],
+    contentType: DEFAULT_REST_CONFIGURATION.contentType,
+    queryParams: DEFAULT_REST_CONFIGURATION.queryParams,
+    requestBody: DEFAULT_REST_CONFIGURATION.requestBody,
     fieldMappings: {},
     dynamicFields: {},
   };
@@ -539,6 +573,14 @@ export function IntegrationWizardModal({
   const { fields, append, remove } = useFieldArray({
     control,
     name: "headers",
+  });
+  const {
+    fields: queryParamFields,
+    append: appendQueryParam,
+    remove: removeQueryParam,
+  } = useFieldArray({
+    control,
+    name: "queryParams",
   });
 
   // Keep form values updated when selected connector changes
@@ -589,6 +631,8 @@ export function IntegrationWizardModal({
 
   const currentAuthType = watch("authType");
   const currentTargetModule = watch("targetModule");
+  const currentHttpMethod = watch("httpMethod");
+  const supportsRequestBody = currentHttpMethod !== "GET" && currentHttpMethod !== "DELETE";
 
   const currentModuleConfig = useMemo(() => {
     return (
@@ -643,6 +687,7 @@ export function IntegrationWizardModal({
   /**
    * Real Connection Test Handler
    * Calls REAL backend API: POST /api/integrations/{id}/test
+   * Prevents duplicate simultaneous requests, provides loading state & normalized feedback
    */
   const handleTestConnection = async () => {
     if (isTesting) return; // Prevent duplicate requests
@@ -660,64 +705,51 @@ export function IntegrationWizardModal({
     const startTime = performance.now();
 
     try {
-      const credentials = buildCredentialsObject(values);
-      const headerObject = buildHeadersObject(values.headers);
-      const testPayload = {
-        apiUrl: values.apiUrl,
-        httpMethod: values.httpMethod,
-        authType: values.authType,
-        credentials,
-        headers: headerObject,
-        config: values.dynamicFields || {},
-      };
-
       let targetId =
         activeIntegrationId ||
         selectedConnector?.connectionId ||
-        selectedConnector?.connectionState?.id ||
-        (selectedConnector?.isConnected ? selectedConnector?.id : null) ||
-        selectedConnector?.id ||
-        selectedConnector?.provider;
+        selectedConnector?.connectionState?.id;
 
-      // If no integration instance ID exists yet, attempt saving draft or use connector ID
-      if (!activeIntegrationId && !selectedConnector?.connectionId) {
+      // If no integration instance ID exists yet (newly created in wizard),
+      // create it in backend first so we have a valid integration ID to test against
+      if (!targetId) {
         setTestProgress("Saving integration instance before live test...");
-        try {
-          const createPayload: CreateIntegrationPayload = {
-            connectorId: selectedConnector?.id,
-            provider: selectedConnector?.provider || selectedConnector?.id || "custom",
-            name: values.displayName || `${selectedConnector?.name || "New"} Integration`,
-            displayName:
-              values.displayName || `${selectedConnector?.name || "New"} Integration`,
-            targetModule: values.targetModule,
-            targetEntity: values.targetEntity,
-            apiUrl: values.apiUrl,
-            httpMethod: values.httpMethod,
-            authType: values.authType,
-            credentials,
-            syncDirection: values.syncDirection,
-            syncFrequency: values.syncFrequency,
-            headers: headerObject,
-            config: values.dynamicFields || {},
-          };
+        const credentials = buildCredentialsObject(values);
+        const headerObject = buildHeadersObject(values.headers);
 
-          const createdInstance = await onSubmit(createPayload);
-          const newId =
-            createdInstance?.id ||
-            createdInstance?._id ||
-            createdInstance?.integration?.id ||
-            createdInstance?.data?.id;
+        const createPayload: CreateIntegrationPayload = {
+          connectorId: selectedConnector?.id,
+          provider: selectedConnector?.provider || "custom",
+          name: values.displayName || `${selectedConnector?.name || "New"} Integration`,
+          displayName:
+            values.displayName || `${selectedConnector?.name || "New"} Integration`,
+          targetModule: values.targetModule,
+          targetEntity: values.targetEntity,
+          apiUrl: values.apiUrl,
+          httpMethod: values.httpMethod,
+          authType: values.authType,
+          credentials,
+          syncDirection: values.syncDirection,
+          syncFrequency: values.syncFrequency,
+          headers: headerObject,
+          config: values.dynamicFields || {},
+        };
 
-          if (newId) {
-            targetId = newId;
-            setActiveIntegrationId(newId);
-          }
-        } catch (submitErr) {
-          // If creation returned error, continue to test with targetId and testPayload
-          console.warn("Draft save handled, testing directly:", submitErr);
+        const createdInstance = await onSubmit(createPayload);
+        targetId =
+          createdInstance?.id ||
+          createdInstance?.integration?.id ||
+          createdInstance?.data?.id;
+
+        if (targetId) {
+          setActiveIntegrationId(targetId);
         }
-      } else if (onUpdateIntegration && targetId) {
+      } else if (onUpdateIntegration) {
+        // If integration already exists and form values were updated, sync before testing
         setTestProgress("Updating configuration parameters...");
+        const headerObject = buildHeadersObject(values.headers);
+        const credentials = buildCredentialsObject(values);
+
         const updatePayload: UpdateIntegrationPayload = {
           displayName: values.displayName,
           syncFrequency: values.syncFrequency,
@@ -740,19 +772,18 @@ export function IntegrationWizardModal({
 
       if (!targetId) {
         throw new Error(
-          "Could not obtain a valid integration identifier to perform connection test."
+          "Could not obtain a valid integration ID to perform connection test."
         );
       }
 
       setTestProgress("Testing connection...");
 
-      // Call the REAL backend API: POST /api/integrations/{id}/test with testPayload
+      // Call the REAL backend API: POST /api/integrations/{id}/test
       const res = onTestConnection
-        ? await onTestConnection(targetId, testPayload)
-        : await testIntegrationConnectionApi(targetId, testPayload);
+        ? await onTestConnection(targetId)
+        : await testIntegrationConnectionApi(targetId);
 
       const latencyMs = Math.round(performance.now() - startTime);
-
       if (
         res &&
         (res.success ||
@@ -769,7 +800,7 @@ export function IntegrationWizardModal({
         );
         setTestResult(normalizedFail);
         setIsSchemaUnlocked(false);
-        toast.error("Connection test failed.");
+        toast.error(normalizedFail.message || "Connection test failed.");
       }
     } catch (err: any) {
       const latencyMs = Math.round(performance.now() - startTime);
@@ -969,18 +1000,19 @@ export function IntegrationWizardModal({
       return;
     }
 
-    setIsSubmitting(true);
-    try {
-      const headerObject = buildHeadersObject(data.headers);
-      const credentials = buildCredentialsObject(data);
+    // If integration was already created during the connection test, update if needed and close
+    if (activeIntegrationId && onUpdateIntegration) {
+      setIsSubmitting(true);
+      try {
+        const headerObject = buildHeadersObject(data.headers);
+        const credentials = buildCredentialsObject(data);
 
-      const dynamicConfig = {
-        ...(data.dynamicFields || {}),
-        fieldMappings: mappedFields,
-        discoveredAt: discoveredSchema?.discoveredAt || new Date().toISOString(),
-      };
+        const dynamicConfig = {
+          ...(data.dynamicFields || {}),
+          fieldMappings: mappedFields,
+          discoveredAt: discoveredSchema?.discoveredAt || new Date().toISOString(),
+        };
 
-      if (activeIntegrationId && onUpdateIntegration) {
         await onUpdateIntegration(activeIntegrationId, {
           displayName: data.displayName,
           syncDirection: data.syncDirection,
@@ -995,8 +1027,28 @@ export function IntegrationWizardModal({
         toast.success(`Successfully configured ${selectedConnector.name}!`);
         reset();
         onClose();
-        return;
+      } catch (err: any) {
+        const errorMsg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to finalize integration.";
+        toast.error(errorMsg);
+      } finally {
+        setIsSubmitting(false);
       }
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const credentials = buildCredentialsObject(data);
+      const headerObject = buildHeadersObject(data.headers);
+
+      const dynamicConfig = {
+        ...(data.dynamicFields || {}),
+        fieldMappings: mappedFields,
+        discoveredAt: discoveredSchema?.discoveredAt || new Date().toISOString(),
+      };
 
       const payload: CreateIntegrationPayload = {
         connectorId: selectedConnector.id,
@@ -1277,6 +1329,89 @@ export function IntegrationWizardModal({
                     <option value="PATCH">PATCH</option>
                     <option value="DELETE">DELETE</option>
                   </select>
+                </div>
+              </div>
+
+              {/* REST request configuration */}
+              <div className="space-y-3 rounded-xl border border-border bg-surface-secondary/30 p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                      Content Type
+                    </label>
+                    <select
+                      {...register("contentType")}
+                      className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                    >
+                      {REST_CONTENT_TYPES.map((contentType) => (
+                        <option key={contentType} value={contentType}>
+                          {contentType}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {supportsRequestBody ? (
+                    <div>
+                      <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                        Request Body (JSON)
+                      </label>
+                      <textarea
+                        {...register("requestBody")}
+                        rows={3}
+                        placeholder={'{"field": "value"}'}
+                        className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      {errors.requestBody && (
+                        <p className="text-xs text-error mt-1">
+                          {errors.requestBody.message}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="self-end text-xs text-text-muted pb-2">
+                      {currentHttpMethod} requests do not send a request body.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-text uppercase tracking-wider">
+                      Query Parameters
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => appendQueryParam({ key: "", value: "" })}
+                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark font-medium transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Parameter</span>
+                    </button>
+                  </div>
+                  {queryParamFields.map((field, idx) => (
+                    <div key={field.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        {...register(`queryParams.${idx}.key` as const)}
+                        placeholder="Parameter name"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      <input
+                        type="text"
+                        {...register(`queryParams.${idx}.value` as const)}
+                        placeholder="Parameter value"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeQueryParam(idx)}
+                        className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
+                        aria-label="Remove query parameter"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 

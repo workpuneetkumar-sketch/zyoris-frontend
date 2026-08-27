@@ -13,9 +13,11 @@
 //     graph and timeline own their loading / error / empty state internally.
 
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Building2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, Edit3 } from "lucide-react";
 import { useCustomer360 } from "@/hooks/useCustomer360";
 import { CustomerApiError } from "@/lib/api/customersApi";
+import type { CanonicalCustomer } from "@/types/customers";
+import { LIFECYCLE_STATE_LABELS, CANONICAL_TYPE_LABELS } from "@/types/customers";
 import { ProvenanceBadge } from "./ProvenanceBadge";
 import { Customer360Skeleton } from "./Customer360Skeleton";
 import { Customer360ErrorState, Customer360NotFound } from "./Customer360States";
@@ -41,7 +43,15 @@ const SECTION_NAV = [
   { id: "ai-insights", label: "AI Insights" },
 ];
 
-export function Customer360Page({ customerId }: { customerId: string }) {
+export function Customer360Page({
+  customerId,
+  onRequestEdit,
+  canonicalCustomer,
+}: {
+  customerId: string;
+  onRequestEdit?: () => void;
+  canonicalCustomer?: CanonicalCustomer | null;
+}) {
   const router = useRouter();
   const { summary, graph } = useCustomer360(customerId);
 
@@ -123,6 +133,46 @@ export function Customer360Page({ customerId }: { customerId: string }) {
             </div>
           </div>
         </div>
+        {(onRequestEdit || canonicalCustomer) && (
+          <div className="flex items-center gap-2">
+            {canonicalCustomer && (
+              <>
+                <span
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium border"
+                  style={{
+                    background: "color-mix(in srgb, var(--color-primary) 12%, transparent)",
+                    color: "var(--color-primary)",
+                    borderColor: "color-mix(in srgb, var(--color-primary) 30%, transparent)",
+                  }}
+                >
+                  {CANONICAL_TYPE_LABELS[canonicalCustomer.canonicalType] ??
+                    canonicalCustomer.canonicalType}
+                </span>
+                <span
+                  className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium border"
+                  style={{
+                    background: "color-mix(in srgb, var(--color-success) 14%, transparent)",
+                    color: "var(--color-success)",
+                    borderColor: "color-mix(in srgb, var(--color-success) 35%, transparent)",
+                  }}
+                >
+                  {LIFECYCLE_STATE_LABELS[canonicalCustomer.lifecycleState] ??
+                    canonicalCustomer.lifecycleState}
+                </span>
+              </>
+            )}
+            {onRequestEdit && (
+              <button
+                type="button"
+                onClick={onRequestEdit}
+                className="flex items-center gap-1.5 h-9 px-4 rounded-lg text-white text-sm font-semibold transition-all shadow-sm hover:brightness-110"
+                style={{ background: "var(--color-primary)" }}
+              >
+                <Edit3 size={14} /> Edit
+              </button>
+            )}
+          </div>
+        )}
       </header>
 
       {/* Section nav */}
