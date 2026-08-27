@@ -11,7 +11,8 @@ import { AdvancedFiltersDrawer } from "@/components/leads/AdvancedFiltersDrawer"
 import { BulkActionsToolbar } from "@/components/leads/BulkActionsToolbar";
 import { AdvancedLeadsFilters, DEFAULT_ADVANCED_FILTERS } from "@/types/savedViews";
 import { fetchLeads } from "@/lib/api/leadsApi";
-import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target, UserPlus, Search as SearchIcon, Building2, ArrowRightLeft } from "lucide-react";
+import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target, UserPlus, Search as SearchIcon, Building2, ArrowRightLeft, UsersRound } from "lucide-react";
+import Link from "next/link";
 import { ConvertLeadModal } from "@/components/customers/ConvertLeadModal";
 import { IdentityResolveModal } from "@/components/customers/IdentityResolveModal";
 import { ConvertCompanyModal } from "@/components/customers/ConvertCompanyModal";
@@ -448,6 +449,22 @@ export default function LeadsPage() {
               <Building2 size={15} />
               Convert Company
             </button>
+            <Link
+              href="/customers"
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              title="Browse all canonical customers"
+            >
+              <UsersRound size={15} />
+              View Customers
+            </Link>
+            <Link
+              href="/customers/new"
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              title="Create a new canonical customer"
+            >
+              <UserPlus size={15} />
+              New Customer
+            </Link>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
               onClick={() => setIsUploadOpen(true)}

@@ -48,6 +48,7 @@ export const isPathAllowed = (
     "/deals",
     "/contacts",
     "/companies",
+    "/customers",
     "/finance",
     "/hr",
     "/settings",
@@ -88,7 +89,7 @@ export const isPathAllowed = (
 
     // Aggregate key expansion — if the API returns key:"crm" that expands to
     // /leads, /deals, etc., those sub-routes must also be allowed
-    const CRM_EXPANSION = ["/leads", "/deals", "/contacts", "/companies", "/activities", "/ai-insights"];
+    const CRM_EXPANSION = ["/leads", "/deals", "/contacts", "/companies", "/customers", "/activities", "/ai-insights"];
     const COMM_EXPANSION = ["/communications", "/email", "/whatsapp", "/calls", "/messages", "/meetings", "/calendar", "/tasks", "/projects"];
 
     const hasCrmKey = sidebarItems.some((item) => (item.key ?? "").toLowerCase() === "crm");
