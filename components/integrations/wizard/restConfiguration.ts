@@ -35,4 +35,5 @@ export function parseRequestBody(value: string): unknown {
   if (!value.trim()) return undefined;
   return JSON.parse(value);
 }
+// Request bodies are parsed before submission so invalid JSON is rejected early.
 
