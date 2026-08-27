@@ -350,6 +350,9 @@ export default function IntegrationsPage() {
         onSubmit={async (payload: CreateIntegrationPayload) => {
           await createIntegration(payload);
         }}
+        onTestConnection={async (id, payload) => {
+          return await testConnection(id, payload);
+        }}
         onOAuthConnect={async (provider: string, payload?: Record<string, any>) => {
           return await initiateOAuth(provider, payload);
         }}

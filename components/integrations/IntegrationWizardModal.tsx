@@ -33,6 +33,11 @@ import { toast } from "sonner";
 import { WizardProgress } from "./wizard/WizardProgress";
 import { WizardFooter } from "./wizard/WizardFooter";
 import { integrationWizardSteps } from "./wizard/wizardSteps";
+import {
+  DEFAULT_REST_CONFIGURATION,
+  REST_CONTENT_TYPES,
+  parseRequestBody,
+} from "./wizard/restConfiguration";
 
 interface IntegrationWizardModalProps {
   isOpen: boolean;
@@ -40,6 +45,10 @@ interface IntegrationWizardModalProps {
   connector: Connector | null;
   availableConnectors: Connector[];
   onSubmit: (payload: CreateIntegrationPayload) => Promise<any>;
+  onTestConnection?: (
+    id: string,
+    payload?: Record<string, any>
+  ) => Promise<{ success: boolean; latencyMs?: number; message?: string }>;
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
 }
 
@@ -103,6 +112,26 @@ const integrationFormSchema = z.object({
       })
     )
     .optional(),
+  contentType: z.enum(REST_CONTENT_TYPES),
+  queryParams: z
+    .array(
+      z.object({
+        key: z.string().min(1, "Parameter name required"),
+        value: z.string().min(1, "Parameter value required"),
+      })
+    )
+    .optional(),
+  requestBody: z.string().refine(
+    (value) => {
+      try {
+        parseRequestBody(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Request body must contain valid JSON" }
+  ),
   // Additional dynamic config
   dynamicFields: z.record(z.string(), z.any()).optional(),
 });
@@ -128,6 +157,7 @@ export function IntegrationWizardModal({
   connector: initialConnector,
   availableConnectors,
   onSubmit,
+  onTestConnection,
   onOAuthConnect,
 }: IntegrationWizardModalProps) {
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(
@@ -184,6 +214,9 @@ export function IntegrationWizardModal({
     syncDirection: "BIDIRECTIONAL",
     syncFrequency: "HOURLY",
     headers: [],
+    contentType: DEFAULT_REST_CONFIGURATION.contentType,
+    queryParams: DEFAULT_REST_CONFIGURATION.queryParams,
+    requestBody: DEFAULT_REST_CONFIGURATION.requestBody,
     dynamicFields: {},
   };
 
@@ -205,6 +238,14 @@ export function IntegrationWizardModal({
     control,
     name: "headers",
   });
+  const {
+    fields: queryParamFields,
+    append: appendQueryParam,
+    remove: removeQueryParam,
+  } = useFieldArray({
+    control,
+    name: "queryParams",
+  });
 
   // Keep form values updated when selected connector changes
   useEffect(() => {
@@ -223,6 +264,62 @@ export function IntegrationWizardModal({
 
   const currentAuthType = watch("authType");
   const currentTargetModule = watch("targetModule");
+  const currentHttpMethod = watch("httpMethod");
+  const supportsRequestBody = ["POST", "PUT", "PATCH"].includes(
+    currentHttpMethod
+  );
+  const existingIntegrationId =
+    selectedConnector?.connectionId || selectedConnector?.connectionState?.id;
+
+  const buildPayload = (data: FormValues): CreateIntegrationPayload => {
+    if (!selectedConnector) {
+      throw new Error("Please select a connector first.");
+    }
+
+    const credentials: Record<string, any> = {};
+    if (data.authType === "API_KEY") {
+      credentials.headerName = data.apiKeyName || "X-API-Key";
+      credentials.apiKey = data.apiKeyValue;
+    } else if (data.authType === "BEARER_TOKEN") {
+      credentials.token = data.bearerToken;
+    } else if (data.authType === "BASIC_AUTH") {
+      credentials.username = data.basicUsername;
+      credentials.password = data.basicPassword;
+    } else if (data.authType === "WEBHOOK_SECRET") {
+      credentials.secret = data.webhookSecret;
+    }
+
+    const headers: Record<string, string> = {};
+    data.headers?.forEach((header) => {
+      if (header.key.trim() && header.value.trim()) {
+        headers[header.key.trim()] = header.value.trim();
+      }
+    });
+
+    return {
+      connectorId: selectedConnector.id,
+      provider: selectedConnector.provider,
+      name: data.displayName,
+      displayName: data.displayName,
+      targetModule: data.targetModule,
+      targetEntity: data.targetEntity,
+      apiUrl: data.apiUrl,
+      httpMethod: data.httpMethod,
+      authType: data.authType,
+      credentials,
+      syncDirection: data.syncDirection,
+      syncFrequency: data.syncFrequency,
+      headers,
+      config: {
+        ...(data.dynamicFields || {}),
+        contentType: data.contentType,
+        queryParams: data.queryParams?.filter(
+          (param) => param.key.trim() && param.value.trim()
+        ),
+        requestBody: parseRequestBody(data.requestBody),
+      },
+    };
+  };
 
   const toggleSecretVisibility = (key: string) => {
     setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -237,7 +334,7 @@ export function IntegrationWizardModal({
     }
   };
 
-  // Test live connection
+  // The backend test endpoint accepts an existing integration ID only.
   const handleTestConnection = async () => {
     const values = watch();
     if (!values.apiUrl) {
@@ -248,16 +345,23 @@ export function IntegrationWizardModal({
     setTestResult(null);
 
     try {
+      if (!existingIntegrationId || !onTestConnection) {
+        throw new Error(
+          "Test Connection is available after this integration is saved; the backend does not provide a test endpoint for unsaved configurations."
+        );
+      }
+
       const startTime = Date.now();
-      // Simulate/Trigger connectivity check
-      await new Promise((resolve) => setTimeout(resolve, 800));
-      const latency = Date.now() - startTime;
+      const result = await onTestConnection(
+        existingIntegrationId,
+        buildPayload(values)
+      );
       setTestResult({
-        success: true,
-        latencyMs: latency,
-        message: "Connection endpoint reached successfully with valid headers.",
+        ...result,
+        latencyMs: result.latencyMs ?? Date.now() - startTime,
       });
-      toast.success("Connection test passed!");
+      if (result.success) toast.success("Connection test passed!");
+      else toast.error(result.message || "Connection test failed.");
     } catch (err: any) {
       setTestResult({
         success: false,
@@ -333,44 +437,7 @@ export function IntegrationWizardModal({
 
     setIsSubmitting(true);
     try {
-      // Build credentials object based on auth type
-      const credentials: Record<string, any> = {};
-      if (data.authType === "API_KEY") {
-        credentials.headerName = data.apiKeyName || "X-API-Key";
-        credentials.apiKey = data.apiKeyValue;
-      } else if (data.authType === "BEARER_TOKEN") {
-        credentials.token = data.bearerToken;
-      } else if (data.authType === "BASIC_AUTH") {
-        credentials.username = data.basicUsername;
-        credentials.password = data.basicPassword;
-      } else if (data.authType === "WEBHOOK_SECRET") {
-        credentials.secret = data.webhookSecret;
-      }
-
-      // Convert header array to object
-      const headerObject: Record<string, string> = {};
-      data.headers?.forEach((h) => {
-        if (h.key.trim() && h.value.trim()) {
-          headerObject[h.key.trim()] = h.value.trim();
-        }
-      });
-
-      const payload: CreateIntegrationPayload = {
-        connectorId: selectedConnector.id,
-        provider: selectedConnector.provider,
-        name: data.displayName,
-        displayName: data.displayName,
-        targetModule: data.targetModule,
-        targetEntity: data.targetEntity,
-        apiUrl: data.apiUrl,
-        httpMethod: data.httpMethod,
-        authType: data.authType,
-        credentials,
-        syncDirection: data.syncDirection,
-        syncFrequency: data.syncFrequency,
-        headers: headerObject,
-        config: data.dynamicFields || {},
-      };
+      const payload = buildPayload(data);
 
       await onSubmit(payload);
       toast.success(`Successfully connected ${selectedConnector.name}!`);
@@ -575,6 +642,89 @@ export function IntegrationWizardModal({
                     <option value="PATCH">PATCH</option>
                     <option value="DELETE">DELETE</option>
                   </select>
+                </div>
+              </div>
+
+              {/* REST request configuration */}
+              <div className="space-y-3 rounded-xl border border-border bg-surface-secondary/30 p-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                      Content Type
+                    </label>
+                    <select
+                      {...register("contentType")}
+                      className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                    >
+                      {REST_CONTENT_TYPES.map((contentType) => (
+                        <option key={contentType} value={contentType}>
+                          {contentType}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {supportsRequestBody ? (
+                    <div>
+                      <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                        Request Body (JSON)
+                      </label>
+                      <textarea
+                        {...register("requestBody")}
+                        rows={3}
+                        placeholder={'{"field": "value"}'}
+                        className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      {errors.requestBody && (
+                        <p className="text-xs text-error mt-1">
+                          {errors.requestBody.message}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="self-end text-xs text-text-muted pb-2">
+                      {currentHttpMethod} requests do not send a request body.
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-text uppercase tracking-wider">
+                      Query Parameters
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => appendQueryParam({ key: "", value: "" })}
+                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark font-medium transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Parameter</span>
+                    </button>
+                  </div>
+                  {queryParamFields.map((field, idx) => (
+                    <div key={field.id} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        {...register(`queryParams.${idx}.key` as const)}
+                        placeholder="Parameter name"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      <input
+                        type="text"
+                        {...register(`queryParams.${idx}.value` as const)}
+                        placeholder="Parameter value"
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeQueryParam(idx)}
+                        className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
+                        aria-label="Remove query parameter"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
@@ -983,7 +1133,7 @@ export function IntegrationWizardModal({
                     Verify Connectivity
                   </h5>
                   <p className="text-xs text-text-secondary mt-0.5">
-                    Test connection credentials against the remote service before saving.
+                    Test saved integration credentials against the remote service.
                   </p>
                 </div>
                 <button
@@ -1005,6 +1155,11 @@ export function IntegrationWizardModal({
                   )}
                 </button>
               </div>
+              {!existingIntegrationId && (
+                <p className="text-xs text-text-muted">
+                  The backend test endpoint accepts an existing integration ID. Save this configuration first, then test it from the integration list.
+                </p>
+              )}
 
               {/* Test Result Box */}
               {testResult && (
