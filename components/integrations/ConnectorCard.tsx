@@ -3,7 +3,11 @@ import {
   Connector,
   ConnectorCategory,
   IntegrationStatus,
+  NormalizedConnectionTestResult,
 } from "@/types/integrations";
+import { AsyncRequestError, useAsyncRequest } from "@/hooks/useAsyncRequest";
+import { normalizeConnectionError } from "@/lib/api/connectionTest";
+import { ConnectionTestResult } from "./ConnectionTestResult";
 import {
   CheckCircle2,
   AlertCircle,
@@ -29,7 +33,7 @@ interface ConnectorCardProps {
   onConfigure: (connector: Connector) => void;
   onRotateCredentials?: (connector: Connector) => void;
   onSyncNow?: (connector: Connector) => Promise<void>;
-  onTestConnection?: (connector: Connector) => Promise<void>;
+  onTestConnection?: (connector: Connector) => Promise<NormalizedConnectionTestResult>;
   onViewSchema?: (connector: Connector) => void;
   onTogglePause?: (connector: Connector) => Promise<void>;
   onReconnect?: (connector: Connector) => void | Promise<void>;
@@ -52,7 +56,7 @@ export function ConnectorCard({
 }: ConnectorCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isTesting, setIsTesting] = useState(false);
+  const connectionTest = useAsyncRequest<NormalizedConnectionTestResult>();
   const menuRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
@@ -106,13 +110,15 @@ export function ConnectorCard({
     }
   };
 
-  const handleTestClick = async () => {
-    if (!onTestConnection || isTesting) return;
-    setIsTesting(true);
+  const handleTestClick = async (retry = false) => {
+    if (!onTestConnection || connectionTest.status === "loading") return;
     try {
-      await onTestConnection(connector);
+      await connectionTest.execute(() => onTestConnection(connector), retry);
+    } catch (error) {
+      if (!(error instanceof AsyncRequestError)) {
+        normalizeConnectionError(error);
+      }
     } finally {
-      setIsTesting(false);
       setIsMenuOpen(false);
     }
   };
@@ -262,6 +268,18 @@ export function ConnectorCard({
             </span>
           </div>
         )}
+
+        {onTestConnection && connectionTest.status !== "idle" && (
+          <div className="mt-3">
+            <ConnectionTestResult
+              status={connectionTest.status}
+              result={connectionTest.data || (connectionTest.error instanceof AsyncRequestError ? connectionTest.error.data : null)}
+              isRetrying={connectionTest.isRetrying}
+              onRetry={() => handleTestClick(true)}
+              compact
+            />
+          </div>
+        )}
       </div>
 
       {/* Action Footer */}
@@ -359,12 +377,12 @@ export function ConnectorCard({
 
                   {onTestConnection && (
                     <button
-                      onClick={handleTestClick}
-                      disabled={isTesting || !canManage}
+                      onClick={() => handleTestClick()}
+                      disabled={connectionTest.status === "loading" || !canManage}
                       className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
                       <Zap className="w-3.5 h-3.5 text-primary" />
-                      <span>{isTesting ? "Testing..." : "Test Connection"}</span>
+                      <span>{connectionTest.status === "loading" ? "Testing..." : "Test Connection"}</span>
                     </button>
                   )}
 
