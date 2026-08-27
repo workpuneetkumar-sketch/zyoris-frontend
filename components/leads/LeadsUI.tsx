@@ -26,6 +26,8 @@ import {
     X,
     Calendar,
     SlidersHorizontal,
+    Users,
+    UserPlus,
 } from "lucide-react";
 
 import { Lead, LeadsFilters } from "@/types/leads";
@@ -56,6 +58,7 @@ export interface LeadsTableProps {
     dateTo?: string;
     filterCount?: number;
     usingAdvanced?: boolean;
+    onPromoteToCustomer?: (lead: Lead) => void;
 }
 
 // ── Avatar ────────────────────────────────────────────────────────────────────
@@ -487,6 +490,7 @@ export function LeadsTable({
     dateTo = "",
     filterCount = 0,
     usingAdvanced = false,
+    onPromoteToCustomer,
 }: LeadsTableProps) {
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const safeLeads = leads ?? [];
@@ -897,6 +901,17 @@ export function LeadsTable({
                             >
                                 <Briefcase size={14} /> Convert to Deal
                             </button>
+                            {onPromoteToCustomer && (
+                                <button
+                                    onClick={() => {
+                                        const lead = safeLeads.find((l) => l.id === openMenu);
+                                        if (lead) { onPromoteToCustomer(lead); setOpenMenu(null); setMenuPos(null); }
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-blue-600"
+                                >
+                                    <UserPlus size={14} /> Promote to Customer
+                                </button>
+                            )}
                             <button
                                 onClick={() => {
                                     const lead = safeLeads.find((l) => l.id === openMenu);

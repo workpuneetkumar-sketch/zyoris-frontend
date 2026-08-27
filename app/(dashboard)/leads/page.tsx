@@ -11,7 +11,11 @@ import { AdvancedFiltersDrawer } from "@/components/leads/AdvancedFiltersDrawer"
 import { BulkActionsToolbar } from "@/components/leads/BulkActionsToolbar";
 import { AdvancedLeadsFilters, DEFAULT_ADVANCED_FILTERS } from "@/types/savedViews";
 import { fetchLeads } from "@/lib/api/leadsApi";
-import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target } from "lucide-react";
+import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target, UserPlus, Search as SearchIcon, Building2, ArrowRightLeft } from "lucide-react";
+import { ConvertLeadModal } from "@/components/customers/ConvertLeadModal";
+import { IdentityResolveModal } from "@/components/customers/IdentityResolveModal";
+import { ConvertCompanyModal } from "@/components/customers/ConvertCompanyModal";
+import type { ConvertLeadResult } from "@/types/customers";
 import { useBulkOperations } from "@/hooks/useBulkOperations";
 import { BulkOperationType } from "@/types/bulkOperations";
 import { useAssignmentRules } from "@/hooks/useAssignmentRules";
@@ -186,6 +190,12 @@ export default function LeadsPage() {
   const [ruleFormOpen, setRuleFormOpen] = useState(false);
   const [editingRule, setEditingRule] = useState<AssignmentRule | null>(null);
   const [team, setTeam] = useState<TeamMember[]>([]);
+
+  // Customer module modals
+  const [convertLeadOpen, setConvertLeadOpen] = useState(false);
+  const [prefillLeadId, setPrefillLeadId] = useState<string | undefined>(undefined);
+  const [identityResolveOpen, setIdentityResolveOpen] = useState(false);
+  const [convertCompanyOpen, setConvertCompanyOpen] = useState(false);
 
   useEffect(() => {
     getTeamMembers()
@@ -379,6 +389,17 @@ export default function LeadsPage() {
     if (result) setRuleFormOpen(false);
   }, [rulesHook]);
 
+  // ── Customer module handlers ─────────────────────────────────────────────
+  const handlePromoteToCustomer = useCallback((lead: Lead) => {
+    setPrefillLeadId(lead.id);
+    setConvertLeadOpen(true);
+  }, []);
+
+  const handleConvertLeadSuccess = useCallback(async (_result: ConvertLeadResult) => {
+    await retry();
+    refreshStats();
+  }, [retry, refreshStats]);
+
   const filterCount = activeFilterCount(advFilters);
 
   if (error && activeTab === "leads") {
@@ -402,7 +423,32 @@ export default function LeadsPage() {
             <h1 className="text-2xl font-bold text-gray-900 leading-tight">Leads</h1>
             <p className="text-sm text-gray-500 mt-0.5">Manage and track all incoming leads in one place.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setIdentityResolveOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              title="Look up an existing canonical customer by email, phone, or external ID"
+            >
+              <SearchIcon size={15} />
+              Resolve Identity
+            </button>
+            <button
+              onClick={() => { setPrefillLeadId(undefined); setConvertLeadOpen(true); }}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              title="Convert a lead into a canonical customer + contact"
+            >
+              <ArrowRightLeft size={15} />
+              Promote Lead
+            </button>
+            <button
+              onClick={() => setConvertCompanyOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              title="Convert a company record into a canonical organization customer"
+            >
+              <Building2 size={15} />
+              Convert Company
+            </button>
+            <div className="w-px h-6 bg-gray-200 mx-1" />
             <button
               onClick={() => setIsUploadOpen(true)}
               className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
@@ -516,6 +562,7 @@ export default function LeadsPage() {
                     dateFrom={filters.dateFrom ?? ""}
                     dateTo={filters.dateTo ?? ""}
                     onDateRangeChange={handleDateRangeChange}
+                    onPromoteToCustomer={handlePromoteToCustomer}
                   />
                 </div>
               </div>
@@ -640,6 +687,23 @@ export default function LeadsPage() {
           }}
         />
       )}
+
+      {/* ── Customer Module Modals ──────────────────────────────────────── */}
+      <ConvertLeadModal
+        isOpen={convertLeadOpen}
+        prefillLeadId={prefillLeadId}
+        onClose={() => { setConvertLeadOpen(false); setPrefillLeadId(undefined); }}
+        onSuccess={handleConvertLeadSuccess}
+      />
+      <IdentityResolveModal
+        isOpen={identityResolveOpen}
+        onClose={() => setIdentityResolveOpen(false)}
+      />
+      <ConvertCompanyModal
+        isOpen={convertCompanyOpen}
+        onClose={() => setConvertCompanyOpen(false)}
+        onSuccess={async () => { await retry(); refreshStats(); }}
+      />
     </>
   );
 }
