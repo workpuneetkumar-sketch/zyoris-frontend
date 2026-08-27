@@ -337,7 +337,15 @@ export function relatedEntitiesOf(event: CustomerTimelineEvent): RelatedEntityRe
 /** Human-readable one-liner for the event body, if the backend supplied one. */
 export function eventSummary(event: CustomerTimelineEvent): string | null {
   const meta = metaRecord(event);
-  for (const key of ["summary", "description", "message", "title", "note", "body"]) {
+  for (const key of [
+    "__backend_pending_title",
+    "summary",
+    "description",
+    "message",
+    "title",
+    "note",
+    "body",
+  ]) {
     const v = meta[key];
     if (typeof v === "string" && v.trim()) return v.trim();
   }
@@ -346,6 +354,15 @@ export function eventSummary(event: CustomerTimelineEvent): string | null {
   const next = meta.currentStatus ?? meta.toStatus ?? meta.to;
   if (typeof prev === "string" && typeof next === "string") {
     return `${prev} → ${next}`;
+  }
+  // detail fields we can assemble inline (e.g. deal_amount, invoice total)
+  const dealName = meta.dealName ?? meta.deal;
+  const stageInfo =
+    typeof meta.fromStage === "string" && typeof meta.toStage === "string"
+      ? `${String(meta.fromStage)} → ${String(meta.toStage)}`
+      : null;
+  if (typeof dealName === "string" && stageInfo) {
+    return `${String(dealName)} — ${stageInfo}`;
   }
   return null;
 }
