@@ -221,7 +221,25 @@ export async function testIntegrationConnectionApi(
     `/api/integrations/${encodeURIComponent(id)}/test`,
     payload || {}
   );
-  return response.data;
+  const data = response.data;
+  if (data && typeof data === "object") {
+    if (data.data && typeof data.data === "object") {
+      return {
+        ...data.data,
+        success: data.data.success ?? data.success ?? (response.status >= 200 && response.status < 300),
+        statusCode: data.data.statusCode ?? data.statusCode ?? response.status,
+      };
+    }
+    return {
+      ...data,
+      success: data.success ?? (response.status >= 200 && response.status < 300),
+      statusCode: data.statusCode ?? response.status,
+    };
+  }
+  return {
+    success: response.status >= 200 && response.status < 300,
+    statusCode: response.status,
+  };
 }
 
 /**

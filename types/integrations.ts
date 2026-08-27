@@ -189,9 +189,42 @@ export interface UpdateIntegrationPayload {
 
 export interface TestConnectionResponse {
   success: boolean;
+  statusCode?: number;
+  httpStatus?: number;
   latencyMs?: number;
+  responseTime?: number;
   message?: string;
   details?: Record<string, any>;
+  recordsDetected?: number;
+  detectedRecords?: number;
+  recordsCount?: number;
+  entitiesDetected?: number;
+  entitiesCount?: number;
+  diagnostics?: string;
+  testedAt?: string;
+  timestamp?: string;
+  [key: string]: any;
+}
+
+export type ConnectionErrorCategory =
+  | "AUTH"
+  | "TIMEOUT"
+  | "NETWORK"
+  | "RATE_LIMIT"
+  | "CONFIG"
+  | "SERVER"
+  | "UNKNOWN";
+
+export interface NormalizedConnectionTestResult {
+  success: boolean;
+  statusCode?: number;
+  latencyMs?: number;
+  message?: string;
+  diagnostics?: string;
+  recordsDetected?: number;
+  entitiesDetected?: number;
+  testedAt?: string;
+  errorCategory?: ConnectionErrorCategory;
 }
 
 export interface OAuthConnectResponse {
