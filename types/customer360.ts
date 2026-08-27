@@ -3,9 +3,9 @@
 // Customer 360 — shared DTO types.
 //
 // SOURCE OF TRUTH: the backend API contract.
-//   • GET /api/customers/:id          — owned by Sakshi (canonical customer summary)
-//   • GET /api/customers/:id/graph     — owned by Manish  (relationship graph)
-//   • GET /customers/:id/timeline      — Customer Timeline service (already live)
+//   • GET /api/customers/:id           — owned by Sakshi  (canonical customer summary)
+//   • GET /api/customers/:id/graph      — owned by Manish   (relationship graph)
+//   • GET /api/customers/:id/timeline   — owned by Prashant (Customer Timeline service)
 //
 // These interfaces MIRROR that contract. They are the single frontend
 // representation of the Customer 360 domain — do NOT introduce a second/parallel
@@ -216,7 +216,7 @@ export interface CustomerGraph {
   generatedAt?: string | null;
 }
 
-// ── GET /customers/:id/timeline (Customer Timeline service — already live) ────
+// ── GET /api/customers/:id/timeline (Customer Timeline service — Prashant) ────
 
 export interface CustomerTimelineEvent {
   id: string;
@@ -245,12 +245,33 @@ export interface CustomerTimelinePage {
   nextCursor: string | null;
 }
 
+/** Wire query for GET /api/customers/:id/timeline — mirrors the backend 1:1. */
 export interface CustomerTimelineQuery {
   cursor?: string;
+  /** Comma-separated backend `eventType` values. */
   types?: string;
+  /** ISO-8601 lower bound (inclusive). */
   from?: string;
+  /** ISO-8601 upper bound (inclusive). */
   to?: string;
 }
+
+/**
+ * UI-side filter state for the Timeline section. `types` holds the exact
+ * backend `eventType` strings (no re-mapping) so it serialises straight into
+ * `CustomerTimelineQuery.types`.
+ */
+export interface CustomerTimelineFilters {
+  types: string[];
+  from: string | null;
+  to: string | null;
+}
+
+export const EMPTY_TIMELINE_FILTERS: CustomerTimelineFilters = {
+  types: [],
+  from: null,
+  to: null,
+};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
