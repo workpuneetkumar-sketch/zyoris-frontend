@@ -1,31 +1,37 @@
 "use client";
 
-import { Activity } from "lucide-react";
+// components/customers/sections/TimelineSection.tsx
+// Canonical Customer 360 Timeline.
+//
+// Wired straight to Prashant's timeline API via useCustomerTimeline →
+// fetchCustomerTimeline → GET /api/customers/:id/timeline?cursor=&types=&from=&to=
+// No mocks, no adapters: events render exactly as the backend returns them and
+// filters are sent as the backend's own `eventType` enum values.
+
+import { Activity, RefreshCw } from "lucide-react";
 import { useCustomerTimeline } from "@/hooks/useCustomerTimeline";
 import { SectionCard } from "../SectionCard";
 import { SectionEmpty, SectionError, SectionLoading } from "../SectionStates";
-import { formatDateTime } from "../primitives";
-import { ProvenanceBadge } from "../ProvenanceBadge";
-import type { CustomerTimelineEvent } from "@/types/customer360";
-
-function eventProvenance(event: CustomerTimelineEvent) {
-  if (!event.source || event.source === "INTERNAL") return null;
-  return {
-    source: event.source,
-    channel: event.channel ?? null,
-    confidence: event.confidence ?? null,
-    externalId: event.externalId ?? null,
-    observedAt: event.timestamp ?? null,
-  };
-}
-
-function humanizeEventType(type: string): string {
-  return type.replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
+import { TimelineFilters } from "./timeline/TimelineFilters";
+import { TimelineEvent } from "./timeline/TimelineEvent";
 
 export function TimelineSection({ customerId }: { customerId: string }) {
-  const { events, loading, loadingMore, error, hasMore, loadMore, reload } =
-    useCustomerTimeline(customerId);
+  const {
+    events,
+    loading,
+    loadingMore,
+    error,
+    hasMore,
+    loadMore,
+    reload,
+    filters,
+    setFilters,
+    clearFilters,
+    isFiltered,
+    knownEventTypes,
+  } = useCustomerTimeline(customerId);
+
+  const showFilters = knownEventTypes.length > 0 || isFiltered;
 
   return (
     <SectionCard
@@ -33,53 +39,70 @@ export function TimelineSection({ customerId }: { customerId: string }) {
       title="Timeline"
       icon={Activity}
       description="Unified activity across every connected system"
+      action={
+        <button
+          type="button"
+          onClick={reload}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-text hover:bg-surface-hover disabled:opacity-60"
+        >
+          <RefreshCw size={13} className={loading ? "animate-spin" : undefined} />
+          Refresh
+        </button>
+      }
     >
+      {showFilters && (
+        <TimelineFilters
+          filters={filters}
+          knownEventTypes={knownEventTypes}
+          events={events}
+          isFiltered={isFiltered}
+          onChange={setFilters}
+          onClear={clearFilters}
+          disabled={loading}
+        />
+      )}
+
       {loading ? (
         <SectionLoading label="Loading timeline…" />
       ) : error ? (
         <SectionError message={error.message} onRetry={reload} />
       ) : events.length === 0 ? (
-        <SectionEmpty
-          title="No timeline events yet"
-          description="Activity from CRM, billing, support and other systems will appear here."
-        />
+        isFiltered ? (
+          <SectionEmpty
+            title="No events match these filters"
+            description="Try widening the date range or clearing some event types."
+          />
+        ) : (
+          <SectionEmpty
+            title="No timeline events yet"
+            description="Activity, deals, tasks, invoices and payments will appear here as they happen."
+          />
+        )
       ) : (
-        <div className="flex flex-col">
-          <ol className="relative border-l border-border-light pl-5">
-            {events.map((event) => {
-              const prov = eventProvenance(event);
-              return (
-                <li key={event.id} className="mb-5 last:mb-0">
-                  <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full border-2 border-surface bg-primary" />
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-semibold text-text">
-                      {humanizeEventType(event.eventType)}
-                    </span>
-                    {prov ? <ProvenanceBadge provenance={prov} /> : (
-                      <span className="rounded-full border border-border-light bg-background-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-muted">
-                        Internal
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-0.5 text-xs text-text-secondary">
-                    {formatDateTime(event.timestamp)}
-                    {event.actorName ? ` · ${event.actorName}` : ""}
-                  </div>
-                </li>
-              );
-            })}
+        <div className="flex flex-col gap-4">
+          <ol className="relative ml-3 flex flex-col gap-5 border-l border-border-light">
+            {events.map((event) => (
+              <TimelineEvent key={event.id} event={event} />
+            ))}
           </ol>
 
-          {hasMore && (
-            <button
-              type="button"
-              onClick={loadMore}
-              disabled={loadingMore}
-              className="mt-2 self-start rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text hover:bg-surface-hover disabled:opacity-60"
-            >
-              {loadingMore ? "Loading…" : "Load older events"}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {hasMore ? (
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-semibold text-text hover:bg-surface-hover disabled:opacity-60"
+              >
+                {loadingMore ? "Loading…" : "Load older events"}
+              </button>
+            ) : (
+              <span className="text-[11px] text-text-muted">
+                {events.length} event{events.length === 1 ? "" : "s"} · end of timeline
+              </span>
+            )}
+          </div>
         </div>
       )}
     </SectionCard>

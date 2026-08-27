@@ -37,13 +37,33 @@ export function ProvenanceBadge({
 
   if (!provenance || !provenance.source) return null;
 
-  const rows = [
+  const baseRows = [
     ["Source", provenance.source],
     ["Channel", provenance.channel ?? null],
     ["Trust", formatConfidence(provenance.confidence)],
     ["External ID", provenance.externalId ?? null],
     ["Last sync", formatObservedAt(provenance.observedAt)],
   ].filter(([, v]) => Boolean(v)) as [string, string][];
+
+  // Surface any extra primitive attribution the backend attached under
+  // `details` that isn't already covered by a base row.
+  const covered = new Set(["source", "channel", "confidence", "externalid", "recordid", "provider", "observedat", "syncedat"]);
+  const detailRows = Object.entries(provenance.details ?? {})
+    .filter(
+      ([k, v]) =>
+        !covered.has(k.toLowerCase()) &&
+        (typeof v === "string" || typeof v === "number" || typeof v === "boolean") &&
+        String(v).trim() !== ""
+    )
+    .slice(0, 4)
+    .map(([k, v]) => {
+      const label = k
+        .replace(/[._-]+/g, " ")
+        .replace(/([a-z])([A-Z])/g, "$1 $2");
+      return [label.charAt(0).toUpperCase() + label.slice(1), String(v)] as [string, string];
+    });
+
+  const rows = [...baseRows, ...detailRows];
 
   return (
     <span className={`relative inline-flex ${className}`}>

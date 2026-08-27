@@ -5,9 +5,12 @@
 // and logout redirect are handled there.
 //
 // Endpoints (see types/customer360.ts for the contract these mirror):
-//   • GET /api/customers/:id          — Sakshi  (canonical customer summary)
-//   • GET /api/customers/:id/graph    — Manish  (relationship graph)
-//   • GET /customers/:id/timeline     — Customer Timeline service (live)
+//   • GET /api/customers/:id                   — Sakshi   (canonical customer summary)
+//   • GET /api/customers/:id/graph             — Manish   (relationship graph)
+//   • GET /api/customers/:id/timeline          — Prashant (Customer Timeline service, live)
+//
+// All three live behind the `/api/customers` prefix on the backend — the bare
+// `/customers/...` path is not routed (404).
 //
 // No domain types are declared here — they live in types/customer360.ts so the
 // app has exactly one Customer 360 model.
@@ -22,7 +25,6 @@ import type {
 } from "@/types/customer360";
 
 const CUSTOMERS_BASE = "/api/customers";
-const TIMELINE_BASE = "/customers";
 
 // ── Error model ─────────────────────────────────────────────────────────────
 
@@ -132,17 +134,30 @@ export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
   }
 }
 
-// ── GET /customers/:id/timeline ─────────────────────────────────────────────
+// ── GET /api/customers/:id/timeline ─────────────────────────────────────────
+// Cursor-paginated. Filters mirror the backend query contract exactly:
+//   cursor  — nextCursor from the previous page
+//   types   — comma-separated backend eventType values
+//   from/to — ISO-8601 timestamps (inclusive bounds)
+// Empty filters are omitted so the backend applies its own defaults.
 
 export async function fetchCustomerTimeline(
   id: string,
   query: CustomerTimelineQuery = {}
 ): Promise<CustomerTimelinePage> {
   if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+
+  const params: Record<string, string> = {};
+  if (query.cursor) params.cursor = query.cursor;
+  if (query.types) params.types = query.types;
+  if (query.from) params.from = query.from;
+  if (query.to) params.to = query.to;
+
   try {
-    const res = await api.get(`${TIMELINE_BASE}/${encodeURIComponent(id)}/timeline`, {
-      params: query,
-    });
+    const res = await api.get(
+      `${CUSTOMERS_BASE}/${encodeURIComponent(id)}/timeline`,
+      { params }
+    );
     const page = unwrapEnvelope<CustomerTimelinePage>(res.data);
     return {
       events: Array.isArray(page?.events) ? page.events : [],
