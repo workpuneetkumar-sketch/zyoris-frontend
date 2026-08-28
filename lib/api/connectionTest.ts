@@ -52,7 +52,7 @@ function classifyError(error: unknown, status?: number): ConnectionErrorCategory
   }
   if (status === 401 || status === 403) return "AUTH";
   if (status === 429) return "RATE_LIMIT";
-  if (status === 400 || status === 422) return "CONFIG";
+  if (status === 400 || status === 404 || status === 422) return "CONFIG";
   const networkCodes = new Set([
     "ERR_NETWORK",
     "ECONNRESET",
@@ -62,7 +62,7 @@ function classifyError(error: unknown, status?: number): ConnectionErrorCategory
   ]);
   if (
     networkCodes.has(String(code)) ||
-    /network|connect|reach|resolve|socket|dns/i.test(message)
+    /\b(network error|econnrefused|econnreset|enotfound|dns|socket hang up|failed to fetch)\b/i.test(message)
   ) {
     return "NETWORK";
   }
@@ -94,12 +94,14 @@ export function normalizeConnectionError(
   error: unknown,
   latencyMs?: number
 ): NormalizedConnectionTestResult {
-  const statusCode = getStatus(error);
-  const category = classifyError(error, statusCode);
+  const rawStatus = getStatus(error);
+  const statusCode = typeof rawStatus === "number" && rawStatus >= 400 ? rawStatus : undefined;
+  const category = classifyError(error, rawStatus);
   const responseData = (error as { response?: { data?: unknown } })?.response?.data;
+  const rawMessage = (error as { message?: unknown })?.message;
   const message = responseData && typeof responseData === "object"
-    ? sanitizeText((responseData as { message?: unknown }).message)
-    : undefined;
+    ? sanitizeText((responseData as { message?: unknown; error?: unknown }).message || (responseData as { error?: unknown }).error)
+    : (typeof rawMessage === "string" && !rawMessage.includes("AsyncRequestError") ? sanitizeText(rawMessage) : undefined);
 
   return {
     success: false,

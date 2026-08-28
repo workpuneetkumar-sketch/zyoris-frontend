@@ -52,6 +52,10 @@ export function ConnectionTestResult({
 
   const isSuccess = result.success;
   const category = result.errorCategory || "UNKNOWN";
+  const showStatusCode =
+    typeof result.statusCode === "number" &&
+    (isSuccess ? result.statusCode < 400 : result.statusCode >= 400);
+
   return (
     <div className={`p-3 rounded-xl border text-xs space-y-2 ${isSuccess ? "bg-success/10 border-success/20 text-success" : "bg-error/10 border-error/20 text-error"}`}>
       <div className="flex items-start gap-2">
@@ -60,7 +64,7 @@ export function ConnectionTestResult({
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <p className="font-bold">{isSuccess ? "Connection successful" : "Connection failed"}</p>
             <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px]">
-              {result.statusCode && <span>HTTP {result.statusCode}</span>}
+              {showStatusCode && <span>HTTP {result.statusCode}</span>}
               {typeof result.latencyMs === "number" && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{result.latencyMs}ms</span>}
               {!isSuccess && <span className="font-sans uppercase font-bold">{errorLabels[category]}</span>}
             </div>

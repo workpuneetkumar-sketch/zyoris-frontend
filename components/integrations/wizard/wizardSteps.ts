@@ -5,7 +5,7 @@ export const integrationWizardSteps = [
   },
   {
     id: 2,
-    label: "REST Configuration",
+    label: "Endpoint",
   },
   {
     id: 3,
@@ -13,6 +13,14 @@ export const integrationWizardSteps = [
   },
   {
     id: 4,
-    label: "Verify & Connect",
+    label: "Verify & Test",
+  },
+  {
+    id: 5,
+    label: "Schema Discovery",
+  },
+  {
+    id: 6,
+    label: "Field Mapping",
   },
 ] as const;

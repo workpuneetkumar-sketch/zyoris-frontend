@@ -348,7 +348,7 @@ function buildMockTimeline(
     { type: "contract_signed", channel: "SIGNATURE", source: "DOCUSIGN" },
   ];
 
-  const samples: Array<Partial<CustomerTimelineEvent> & { title?: string; detail?: string }> = [
+  const samples: Array<Partial<CustomerTimelineEvent> & { title?: string; detail?: string; hoursAgo?: number }> = [
     {
       eventType: "status_changed",
       source: "INTERNAL",
