@@ -7,16 +7,20 @@
 // channel, timestamp, confidence/provenance, and links to related entities.
 
 import Link from "next/link";
-import { ArrowUpRight, Radio, User } from "lucide-react";
+import { ArrowUpRight, ChevronRight, Radio, User } from "lucide-react";
 import type { CustomerTimelineEvent } from "@/types/customer360";
 import { ProvenanceBadge } from "../../ProvenanceBadge";
 import { formatDateTime } from "../../primitives";
 import {
   CATEGORY_STYLES,
   categoryOf,
+  communicationDetailsOf,
+  directionLabel,
   eventProvenance,
   eventSummary,
+  formatDuration,
   humanizeEventType,
+  isCommunicationEvent,
   relatedEntitiesOf,
 } from "./eventPresentation";
 
@@ -26,7 +30,14 @@ function formatConfidence(confidence?: number | null): string | null {
   return `${Math.round(pct)}%`;
 }
 
-export function TimelineEvent({ event }: { event: CustomerTimelineEvent }) {
+export function TimelineEvent({
+  event,
+  onOpen,
+}: {
+  event: CustomerTimelineEvent;
+  /** Open the detail drawer for this event. Omit to render a static row. */
+  onOpen?: (event: CustomerTimelineEvent) => void;
+}) {
   const category = categoryOf(event);
   const style = CATEGORY_STYLES[category];
   const Icon = style.icon;
@@ -35,6 +46,19 @@ export function TimelineEvent({ event }: { event: CustomerTimelineEvent }) {
   const summary = eventSummary(event);
   const related = relatedEntitiesOf(event);
   const confidence = formatConfidence(event.confidence);
+
+  const comm = isCommunicationEvent(event) ? communicationDetailsOf(event) : null;
+  const commPreview =
+    comm && comm.hasAny
+      ? [
+          directionLabel(comm.direction),
+          comm.subject,
+          comm.participants[0]?.label,
+          formatDuration(comm.durationSeconds),
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : null;
 
   return (
     <li className="relative pl-6">
@@ -72,7 +96,24 @@ export function TimelineEvent({ event }: { event: CustomerTimelineEvent }) {
               {confidence} confidence
             </span>
           )}
+
+          {onOpen && (
+            <button
+              type="button"
+              onClick={() => onOpen(event)}
+              className="ml-auto inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold text-text-secondary hover:bg-surface-hover hover:text-text"
+              aria-label={`View details for ${humanizeEventType(event.eventType)}`}
+            >
+              Details
+              <ChevronRight size={12} />
+            </button>
+          )}
         </div>
+
+        {/* Communication preview (direction · subject · participant · duration) */}
+        {commPreview && (
+          <p className="text-[11px] font-medium text-text-secondary">{commPreview}</p>
+        )}
 
         {/* Optional human-readable summary */}
         {summary && (

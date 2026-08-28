@@ -8,12 +8,15 @@
 // No mocks, no adapters: events render exactly as the backend returns them and
 // filters are sent as the backend's own `eventType` enum values.
 
+import { useState } from "react";
 import { Activity, RefreshCw } from "lucide-react";
 import { useCustomerTimeline } from "@/hooks/useCustomerTimeline";
+import type { CustomerTimelineEvent } from "@/types/customer360";
 import { SectionCard } from "../SectionCard";
 import { SectionEmpty, SectionError, SectionLoading } from "../SectionStates";
 import { TimelineFilters } from "./timeline/TimelineFilters";
 import { TimelineEvent } from "./timeline/TimelineEvent";
+import { TimelineEventDrawer } from "./timeline/TimelineEventDrawer";
 
 export function TimelineSection({ customerId }: { customerId: string }) {
   const {
@@ -30,6 +33,12 @@ export function TimelineSection({ customerId }: { customerId: string }) {
     isFiltered,
     knownEventTypes,
   } = useCustomerTimeline(customerId);
+
+  // Drawer selection is local view state only — deliberately kept out of
+  // useCustomerTimeline so opening/closing an event never refetches the list or
+  // resets the cursor / active filters.
+  const [selectedEvent, setSelectedEvent] =
+    useState<CustomerTimelineEvent | null>(null);
 
   const showFilters = knownEventTypes.length > 0 || isFiltered;
 
@@ -83,7 +92,11 @@ export function TimelineSection({ customerId }: { customerId: string }) {
         <div className="flex flex-col gap-4">
           <ol className="relative ml-3 flex flex-col gap-5 border-l border-border-light">
             {events.map((event) => (
-              <TimelineEvent key={event.id} event={event} />
+              <TimelineEvent
+                key={event.id}
+                event={event}
+                onOpen={setSelectedEvent}
+              />
             ))}
           </ol>
 
@@ -105,6 +118,11 @@ export function TimelineSection({ customerId }: { customerId: string }) {
           </div>
         </div>
       )}
+
+      <TimelineEventDrawer
+        event={selectedEvent}
+        onClose={() => setSelectedEvent(null)}
+      />
     </SectionCard>
   );
 }
