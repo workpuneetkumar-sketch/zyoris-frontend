@@ -17,6 +17,12 @@ import {
   DiscoveredEntity,
   DiscoveredField,
 } from "@/types/integrations";
+import { AsyncRequestError, useAsyncRequest } from "@/hooks/useAsyncRequest";
+import {
+  normalizeConnectionError,
+  normalizeConnectionSuccess,
+} from "@/lib/api/connectionTest";
+import { ConnectionTestResult } from "./ConnectionTestResult";
 import {
   X,
   Zap,
@@ -303,118 +309,23 @@ function sanitizeDiagnosticMessage(rawMessage?: string): string {
   if (!rawMessage || typeof rawMessage !== "string") return "";
 
   return rawMessage
+    // Redact JWT tokens
     .replace(/ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g, "[TOKEN_REDACTED]")
+    // Redact Bearer tokens
     .replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, "Bearer [REDACTED]")
+    // Redact sensitive key/value pairs
     .replace(
       /(api_?key|password|secret|client_secret|access_token|refresh_token|authorization|auth|token)[=:\s]+[^\s,;&]+/gi,
       "$1: [REDACTED]"
     )
+    // Redact credentials in URLs
     .replace(/:\/\/[^:]+:[^@]+@/g, "://[REDACTED]@")
+    // Redact internal file system paths
     .replace(
       /([a-zA-Z]:\\[^\s:<>|"?*]+|\/(var|etc|usr|home|app|root|tmp)\/[^\s:<>|"?*]+)/gi,
       "[SERVER_PATH]"
     )
     .trim();
-}
-
-/**
- * Normalizes error responses into a typed error structure
- */
-function parseConnectionError(
-  err: any,
-  calculatedLatencyMs?: number
-): NormalizedConnectionTestResult {
-  const errResponse = err?.response;
-  const status = errResponse?.status;
-  const errData = errResponse?.data;
-
-  let errorCategory: ConnectionErrorCategory = "UNKNOWN";
-  let fallbackMessage = "Failed to establish connection to the remote integration endpoint.";
-
-  if (
-    err?.code === "ECONNABORTED" ||
-    status === 408 ||
-    status === 504 ||
-    (err?.message && err.message.toLowerCase().includes("timeout"))
-  ) {
-    errorCategory = "TIMEOUT";
-    fallbackMessage =
-      "Connection timed out. The remote endpoint did not respond within the allocated time.";
-  } else if (status === 401 || status === 403) {
-    errorCategory = "AUTH";
-    fallbackMessage =
-      "Authentication failed. The remote service rejected the provided credentials or permissions are insufficient.";
-  } else if (status === 429) {
-    errorCategory = "RATE_LIMIT";
-    fallbackMessage =
-      "Rate limit exceeded. The remote provider has temporarily throttled connection requests.";
-  } else if (status === 400 || status === 422) {
-    errorCategory = "CONFIG";
-    fallbackMessage =
-      "Invalid configuration. The provider endpoint URL, headers, or parameters were rejected.";
-  } else if (
-    !errResponse ||
-    err?.code === "ERR_NETWORK" ||
-    (err?.message && err.message.toLowerCase().includes("network"))
-  ) {
-    errorCategory = "NETWORK";
-    fallbackMessage =
-      "Network failure. Unable to reach the target server or host name is invalid.";
-  } else if (status && status >= 500) {
-    errorCategory = "SERVER";
-    fallbackMessage = `Remote server error (HTTP ${status}). The target provider encountered an internal service error.`;
-  }
-
-  const rawMsg =
-    errData?.message ||
-    errData?.error ||
-    errData?.details?.message ||
-    err?.message;
-  const sanitizedMsg = sanitizeDiagnosticMessage(rawMsg) || fallbackMessage;
-  const rawDiag =
-    errData?.diagnostics ||
-    (typeof errData?.details === "string" ? errData.details : undefined);
-  const sanitizedDiag = rawDiag ? sanitizeDiagnosticMessage(rawDiag) : undefined;
-
-  return {
-    success: false,
-    statusCode: status || undefined,
-    latencyMs: calculatedLatencyMs,
-    message: sanitizedMsg,
-    diagnostics: sanitizedDiag,
-    errorCategory,
-  };
-}
-
-/**
- * Normalizes successful API responses into a typed structure
- */
-function parseConnectionSuccess(
-  res: TestConnectionResponse,
-  calculatedLatencyMs: number
-): NormalizedConnectionTestResult {
-  const latency = res.latencyMs ?? res.responseTime ?? calculatedLatencyMs;
-  const rawMsg =
-    res.message || "Connection established and verified successfully with the remote service.";
-  const sanitizedMsg = sanitizeDiagnosticMessage(rawMsg);
-  const rawDiag =
-    res.diagnostics ||
-    (typeof res.details?.message === "string" ? res.details.message : undefined);
-  const sanitizedDiag = rawDiag ? sanitizeDiagnosticMessage(rawDiag) : undefined;
-
-  const records = res.recordsDetected ?? res.detectedRecords ?? res.recordsCount;
-  const entities = res.entitiesDetected ?? res.entitiesCount;
-
-  return {
-    success: true,
-    statusCode: res.statusCode || res.httpStatus || 200,
-    latencyMs: latency,
-    message: sanitizedMsg,
-    diagnostics: sanitizedDiag,
-    recordsDetected: typeof records === "number" ? records : undefined,
-    entitiesDetected: typeof entities === "number" ? entities : undefined,
-    testedAt: res.testedAt || new Date().toISOString(),
-  };
 }
 
 /**
@@ -480,9 +391,14 @@ export function IntegrationWizardModal({
 
   // Live Connection Test state
   const [activeIntegrationId, setActiveIntegrationId] = useState<string | null>(null);
-  const [isTesting, setIsTesting] = useState(false);
-  const [testProgress, setTestProgress] = useState<string>("");
-  const [testResult, setTestResult] = useState<NormalizedConnectionTestResult | null>(null);
+  const connectionTest = useAsyncRequest<NormalizedConnectionTestResult>();
+  const connectionTestStatus = connectionTest.status;
+  const resetConnectionTest = connectionTest.reset;
+  const isTesting = connectionTest.status === "loading";
+  const testResult = connectionTest.data ||
+    (connectionTest.error instanceof AsyncRequestError
+      ? connectionTest.error.data
+      : null);
   const [isSchemaUnlocked, setIsSchemaUnlocked] = useState(false);
 
   // Schema Discovery state — preserved in wizard state
@@ -509,26 +425,30 @@ export function IntegrationWizardModal({
       setActiveIntegrationId(null);
       setStep(1);
     }
-    setTestResult(null);
+    resetConnectionTest();
     setIsSchemaUnlocked(false);
-    setTestProgress("");
     setDiscoveredSchema(null);
     setSchemaError(null);
     setMappedFields({});
-  }, [initialConnector, isOpen]);
+  }, [initialConnector, isOpen, resetConnectionTest]);
 
+  const prov = (selectedConnector?.provider || selectedConnector?.id || selectedConnector?.name || "").toLowerCase();
   const defaultValues: Partial<FormValues> = {
     displayName: selectedConnector ? `${selectedConnector.name} Integration` : "",
     targetModule: "leads",
     targetEntity: "Lead",
     apiUrl:
       selectedConnector?.configSchema?.endpoint?.defaultUrl ||
-      (selectedConnector?.provider === "salesforce"
+      (prov.includes("salesforce")
         ? "https://login.salesforce.com/services/data/v58.0"
-        : selectedConnector?.provider === "hubspot"
+        : prov.includes("hubspot")
         ? "https://api.hubapi.com/crm/v3/objects"
-        : selectedConnector?.provider === "stripe"
+        : prov.includes("zoho")
+        ? "https://www.zohoapis.com/crm/v2"
+        : prov.includes("stripe")
         ? "https://api.stripe.com/v1"
+        : prov.includes("slack")
+        ? "https://slack.com/api"
         : "https://api.example.com/v1"),
     httpMethod:
       (selectedConnector?.configSchema?.endpoint?.defaultMethod as HttpMethod) ||
@@ -587,9 +507,21 @@ export function IntegrationWizardModal({
   useEffect(() => {
     if (selectedConnector) {
       setValue("displayName", `${selectedConnector.name} Integration`);
-      if (selectedConnector.configSchema?.endpoint?.defaultUrl) {
-        setValue("apiUrl", selectedConnector.configSchema.endpoint.defaultUrl);
-      }
+      const p = (selectedConnector.provider || selectedConnector.id || selectedConnector.name || "").toLowerCase();
+      const defaultUrl =
+        selectedConnector.configSchema?.endpoint?.defaultUrl ||
+        (p.includes("salesforce")
+          ? "https://login.salesforce.com/services/data/v58.0"
+          : p.includes("hubspot")
+          ? "https://api.hubapi.com/crm/v3/objects"
+          : p.includes("zoho")
+          ? "https://www.zohoapis.com/crm/v2"
+          : p.includes("stripe")
+          ? "https://api.stripe.com/v1"
+          : p.includes("slack")
+          ? "https://slack.com/api"
+          : "https://api.example.com/v1");
+      setValue("apiUrl", defaultUrl);
       if (selectedConnector.authType) {
         setValue("authType", selectedConnector.authType as AuthType);
       }
@@ -611,15 +543,15 @@ export function IntegrationWizardModal({
   const watchedWebhookSecret = watch("webhookSecret");
 
   useEffect(() => {
-    if (step < 4 && (testResult || discoveredSchema)) {
-      setTestResult(null);
+    if (step < 4 && connectionTestStatus !== "idle") {
+      resetConnectionTest();
       setIsSchemaUnlocked(false);
       setDiscoveredSchema(null);
     }
   }, [
     step,
-    testResult,
-    discoveredSchema,
+    connectionTestStatus,
+    resetConnectionTest,
     watchedApiUrl,
     watchedHttpMethod,
     watchedAuthType,
@@ -690,127 +622,81 @@ export function IntegrationWizardModal({
    * Prevents duplicate simultaneous requests, provides loading state & normalized feedback
    */
   const handleTestConnection = async () => {
-    if (isTesting) return; // Prevent duplicate requests
-
     const values = watch();
     if (!values.apiUrl) {
       toast.error("Please enter a valid API URL before testing connectivity.");
       return;
     }
 
-    setIsTesting(true);
-    setTestProgress("Testing connection...");
-    setTestResult(null);
-
     const startTime = performance.now();
 
     try {
-      let targetId =
+      const targetId =
         activeIntegrationId ||
         selectedConnector?.connectionId ||
-        selectedConnector?.connectionState?.id;
+        selectedConnector?.connectionState?.id ||
+        selectedConnector?.id ||
+        selectedConnector?.provider ||
+        "custom";
 
-      // If no integration instance ID exists yet (newly created in wizard),
-      // create it in backend first so we have a valid integration ID to test against
-      if (!targetId) {
-        setTestProgress("Saving integration instance before live test...");
-        const credentials = buildCredentialsObject(values);
-        const headerObject = buildHeadersObject(values.headers);
+      const testPayload = {
+        apiUrl: values.apiUrl,
+        httpMethod: values.httpMethod,
+        authType: values.authType,
+        credentials: buildCredentialsObject(values),
+        headers: buildHeadersObject(values.headers),
+        targetModule: values.targetModule,
+        targetEntity: values.targetEntity,
+        ...(values.dynamicFields || {}),
+      };
 
-        const createPayload: CreateIntegrationPayload = {
-          connectorId: selectedConnector?.id,
-          provider: selectedConnector?.provider || "custom",
-          name: values.displayName || `${selectedConnector?.name || "New"} Integration`,
-          displayName:
-            values.displayName || `${selectedConnector?.name || "New"} Integration`,
-          targetModule: values.targetModule,
-          targetEntity: values.targetEntity,
-          apiUrl: values.apiUrl,
-          httpMethod: values.httpMethod,
-          authType: values.authType,
-          credentials,
-          syncDirection: values.syncDirection,
-          syncFrequency: values.syncFrequency,
-          headers: headerObject,
-          config: values.dynamicFields || {},
-        };
-
-        const createdInstance = await onSubmit(createPayload);
-        targetId =
-          createdInstance?.id ||
-          createdInstance?.integration?.id ||
-          createdInstance?.data?.id;
-
-        if (targetId) {
-          setActiveIntegrationId(targetId);
+      const result = await connectionTest.execute(async () => {
+        const response = onTestConnection
+          ? await onTestConnection(targetId, testPayload)
+          : await testIntegrationConnectionApi(targetId, testPayload);
+        const latencyMs = Math.round(performance.now() - startTime);
+        const normalized = response.success
+          ? normalizeConnectionSuccess(response, latencyMs)
+          : normalizeConnectionError(
+              {
+                response: {
+                  status: response.statusCode && response.statusCode >= 400 ? response.statusCode : undefined,
+                  data: response,
+                },
+              },
+              latencyMs
+            );
+        if (!normalized.success) {
+          throw new AsyncRequestError(normalized, normalized.message || "Connection test failed.");
         }
-      } else if (onUpdateIntegration) {
-        // If integration already exists and form values were updated, sync before testing
-        setTestProgress("Updating configuration parameters...");
-        const headerObject = buildHeadersObject(values.headers);
-        const credentials = buildCredentialsObject(values);
+        return normalized;
+      });
 
-        const updatePayload: UpdateIntegrationPayload = {
-          displayName: values.displayName,
-          syncFrequency: values.syncFrequency,
-          syncDirection: values.syncDirection,
-          apiUrl: values.apiUrl,
-          httpMethod: values.httpMethod,
-          headers: headerObject,
-        };
-
-        if (Object.keys(credentials).length > 0) {
-          updatePayload.credentials = credentials;
-        }
-
-        try {
-          await onUpdateIntegration(targetId, updatePayload);
-        } catch {
-          // Continue to test even if update returns warning
-        }
-      }
-
-      if (!targetId) {
-        throw new Error(
-          "Could not obtain a valid integration ID to perform connection test."
-        );
-      }
-
-      setTestProgress("Testing connection...");
-
-      // Call the REAL backend API: POST /api/integrations/{id}/test
-      const res = onTestConnection
-        ? await onTestConnection(targetId)
-        : await testIntegrationConnectionApi(targetId);
-
-      const latencyMs = Math.round(performance.now() - startTime);
-      if (
-        res &&
-        (res.success ||
-          (res.statusCode && res.statusCode >= 200 && res.statusCode < 300))
-      ) {
-        const normalizedSuccess = parseConnectionSuccess(res, latencyMs);
-        setTestResult(normalizedSuccess);
-        setIsSchemaUnlocked(true);
-        toast.success("Connection test passed!");
-      } else {
-        const normalizedFail = parseConnectionError(
-          { response: { status: res?.statusCode || 400, data: res } },
-          latencyMs
-        );
-        setTestResult(normalizedFail);
-        setIsSchemaUnlocked(false);
-        toast.error(normalizedFail.message || "Connection test failed.");
-      }
-    } catch (err: any) {
-      const latencyMs = Math.round(performance.now() - startTime);
-      const normalizedErr = parseConnectionError(err, latencyMs);
-      setTestResult(normalizedErr);
+      if (!result) return;
+      setIsSchemaUnlocked(true);
+      toast.success("Connection test passed!");
+      return result;
+    } catch (err) {
+      const normalizedErr = err instanceof AsyncRequestError
+        ? err.data
+        : normalizeConnectionError(err, Math.round(performance.now() - startTime));
       setIsSchemaUnlocked(false);
       toast.error(normalizedErr.message || "Connection test failed.");
-    } finally {
-      setIsTesting(false);
-      setTestProgress("");
+    }
+  };
+
+  const handleRetryConnection = async () => {
+    try {
+      const result = await connectionTest.retry();
+      if (!result) return;
+      setIsSchemaUnlocked(true);
+      toast.success("Connection test passed!");
+    } catch (err) {
+      const normalizedErr = err instanceof AsyncRequestError
+        ? err.data
+        : normalizeConnectionError(err);
+      setIsSchemaUnlocked(false);
+      toast.error(normalizedErr.message || "Connection test failed.");
     }
   };
 
@@ -1850,12 +1736,14 @@ export function IntegrationWizardModal({
                     {testResult && !testResult.success && (
                       <button
                         type="button"
-                        onClick={handleTestConnection}
+                        onClick={handleRetryConnection}
                         disabled={isTesting}
                         className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20 text-xs font-semibold transition-colors disabled:opacity-50"
                       >
                         <RefreshCw
-                          className={`w-3.5 h-3.5 ${isTesting ? "animate-spin" : ""}`}
+                          className={`w-3.5 h-3.5 ${
+                            connectionTest.isRetrying ? "animate-spin" : ""
+                          }`}
                         />
                         <span>Retry Test</span>
                       </button>
@@ -1887,102 +1775,12 @@ export function IntegrationWizardModal({
                   </div>
                 </div>
 
-                {/* Progress / Testing State */}
-                {isTesting && (
-                  <div className="p-3.5 rounded-xl border border-primary/20 bg-primary/5 text-xs text-text space-y-1.5 animate-in fade-in duration-150">
-                    <div className="flex items-center gap-2 font-semibold text-primary">
-                      <Loader2 className="w-4 h-4 animate-spin text-primary" />
-                      <span>Testing connection...</span>
-                    </div>
-                    <p className="text-[11px] text-text-secondary pl-6">
-                      {testProgress || "Contacting remote endpoint and validating credentials..."}
-                    </p>
-                  </div>
-                )}
-
-                {/* Test Result Feedback Box */}
-                {!isTesting && testResult && (
-                  <div
-                    className={`p-4 rounded-xl border text-xs space-y-2.5 transition-all animate-in fade-in duration-150 ${
-                      testResult.success
-                        ? "bg-success/10 border-success/20 text-success"
-                        : "bg-error/10 border-error/20 text-error"
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      {testResult.success ? (
-                        <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-success" />
-                      ) : (
-                        <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5 text-error" />
-                      )}
-                      <div className="flex-1 space-y-1">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                          <p className="font-bold text-sm">
-                            {testResult.success
-                              ? "Connection successful"
-                              : "Connection failed"}
-                          </p>
-                          <div className="flex items-center gap-1.5 flex-wrap font-mono text-[11px]">
-                            {testResult.statusCode && (
-                              <span className="px-2 py-0.5 rounded bg-surface/60 border border-current">
-                                HTTP {testResult.statusCode}
-                              </span>
-                            )}
-                            {typeof testResult.latencyMs === "number" && (
-                              <span className="px-2 py-0.5 rounded bg-surface/60 border border-current flex items-center gap-1">
-                                <Clock className="w-3 h-3" />
-                                {testResult.latencyMs}ms
-                              </span>
-                            )}
-                            {testResult.errorCategory && (
-                              <span className="px-2 py-0.5 rounded bg-error/20 font-sans uppercase font-bold text-[10px]">
-                                {testResult.errorCategory === "AUTH" && "Auth Error"}
-                                {testResult.errorCategory === "TIMEOUT" && "Timeout"}
-                                {testResult.errorCategory === "NETWORK" && "Network Failure"}
-                                {testResult.errorCategory === "RATE_LIMIT" && "Rate Limited"}
-                                {testResult.errorCategory === "CONFIG" && "Config Error"}
-                                {testResult.errorCategory === "SERVER" && "Server Error"}
-                                {testResult.errorCategory === "UNKNOWN" && "Error"}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <p className="text-xs opacity-90 leading-relaxed font-sans">
-                          {testResult.message}
-                        </p>
-
-                        {/* Normalized detected records / entities metrics if present in real response */}
-                        {testResult.success &&
-                          (typeof testResult.recordsDetected === "number" ||
-                            typeof testResult.entitiesDetected === "number") && (
-                            <div className="pt-2 flex items-center gap-3 text-[11px] font-sans font-medium">
-                              {typeof testResult.recordsDetected === "number" && (
-                                <div className="flex items-center gap-1">
-                                  <Activity className="w-3.5 h-3.5" />
-                                  <span>{testResult.recordsDetected} records detected</span>
-                                </div>
-                              )}
-                              {typeof testResult.entitiesDetected === "number" && (
-                                <div className="flex items-center gap-1">
-                                  <Layers className="w-3.5 h-3.5" />
-                                  <span>{testResult.entitiesDetected} entities available</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
-                        {/* Sanitized diagnostics if present */}
-                        {testResult.diagnostics && (
-                          <div className="pt-2 mt-2 border-t border-current/20 text-[11px] opacity-80 font-mono break-all">
-                            <span className="font-bold font-sans">Diagnostic details: </span>
-                            {testResult.diagnostics}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <ConnectionTestResult
+                  status={connectionTest.status}
+                  result={testResult}
+                  isRetrying={connectionTest.isRetrying}
+                  onRetry={handleRetryConnection}
+                />
               </div>
 
               {/* Schema Discovery Gating Card */}

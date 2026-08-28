@@ -290,21 +290,24 @@ export async function testIntegrationConnectionApi(
   const data = response.data;
   if (data && typeof data === "object") {
     if (data.data && typeof data.data === "object") {
+      const isSuccess = data.data.success ?? data.success ?? (response.status >= 200 && response.status < 300);
       return {
         ...data.data,
-        success: data.data.success ?? data.success ?? (response.status >= 200 && response.status < 300),
-        statusCode: data.data.statusCode ?? data.statusCode ?? response.status,
+        success: isSuccess,
+        statusCode: data.data.statusCode ?? data.statusCode ?? (isSuccess ? response.status : undefined),
       };
     }
+    const isSuccess = data.success ?? (response.status >= 200 && response.status < 300);
     return {
       ...data,
-      success: data.success ?? (response.status >= 200 && response.status < 300),
-      statusCode: data.statusCode ?? response.status,
+      success: isSuccess,
+      statusCode: data.statusCode ?? (isSuccess ? response.status : undefined),
     };
   }
+  const isSuccess = response.status >= 200 && response.status < 300;
   return {
-    success: response.status >= 200 && response.status < 300,
-    statusCode: response.status,
+    success: isSuccess,
+    statusCode: isSuccess ? response.status : undefined,
   };
 }
 
