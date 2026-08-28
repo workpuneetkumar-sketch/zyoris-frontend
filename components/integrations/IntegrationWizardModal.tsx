@@ -191,10 +191,6 @@ export function IntegrationWizardModal({
   const connectionTestStatus = connectionTest.status;
   const resetConnectionTest = connectionTest.reset;
   const isTesting = connectionTest.status === "loading";
-  const testResult = connectionTest.data ||
-    (connectionTest.error instanceof AsyncRequestError
-      ? connectionTest.error.data
-      : null);
   const [isSchemaUnlocked, setIsSchemaUnlocked] = useState(false);
 
   useEffect(() => {
@@ -266,6 +262,14 @@ export function IntegrationWizardModal({
     mode: "onBlur",
   });
 
+  const testResult: NormalizedConnectionTestResult | null =
+    connectionTest.data ||
+    (connectionTest.error instanceof AsyncRequestError
+      ? (connectionTest.error.data as NormalizedConnectionTestResult)
+      : connectionTest.error
+      ? normalizeConnectionError(connectionTest.error, undefined)
+      : null);
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "headers",
@@ -332,13 +336,40 @@ export function IntegrationWizardModal({
   const supportsRequestBody = ["POST", "PUT", "PATCH"].includes(
     currentHttpMethod
   );
-  const existingIntegrationId =
-    selectedConnector?.connectionId || selectedConnector?.connectionState?.id;
+
+  const getVerifiedExistingIntegrationId = (
+    connector: Connector | null,
+    payload?: CreateIntegrationPayload
+  ): string | null => {
+    if (!connector || !payload) return null;
+
+    const connectorMatchesById =
+      !!connector.id &&
+      !!payload.connectorId &&
+      connector.id.toLowerCase() === payload.connectorId.toLowerCase();
+
+    const connectorMatchesByProvider =
+      !!connector.provider &&
+      !!payload.provider &&
+      connector.provider.toLowerCase() === payload.provider.toLowerCase();
+
+    if (!connectorMatchesById && !connectorMatchesByProvider) {
+      return null;
+    }
+
+    return (
+      connector.connectionId ||
+      connector.connectionState?.id ||
+      (connector.isConnected ? connector.id : null)
+    );
+  };
 
   const buildPayload = (data: FormValues): CreateIntegrationPayload => {
-    if (!selectedConnector) {
-      throw new Error("Please select a connector first.");
-    }
+    const connector = selectedConnector || initialConnector || {
+      id: "custom",
+      provider: "custom",
+      name: data.displayName || "Custom Integration",
+    };
 
     const credentials: Record<string, any> = {};
     if (data.authType === "API_KEY") {
@@ -361,8 +392,8 @@ export function IntegrationWizardModal({
     });
 
     return {
-      connectorId: selectedConnector.id,
-      provider: selectedConnector.provider,
+      connectorId: connector.id,
+      provider: connector.provider,
       name: data.displayName,
       displayName: data.displayName,
       targetModule: data.targetModule,
@@ -398,7 +429,37 @@ export function IntegrationWizardModal({
     }
   };
 
-  // Real connection test handler for the existing integration test endpoint.
+  // Helper to extract integration database ID from various API response shapes
+  const extractIntegrationId = (target: any): string | null => {
+    if (!target) return null;
+    if (typeof target === "string" && target.trim().length > 3) return target.trim();
+    if (typeof target !== "object") return null;
+
+    if (typeof target.id === "string" && target.id.trim()) return target.id.trim();
+    if (typeof target._id === "string" && target._id.trim()) return target._id.trim();
+    if (typeof target.integrationId === "string" && target.integrationId.trim()) return target.integrationId.trim();
+    if (typeof target.connectionId === "string" && target.connectionId.trim()) return target.connectionId.trim();
+
+    if (target.data) {
+      const fromData = extractIntegrationId(target.data);
+      if (fromData) return fromData;
+    }
+    if (target.integration) {
+      const fromIntegration = extractIntegrationId(target.integration);
+      if (fromIntegration) return fromIntegration;
+    }
+    if (target.result) {
+      const fromResult = extractIntegrationId(target.result);
+      if (fromResult) return fromResult;
+    }
+    if (Array.isArray(target) && target.length > 0) {
+      const fromArray = extractIntegrationId(target[0]);
+      if (fromArray) return fromArray;
+    }
+    return null;
+  };
+
+  // Real connection test handler for the integration test endpoint.
   const handleTestConnection = async () => {
     if (isTesting) return; // Prevent duplicate requests
 
@@ -411,37 +472,118 @@ export function IntegrationWizardModal({
     const startTime = performance.now();
 
     try {
-      if (!existingIntegrationId || !onTestConnection) {
-        throw new Error(
-          "Test Connection requires an existing integration. Save this configuration first."
-        );
-      }
-
       const result = await connectionTest.execute(async () => {
-        const response = await onTestConnection(existingIntegrationId, buildPayload(values));
-        const latencyMs = Math.round(performance.now() - startTime);
-        const normalized = response.success
-          ? normalizeConnectionSuccess(response, latencyMs)
-          : normalizeConnectionError({ response: { status: response.statusCode || 400, data: response } }, latencyMs);
-        if (!normalized.success) {
-          throw new AsyncRequestError(normalized, normalized.message || "Connection test failed.");
+        const payload = buildPayload(values);
+        const verifiedExistingTargetId = getVerifiedExistingIntegrationId(
+          selectedConnector,
+          payload
+        );
+
+        let currentTargetId = activeIntegrationId || verifiedExistingTargetId || null;
+
+        // For a brand-new integration, the test must use the newly-created ID from
+        // the successful POST /api/integrations response. Any stale connector
+        // connectionId from a different provider must not override that fresh ID.
+        if (!currentTargetId && onSubmit) {
+          try {
+            const created = await onSubmit(payload);
+            const createdId = extractIntegrationId(created);
+            if (createdId) {
+              currentTargetId = createdId;
+              setActiveIntegrationId(createdId);
+            }
+          } catch (createErr: any) {
+            const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+            const normalized = normalizeConnectionError(createErr, latencyMs);
+            throw new AsyncRequestError(
+              normalized,
+              normalized.message || "Failed to establish integration target."
+            );
+          }
         }
-        return normalized;
+
+        // If active integration was already created and user edited fields before re-testing, sync configuration
+        if (activeIntegrationId && onUpdateIntegration) {
+          try {
+            await onUpdateIntegration(activeIntegrationId, {
+              displayName: payload.displayName,
+              apiUrl: payload.apiUrl,
+              httpMethod: payload.httpMethod,
+              credentials: payload.credentials,
+              headers: payload.headers,
+              config: payload.config,
+              syncDirection: payload.syncDirection,
+              syncFrequency: payload.syncFrequency,
+            });
+          } catch (updateErr) {
+            // Non-fatal, continue with payload in test request
+            console.warn("Failed to sync updated configuration before test:", updateErr);
+          }
+        }
+
+        if (!currentTargetId) {
+          throw new Error(
+            "An integration instance could not be established for your organization. Please verify your configuration."
+          );
+        }
+
+        if (!onTestConnection) {
+          throw new Error("Test connection service is currently unavailable.");
+        }
+
+        try {
+          const response = await onTestConnection(currentTargetId, payload);
+          const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+
+          if (response.success) {
+            const normalized = normalizeConnectionSuccess(response, latencyMs);
+            return normalized;
+          } else {
+            const normalized = normalizeConnectionError(
+              {
+                response: {
+                  status: response.statusCode || response.httpStatus || 400,
+                  data: response,
+                },
+              },
+              latencyMs
+            );
+            throw new AsyncRequestError(
+              normalized,
+              normalized.message || response.message || "Connection test failed."
+            );
+          }
+        } catch (apiErr) {
+          if (apiErr instanceof AsyncRequestError) {
+            throw apiErr;
+          }
+          const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+          const normalized = normalizeConnectionError(apiErr, latencyMs);
+          throw new AsyncRequestError(
+            normalized,
+            normalized.message || "Connection test failed."
+          );
+        }
       });
+
       if (!result) return;
       setIsSchemaUnlocked(true);
       toast.success("Connection test passed!");
       return result;
     } catch (err) {
-      const normalizedErr = err instanceof AsyncRequestError
-        ? err.data
-        : normalizeConnectionError(err, Math.round(performance.now() - startTime));
       setIsSchemaUnlocked(false);
+      const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+      const normalizedErr =
+        err instanceof AsyncRequestError
+          ? err.data
+          : normalizeConnectionError(err, latencyMs);
       toast.error(normalizedErr.message || "Connection test failed.");
     }
   };
 
   const handleRetryConnection = async () => {
+    const values = watch();
+    const startTime = performance.now();
     try {
       const result = await connectionTest.retry();
       if (!result) return;
@@ -449,9 +591,11 @@ export function IntegrationWizardModal({
       toast.success("Connection test passed!");
     } catch (err) {
       setIsSchemaUnlocked(false);
-      const normalized = err instanceof AsyncRequestError
-        ? err.data
-        : normalizeConnectionError(err);
+      const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+      const normalized =
+        err instanceof AsyncRequestError
+          ? err.data
+          : normalizeConnectionError(err, latencyMs);
       toast.error(normalized.message || "Connection test failed.");
     }
   };
