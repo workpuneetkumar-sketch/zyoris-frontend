@@ -4,7 +4,9 @@ import React, { useState } from "react";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useAuth } from "@/context/AuthContext";
-import { Connector, CreateIntegrationPayload, UpdateIntegrationPayload } from "@/types/integrations";
+import { Connector, CreateIntegrationPayload, NormalizedConnectionTestResult, UpdateIntegrationPayload } from "@/types/integrations";
+import { AsyncRequestError } from "@/hooks/useAsyncRequest";
+import { normalizeConnectionError, normalizeConnectionSuccess } from "@/lib/api/connectionTest";
 import { MarketplaceStats } from "@/components/integrations/MarketplaceStats";
 import { ConnectorFilters } from "@/components/integrations/ConnectorFilters";
 import { ConnectorCard } from "@/components/integrations/ConnectorCard";
@@ -152,29 +154,30 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleTestConnection = async (connector: Connector) => {
+  const handleTestConnection = async (connector: Connector): Promise<NormalizedConnectionTestResult> => {
     const targetId =
       connector.connectionId || connector.connectionState?.id || connector.id;
-    if (!targetId) return;
+    if (!targetId) {
+      throw new AsyncRequestError(normalizeConnectionError(new Error("Missing integration id")), "Missing integration id");
+    }
     try {
       const res = await testConnection(targetId);
+      const normalized = res.success
+        ? normalizeConnectionSuccess(res, res.latencyMs || 0)
+        : normalizeConnectionError({ response: { status: res.statusCode || 400, data: res } });
       if (res?.success) {
         toast.success(
           `Connection verified for ${connector.name}${
             res.latencyMs ? ` (${res.latencyMs}ms)` : ""
           }`
         );
-      } else {
-        toast.error(
-          res?.message || `Connection test failed for ${connector.name}`
-        );
+        return normalized;
       }
-    } catch (err: any) {
-      toast.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          `Failed to test connection for ${connector.name}`
-      );
+      throw new AsyncRequestError(normalized, normalized.message || "Connection test failed");
+    } catch (err) {
+      const normalized = err instanceof AsyncRequestError ? err.data : normalizeConnectionError(err);
+      toast.error(normalized.message || `Failed to test connection for ${connector.name}`);
+      throw err instanceof AsyncRequestError ? err : new AsyncRequestError(normalized, normalized.message || "Connection test failed");
     }
   };
 
