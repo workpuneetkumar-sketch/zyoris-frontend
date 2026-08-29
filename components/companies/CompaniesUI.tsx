@@ -43,7 +43,7 @@ const INDUSTRY_OPTIONS = [
     "Real Estate", "Education", "Marketing", "Consulting", "Other",
 ];
 
-const STATUS_OPTIONS = ["Active", "Inactive", "Prospect", "Partner", "Customer"];
+const STATUS_OPTIONS = ["Active", "Inactive"];
 
 const STATUS_STYLES: Record<string, string> = {
     Active: "bg-green-50 text-green-600 border border-green-200",

@@ -49,7 +49,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
     setLoadingLists(true);
     Promise.allSettled([
       fetchLeads(1, { status: "All Status", source: "All Sources", owner: "All Owners", search: "" }, 50),
-      fetchCompanies(1, { status: "All Status", industry: "All Industries", search: "", owner: "All Owners" } as any),
+      fetchCompanies(1, { status: "All Status", industry: "All Industries", search: "" }, 50),
       fetchCustomerOwners(),
     ]).then(([leadsRes, compRes, ownersRes]) => {
       let loadedLeads: Lead[] = [];
@@ -59,8 +59,13 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
       }
       if (compRes.status === "fulfilled") {
         const raw: any = compRes.value as any;
-        const arr = Array.isArray(raw?.companies) ? raw.companies : Array.isArray(raw?.data) ? raw.data : [];
-        setCompanies(arr.map((c: any) => ({ id: c.id, name: c.name || c.companyName || "Unnamed" })));
+        const arr = Array.isArray(raw?.companies) ? raw.companies : Array.isArray(raw?.data) ? raw.data : Array.isArray(raw) ? raw : [];
+        setCompanies(arr.map((c: any) => ({
+          id: c.id || c._id || c.companyId,
+          name: c.name || c.companyName || c.company_name || c.title || "Unnamed Company",
+        })));
+      } else {
+        console.error("Failed to fetch companies:", compRes.reason);
       }
       if (ownersRes.status === "fulfilled") setOwners(ownersRes.value);
       // apply prefill after lists are loaded

@@ -742,7 +742,14 @@ export async function convertLeadToCustomer(
   payload: ConvertLeadPayload
 ): Promise<ConvertLeadResult> {
   try {
-    const res = await api.post(`${CUSTOMERS_BASE}/convert-lead`, payload);
+    const cleanedPayload: Record<string, any> = { ...payload };
+    Object.keys(cleanedPayload).forEach((key) => {
+      if (cleanedPayload[key] === "" || cleanedPayload[key] === null || cleanedPayload[key] === undefined) {
+        delete cleanedPayload[key];
+      }
+    });
+
+    const res = await api.post(`${CUSTOMERS_BASE}/convert-lead`, cleanedPayload);
     const data = unwrapEnvelope<any>(res.data);
     return {
       success: true,
@@ -762,7 +769,14 @@ export async function convertCompanyToCustomer(
   payload: ConvertCompanyPayload
 ): Promise<ConvertCompanyResult> {
   try {
-    const res = await api.post(`${CUSTOMERS_BASE}/convert-company`, payload);
+    const cleanedPayload: Record<string, any> = { ...payload };
+    Object.keys(cleanedPayload).forEach((key) => {
+      if (cleanedPayload[key] === "" || cleanedPayload[key] === null || cleanedPayload[key] === undefined) {
+        delete cleanedPayload[key];
+      }
+    });
+
+    const res = await api.post(`${CUSTOMERS_BASE}/convert-company`, cleanedPayload);
     const data = unwrapEnvelope<any>(res.data);
     return {
       success: true,
