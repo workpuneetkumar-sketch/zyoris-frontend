@@ -18,10 +18,10 @@ import {
 /**
  * Retrieve Integration Marketplace connector catalog with live organization
  * connection state and configuration schemas.
- * GET /api/integrations/connectors
+ * GET /api/v1/integrations/connectors
  */
 export async function getConnectorsApi(): Promise<Connector[]> {
-  const response = await api.get("/api/integrations/connectors");
+  const response = await api.get("/api/v1/integrations/connectors");
   const data = response.data;
   // Handle both array response and wrapped response ({ data: [...] } or { connectors: [...] })
   if (Array.isArray(data)) {
@@ -38,10 +38,10 @@ export async function getConnectorsApi(): Promise<Connector[]> {
 
 /**
  * Retrieve list of connected integration instances for current organization.
- * GET /api/integrations
+ * GET /api/v1/integrations
  */
 export async function getIntegrationsApi(): Promise<IntegrationInstance[]> {
-  const response = await api.get("/api/integrations");
+  const response = await api.get("/api/v1/integrations");
   const data = response.data;
   if (Array.isArray(data)) {
     return data;
@@ -56,37 +56,37 @@ export async function getIntegrationsApi(): Promise<IntegrationInstance[]> {
 }
 
 /**
- * Create/connect a new integration instance for current organization.
- * POST /api/integrations
+ * Create/connect a new integration instance for current organization with encrypted credentials.
+ * POST /api/v1/integrations
  */
 export async function createIntegrationApi(
   payload: CreateIntegrationPayload
 ): Promise<IntegrationInstance> {
-  const response = await api.post("/api/integrations", payload);
+  const response = await api.post("/api/v1/integrations", payload);
   return response.data?.data || response.data?.integration || response.data;
 }
 
 /**
- * Get single integration details scoped to organization.
- * GET /api/integrations/{id}
+ * Get single integration details scoped to organization (credentials masked/omitted).
+ * GET /api/v1/integrations/{id}
  */
 export async function getIntegrationByIdApi(
   id: string
 ): Promise<IntegrationInstance> {
-  const response = await api.get(`/api/integrations/${encodeURIComponent(id)}`);
+  const response = await api.get(`/api/v1/integrations/${encodeURIComponent(id)}`);
   return response.data?.data || response.data?.integration || response.data;
 }
 
 /**
- * Update configuration, status, or display name of an integration.
- * PATCH /api/integrations/{id}
+ * Update configuration, status, display name, or credentials of an integration.
+ * PATCH /api/v1/integrations/{id}
  */
 export async function updateIntegrationApi(
   id: string,
   payload: UpdateIntegrationPayload
 ): Promise<IntegrationInstance> {
   const response = await api.patch(
-    `/api/integrations/${encodeURIComponent(id)}`,
+    `/api/v1/integrations/${encodeURIComponent(id)}`,
     payload
   );
   return response.data?.data || response.data?.integration || response.data;
@@ -94,25 +94,25 @@ export async function updateIntegrationApi(
 
 /**
  * Disconnect and remove an integration instance.
- * DELETE /api/integrations/{id}
+ * DELETE /api/v1/integrations/{id}
  */
 export async function deleteIntegrationApi(
   id: string
 ): Promise<{ success: boolean; message?: string }> {
-  const response = await api.delete(`/api/integrations/${encodeURIComponent(id)}`);
+  const response = await api.delete(`/api/v1/integrations/${encodeURIComponent(id)}`);
   return response.data;
 }
 
 /**
  * Initiate connection or generate OAuth authorization URL for a connector.
- * POST /api/integrations/{provider}/connect
+ * POST /api/v1/integrations/{provider}/connect
  */
 export async function connectOAuthApi(
   provider: string,
   payload?: Record<string, any>
 ): Promise<OAuthConnectResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(provider)}/connect`,
+    `/api/v1/integrations/${encodeURIComponent(provider)}/connect`,
     payload || {}
   );
   const data = response.data?.data || response.data;
@@ -132,14 +132,14 @@ export async function connectOAuthApi(
 
 /**
  * Complete OAuth 2.0 authorization callback.
- * GET /api/integrations/{provider}/callback
+ * GET /api/v1/integrations/{provider}/callback
  */
 export async function callbackOAuthApi(
   provider: string,
   params: Record<string, string | string[] | undefined>
 ): Promise<any> {
   const response = await api.get(
-    `/api/integrations/${encodeURIComponent(provider)}/callback`,
+    `/api/v1/integrations/${encodeURIComponent(provider)}/callback`,
     { params }
   );
   return response.data;
@@ -147,14 +147,14 @@ export async function callbackOAuthApi(
 
 /**
  * Reconnect an integration and re-encrypt updated credentials in the vault.
- * POST /api/integrations/{id}/reconnect
+ * POST /api/v1/integrations/{id}/reconnect
  */
 export async function reconnectIntegrationApi(
   id: string,
   payload?: ReconnectPayload | Record<string, any>
 ): Promise<ReconnectResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/reconnect`,
+    `/api/v1/integrations/${encodeURIComponent(id)}/reconnect`,
     payload || {}
   );
   return response.data;
@@ -162,14 +162,14 @@ export async function reconnectIntegrationApi(
 
 /**
  * Rotate and encrypt credentials in the vault for an integration.
- * POST /api/integrations/{id}/rotate-credentials
+ * POST /api/v1/integrations/{id}/rotate-credentials
  */
 export async function rotateCredentialsApi(
   id: string,
   payload: RotateCredentialsPayload
 ): Promise<RotateCredentialsResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/rotate-credentials`,
+    `/api/v1/integrations/${encodeURIComponent(id)}/rotate-credentials`,
     payload
   );
   return response.data;
@@ -177,24 +177,24 @@ export async function rotateCredentialsApi(
 
 /**
  * Trigger manual synchronization run for an integration.
- * POST /api/integrations/{id}/sync
+ * POST /api/v1/integrations/{id}/sync
  */
 export async function triggerSyncApi(id: string): Promise<SyncResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/sync`
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync`
   );
   return response.data;
 }
 
 /**
  * Discover schema, entities, and fields available from a connected integration.
- * GET /api/integrations/{id}/schema
+ * GET /api/v1/integrations/{id}/schema
  */
 export async function getIntegrationSchemaApi(
   id: string
 ): Promise<DiscoveredSchemaResponse> {
   const response = await api.get(
-    `/api/integrations/${encodeURIComponent(id)}/schema`
+    `/api/v1/integrations/${encodeURIComponent(id)}/schema`
   );
   const data = response.data;
   if (Array.isArray(data)) {
@@ -234,7 +234,7 @@ export async function getIntegrationSchemaApi(
       return {
         entities: [
           {
-            name: data.data.name || "DefaultEntity",
+            name: data.data.name || data.data.provider || "DefaultEntity",
             label: data.data.label || data.data.name || "Entity",
             fields: data.data.fields,
             recordCount: data.data.recordCount ?? data.data.totalRecords,
@@ -245,6 +245,7 @@ export async function getIntegrationSchemaApi(
               data.data.records,
           },
         ],
+        fields: data.data.fields,
         recordCount: data.data.recordCount ?? data.data.totalRecords,
         pagination: data.data.pagination,
         sampleRecords:
@@ -259,7 +260,7 @@ export async function getIntegrationSchemaApi(
     return {
       entities: [
         {
-          name: data.name || "DefaultEntity",
+          name: data.name || data.provider || "DefaultEntity",
           label: data.label || data.name || "Entity",
           fields: data.fields,
           recordCount: data.recordCount ?? data.totalRecords,
@@ -267,6 +268,7 @@ export async function getIntegrationSchemaApi(
           sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
         },
       ],
+      fields: data.fields,
       recordCount: data.recordCount ?? data.totalRecords,
       pagination: data.pagination,
       sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
@@ -276,15 +278,15 @@ export async function getIntegrationSchemaApi(
 }
 
 /**
- * Test live connectivity and credentials for an integration.
- * POST /api/integrations/{id}/test
+ * Test live connectivity, authentication, and credentials against external provider.
+ * POST /api/v1/integrations/{id}/test
  */
 export async function testIntegrationConnectionApi(
   id: string,
   payload?: Record<string, any>
 ): Promise<TestConnectionResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/test`,
+    `/api/v1/integrations/${encodeURIComponent(id)}/test`,
     payload || {}
   );
   const data = response.data;
@@ -294,14 +296,14 @@ export async function testIntegrationConnectionApi(
       return {
         ...data.data,
         success: isSuccess,
-        statusCode: data.data.statusCode ?? data.statusCode ?? (isSuccess ? response.status : undefined),
+        statusCode: data.data.statusCode ?? data.data.httpStatus ?? data.statusCode ?? (isSuccess ? response.status : undefined),
       };
     }
     const isSuccess = data.success ?? (response.status >= 200 && response.status < 300);
     return {
       ...data,
       success: isSuccess,
-      statusCode: data.statusCode ?? (isSuccess ? response.status : undefined),
+      statusCode: data.statusCode ?? data.httpStatus ?? (isSuccess ? response.status : undefined),
     };
   }
   const isSuccess = response.status >= 200 && response.status < 300;
@@ -313,26 +315,26 @@ export async function testIntegrationConnectionApi(
 
 /**
  * Pause synchronization for an integration.
- * POST /api/integrations/{id}/pause
+ * POST /api/v1/integrations/{id}/pause
  */
 export async function pauseIntegrationApi(
   id: string
 ): Promise<StatusToggleResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/pause`
+    `/api/v1/integrations/${encodeURIComponent(id)}/pause`
   );
   return response.data;
 }
 
 /**
  * Resume synchronization for an integration.
- * POST /api/integrations/{id}/resume
+ * POST /api/v1/integrations/{id}/resume
  */
 export async function resumeIntegrationApi(
   id: string
 ): Promise<StatusToggleResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/resume`
+    `/api/v1/integrations/${encodeURIComponent(id)}/resume`
   );
   return response.data;
 }

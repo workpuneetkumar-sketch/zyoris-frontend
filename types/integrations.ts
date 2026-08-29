@@ -1,11 +1,32 @@
+export type IntegrationProvider =
+  | "HUBSPOT"
+  | "SALESFORCE"
+  | "ZOHO"
+  | "SHOPIFY"
+  | "STRIPE"
+  | "RAZORPAY"
+  | "GOOGLE_WORKSPACE"
+  | "META_WHATSAPP"
+  | "SLACK"
+  | "CUSTOM_WEBHOOK"
+  | "CUSTOM_API"
+  | (string & {});
+
 export type ConnectorCategory =
   | "CRM"
   | "FINANCE"
   | "MARKETING"
+  | "COMMUNICATION"
   | "COMMUNICATIONS"
+  | "ERP"
+  | "ACCOUNTING"
+  | "ECOMMERCE"
+  | "PAYMENT"
+  | "STORAGE"
   | "HR"
   | "PROJECTS"
-  | "CUSTOM";
+  | "CUSTOM"
+  | (string & {});
 
 export type AuthType =
   | "OAUTH2"
@@ -13,6 +34,7 @@ export type AuthType =
   | "BEARER_TOKEN"
   | "BASIC_AUTH"
   | "WEBHOOK_SECRET"
+  | "CUSTOM"
   | "NONE";
 
 export type SyncDirection = "INBOUND" | "OUTBOUND" | "BIDIRECTIONAL";
@@ -29,6 +51,8 @@ export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 
 export type IntegrationStatus =
   | "ACTIVE"
+  | "INACTIVE"
+  | "PENDING_AUTH"
   | "CONNECTED"
   | "PAUSED"
   | "ERROR"
@@ -95,18 +119,26 @@ export interface ConnectorConfigSchema {
   fields?: ConnectorSchemaField[];
 }
 
+export interface ConnectorPermissions {
+  canConnect?: boolean;
+  canConfigure?: boolean;
+  canDisconnect?: boolean;
+}
+
 export interface Connector {
   id: string;
-  provider: string;
+  provider: IntegrationProvider | string;
   name: string;
   description: string;
   category: ConnectorCategory | string;
   icon?: string;
   iconUrl?: string;
+  logo?: string;
   logoUrl?: string;
   version?: string;
   status?: IntegrationStatus | string;
   isConnected?: boolean;
+  available?: boolean;
   connectionId?: string;
   connectionState?: {
     id?: string;
@@ -123,6 +155,7 @@ export interface Connector {
   supportedMethods?: HttpMethod[];
   capabilities?: string[];
   configSchema?: ConnectorConfigSchema;
+  permissions?: ConnectorPermissions;
   popular?: boolean;
   website?: string;
   docsUrl?: string;
@@ -134,21 +167,24 @@ export interface IntegrationInstance {
   id: string;
   organizationId?: string;
   connectorId?: string;
-  provider: string;
+  provider: IntegrationProvider | string;
   name: string;
   displayName?: string;
   category?: ConnectorCategory | string;
   status: IntegrationStatus | string;
-  authType: AuthType | string;
-  targetModule: string;
+  authType?: AuthType | string;
+  isEnabled?: boolean;
+  targetModule?: string;
   targetEntity?: string;
   apiUrl?: string;
+  baseUrl?: string;
   httpMethod?: HttpMethod;
-  syncDirection: SyncDirection;
-  syncFrequency: SyncFrequency;
+  syncDirection?: SyncDirection;
+  syncFrequency?: SyncFrequency;
   headers?: Record<string, string> | Array<{ key: string; value: string }>;
   config?: Record<string, any>;
   credentials?: Record<string, any>;
+  lastSyncedAt?: string | null;
   lastSyncAt?: string;
   lastTestedAt?: string;
   errorCount?: number;
@@ -159,48 +195,94 @@ export interface IntegrationInstance {
 }
 
 export interface CreateIntegrationPayload {
-  connectorId?: string;
   provider: string;
   name: string;
-  displayName?: string;
-  targetModule: string;
-  targetEntity?: string;
-  apiUrl: string;
-  httpMethod: HttpMethod;
-  authType: AuthType;
-  credentials?: Record<string, any>;
-  syncDirection: SyncDirection;
-  syncFrequency: SyncFrequency;
-  headers?: Record<string, string>;
+  authType?: AuthType | string;
+  apiKey?: string;
+  apiSecret?: string;
+  webhookSecret?: string;
+  password?: string;
+  customSecrets?: Record<string, any>;
+  baseUrl?: string;
   config?: Record<string, any>;
+  redirectUri?: string;
+  // Additional client helper fields
+  connectorId?: string;
+  displayName?: string;
+  targetModule?: string;
+  targetEntity?: string;
+  apiUrl?: string;
+  httpMethod?: HttpMethod;
+  credentials?: Record<string, any>;
+  syncDirection?: SyncDirection;
+  syncFrequency?: SyncFrequency;
+  headers?: Record<string, string>;
 }
 
 export interface UpdateIntegrationPayload {
+  name?: string;
   displayName?: string;
+  isEnabled?: boolean;
   status?: IntegrationStatus | string;
+  config?: Record<string, any>;
+  apiKey?: string;
+  apiSecret?: string;
+  webhookSecret?: string;
+  password?: string;
+  customSecrets?: Record<string, any>;
   syncFrequency?: SyncFrequency;
   syncDirection?: SyncDirection;
   apiUrl?: string;
   httpMethod?: HttpMethod;
   headers?: Record<string, string>;
-  config?: Record<string, any>;
   credentials?: Record<string, any>;
+}
+
+export interface TestConnectionDiagnostics {
+  provider?: string;
+  connector?: string;
+  httpStatus?: number | null;
+  responseTimeMs?: number;
+  recordCount?: number | null;
+}
+
+export interface TestConnectionError {
+  category?:
+    | "AUTHENTICATION"
+    | "AUTH"
+    | "TIMEOUT"
+    | "NETWORK"
+    | "RATE_LIMIT"
+    | "CONFIGURATION"
+    | "CONFIG"
+    | "UNKNOWN"
+    | "SERVER";
+  code?: string;
+  message?: string;
+  retryable?: boolean;
+  retryAfterSeconds?: number | null;
 }
 
 export interface TestConnectionResponse {
   success: boolean;
+  integrationId?: string;
+  provider?: string;
+  status?: "connected" | "failed" | "unsupported" | string;
+  httpStatus?: number | null;
   statusCode?: number;
-  httpStatus?: number;
+  responseTimeMs?: number;
   latencyMs?: number;
   responseTime?: number;
-  message?: string;
-  details?: Record<string, any>;
+  recordCount?: number | null;
   recordsDetected?: number;
   detectedRecords?: number;
   recordsCount?: number;
   entitiesDetected?: number;
   entitiesCount?: number;
-  diagnostics?: string;
+  diagnostics?: TestConnectionDiagnostics | string;
+  error?: TestConnectionError;
+  message?: string;
+  details?: Record<string, any>;
   testedAt?: string;
   timestamp?: string;
   [key: string]: any;
@@ -225,31 +307,36 @@ export interface NormalizedConnectionTestResult {
   entitiesDetected?: number;
   testedAt?: string;
   errorCategory?: ConnectionErrorCategory;
+  retryable?: boolean;
+  retryAfterSeconds?: number | null;
 }
 
 export interface OAuthConnectResponse {
   authorizationUrl?: string;
   authUrl?: string;
   url?: string;
+  redirectUrl?: string;
   state?: string;
   message?: string;
+  [key: string]: any;
 }
 
 export interface DiscoveredPagination {
   page?: number;
   limit?: number;
-  pageSize?: number;
-  total?: number;
-  totalRecords?: number;
+  pageSize?: number | null;
+  total?: number | null;
+  totalRecords?: number | null;
   totalPages?: number;
+  hasNext?: boolean;
   hasMore?: boolean;
-  nextCursor?: string;
+  nextCursor?: string | null;
   [key: string]: any;
 }
 
 export interface DiscoveredField {
-  name: string;
-  path?: string;
+  name?: string;
+  path: string;
   label?: string;
   type: string;
   required?: boolean;
@@ -259,6 +346,7 @@ export interface DiscoveredField {
   sampleValue?: any;
   sample?: any;
   example?: any;
+  nestedPath?: string;
   fields?: DiscoveredField[];
   children?: DiscoveredField[];
   properties?: Record<string, DiscoveredField>;
@@ -272,23 +360,27 @@ export interface DiscoveredEntity {
   description?: string;
   fields: DiscoveredField[];
   supportedOperations?: ("READ" | "WRITE" | "SYNC")[];
-  recordCount?: number;
-  totalRecords?: number;
+  recordCount?: number | null;
+  totalRecords?: number | null;
   sampleRecords?: Record<string, any>[];
   sampleData?: Record<string, any>[];
   records?: Record<string, any>[];
-  pagination?: DiscoveredPagination;
+  pagination?: DiscoveredPagination | null;
   [key: string]: any;
 }
 
 export interface DiscoveredSchemaResponse {
+  success?: boolean;
+  integrationId?: string;
+  provider?: string;
+  fields?: DiscoveredField[];
   entities: DiscoveredEntity[];
   discoveredAt?: string;
+  sampledAt?: string;
   version?: string;
-  provider?: string;
-  recordCount?: number;
-  totalRecords?: number;
-  pagination?: DiscoveredPagination;
+  recordCount?: number | null;
+  totalRecords?: number | null;
+  pagination?: DiscoveredPagination | null;
   sampleRecords?: Record<string, any>[];
   sampleData?: Record<string, any>[];
   rawSchema?: any;
@@ -300,6 +392,7 @@ export interface SyncResponse {
   message?: string;
   recordsProcessed?: number;
   syncedAt?: string;
+  data?: Record<string, any>;
 }
 
 export interface RotateCredentialsPayload {
@@ -322,19 +415,24 @@ export interface RotateCredentialsResponse {
 
 export interface ReconnectPayload {
   apiKey?: string;
+  apiSecret?: string;
   accessToken?: string;
   refreshToken?: string;
   webhookSecret?: string;
   clientSecret?: string;
   password?: string;
   customSecrets?: Record<string, any>;
+  baseUrl?: string;
   config?: Record<string, any>;
+  redirectUri?: string;
 }
 
 export interface ReconnectResponse {
   success: boolean;
   message?: string;
   integration?: IntegrationInstance;
+  authorizationUrl?: string;
+  authUrl?: string;
 }
 
 export interface StatusToggleResponse {
