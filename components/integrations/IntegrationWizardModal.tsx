@@ -214,15 +214,8 @@ export function IntegrationWizardModal({
     displayName: selectedConnector ? `${selectedConnector.name} Integration` : "",
     targetModule: "leads",
     targetEntity: "Lead",
-    apiUrl:
-      selectedConnector?.configSchema?.endpoint?.defaultUrl ||
-      (selectedConnector?.provider === "salesforce"
-        ? "https://login.salesforce.com/services/data/v58.0"
-        : selectedConnector?.provider === "hubspot"
-        ? "https://api.hubapi.com/crm/v3/objects"
-        : selectedConnector?.provider === "stripe"
-        ? "https://api.stripe.com/v1"
-        : "https://api.example.com/v1"),
+    // API URL: Use connector's configured default if available, otherwise require user input
+    apiUrl: selectedConnector?.configSchema?.endpoint?.defaultUrl || "",
     httpMethod:
       (selectedConnector?.configSchema?.endpoint?.defaultMethod as HttpMethod) ||
       "POST",
@@ -327,6 +320,36 @@ export function IntegrationWizardModal({
     watchedBasicPassword,
     watchedWebhookSecret,
   ]);
+
+  // Clear auth credentials when auth type changes to prevent old secrets from being submitted
+  const previousAuthTypeRef = React.useRef<AuthType | undefined>();
+  useEffect(() => {
+    const currentAuthType = watch("authType");
+    
+    // Only clear when explicitly changing auth type (not on initial load)
+    if (previousAuthTypeRef.current !== undefined && previousAuthTypeRef.current !== currentAuthType) {
+      // Clear all auth-specific fields when switching auth type
+      setValue("apiKeyName", "");
+      setValue("apiKeyValue", "");
+      setValue("bearerToken", "");
+      setValue("basicUsername", "");
+      setValue("basicPassword", "");
+      setValue("oauthClientId", "");
+      setValue("oauthClientSecret", "");
+      setValue("oauthScopes", "");
+      setValue("webhookSecret", "");
+
+      // Reset to defaults for new auth type
+      if (currentAuthType === "API_KEY") {
+        setValue("apiKeyName", "X-API-Key");
+      }
+      if (currentAuthType === "OAUTH2") {
+        setValue("oauthScopes", "read, write");
+      }
+    }
+    
+    previousAuthTypeRef.current = currentAuthType;
+  }, [watchedAuthType, watch, setValue]);
 
   if (!isOpen) return null;
 
