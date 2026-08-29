@@ -164,7 +164,12 @@ export default function IntegrationsPage() {
       const res = await testConnection(targetId);
       const normalized = res.success
         ? normalizeConnectionSuccess(res, res.latencyMs || 0)
-        : normalizeConnectionError({ response: { status: res.statusCode || 400, data: res } });
+        : normalizeConnectionError({
+            response: {
+              status: res.statusCode && res.statusCode >= 400 ? res.statusCode : undefined,
+              data: res,
+            },
+          });
       if (res?.success) {
         toast.success(
           `Connection verified for ${connector.name}${
@@ -351,7 +356,7 @@ export default function IntegrationsPage() {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 items-start">
               {filteredConnectors.map((connector) => (
                 <ConnectorCard
                   key={connector.id || connector.provider}
@@ -394,6 +399,9 @@ export default function IntegrationsPage() {
         }}
         onUpdateIntegration={async (id: string, payload: UpdateIntegrationPayload) => {
           return await updateIntegration(id, payload);
+        }}
+        onFetchSchema={async (id: string) => {
+          return await fetchSchema(id);
         }}
         onViewSchema={(connector: Connector) => {
           handleViewSchema(connector);

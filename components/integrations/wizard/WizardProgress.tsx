@@ -17,7 +17,12 @@ export function WizardProgress({
   onStepChange,
 }: WizardProgressProps) {
   return (
-    <div className="grid border-b border-border bg-surface-secondary/30 text-xs">
+    <div
+      className="grid border-b border-border bg-surface-secondary/30 text-xs"
+      style={{
+        gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))`,
+      }}
+    >
       {steps.map((step) => {
         const isCurrent = currentStep === step.id;
         const isCompleted = currentStep > step.id;

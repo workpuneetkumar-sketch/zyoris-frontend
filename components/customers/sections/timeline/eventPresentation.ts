@@ -15,6 +15,7 @@ import {
   FileText,
   Handshake,
   Mail,
+  MessageCircle,
   Phone,
   Receipt,
   RefreshCw,
@@ -32,6 +33,7 @@ export type TimelineCategory =
   | "note"
   | "status"
   | "email"
+  | "whatsapp"
   | "call"
   | "meeting"
   | "other";
@@ -95,6 +97,12 @@ export const CATEGORY_STYLES: Record<TimelineCategory, CategoryStyle> = {
     iconClass: "bg-cat-comm-bg text-cat-comm",
     chipClass: "bg-cat-comm-bg text-cat-comm",
   },
+  whatsapp: {
+    label: "WhatsApp",
+    icon: MessageCircle,
+    iconClass: "bg-cat-comm-bg text-cat-comm",
+    chipClass: "bg-cat-comm-bg text-cat-comm",
+  },
   call: {
     label: "Call",
     icon: Phone,
@@ -149,6 +157,7 @@ function keywordCategory(eventType: string): TimelineCategory {
   if (/deal|opportunity|pipeline|stage|quote/.test(t)) return "deal";
   if (/task|todo|to_do/.test(t)) return "task";
   if (/note|comment/.test(t)) return "note";
+  if (/whatsapp|wa_message|wa_msg/.test(t)) return "whatsapp";
   if (/email|mail/.test(t)) return "email";
   if (/\bcall\b|dialer|voip/.test(t)) return "call";
   if (/meeting|calendar|event_scheduled/.test(t)) return "meeting";
@@ -157,8 +166,27 @@ function keywordCategory(eventType: string): TimelineCategory {
   return "other";
 }
 
+/**
+ * Map the backend `channel` (e.g. "EMAIL", "WHATSAPP", "CALL", "MEETING") to a
+ * display category. Only the four communication channels are recognised — every
+ * other channel value falls through to producer / keyword classification.
+ */
+function channelCategory(channel?: string | null): TimelineCategory | null {
+  if (!channel) return null;
+  const c = channel.toLowerCase();
+  if (/whatsapp|^wa$/.test(c)) return "whatsapp";
+  if (/mail/.test(c)) return "email";
+  if (/call|phone|voice|dialer|telephony/.test(c)) return "call";
+  if (/meeting|calendar|video|conference/.test(c)) return "meeting";
+  return null;
+}
+
 export function categoryOf(event: CustomerTimelineEvent): TimelineCategory {
-  return producerOf(event) ?? keywordCategory(event.eventType || "");
+  return (
+    producerOf(event) ??
+    channelCategory(event.channel) ??
+    keywordCategory(event.eventType || "")
+  );
 }
 
 /** "invoice_paid" -> "Invoice paid" ; "STATUS_CHANGED" -> "Status changed". */
@@ -337,7 +365,15 @@ export function relatedEntitiesOf(event: CustomerTimelineEvent): RelatedEntityRe
 /** Human-readable one-liner for the event body, if the backend supplied one. */
 export function eventSummary(event: CustomerTimelineEvent): string | null {
   const meta = metaRecord(event);
-  for (const key of ["summary", "description", "message", "title", "note", "body"]) {
+  for (const key of [
+    "__backend_pending_title",
+    "summary",
+    "description",
+    "message",
+    "title",
+    "note",
+    "body",
+  ]) {
     const v = meta[key];
     if (typeof v === "string" && v.trim()) return v.trim();
   }
@@ -347,5 +383,298 @@ export function eventSummary(event: CustomerTimelineEvent): string | null {
   if (typeof prev === "string" && typeof next === "string") {
     return `${prev} → ${next}`;
   }
+  // detail fields we can assemble inline (e.g. deal_amount, invoice total)
+  const dealName = meta.dealName ?? meta.deal;
+  const stageInfo =
+    typeof meta.fromStage === "string" && typeof meta.toStage === "string"
+      ? `${String(meta.fromStage)} → ${String(meta.toStage)}`
+      : null;
+  if (typeof dealName === "string" && stageInfo) {
+    return `${String(dealName)} — ${stageInfo}`;
+  }
   return null;
+}
+
+// ── Communication events ────────────────────────────────────────────────────
+// Email / WhatsApp / Call / Meeting events flow through the SAME common timeline
+// DTO (Prashant's Customer Timeline service) — there is no channel-specific API.
+// The communication-specific facts live in the free-form `metadata` bag, so we
+// read them defensively (multiple candidate key names, every field optional),
+// exactly as the rest of this file already treats `metadata`. If Prashant later
+// publishes a fixed metadata schema, tighten the key lists below to match.
+
+const COMMUNICATION_CATEGORIES: ReadonlySet<TimelineCategory> = new Set<TimelineCategory>([
+  "email",
+  "whatsapp",
+  "call",
+  "meeting",
+]);
+
+/** True when the event should render the communication-detail affordances. */
+export function isCommunicationEvent(event: CustomerTimelineEvent): boolean {
+  return COMMUNICATION_CATEGORIES.has(categoryOf(event));
+}
+
+export type CommunicationDirection = "inbound" | "outbound" | "internal";
+
+export interface CommunicationParticipant {
+  /** Display name when known, otherwise the address / handle / number. */
+  label: string;
+  email?: string;
+  phone?: string;
+  /** "from" | "to" | "cc" | "bcc" | "attendee" | free-form backend value. */
+  role?: string;
+}
+
+export interface CommunicationCallDetails {
+  outcome: string | null;
+  status: string | null;
+  recordingUrl: string | null;
+  fromNumber: string | null;
+  toNumber: string | null;
+}
+
+export interface CommunicationMeetingDetails {
+  joinUrl: string | null;
+  location: string | null;
+  startsAt: string | null;
+  endsAt: string | null;
+  provider: string | null;
+}
+
+export interface CommunicationDetails {
+  direction: CommunicationDirection | null;
+  subject: string | null;
+  participants: CommunicationParticipant[];
+  /** Normalised to whole seconds when any duration hint was supplied. */
+  durationSeconds: number | null;
+  call: CommunicationCallDetails;
+  meeting: CommunicationMeetingDetails;
+  threadIds: Array<{ label: string; value: string }>;
+  /** True when at least one communication-specific field was found. */
+  hasAny: boolean;
+}
+
+function readString(v: unknown): string | null {
+  if (typeof v === "string") return v.trim() || null;
+  if (typeof v === "number" && Number.isFinite(v)) return String(v);
+  return null;
+}
+
+function readNumber(v: unknown): number | null {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) {
+    return Number(v);
+  }
+  return null;
+}
+
+function pickString(
+  meta: Record<string, unknown>,
+  keys: string[]
+): string | null {
+  for (const k of keys) {
+    const hit = readString(meta[k]);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function normalizeDirection(raw: string | null): CommunicationDirection | null {
+  if (!raw) return null;
+  const t = raw.toLowerCase();
+  if (/in(bound|coming)?|received|from[_ -]?customer/.test(t)) return "inbound";
+  if (/out(bound|going)?|sent|to[_ -]?customer/.test(t)) return "outbound";
+  if (/internal|note/.test(t)) return "internal";
+  return null;
+}
+
+function toParticipant(
+  raw: unknown,
+  roleHint?: string
+): CommunicationParticipant | null {
+  if (raw == null) return null;
+  if (typeof raw === "string" || typeof raw === "number") {
+    const s = String(raw).trim();
+    if (!s) return null;
+    return { label: s, email: s.includes("@") ? s : undefined, role: roleHint };
+  }
+  if (typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const name = pickString(o, ["name", "displayName", "display_name", "fullName", "full_name"]);
+    const email = pickString(o, ["email", "emailAddress", "email_address", "address"]);
+    const phone = pickString(o, ["phone", "phoneNumber", "phone_number", "number", "msisdn"]);
+    const role = pickString(o, ["role", "type", "kind"]) ?? roleHint;
+    const label = name ?? email ?? phone;
+    if (!label) return null;
+    return {
+      label,
+      email: email ?? undefined,
+      phone: phone ?? undefined,
+      role: role ?? undefined,
+    };
+  }
+  return null;
+}
+
+function collectParticipants(
+  meta: Record<string, unknown>
+): CommunicationParticipant[] {
+  const out: CommunicationParticipant[] = [];
+  const seen = new Set<string>();
+
+  const add = (p: CommunicationParticipant | null) => {
+    if (!p) return;
+    const key = (p.email ?? p.phone ?? p.label).toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(p);
+  };
+
+  const fromSource = (v: unknown, roleHint?: string) => {
+    if (Array.isArray(v)) v.forEach((el) => add(toParticipant(el, roleHint)));
+    else if (v != null) add(toParticipant(v, roleHint));
+  };
+
+  fromSource(meta.from ?? meta.sender, "from");
+  fromSource(meta.to ?? meta.recipients, "to");
+  fromSource(meta.cc, "cc");
+  fromSource(meta.bcc, "bcc");
+  fromSource(meta.attendees, "attendee");
+  fromSource(meta.participants);
+  fromSource(meta.members);
+
+  return out;
+}
+
+function readDurationSeconds(meta: Record<string, unknown>): number | null {
+  const sec = readNumber(
+    meta.durationSeconds ?? meta.duration_seconds ?? meta.durationSec ?? meta.duration_sec
+  );
+  if (sec != null) return Math.round(sec);
+  const min = readNumber(
+    meta.durationMinutes ?? meta.duration_minutes ?? meta.durationMins ?? meta.duration_min
+  );
+  if (min != null) return Math.round(min * 60);
+  const ms = readNumber(meta.durationMs ?? meta.duration_ms ?? meta.durationMillis);
+  if (ms != null) return Math.round(ms / 1000);
+  const raw = readNumber(meta.duration);
+  if (raw != null) return Math.round(raw); // assume seconds when unit-less
+  return null;
+}
+
+function readThreadIds(
+  meta: Record<string, unknown>
+): Array<{ label: string; value: string }> {
+  const probes: Array<[string, string[]]> = [
+    ["Thread", ["threadId", "thread_id", "gmailThreadId", "emailThreadId"]],
+    ["Message", ["messageId", "message_id", "providerMessageId", "waMessageId", "wamid"]],
+    ["Conversation", ["conversationId", "conversation_id", "chatId", "chat_id"]],
+    ["Call", ["callId", "call_id", "callSid", "call_sid"]],
+    ["Meeting", ["meetingId", "meeting_id", "icalUid", "iCalUID", "eventId"]],
+  ];
+  const out: Array<{ label: string; value: string }> = [];
+  const seen = new Set<string>();
+  for (const [label, keys] of probes) {
+    const value = pickString(meta, keys);
+    if (value && !seen.has(value)) {
+      seen.add(value);
+      out.push({ label, value });
+    }
+  }
+  return out;
+}
+
+/**
+ * Pull the communication-specific facts out of a timeline event's `metadata`.
+ * Every field is optional; `hasAny` is false when the backend supplied none.
+ */
+export function communicationDetailsOf(
+  event: CustomerTimelineEvent
+): CommunicationDetails {
+  const meta = metaRecord(event);
+
+  const direction = normalizeDirection(
+    pickString(meta, [
+      "direction",
+      "messageDirection",
+      "message_direction",
+      "callDirection",
+      "call_direction",
+    ])
+  );
+  const subject = pickString(meta, [
+    "subject",
+    "emailSubject",
+    "email_subject",
+    "title",
+    "topic",
+    "headline",
+  ]);
+  const participants = collectParticipants(meta);
+  const durationSeconds = readDurationSeconds(meta);
+
+  const call: CommunicationCallDetails = {
+    outcome: pickString(meta, ["outcome", "callOutcome", "call_outcome", "disposition", "callDisposition"]),
+    status: pickString(meta, ["callStatus", "call_status", "status"]),
+    recordingUrl: pickString(meta, ["recordingUrl", "recording_url", "callRecordingUrl", "recording"]),
+    fromNumber: pickString(meta, ["fromNumber", "from_number", "callerNumber", "caller"]),
+    toNumber: pickString(meta, ["toNumber", "to_number", "calleeNumber", "callee"]),
+  };
+
+  const meeting: CommunicationMeetingDetails = {
+    joinUrl: pickString(meta, [
+      "joinUrl", "join_url", "meetingUrl", "meeting_url",
+      "conferenceUrl", "conference_url", "hangoutLink", "videoUrl",
+    ]),
+    location: pickString(meta, ["location", "meetingLocation", "meeting_location", "place"]),
+    startsAt: pickString(meta, ["startTime", "start_time", "startsAt", "starts_at", "start", "scheduledStart"]),
+    endsAt: pickString(meta, ["endTime", "end_time", "endsAt", "ends_at", "end", "scheduledEnd"]),
+    provider: pickString(meta, ["meetingProvider", "meeting_provider", "conferenceProvider", "platform"]),
+  };
+
+  const threadIds = readThreadIds(meta);
+
+  const hasAny = Boolean(
+    direction ||
+      subject ||
+      participants.length ||
+      durationSeconds != null ||
+      call.outcome ||
+      call.status ||
+      call.recordingUrl ||
+      call.fromNumber ||
+      call.toNumber ||
+      meeting.joinUrl ||
+      meeting.location ||
+      meeting.startsAt ||
+      meeting.endsAt ||
+      meeting.provider ||
+      threadIds.length
+  );
+
+  return { direction, subject, participants, durationSeconds, call, meeting, threadIds, hasAny };
+}
+
+export function directionLabel(
+  direction: CommunicationDirection | null
+): string | null {
+  if (!direction) return null;
+  if (direction === "inbound") return "Inbound";
+  if (direction === "outbound") return "Outbound";
+  return "Internal";
+}
+
+/** "3665" seconds -> "1h 1m" ; "95" -> "1m 35s" ; "12" -> "12s". */
+export function formatDuration(totalSeconds: number | null): string | null {
+  if (totalSeconds == null || !Number.isFinite(totalSeconds) || totalSeconds < 0) {
+    return null;
+  }
+  const s = Math.round(totalSeconds);
+  const hours = Math.floor(s / 3600);
+  const minutes = Math.floor((s % 3600) / 60);
+  const seconds = s % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+  return `${seconds}s`;
 }

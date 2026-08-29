@@ -59,15 +59,16 @@ export const COMPANIES_PER_PAGE = 10;
 
 export async function fetchCompanies(
     page: number,
-    filters: CompaniesFilters
+    filters: CompaniesFilters,
+    limit: number = COMPANIES_PER_PAGE
 ): Promise<CompaniesResponse> {
     const params: Record<string, string | number> = {
         page,
-        limit: COMPANIES_PER_PAGE,
+        limit: Math.min(limit, 50),
     };
 
-    if (filters.industry !== "All Industries") params.industry = filters.industry;
-    if (filters.status !== "All Status") params.status = filters.status;
+    if (filters.industry && filters.industry !== "All Industries") params.industry = filters.industry;
+    if (filters.status && filters.status !== "All Status") params.status = filters.status;
     if (filters.search) params.search = filters.search;
 
     const res = await api.get("/api/company/get-companies", { params });
@@ -77,14 +78,20 @@ export async function fetchCompanies(
     if (Array.isArray(raw)) {
         return { companies: raw, total: raw.length };
     }
-    if (Array.isArray(raw.data)) {
+    if (Array.isArray(raw?.data)) {
         return {
             companies: raw.data,
-            total: raw.pagination?.total ?? raw.data.length,
+            total: raw.pagination?.total ?? raw.total ?? raw.data.length,
         };
     }
-    if (Array.isArray(raw.companies)) {
+    if (Array.isArray(raw?.companies)) {
         return { companies: raw.companies, total: raw.total ?? raw.companies.length };
+    }
+    if (Array.isArray(raw?.data?.companies)) {
+        return { companies: raw.data.companies, total: raw.data.total ?? raw.data.companies.length };
+    }
+    if (Array.isArray(raw?.items)) {
+        return { companies: raw.items, total: raw.total ?? raw.items.length };
     }
     return { companies: [], total: 0 };
 }
@@ -125,7 +132,26 @@ export async function createCompany(data: {
     status?: string;
     description?: string;
 }): Promise<Company> {
-    const res = await api.post<Company>("/api/company/create", data);
+    const payload: Record<string, any> = { ...data };
+
+    // Normalize status enum for backend validation (expects 'Active' | 'Inactive')
+    if (payload.status) {
+        const s = String(payload.status).trim();
+        if (s.toLowerCase() === "active") payload.status = "Active";
+        else if (s.toLowerCase() === "inactive") payload.status = "Inactive";
+        else payload.status = "Active";
+    } else {
+        payload.status = "Active";
+    }
+
+    // Omit empty fields to avoid backend validation issues
+    Object.keys(payload).forEach((key) => {
+        if (payload[key] === "" || payload[key] === null || payload[key] === undefined) {
+            delete payload[key];
+        }
+    });
+
+    const res = await api.post<Company>("/api/company/create", payload);
     return res.data;
 }
 
@@ -136,7 +162,22 @@ export async function updateCompany(
     id: string,
     data: Partial<Company>
 ): Promise<Company> {
-    const res = await api.patch<Company>(`/api/company/update-company/${id}`, data);
+    const payload: Record<string, any> = { ...data };
+
+    if (payload.status) {
+        const s = String(payload.status).trim();
+        if (s.toLowerCase() === "active") payload.status = "Active";
+        else if (s.toLowerCase() === "inactive") payload.status = "Inactive";
+        else delete payload.status;
+    }
+
+    Object.keys(payload).forEach((key) => {
+        if (payload[key] === "" || payload[key] === null || payload[key] === undefined) {
+            delete payload[key];
+        }
+    });
+
+    const res = await api.patch<Company>(`/api/company/update-company/${id}`, payload);
     return res.data;
 }
 
