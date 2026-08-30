@@ -182,7 +182,7 @@ export function CustomerOwnershipModal({
           <form id="ownership-form" onSubmit={handleSave} className="space-y-4">
             <div>
               <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 flex items-center gap-1">
-                <User size={11} /> New Owner
+                <User size={11} /> New Owner <span className="text-amber-500 text-[10px] font-normal">(at least 1 ownership field required *)</span>
               </label>
               <div className="relative">
                 <select

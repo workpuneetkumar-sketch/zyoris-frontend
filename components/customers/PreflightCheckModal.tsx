@@ -94,21 +94,37 @@ export function PreflightCheckModal({ isOpen, onClose }: PreflightCheckModalProp
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   if (!isOpen) return null;
 
   const setField = (k: keyof PreflightPayload, v: string) => {
     setPayload((p) => ({ ...p, [k]: v }));
     if (errorMsg) setErrorMsg(null);
     if (result) setResult(null);
+    if (fieldErrors[k]) setFieldErrors((p) => ({ ...p, [k]: "" }));
+  };
+
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {};
+    const hasAny = Object.values(payload).some((v) => typeof v === "string" && v.trim() !== "");
+    if (!hasAny) {
+      setErrorMsg("Fill in at least one field (Email, Phone, Name, External ID, etc.) to run a preflight check.");
+      return false;
+    }
+    if (payload.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email.trim())) {
+      errs.email = "Please enter a valid email address";
+    }
+    if (payload.phone?.trim() && !/^[+0-9\s\-()]{7,20}$/.test(payload.phone.trim())) {
+      errs.phone = "Please enter a valid phone number (min 7 digits)";
+    }
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
   };
 
   const handleCheck = async (e: React.FormEvent) => {
     e.preventDefault();
-    const hasAny = Object.values(payload).some((v) => typeof v === "string" && v.trim() !== "");
-    if (!hasAny) {
-      setErrorMsg("Fill in at least one field to run a preflight check.");
-      return;
-    }
+    if (!validate()) return;
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -165,6 +181,15 @@ export function PreflightCheckModal({ isOpen, onClose }: PreflightCheckModalProp
         </div>
 
         <div className="overflow-y-auto flex-1 p-5 space-y-5">
+          <div className="flex items-center justify-between bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/20 px-3 py-2 rounded-lg">
+            <span className="text-xs text-amber-800 dark:text-amber-300 font-medium">
+              Enter details below to check for matches before record creation.
+            </span>
+            <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider shrink-0">
+              At least 1 required *
+            </span>
+          </div>
+
           {/* Form */}
           <form id="preflight-form" onSubmit={handleCheck} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
@@ -173,22 +198,24 @@ export function PreflightCheckModal({ isOpen, onClose }: PreflightCheckModalProp
                   <Mail size={11} /> Email
                 </label>
                 <input
-                  className={INPUT_CLASS}
+                  className={INPUT_CLASS + (fieldErrors.email ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                   placeholder="customer@example.com"
                   value={payload.email ?? ""}
                   onChange={(e) => setField("email", e.target.value)}
                 />
+                {fieldErrors.email && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.email}</p>}
               </div>
               <div>
                 <label className="text-xs font-medium text-[var(--color-text-secondary)] mb-1 flex items-center gap-1">
                   <Phone size={11} /> Phone
                 </label>
                 <input
-                  className={INPUT_CLASS}
+                  className={INPUT_CLASS + (fieldErrors.phone ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                   placeholder="+1 555 000 0000"
                   value={payload.phone ?? ""}
                   onChange={(e) => setField("phone", e.target.value)}
                 />
+                {fieldErrors.phone && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.phone}</p>}
               </div>
               <div>
                 <label className="text-xs font-medium text-[var(--color-text-secondary)] mb-1 flex items-center gap-1">

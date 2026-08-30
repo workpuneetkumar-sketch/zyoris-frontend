@@ -52,33 +52,56 @@ export function MergeCustomerModal({
   const [auditCustomerId, setAuditCustomerId] = useState(preselectedSurvivorId);
   const [mergeResult, setMergeResult] = useState<{ survivorId: string; message?: string } | null>(null);
 
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+
   if (!isOpen) return null;
 
   const addLoser = () => setLoserIds((ids) => [...ids, ""]);
-  const removeLoser = (idx: number) => setLoserIds((ids) => ids.filter((_, i) => i !== idx));
-  const setLoser = (idx: number, val: string) =>
+  const removeLoser = (idx: number) => {
+    setLoserIds((ids) => ids.filter((_, i) => i !== idx));
+    if (fieldErrors.loserIds) setFieldErrors((p) => ({ ...p, loserIds: "" }));
+  };
+  const setLoser = (idx: number, val: string) => {
     setLoserIds((ids) => ids.map((v, i) => (i === idx ? val : v)));
+    if (fieldErrors.loserIds) setFieldErrors((p) => ({ ...p, loserIds: "" }));
+    if (errorMsg) setErrorMsg(null);
+  };
+
+  const validate = (): boolean => {
+    const errs: Record<string, string> = {};
+    const sId = survivorId.trim();
+    if (!sId) {
+      errs.survivorId = "Survivor customer ID is required.";
+    }
+
+    const validLosers = loserIds.map((id) => id.trim()).filter(Boolean);
+    if (validLosers.length === 0) {
+      errs.loserIds = "At least one loser customer ID is required.";
+    } else if (sId && validLosers.includes(sId)) {
+      errs.loserIds = "Self-merge is invalid: a loser ID cannot be the same as the survivor ID.";
+    }
+
+    if (fieldOverrides.trim()) {
+      try {
+        JSON.parse(fieldOverrides);
+      } catch {
+        errs.fieldOverrides = "Field overrides must be valid JSON.";
+      }
+    }
+
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  };
 
   const handleMerge = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!survivorId.trim()) {
-      setErrorMsg("Survivor customer ID is required.");
-      return;
-    }
+    if (!validate()) return;
     const validLosers = loserIds.map((id) => id.trim()).filter(Boolean);
-    if (validLosers.length === 0) {
-      setErrorMsg("At least one loser customer ID is required.");
-      return;
-    }
     let overrides: Record<string, unknown> = {};
     if (fieldOverrides.trim()) {
-      try {
-        overrides = JSON.parse(fieldOverrides);
-      } catch {
-        setErrorMsg("Field overrides must be valid JSON.");
-        return;
-      }
+      overrides = JSON.parse(fieldOverrides);
     }
+
     setLoading(true);
     setErrorMsg(null);
     try {
@@ -194,11 +217,16 @@ export function MergeCustomerModal({
                       Survivor Customer ID <span className="text-red-500">*</span>
                     </label>
                     <input
-                      className={INPUT_CLASS}
+                      className={INPUT_CLASS + (fieldErrors.survivorId ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                       placeholder="UUID of the record to keep"
                       value={survivorId}
-                      onChange={(e) => { setSurvivorId(e.target.value); setErrorMsg(null); }}
+                      onChange={(e) => {
+                        setSurvivorId(e.target.value);
+                        if (fieldErrors.survivorId) setFieldErrors((p) => ({ ...p, survivorId: "" }));
+                        setErrorMsg(null);
+                      }}
                     />
+                    {fieldErrors.survivorId && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.survivorId}</p>}
                     {preselectedSurvivorName && (
                       <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
                         Pre-selected: <span className="font-semibold">{preselectedSurvivorName}</span>
@@ -214,7 +242,7 @@ export function MergeCustomerModal({
                       {loserIds.map((id, idx) => (
                         <div key={idx} className="flex items-center gap-2">
                           <input
-                            className={INPUT_CLASS}
+                            className={INPUT_CLASS + (fieldErrors.loserIds ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                             placeholder={`Loser ID ${idx + 1}`}
                             value={id}
                             onChange={(e) => setLoser(idx, e.target.value)}
@@ -231,6 +259,7 @@ export function MergeCustomerModal({
                         </div>
                       ))}
                     </div>
+                    {fieldErrors.loserIds && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.loserIds}</p>}
                     <button
                       type="button"
                       onClick={addLoser}
@@ -245,14 +274,21 @@ export function MergeCustomerModal({
                       Field Overrides <span className="text-[var(--color-text-muted)] font-normal">(optional JSON)</span>
                     </label>
                     <textarea
-                      className={`${INPUT_CLASS} h-24 py-2 font-mono text-xs resize-none`}
+                      className={`${INPUT_CLASS} h-24 py-2 font-mono text-xs resize-none` + (fieldErrors.fieldOverrides ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                       placeholder={'{ "name": "Preferred Name", "email": "primary@example.com" }'}
                       value={fieldOverrides}
-                      onChange={(e) => setFieldOverrides(e.target.value)}
+                      onChange={(e) => {
+                        setFieldOverrides(e.target.value);
+                        if (fieldErrors.fieldOverrides) setFieldErrors((p) => ({ ...p, fieldOverrides: "" }));
+                      }}
                     />
-                    <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                      Override specific fields on the surviving record. Leave blank to use survivor's existing values.
-                    </p>
+                    {fieldErrors.fieldOverrides ? (
+                      <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.fieldOverrides}</p>
+                    ) : (
+                      <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                        Override specific fields on the surviving record. Leave blank to use survivor's existing values.
+                      </p>
+                    )}
                   </div>
 
                   {errorMsg && (

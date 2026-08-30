@@ -729,13 +729,31 @@ export async function resolveCustomerIdentity(
   payload: IdentityResolvePayload
 ): Promise<IdentityResolveResult> {
   try {
-    const res = await api.post(`${CUSTOMERS_BASE}/resolve`, payload);
+    const cleanedPayload: Record<string, any> = { ...payload };
+    Object.keys(cleanedPayload).forEach((key) => {
+      if (cleanedPayload[key] === "" || cleanedPayload[key] === null || cleanedPayload[key] === undefined) {
+        delete cleanedPayload[key];
+      }
+    });
+
+    const res = await api.post(`${CUSTOMERS_BASE}/resolve`, cleanedPayload);
     const data = unwrapEnvelope<any>(res.data);
+
+    const matchesList = Array.isArray(data?.matches)
+      ? data.matches
+      : Array.isArray(data?.candidates)
+      ? data.candidates
+      : Array.isArray(data?.results)
+      ? data.results
+      : [];
+
+    const matchedCustomer = data?.customer ?? data?.matchedCustomer ?? data?.match ?? (data?.resolved && matchesList[0] ? matchesList[0] : null);
+
     return {
-      resolved: Boolean(data?.resolved),
-      customer: data?.customer ?? null,
-      confidence: typeof data?.confidence === "number" ? data.confidence : null,
-      matches: Array.isArray(data?.matches) ? data.matches : [],
+      resolved: Boolean(data?.resolved ?? data?.isResolved ?? (matchedCustomer != null)),
+      customer: matchedCustomer,
+      confidence: typeof data?.confidence === "number" ? data.confidence : (typeof data?.confidenceScore === "number" ? data.confidenceScore : (matchesList[0]?.confidence ?? null)),
+      matches: matchesList,
       metadata: data?.metadata ?? null,
     } as IdentityResolveResult;
   } catch (err) {
