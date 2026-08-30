@@ -1,9 +1,11 @@
 "use client";
 
 import { Sparkles, AlertTriangle, Lightbulb, Target, FileText } from "lucide-react";
-import type { CustomerAiInsight } from "@/types/customer360";
+import type { AsyncResource } from "@/hooks/useCustomer360";
+import type { CommunicationIntelligence, CustomerAiInsight } from "@/types/customer360";
+import { toCustomerAiInsights } from "@/lib/api/customersApi";
 import { SectionCard } from "../SectionCard";
-import { SectionEmpty } from "../SectionStates";
+import { SectionEmpty, SectionError, SectionLoading } from "../SectionStates";
 import { ProvenanceBadge } from "../ProvenanceBadge";
 import { formatDateTime } from "../primitives";
 
@@ -17,8 +19,14 @@ const KIND_META: Record<
   summary: { label: "Summary", icon: FileText, accent: "text-text-secondary" },
 };
 
-export function AiInsightsSection({ insights }: { insights?: CustomerAiInsight[] }) {
-  const list = insights ?? [];
+export function AiInsightsSection({
+  intelligence,
+  hasLead,
+}: {
+  intelligence: AsyncResource<CommunicationIntelligence | null>;
+  hasLead: boolean;
+}) {
+  const list = toCustomerAiInsights(intelligence.data);
 
   return (
     <SectionCard
@@ -26,11 +34,31 @@ export function AiInsightsSection({ insights }: { insights?: CustomerAiInsight[]
       title="AI Insights"
       icon={Sparkles}
       description="Model-generated risks, opportunities and recommended actions"
+      action={
+        hasLead ? (
+          <button
+            type="button"
+            onClick={intelligence.reload}
+            className="rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-text hover:bg-surface-hover"
+          >
+            Refresh
+          </button>
+        ) : undefined
+      }
     >
-      {list.length === 0 ? (
+      {!hasLead ? (
+        <SectionEmpty
+          title="No AI insights"
+          description="Insights are generated from a linked lead's communication history — this customer isn't linked to a lead."
+        />
+      ) : intelligence.loading ? (
+        <SectionLoading label="Generating insights…" />
+      ) : intelligence.error ? (
+        <SectionError message={intelligence.error.message} onRetry={intelligence.reload} />
+      ) : list.length === 0 ? (
         <SectionEmpty
           title="No AI insights yet"
-          description="Insights are generated once there is enough account activity to analyse."
+          description="Insights appear once there is enough account activity to analyse."
         />
       ) : (
         <ul className="flex flex-col gap-3">
@@ -46,7 +74,10 @@ export function AiInsightsSection({ insights }: { insights?: CustomerAiInsight[]
                   </span>
                   {insight.confidence != null && (
                     <span className="text-[11px] text-text-muted">
-                      {Math.round((insight.confidence <= 1 ? insight.confidence * 100 : insight.confidence))}% confidence
+                      {Math.round(
+                        insight.confidence <= 1 ? insight.confidence * 100 : insight.confidence
+                      )}
+                      % confidence
                     </span>
                   )}
                   <ProvenanceBadge provenance={insight.provenance} className="ml-auto" />
@@ -55,10 +86,12 @@ export function AiInsightsSection({ insights }: { insights?: CustomerAiInsight[]
                 {insight.body && (
                   <p className="mt-1 text-sm leading-relaxed text-text-secondary">{insight.body}</p>
                 )}
-                <p className="mt-2 text-[11px] text-text-muted">
-                  {insight.model ? `${insight.model} · ` : ""}
-                  {insight.generatedAt ? formatDateTime(insight.generatedAt) : ""}
-                </p>
+                {(insight.model || insight.generatedAt) && (
+                  <p className="mt-2 text-[11px] text-text-muted">
+                    {insight.model ? `${insight.model} · ` : ""}
+                    {insight.generatedAt ? formatDateTime(insight.generatedAt) : ""}
+                  </p>
+                )}
               </li>
             );
           })}

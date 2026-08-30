@@ -4,7 +4,7 @@
 // Shared loading / error / empty primitives for Customer 360 sections.
 // Every section renders exactly one of: loading, error, empty, or content.
 
-import { AlertCircle, Inbox, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Inbox, Loader2, PlugZap, RefreshCw } from "lucide-react";
 
 export function SectionLoading({ label = "Loading…" }: { label?: string }) {
   return (
@@ -56,6 +56,29 @@ export function SectionEmpty({
     <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
       <div className="rounded-full bg-background-secondary p-3">
         <Inbox size={20} className="text-text-muted" />
+      </div>
+      <p className="text-sm font-medium text-text">{title}</p>
+      {description && <p className="max-w-xs text-xs text-text-secondary">{description}</p>}
+    </div>
+  );
+}
+
+/**
+ * Shown when a section has no frozen Platform contract to load from yet. Visually
+ * distinct from SectionEmpty ("connected, nothing here") so it reads as
+ * "blocked on backend" during QA.
+ */
+export function SectionUnavailable({
+  title = "Not available yet",
+  description,
+}: {
+  title?: string;
+  description?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border py-10 text-center">
+      <div className="rounded-full bg-background-secondary p-3">
+        <PlugZap size={20} className="text-text-muted" />
       </div>
       <p className="text-sm font-medium text-text">{title}</p>
       {description && <p className="max-w-xs text-xs text-text-secondary">{description}</p>}

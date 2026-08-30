@@ -3,17 +3,33 @@
 // hooks/useCustomer360.ts
 // Data orchestration for the Customer 360 page.
 //
-// The canonical summary (Sakshi) and the relationship graph (Manish) are fetched
-// independently so a failure in one never blanks the other — each section keeps
-// its own loading / error / empty state and its own retry.
+// Each frozen contract is fetched as its own independent resource so a failure
+// in one never blanks the others — every section keeps its own loading / error /
+// empty state and its own retry:
+//
+//   summary        GET /api/customers/:id                       (Sakshi)
+//   graph          GET /api/customers/:id/graph                  (Manish)
+//   stakeholders   GET /api/customers/:companyId/relationships   (Manish)   — keyed by summary.companyId
+//   intelligence   GET /crm/communication-intelligence/:leadId   (Ayush)    — keyed by summary.leadId
+//
+// stakeholders / intelligence stay idle until the canonical summary resolves and
+// yields the join key; when the customer has no linked company / lead the
+// resource is empty (not an error).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CustomerApiError,
   fetchCustomerById,
+  fetchCustomerCommunicationIntelligence,
   fetchCustomerGraph,
+  fetchCustomerStakeholders,
 } from "@/lib/api/customersApi";
-import type { CustomerGraph, CustomerSummary } from "@/types/customer360";
+import type {
+  CommunicationIntelligence,
+  CustomerGraph,
+  CustomerStakeholder,
+  CustomerSummary,
+} from "@/types/customer360";
 
 export interface AsyncResource<T> {
   data: T | null;
@@ -78,7 +94,12 @@ function useAsyncResource<T>(
 export interface UseCustomer360Result {
   summary: AsyncResource<CustomerSummary>;
   graph: AsyncResource<CustomerGraph>;
+  stakeholders: AsyncResource<CustomerStakeholder[]>;
+  intelligence: AsyncResource<CommunicationIntelligence | null>;
 }
+
+const loadStakeholders = (companyId: string) => fetchCustomerStakeholders(companyId);
+const loadIntelligence = (leadId: string) => fetchCustomerCommunicationIntelligence(leadId);
 
 export function useCustomer360(customerId: string | null | undefined): UseCustomer360Result {
   const id = customerId ? String(customerId) : null;
@@ -86,5 +107,14 @@ export function useCustomer360(customerId: string | null | undefined): UseCustom
   const summary = useAsyncResource<CustomerSummary>(id, fetchCustomerById);
   const graph = useAsyncResource<CustomerGraph>(id, fetchCustomerGraph);
 
-  return { summary, graph };
+  const companyId = summary.data?.companyId ? String(summary.data.companyId) : null;
+  const leadId = summary.data?.leadId ? String(summary.data.leadId) : null;
+
+  const stakeholders = useAsyncResource<CustomerStakeholder[]>(companyId, loadStakeholders);
+  const intelligence = useAsyncResource<CommunicationIntelligence | null>(leadId, loadIntelligence);
+
+  return useMemo(
+    () => ({ summary, graph, stakeholders, intelligence }),
+    [summary, graph, stakeholders, intelligence]
+  );
 }

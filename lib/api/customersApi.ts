@@ -4,13 +4,19 @@
 // Uses the shared axios instance (`@/lib/api/api`) — auth header, token refresh
 // and logout redirect are handled there.
 //
-// Endpoints (see types/customer360.ts for the contract these mirror):
-//   • GET /api/customers/:id                   — Sakshi   (canonical customer summary)
-//   • GET /api/customers/:id/graph             — Manish   (relationship graph)
-//   • GET /api/customers/:id/timeline          — Prashant (Customer Timeline service, live)
+// Endpoints (see types/customer360.ts for the frozen contracts these mirror):
+//   • GET /api/customers/:id                      — Sakshi   (canonical customer record)
+//   • GET /api/customers/:id/graph                — Manish   (relationship graph)
+//   • GET /api/customers/:id/timeline             — Prashant (Customer Timeline service)
+//   • GET /api/customers/:companyId/relationships — Manish   (relationship hierarchy / stakeholders)
+//   • GET /crm/communication-intelligence/:leadId — Ayush    (AI communication intelligence)
 //
-// All three live behind the `/api/customers` prefix on the backend — the bare
-// `/customers/...` path is not routed (404).
+// The customer endpoints live behind the `/api/customers` prefix on the backend
+// — the bare `/customers/...` path is not routed (404).
+//
+// There is NO mock/placeholder data path here: every function returns exactly
+// what the backend produced, and a 404 on the graph / timeline sub-resources is
+// surfaced as an empty result so the section renders its own empty state.
 //
 // No domain types are declared here — they live in types/customer360.ts so the
 // app has exactly one Customer 360 model.
@@ -18,15 +24,22 @@
 import { AxiosError } from "axios";
 import api from "@/lib/api/api";
 import type {
+  CommunicationIntelligence,
+  CustomerAiInsight,
   CustomerGraph,
   CustomerGraphEdge,
   CustomerGraphNode,
   CustomerGraphNodeType,
+  CustomerHealth,
+  CustomerStakeholder,
   CustomerSummary,
-  CustomerTimelineEvent,
   CustomerTimelinePage,
   CustomerTimelineQuery,
+  HealthBand,
+  Provenance,
+  RelationshipEdge,
 } from "@/types/customer360";
+import { STAKEHOLDER_RELATIONSHIP_TYPES } from "@/types/customer360";
 import type {
   CanonicalCustomer,
   CustomersFilters,
@@ -120,6 +133,21 @@ function unwrapEnvelope<T>(raw: unknown): T {
 
 // ── GET /api/customers/:id ──────────────────────────────────────────────────
 
+/**
+ * Derive record-level provenance from the canonical customer's `externalSystem`
+ * / `externalId`. This is a real fact from the contract (which CRM the record is
+ * mastered in), not a synthetic value — when both are absent, provenance is null.
+ */
+function deriveCustomerProvenance(customer: CustomerSummary): Provenance | null {
+  const system = customer.externalSystem?.trim();
+  if (!system) return null;
+  return {
+    source: system.toUpperCase(),
+    externalId: customer.externalId ?? null,
+    observedAt: customer.updatedAt ?? null,
+  };
+}
+
 export async function fetchCustomerById(id: string): Promise<CustomerSummary> {
   if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
   try {
@@ -128,342 +156,55 @@ export async function fetchCustomerById(id: string): Promise<CustomerSummary> {
     if (!customer || typeof customer !== "object" || !customer.id) {
       throw new CustomerApiError("not_found", "This customer was not found.", 404);
     }
-    return customer;
+    return { ...customer, provenance: customer.provenance ?? deriveCustomerProvenance(customer) };
   } catch (err) {
     throw toCustomerApiError(err, "this customer");
   }
 }
 
-// ── Graph + Timeline — backend contract normalization + mock fallback ───────
+// ── Graph contract normalisation ───────────────────────────────────────────
 //
-// These two endpoints are backed by separate services (Manish / Prashant) and
-// may return 404 while still under development. Instead of surfacing the raw
-// error and blanking the 360 page, we return a well-shaped mock dataset tagged
-// with provenance.source = "BACKEND_PENDING" so the UI renders cleanly and
-// provenance badges clearly indicate which records are synthetic placeholders.
-// The live API is always attempted first — mocks only fire on 404 / network /
-// empty response.
-//
-// Additionally, the graph backend contract uses `nodeType` / `refId` /
-// `fromNodeId` / `toNodeId` (per Swagger) while the frontend types use
-// `type` / `label` / `source` / `target`. The normalizer bridge below makes
-// both contracts coexist transparently.
-
-const BACKEND_PENDING_PROVENANCE = {
-  source: "BACKEND_PENDING",
-  channel: "MOCK",
-  confidence: 0,
-  externalId: null,
-  observedAt: new Date().toISOString(),
-  details: { note: "Backend endpoint not available yet — placeholder data until /graph and /timeline services are live." },
-} as const;
-
-function mockId(prefix: string, salt: string, idx = 0): string {
-  const hash = Array.from(salt + String(idx)).reduce(
-    (a, c) => (a * 31 + c.charCodeAt(0)) >>> 0,
-    7
-  );
-  return `${prefix}_${hash.toString(36).padStart(10, "0")}`;
-}
+// The frozen graph contract uses `nodeType` / `refId` / `fromNodeId` /
+// `toNodeId` / `relationshipType`; the GraphSection renders `type` / `label` /
+// `source` / `target` / `kind`. The bridge below maps one onto the other. There
+// is no mock/placeholder path — an unreachable graph is surfaced as empty.
 
 function normalizeGraphNodes(rawNodes: any[]): CustomerGraphNode[] {
-  return rawNodes.map((rn: any) => {
-    const nodeType: CustomerGraphNodeType =
-      (rn.nodeType ?? rn.type ?? "customer").toLowerCase();
+  return rawNodes.map((rn: any, i: number) => {
+    const nodeType = String(rn.nodeType ?? rn.type ?? "customer").toLowerCase() as CustomerGraphNodeType;
     return {
-      id: String(rn.id ?? rn.refId ?? mockId("n", JSON.stringify(rn))),
+      id: String(rn.id ?? rn.refId ?? `node-${i}`),
       type: nodeType,
       label: String(rn.label ?? rn.name ?? nodeType),
       isRoot: Boolean(rn.isRoot),
       meta: rn.meta ?? rn.metadata ?? null,
-      provenance: rn.provenance ?? null,
+      provenance: rn.provenance ?? (rn.source ? { source: String(rn.source) } : null),
     };
   });
 }
 
 function normalizeGraphEdges(rawEdges: any[]): CustomerGraphEdge[] {
-  return rawEdges.map((re: any) => ({
-    id: String(re.id ?? mockId("e", JSON.stringify(re))),
+  return rawEdges.map((re: any, i: number) => ({
+    id: String(re.id ?? `edge-${i}`),
     source: String(re.source ?? re.fromNodeId ?? ""),
     target: String(re.target ?? re.toNodeId ?? ""),
     label: re.label ?? null,
     kind: re.kind ?? re.relationshipType ?? null,
-    provenance: re.provenance ?? null,
+    strength: typeof re.strength === "number" ? re.strength : null,
+    provenance: re.provenance ?? (re.edgeSource ? { source: String(re.edgeSource) } : null),
   }));
 }
 
-function buildMockGraph(customerId: string, customerName: string): CustomerGraph {
-  const now = new Date();
-  const rootId = mockId("n", customerId + "root");
-  const companyId = mockId("n", customerId + "co");
-  const contact1Id = mockId("n", customerId + "c1");
-  const contact2Id = mockId("n", customerId + "c2");
-  const dealId = mockId("n", customerId + "d1");
-  const ownerId = mockId("n", customerId + "owner");
-  const productId = mockId("n", customerId + "prod");
-
-  const nodes: CustomerGraphNode[] = [
-    {
-      id: rootId,
-      type: "customer",
-      label: customerName || "Customer account",
-      isRoot: true,
-      meta: null,
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: companyId,
-      type: "company",
-      label: customerName ? `${customerName} HQ` : "Parent company",
-      meta: null,
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: contact1Id,
-      type: "contact",
-      label: "Jane Doe",
-      meta: { title: "VP of Engineering", email: "jane.doe@example.com" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: contact2Id,
-      type: "contact",
-      label: "Raj Patel",
-      meta: { title: "Procurement Manager", email: "raj.patel@example.com" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: dealId,
-      type: "deal",
-      label: "Q3 Enterprise Renewal",
-      meta: { amount: 48000, currency: "USD", stage: "Negotiation" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: ownerId,
-      type: "user",
-      label: "Demo User",
-      meta: { role: "Account Owner", email: "demo@zyoris.ai" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: productId,
-      type: "product",
-      label: "Zyoris Platform - Enterprise",
-      meta: { sku: "ZYR-ENT-ANN", seats: 120 },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-  ];
-
-  const edges: CustomerGraphEdge[] = [
-    {
-      id: mockId("e", customerId + "root-co", 1),
-      source: rootId,
-      target: companyId,
-      label: "Belongs to",
-      kind: "belongs_to",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-c1", 2),
-      source: rootId,
-      target: contact1Id,
-      label: "Stakeholder",
-      kind: "stakeholder",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-c2", 3),
-      source: rootId,
-      target: contact2Id,
-      label: "Buyer",
-      kind: "buyer",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-d1", 4),
-      source: rootId,
-      target: dealId,
-      label: "Open deal",
-      kind: "has_deal",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-owner", 5),
-      source: rootId,
-      target: ownerId,
-      label: "Owned by",
-      kind: "owned_by",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-prod", 6),
-      source: rootId,
-      target: productId,
-      label: "Subscribed to",
-      kind: "subscribed_to",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "c1-co", 7),
-      source: contact1Id,
-      target: companyId,
-      label: "Works at",
-      kind: "works_at",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "c2-co", 8),
-      source: contact2Id,
-      target: companyId,
-      label: "Works at",
-      kind: "works_at",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-  ];
-
-  return {
-    customerId,
-    nodes,
-    edges,
-    generatedAt: now.toISOString(),
-  };
-}
-
-function buildMockTimeline(
-  customerId: string,
-  customerName: string
-): CustomerTimelinePage {
-  const now = Date.now();
-  const orgId = mockId("org", customerId);
-
-  const eventTypes = [
-    { type: "status_changed", channel: "INTERNAL", source: "INTERNAL" },
-    { type: "note_added", channel: "EMAIL", source: "INTERNAL" },
-    { type: "meeting_scheduled", channel: "CALENDAR", source: "GOOGLE" },
-    { type: "invoice_paid", channel: "PAYMENT", source: "STRIPE" },
-    { type: "deal_stage_changed", channel: "CRM", source: "HUBSPOT" },
-    { type: "email_opened", channel: "EMAIL", source: "SENDGRID" },
-    { type: "task_completed", channel: "INTERNAL", source: "INTERNAL" },
-    { type: "contract_signed", channel: "SIGNATURE", source: "DOCUSIGN" },
-  ];
-
-  const samples: Array<Partial<CustomerTimelineEvent> & { title?: string; detail?: string; hoursAgo?: number }> = [
-    {
-      eventType: "status_changed",
-      source: "INTERNAL",
-      channel: null,
-      actorName: "Demo User",
-      title: "Customer promoted to ACTIVE",
-      metadata: { from: "PROSPECT", to: "ACTIVE", reason: "Contract executed" },
-      hoursAgo: 1,
-    },
-    {
-      eventType: "contract_signed",
-      source: "DOCUSIGN",
-      channel: "SIGNATURE",
-      actorName: "Jane Doe",
-      title: "MS-1234 Enterprise contract signed",
-      metadata: { contractId: "MS-1234", value: 48000, currency: "USD", signer: "jane.doe@example.com" },
-      hoursAgo: 5,
-    },
-    {
-      eventType: "deal_stage_changed",
-      source: "HUBSPOT",
-      channel: "CRM",
-      actorName: "Demo User",
-      title: "Deal moved to Negotiation",
-      metadata: { dealName: "Q3 Enterprise Renewal", fromStage: "Proposal", toStage: "Negotiation", probability: 0.75 },
-      hoursAgo: 20,
-    },
-    {
-      eventType: "invoice_paid",
-      source: "STRIPE",
-      channel: "PAYMENT",
-      actorName: "Raj Patel",
-      title: "Invoice INV-4021 paid in full",
-      metadata: { invoiceId: "INV-4021", amount: 12000, currency: "USD", method: "wire_transfer" },
-      hoursAgo: 36,
-    },
-    {
-      eventType: "meeting_scheduled",
-      source: "GOOGLE",
-      channel: "CALENDAR",
-      actorName: "Jane Doe",
-      title: "Kickoff meeting scheduled",
-      metadata: { subject: "Zyoris Platform Kickoff", startTime: new Date(now + 86400000 * 2).toISOString(), attendees: 5 },
-      hoursAgo: 48,
-    },
-    {
-      eventType: "email_opened",
-      source: "SENDGRID",
-      channel: "EMAIL",
-      title: "Proposal email opened",
-      metadata: { subject: "Proposal - Zyoris Enterprise Plan", emailId: "eml_987654", opens: 3 },
-      hoursAgo: 72,
-    },
-    {
-      eventType: "note_added",
-      source: "INTERNAL",
-      channel: "EMAIL",
-      actorName: "Demo User",
-      title: "Discovery call notes",
-      metadata: {
-        summary:
-          "Customer has 120 seats across 3 business units. Prioritized integration with Salesforce and Slack. Security review expected in week 2.",
-      },
-      hoursAgo: 96,
-    },
-    {
-      eventType: "task_completed",
-      source: "INTERNAL",
-      channel: "INTERNAL",
-      actorName: "Demo User",
-      title: "Security questionnaire completed",
-      metadata: { taskId: "tsk_1092", dueAt: new Date(now - 86400000 * 5).toISOString() },
-      hoursAgo: 120,
-    },
-  ];
-
-  const events: CustomerTimelineEvent[] = samples.map((s, i) => {
-    const typeMeta = eventTypes.find((e) => e.type === s.eventType) ?? eventTypes[0];
-    const ts = new Date(now - (s.hoursAgo ?? i * 24) * 3600 * 1000);
-    return {
-      id: mockId("ev", customerId, i),
-      organizationId: orgId,
-      customerId,
-      sourceEventId: mockId("sev", customerId, i),
-      idempotencyKey: `mock:${customerId}:${s.eventType}:${ts.getTime()}`,
-      eventType: s.eventType!,
-      source: s.source ?? typeMeta.source,
-      channel: s.channel ?? typeMeta.channel ?? null,
-      confidence: 1,
-      payloadVersion: "1.0",
-      metadata: {
-        ...(s.metadata ?? {}),
-        __backend_pending_title: s.title ?? null,
-      },
-      externalId: null,
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-      actorId: s.actorName ? mockId("u", s.actorName, i) : null,
-      actorName: s.actorName ?? null,
-      relatedEntityIds: [
-        mockId("ent", customerId + "a", i),
-        mockId("ent", customerId + "b", i),
-      ],
-      timestamp: ts.toISOString(),
-      createdAt: ts.toISOString(),
-      updatedAt: new Date(ts.getTime() + 60_000).toISOString(),
-    };
-  });
-
-  return {
-    events,
-    nextCursor: null,
-  };
+/** A 404 on a 360 sub-resource means "no data for this customer yet", not an error. */
+function isSubResourceNotFound(err: unknown): boolean {
+  const ax = err as AxiosError;
+  return Boolean(ax?.isAxiosError) && ax.response?.status === 404;
 }
 
 // ── GET /api/customers/:id/graph ────────────────────────────────────────────
+// Frozen contract: { rootNodeId, depth, nodes[], edges[] }. A 404 (no graph for
+// this customer yet) resolves to an empty graph so the section shows its empty
+// state rather than a page error.
 
 export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
   if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
@@ -481,8 +222,6 @@ export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
       Array.isArray(raw?.data?.edges) ? raw.data.edges :
       [];
 
-    // Empty backend response → empty graph, let the UI render its empty state.
-    // No mocking here — only 404 / unreachable endpoints fall back to placeholders.
     return {
       customerId: raw?.customerId ?? raw?.rootNodeId ?? id,
       nodes: normalizeGraphNodes(rawNodes),
@@ -490,16 +229,8 @@ export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
       generatedAt: raw?.generatedAt ?? null,
     };
   } catch (err) {
-    const ax = err as AxiosError;
-    const status = ax?.isAxiosError ? ax.response?.status : undefined;
-    const isNotFoundOrUnroutable =
-      status === 404 ||
-      status === 501 ||
-      status === 502 ||
-      !ax?.isAxiosError;
-
-    if (isNotFoundOrUnroutable) {
-      return buildMockGraph(id, `Customer ${id}`);
+    if (isSubResourceNotFound(err)) {
+      return { customerId: id, nodes: [], edges: [], generatedAt: null };
     }
     throw toCustomerApiError(err, "the relationship graph");
   }
@@ -510,7 +241,8 @@ export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
 //   cursor  — nextCursor from the previous page
 //   types   — comma-separated backend eventType values
 //   from/to — ISO-8601 timestamps (inclusive bounds)
-// Empty filters are omitted so the backend applies its own defaults.
+// Empty filters are omitted so the backend applies its own defaults. A 404
+// resolves to an empty page so the section shows its empty state.
 
 export async function fetchCustomerTimeline(
   id: string,
@@ -536,41 +268,218 @@ export async function fetchCustomerTimeline(
       Array.isArray(raw?.data?.events) ? raw.data.events :
       [];
 
-    // Empty backend response → empty array, let the UI render its empty state.
-    // Filters (types/from/to) are handled server-side; we only need to pass
-    // through what comes back.
     return {
       events,
       nextCursor: raw?.nextCursor ?? null,
     };
   } catch (err) {
-    const ax = err as AxiosError;
-    const status = ax?.isAxiosError ? ax.response?.status : undefined;
-    const isNotFoundOrUnroutable =
-      status === 404 ||
-      status === 501 ||
-      status === 502 ||
-      !ax?.isAxiosError;
-
-    if (isNotFoundOrUnroutable) {
-      let all = buildMockTimeline(id, `Customer ${id}`).events;
-      if (query.types) {
-        const include = new Set(query.types.split(",").map((t) => t.trim()).filter(Boolean));
-        all = all.filter((e) => include.has(e.eventType));
-      }
-      if (query.from) {
-        const fromTs = new Date(query.from).getTime();
-        if (!Number.isNaN(fromTs)) all = all.filter((e) => new Date(e.timestamp).getTime() >= fromTs);
-      }
-      if (query.to) {
-        const toTs = new Date(query.to).getTime();
-        if (!Number.isNaN(toTs)) all = all.filter((e) => new Date(e.timestamp).getTime() <= toTs);
-      }
-      return { events: all, nextCursor: null };
+    if (isSubResourceNotFound(err)) {
+      return { events: [], nextCursor: null };
     }
     throw toCustomerApiError(err, "the customer timeline");
   }
 }
+
+// ── GET /api/customers/:companyId/relationships (Stakeholders) ───────────────
+// The frozen RelationshipEdge schema has no contact identity fields, so the
+// Stakeholders list degrades to role + relationship type when the backend does
+// not enrich the edge. Only person→account relationship types are surfaced here.
+
+const RELATIONSHIP_ROLE_LABELS: Record<string, string> = {
+  DECISION_MAKER_OF: "Decision maker",
+  INFLUENCER_OF: "Influencer",
+  BUYING_COMMITTEE_MEMBER_OF: "Buying committee",
+};
+
+function influenceLevelToBand(level?: string | null): "high" | "medium" | "low" | null {
+  switch (level) {
+    case "CRITICAL":
+    case "HIGH":
+      return "high";
+    case "MEDIUM":
+      return "medium";
+    case "LOW":
+      return "low";
+    default:
+      return null;
+  }
+}
+
+function mapRelationshipsToStakeholders(edges: RelationshipEdge[]): CustomerStakeholder[] {
+  return edges
+    .filter((e) => STAKEHOLDER_RELATIONSHIP_TYPES.includes(e.relationshipType))
+    .map((e) => {
+      const contact = e.contact ?? null;
+      const fallbackName =
+        RELATIONSHIP_ROLE_LABELS[e.relationshipType] ??
+        e.relationshipType.replace(/_/g, " ").toLowerCase();
+      return {
+        id: e.id,
+        name: contact?.name?.trim() || fallbackName,
+        title: contact?.title ?? e.role ?? null,
+        email: contact?.email ?? null,
+        phone: contact?.phone ?? null,
+        role: RELATIONSHIP_ROLE_LABELS[e.relationshipType] ?? e.relationshipType,
+        influence: influenceLevelToBand(e.influenceLevel),
+        provenance: {
+          source: e.source ? String(e.source).toUpperCase() : "RELATIONSHIP_GRAPH",
+          confidence: typeof e.strength === "number" ? e.strength : null,
+          observedAt: e.updatedAt ?? e.createdAt ?? null,
+        },
+      };
+    });
+}
+
+/**
+ * GET /api/customers/:companyId/relationships → mapped stakeholder list.
+ * The `companyId` join key comes from the canonical customer record. A 404
+ * (company has no relationships yet) resolves to an empty list.
+ */
+export async function fetchCustomerStakeholders(companyId: string): Promise<CustomerStakeholder[]> {
+  if (!companyId) return [];
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(companyId)}/relationships`);
+    const raw = unwrapEnvelope<any>(res.data);
+    const list: any[] =
+      Array.isArray(raw?.relationships) ? raw.relationships :
+      Array.isArray(raw?.data?.relationships) ? raw.data.relationships :
+      Array.isArray(raw) ? raw :
+      [];
+    return mapRelationshipsToStakeholders(list as RelationshipEdge[]);
+  } catch (err) {
+    if (isSubResourceNotFound(err)) return [];
+    throw toCustomerApiError(err, "stakeholders for this account");
+  }
+}
+
+// ── GET /crm/communication-intelligence/:leadId (AI Insights + Health) ──────
+// Ayush's AI DTO. Keyed by the canonical customer's `leadId`. Returns a 502 when
+// the AI provider itself fails — that is surfaced as a section error, not a page
+// error. When the customer has no linked lead, the section shows its empty state.
+
+const CI_PROVENANCE_BASE: Provenance = {
+  source: "ZYORIS_AI",
+  channel: "COMMUNICATION_INTELLIGENCE",
+};
+
+export async function fetchCustomerCommunicationIntelligence(
+  leadId: string
+): Promise<CommunicationIntelligence | null> {
+  if (!leadId) return null;
+  try {
+    const res = await api.get(`/crm/communication-intelligence/${encodeURIComponent(leadId)}`);
+    const raw = unwrapEnvelope<CommunicationIntelligence>(res.data);
+    if (!raw || typeof raw !== "object") return null;
+    return raw;
+  } catch (err) {
+    if (isSubResourceNotFound(err)) return null;
+    throw toCustomerApiError(err, "AI communication intelligence");
+  }
+}
+
+function healthBandFromScore(score: number | null): HealthBand | null {
+  if (score == null || Number.isNaN(score)) return null;
+  if (score >= 75) return "healthy";
+  if (score >= 50) return "neutral";
+  if (score >= 25) return "at_risk";
+  return "critical";
+}
+
+/** Derive the Health view model from communication intelligence. */
+export function toCustomerHealth(ci: CommunicationIntelligence | null): CustomerHealth | null {
+  if (!ci) return null;
+  const score =
+    typeof ci.buyingProbability === "number" ? Math.round(ci.buyingProbability) : null;
+
+  const factors: NonNullable<CustomerHealth["factors"]> = [];
+  for (const r of ci.risk ?? []) {
+    if (!r?.description) continue;
+    factors.push({
+      label: r.riskLevel ? `${r.riskLevel} risk` : "Risk",
+      impact: "negative",
+      detail: r.description,
+    });
+  }
+  if (ci.mood) {
+    const positiveMood = ci.mood === "ENTHUSIASTIC" || ci.mood === "SATISFIED";
+    factors.push({
+      label: `Mood: ${ci.mood.toLowerCase()}`,
+      impact: positiveMood ? "positive" : ci.mood === "NEUTRAL" ? "neutral" : "negative",
+      detail: ci.moodDrivers ?? null,
+    });
+  }
+  if (ci.urgency) {
+    factors.push({
+      label: `Urgency: ${ci.urgency.toLowerCase()}`,
+      impact: ci.urgency === "CRITICAL" || ci.urgency === "HIGH" ? "negative" : "neutral",
+      detail: ci.urgencyTriggers ?? null,
+    });
+  }
+
+  if (score == null && factors.length === 0) return null;
+
+  return {
+    score,
+    band: healthBandFromScore(score),
+    summary: ci.communicationSummary ?? ci.intentExplanation ?? null,
+    factors,
+    provenance: { ...CI_PROVENANCE_BASE },
+  };
+}
+
+/** Derive the AI Insights list from communication intelligence. */
+export function toCustomerAiInsights(ci: CommunicationIntelligence | null): CustomerAiInsight[] {
+  if (!ci) return [];
+  const insights: CustomerAiInsight[] = [];
+
+  if (ci.communicationSummary || ci.intentExplanation) {
+    insights.push({
+      id: "ci-summary",
+      kind: "summary",
+      title: ci.intent ? `Intent: ${ci.intent.replace(/_/g, " ").toLowerCase()}` : "Communication summary",
+      body: ci.communicationSummary ?? ci.intentExplanation ?? null,
+      provenance: { ...CI_PROVENANCE_BASE },
+    });
+  }
+
+  for (const [i, r] of (ci.risk ?? []).entries()) {
+    if (!r?.description) continue;
+    insights.push({
+      id: `ci-risk-${i}`,
+      kind: "risk",
+      title: r.riskLevel ? `${r.riskLevel} risk` : "Risk detected",
+      body: r.sourceChannel ? `${r.description} (via ${r.sourceChannel})` : r.description,
+      provenance: { ...CI_PROVENANCE_BASE },
+    });
+  }
+
+  const nba = ci.nextBestAction;
+  if (nba?.actionTitle) {
+    insights.push({
+      id: "ci-nba",
+      kind: "next_best_action",
+      title: nba.actionTitle,
+      body: [nba.detailedRationale, nba.recommendedChannel ? `Channel: ${nba.recommendedChannel}` : null]
+        .filter(Boolean)
+        .join(" · ") || null,
+      provenance: { ...CI_PROVENANCE_BASE },
+    });
+  }
+
+  if (typeof ci.buyingProbability === "number") {
+    insights.push({
+      id: "ci-opportunity",
+      kind: "opportunity",
+      title: `Buying probability ${Math.round(ci.buyingProbability)}%`,
+      body: (ci.probabilityFactors ?? []).join("; ") || null,
+      confidence: ci.buyingProbability <= 1 ? ci.buyingProbability : ci.buyingProbability / 100,
+      provenance: { ...CI_PROVENANCE_BASE },
+    });
+  }
+
+  return insights;
+}
+
 
 // ── Canonical Customer CRUD + Identity endpoints ────────────────────────────
 // These mirror the backend /api/customers endpoints documented in the
