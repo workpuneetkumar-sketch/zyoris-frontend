@@ -42,6 +42,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
   const [loadingLists, setLoadingLists] = useState(true);
   const [converting, setConverting] = useState(false);
   const [result, setResult] = useState<ConvertLeadResult | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -86,6 +87,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
 
   const setField = <K extends keyof ConvertLeadPayload>(k: K, v: ConvertLeadPayload[K]) => {
     setPayload((p) => ({ ...p, [k]: v }));
+    if (errors[k]) setErrors((p) => ({ ...p, [k]: "" }));
   };
 
   const handleSelectLead = (id: string) => {
@@ -96,14 +98,29 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
       dealName: prev.dealName || (l ? `${l.name} - New Deal` : ""),
       dealAmount: prev.dealAmount || (l && typeof l.estimatedValue === "number" ? l.estimatedValue : 0),
     }));
+    if (errors.leadId) setErrors((p) => ({ ...p, leadId: "" }));
+  };
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    if (!payload.leadId) {
+      newErrors.leadId = "Please select a lead to convert";
+    }
+    if (payload.createDeal) {
+      if (!payload.dealName?.trim()) {
+        newErrors.dealName = "Deal name is required when creating a deal";
+      }
+      if (payload.dealAmount === undefined || payload.dealAmount === null || payload.dealAmount < 0) {
+        newErrors.dealAmount = "Deal amount must be 0 or greater";
+      }
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleConvert = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!payload.leadId) {
-      toast.warning("Please select a lead to convert.");
-      return;
-    }
+    if (!validate()) return;
     setConverting(true);
     try {
       const finalPayload: ConvertLeadPayload = { ...payload };
@@ -242,7 +259,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                     disabled={loadingLists || converting}
                     value={payload.leadId}
                     onChange={(e) => handleSelectLead(e.target.value)}
-                    className={INPUT_CLASS + " appearance-none pr-9 cursor-pointer" + (loadingLists ? " opacity-60" : "")}
+                    className={INPUT_CLASS + " appearance-none pr-9 cursor-pointer" + (loadingLists ? " opacity-60" : "") + (errors.leadId ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                   >
                     <option value="">Select a lead…</option>
                     {leads.map((l) => (
@@ -252,6 +269,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                     ))}
                   </select>
                 </div>
+                {errors.leadId && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.leadId}</p>}
               </div>
 
               {/* Company + Owner */}
@@ -322,19 +340,20 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                 {payload.createDeal && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pl-9">
                     <div>
-                      <label className="text-[11px] font-medium mb-1" style={{ color: "var(--color-text-secondary)" }}>
-                        Deal Name
+                      <label className="text-[11px] font-medium mb-1 block" style={{ color: "var(--color-text-secondary)" }}>
+                        Deal Name <span style={{ color: "var(--color-error)" }}>*</span>
                       </label>
                       <input
                         value={payload.dealName}
                         onChange={(e) => setField("dealName", e.target.value)}
                         placeholder="[Lead Name] - New Deal"
-                        className={INPUT_CLASS}
+                        className={INPUT_CLASS + (errors.dealName ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                       />
+                      {errors.dealName && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.dealName}</p>}
                     </div>
                     <div>
                       <label className="text-[11px] font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
-                        <DollarSign size={12} /> Deal Amount
+                        <DollarSign size={12} /> Deal Amount <span style={{ color: "var(--color-error)" }}>*</span>
                       </label>
                       <input
                         type="number"
@@ -343,8 +362,9 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                         value={payload.dealAmount ?? 0}
                         onChange={(e) => setField("dealAmount", Number(e.target.value) || 0)}
                         placeholder="0"
-                        className={INPUT_CLASS}
+                        className={INPUT_CLASS + (errors.dealAmount ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                       />
+                      {errors.dealAmount && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.dealAmount}</p>}
                     </div>
                   </div>
                 )}

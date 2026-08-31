@@ -8,6 +8,10 @@ import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { IdentityResolveModal } from "@/components/customers/IdentityResolveModal";
 import { ConvertLeadModal } from "@/components/customers/ConvertLeadModal";
 import { ConvertCompanyModal } from "@/components/customers/ConvertCompanyModal";
+import { PreflightCheckModal } from "@/components/customers/PreflightCheckModal";
+import { MergeCustomerModal } from "@/components/customers/MergeCustomerModal";
+import { CustomerPreferencesModal } from "@/components/customers/CustomerPreferencesModal";
+import { CustomerOwnershipModal } from "@/components/customers/CustomerOwnershipModal";
 import {
   Users,
   UserCheck,
@@ -20,9 +24,13 @@ import {
   ArrowRightLeft,
   UserPlus,
   Factory,
+  CheckCircle2,
+  GitMerge,
+  Settings2,
+  Crown,
 } from "lucide-react";
 
-type CustomersTab = "customers" | "identity" | "convert-lead" | "convert-company";
+type CustomersTab = "customers" | "identity" | "convert-lead" | "convert-company" | "preflight" | "merge";
 
 interface CustomersStats {
   total: number;
@@ -85,10 +93,12 @@ function SummaryCard({ label, value, icon, iconBg, iconColor, loading, hint }: S
 }
 
 const TABS: { id: CustomersTab; label: string; icon: React.ReactNode }[] = [
-  { id: "customers",       label: "All Customers",  icon: <Users size={14} /> },
+  { id: "customers",       label: "All Customers",   icon: <Users size={14} /> },
   { id: "identity",        label: "Identity Resolve", icon: <Search size={14} /> },
-  { id: "convert-lead",    label: "Convert Lead",   icon: <ArrowRightLeft size={14} /> },
-  { id: "convert-company", label: "Convert Company", icon: <Factory size={14} /> },
+  { id: "preflight",       label: "Preflight Check",  icon: <CheckCircle2 size={14} /> },
+  { id: "merge",           label: "Merge",            icon: <GitMerge size={14} /> },
+  { id: "convert-lead",    label: "Convert Lead",     icon: <ArrowRightLeft size={14} /> },
+  { id: "convert-company", label: "Convert Company",  icon: <Factory size={14} /> },
 ];
 
 function TabBar({ active, onChange }: { active: CustomersTab; onChange: (t: CustomersTab) => void }) {
@@ -122,6 +132,11 @@ export default function CustomersPage() {
   const [identityModalOpen, setIdentityModalOpen] = useState(false);
   const [convertLeadModalOpen, setConvertLeadModalOpen] = useState(false);
   const [convertCompanyModalOpen, setConvertCompanyModalOpen] = useState(false);
+  const [preflightModalOpen, setPreflightModalOpen] = useState(false);
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [prefsModalOpen, setPrefsModalOpen] = useState(false);
+  const [ownershipModalOpen, setOwnershipModalOpen] = useState(false);
+  const [selectedCustomer, setSelectedCustomer] = useState<CanonicalCustomer | null>(null);
 
   const {
     customers, total, page, pageSize, totalPages, filters, loading, error, openMenu,
@@ -153,6 +168,10 @@ export default function CustomersPage() {
       setConvertLeadModalOpen(true);
     } else if (activeTab === "convert-company") {
       setConvertCompanyModalOpen(true);
+    } else if (activeTab === "preflight") {
+      setPreflightModalOpen(true);
+    } else if (activeTab === "merge") {
+      setMergeModalOpen(true);
     }
   }, [activeTab]);
 
@@ -162,6 +181,8 @@ export default function CustomersPage() {
       setIdentityModalOpen(false);
       setConvertLeadModalOpen(false);
       setConvertCompanyModalOpen(false);
+      setPreflightModalOpen(false);
+      setMergeModalOpen(false);
     }
   };
 
@@ -195,6 +216,17 @@ export default function CustomersPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              onClick={() => setPreflightModalOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors shadow-sm
+                bg-[var(--color-surface)]
+                border-[var(--color-border)]
+                text-[var(--color-text-secondary)]
+                hover:bg-[var(--color-surface-hover)]"
+            >
+              <CheckCircle2 size={15} />
+              Preflight
+            </button>
+            <button
               onClick={() => setIdentityModalOpen(true)}
               className="flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors shadow-sm
                 bg-[var(--color-surface)]
@@ -204,6 +236,17 @@ export default function CustomersPage() {
             >
               <GitBranch size={15} />
               Resolve Identity
+            </button>
+            <button
+              onClick={() => setMergeModalOpen(true)}
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors shadow-sm
+                bg-[var(--color-surface)]
+                border-[var(--color-border)]
+                text-[var(--color-text-secondary)]
+                hover:bg-[var(--color-surface-hover)]"
+            >
+              <GitMerge size={15} />
+              Merge
             </button>
             <button
               onClick={handleNewCustomer}
@@ -290,7 +333,20 @@ export default function CustomersPage() {
                 onRefreshCustomers={retry}
                 onFiltersChange={handleFiltersChange}
                 onNewCustomer={handleNewCustomer}
-                onAction={handleAction}
+                onAction={(action, customer) => {
+                  if (action === "Preferences") {
+                    setSelectedCustomer(customer);
+                    setPrefsModalOpen(true);
+                  } else if (action === "Ownership") {
+                    setSelectedCustomer(customer);
+                    setOwnershipModalOpen(true);
+                  } else if (action === "Merge") {
+                    setSelectedCustomer(customer);
+                    setMergeModalOpen(true);
+                  } else {
+                    handleAction(action, customer);
+                  }
+                }}
                 setOpenMenu={setOpenMenu}
                 owners={owners}
                 ownersLoading={ownersLoading}
@@ -322,6 +378,54 @@ export default function CustomersPage() {
                 >
                   <Search size={15} />
                   Run Identity Resolution
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "preflight" && (
+            <div className="p-6">
+              <div className="max-w-2xl mx-auto text-center py-8">
+                <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-violet-500/20 to-indigo-500/20">
+                  <CheckCircle2 size={28} className="text-violet-500" />
+                </div>
+                <h2 className="text-lg font-bold text-[var(--color-text)] mb-2">Preflight Check</h2>
+                <p className="text-sm mb-6" style={{ color: "var(--color-text-secondary)" }}>
+                  Run a preflight before creating or converting a customer record.
+                  Get an action decision: <strong>allow_create</strong>, <strong>link_existing</strong>, or <strong>merge_required</strong>.
+                </p>
+                <button
+                  onClick={() => setPreflightModalOpen(true)}
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-xl text-white text-sm font-semibold transition-all shadow
+                    bg-gradient-to-r from-violet-600 to-indigo-500
+                    hover:shadow-lg"
+                >
+                  <CheckCircle2 size={15} />
+                  Run Preflight Check
+                </button>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "merge" && (
+            <div className="p-6">
+              <div className="max-w-2xl mx-auto text-center py-8">
+                <div className="w-16 h-16 rounded-2xl mx-auto mb-4 flex items-center justify-center bg-gradient-to-br from-rose-500/20 to-pink-500/20">
+                  <GitMerge size={28} className="text-rose-500" />
+                </div>
+                <h2 className="text-lg font-bold text-[var(--color-text)] mb-2">Merge Customers</h2>
+                <p className="text-sm mb-6" style={{ color: "var(--color-text-secondary)" }}>
+                  Merge duplicate customer records into a single surviving record.
+                  Optionally override specific fields and view merge audit history.
+                </p>
+                <button
+                  onClick={() => setMergeModalOpen(true)}
+                  className="inline-flex items-center gap-2 h-10 px-5 rounded-xl text-white text-sm font-semibold transition-all shadow
+                    bg-gradient-to-r from-rose-600 to-pink-500
+                    hover:shadow-lg"
+                >
+                  <GitMerge size={15} />
+                  Open Merge Tool
                 </button>
               </div>
             </div>
@@ -417,6 +521,33 @@ export default function CustomersPage() {
         isOpen={convertCompanyModalOpen}
         onClose={() => { setConvertCompanyModalOpen(false); setActiveTab("customers"); }}
         onSuccess={() => { setConvertCompanyModalOpen(false); setActiveTab("customers"); retry(); }}
+      />
+
+      <PreflightCheckModal
+        isOpen={preflightModalOpen}
+        onClose={() => { setPreflightModalOpen(false); setActiveTab("customers"); }}
+      />
+
+      <MergeCustomerModal
+        isOpen={mergeModalOpen}
+        onClose={() => { setMergeModalOpen(false); setSelectedCustomer(null); setActiveTab("customers"); }}
+        onSuccess={() => { setMergeModalOpen(false); setSelectedCustomer(null); setActiveTab("customers"); retry(); }}
+        preselectedSurvivorId={selectedCustomer?.id ?? ""}
+        preselectedSurvivorName={selectedCustomer?.name ?? ""}
+      />
+
+      <CustomerPreferencesModal
+        isOpen={prefsModalOpen}
+        onClose={() => { setPrefsModalOpen(false); setSelectedCustomer(null); }}
+        customerId={selectedCustomer?.id ?? ""}
+        customerName={selectedCustomer?.name}
+      />
+
+      <CustomerOwnershipModal
+        isOpen={ownershipModalOpen}
+        onClose={() => { setOwnershipModalOpen(false); setSelectedCustomer(null); }}
+        onSuccess={() => { setOwnershipModalOpen(false); setSelectedCustomer(null); retry(); }}
+        customer={selectedCustomer}
       />
     </>
   );

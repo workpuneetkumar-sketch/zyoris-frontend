@@ -135,6 +135,7 @@ const integrationFormSchema = z.object({
     "BEARER_TOKEN",
     "BASIC_AUTH",
     "WEBHOOK_SECRET",
+    "CUSTOM",
     "NONE",
   ] as const),
   // Auth specific credentials
@@ -618,7 +619,7 @@ export function IntegrationWizardModal({
 
   /**
    * Real Connection Test Handler
-   * Calls REAL backend API: POST /api/integrations/{id}/test
+   * Calls REAL backend API: POST /api/v1/integrations/{id}/test
    * Prevents duplicate simultaneous requests, provides loading state & normalized feedback
    */
   const handleTestConnection = async () => {
@@ -631,10 +632,45 @@ export function IntegrationWizardModal({
     const startTime = performance.now();
 
     try {
-      const targetId =
+      let targetId =
         activeIntegrationId ||
         selectedConnector?.connectionId ||
-        selectedConnector?.connectionState?.id ||
+        selectedConnector?.connectionState?.id;
+
+      // If no backend integration ID exists yet, create the instance with encrypted credentials
+      if (!targetId && selectedConnector) {
+        const credentials = buildCredentialsObject(values);
+        const headerObject = buildHeadersObject(values.headers);
+        const createPayload: CreateIntegrationPayload = {
+          connectorId: selectedConnector.id,
+          provider: selectedConnector.provider,
+          name: values.displayName,
+          displayName: values.displayName,
+          targetModule: values.targetModule,
+          targetEntity: values.targetEntity,
+          apiUrl: values.apiUrl,
+          baseUrl: values.apiUrl,
+          httpMethod: values.httpMethod,
+          authType: values.authType,
+          credentials,
+          syncDirection: values.syncDirection,
+          syncFrequency: values.syncFrequency,
+          headers: headerObject,
+          config: values.dynamicFields,
+        };
+        try {
+          const created = await onSubmit(createPayload);
+          if (created?.id) {
+            targetId = created.id;
+            setActiveIntegrationId(created.id);
+          }
+        } catch {
+          // Fall back to connector identifier if creation endpoint is handled alternatively
+        }
+      }
+
+      targetId =
+        targetId ||
         selectedConnector?.id ||
         selectedConnector?.provider ||
         "custom";
@@ -702,7 +738,7 @@ export function IntegrationWizardModal({
 
   /**
    * Real Schema Discovery Handler
-   * Calls REAL backend API: GET /api/integrations/{id}/schema
+   * Calls REAL backend API: GET /api/v1/integrations/{id}/schema
    * Prevents unnecessary refetches when schema is already stored in wizard state
    */
   const handleDiscoverSchema = useCallback(
@@ -752,8 +788,8 @@ export function IntegrationWizardModal({
             if (!initialMap[tf.key]) {
               const directMatch = firstEntityFields.find(
                 (f) =>
-                  f.name.toLowerCase() === tf.key.toLowerCase() ||
-                  f.fullPath.toLowerCase() === tf.key.toLowerCase() ||
+                  f.name?.toLowerCase() === tf.key.toLowerCase() ||
+                  f.fullPath?.toLowerCase() === tf.key.toLowerCase() ||
                   f.label?.toLowerCase() === tf.label.toLowerCase()
               );
               if (directMatch) {
@@ -819,10 +855,10 @@ export function IntegrationWizardModal({
     const q = schemaSearchQuery.toLowerCase().trim();
     return allFlatFields.filter((f) => {
       const matchPath = f.fullPath.toLowerCase().includes(q);
-      const matchName = f.name.toLowerCase().includes(q);
-      const matchLabel = f.label?.toLowerCase().includes(q);
-      const matchType = f.type.toLowerCase().includes(q);
-      const matchDesc = f.description?.toLowerCase().includes(q);
+      const matchName = (f.name || "").toLowerCase().includes(q);
+      const matchLabel = (f.label || "").toLowerCase().includes(q);
+      const matchType = (f.type || "").toLowerCase().includes(q);
+      const matchDesc = (f.description || "").toLowerCase().includes(q);
       return matchPath || matchName || matchLabel || matchType || matchDesc;
     });
   }, [allFlatFields, schemaSearchQuery]);
@@ -2178,7 +2214,7 @@ export function IntegrationWizardModal({
                                   field.sampleValue ??
                                     field.sample ??
                                     field.example ??
-                                    activeEntity.sampleRecords?.[0]?.[field.name] ??
+                                    (field.name ? activeEntity.sampleRecords?.[0]?.[field.name] : undefined) ??
                                     activeEntity.sampleRecords?.[0]?.[field.fullPath]
                                 )}
                               </td>

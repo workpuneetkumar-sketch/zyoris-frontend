@@ -22,6 +22,9 @@ import {
   Building,
   Hash,
   ArrowUpDown,
+  Settings,
+  Crown,
+  GitMerge,
 } from "lucide-react";
 
 import {
@@ -200,9 +203,12 @@ function ActionMenu({
   if (!open) return null;
 
   const actions = [
-    { key: "View",   label: "View details", icon: <Eye size={14} />,   danger: false },
-    { key: "Edit",   label: "Edit customer",  icon: <Edit3 size={14} />, danger: false },
-    { key: "Delete", label: "Delete",         icon: <Trash2 size={14} />, danger: true  },
+    { key: "View",        label: "View details",   icon: <Eye size={14} />,           danger: false },
+    { key: "Edit",        label: "Edit customer",  icon: <Edit3 size={14} />,          danger: false },
+    { key: "Preferences", label: "Preferences",    icon: <Settings size={14} />,       danger: false },
+    { key: "Ownership",   label: "Update Owner",   icon: <Crown size={14} />,          danger: false },
+    { key: "Merge",       label: "Merge into…",    icon: <GitMerge size={14} />,       danger: false },
+    { key: "Delete",      label: "Delete",         icon: <Trash2 size={14} />,         danger: true  },
   ];
 
   return (

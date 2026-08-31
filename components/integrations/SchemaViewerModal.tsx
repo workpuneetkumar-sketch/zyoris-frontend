@@ -53,11 +53,10 @@ export function SchemaViewerModal({
   const filteredFields = currentEntity?.fields?.filter((f) => {
     if (!searchQuery.trim()) return true;
     const q = searchQuery.toLowerCase();
-    return (
-      f.name.toLowerCase().includes(q) ||
-      f.label?.toLowerCase().includes(q) ||
-      f.type.toLowerCase().includes(q)
-    );
+    const nameStr = (f.name || f.path || "").toLowerCase();
+    const labelStr = (f.label || "").toLowerCase();
+    const typeStr = (f.type || "").toLowerCase();
+    return nameStr.includes(q) || labelStr.includes(q) || typeStr.includes(q);
   }) || [];
 
   return (
@@ -158,7 +157,7 @@ export function SchemaViewerModal({
                   <table className="w-full text-left text-xs">
                     <thead className="bg-surface-secondary/60 text-text-muted border-b border-border sticky top-0">
                       <tr>
-                        <th className="py-2.5 px-3 font-semibold uppercase">Field Name</th>
+                        <th className="py-2.5 px-3 font-semibold uppercase">Field Path / Name</th>
                         <th className="py-2.5 px-3 font-semibold uppercase">Type</th>
                         <th className="py-2.5 px-3 font-semibold uppercase">Attributes</th>
                         <th className="py-2.5 px-3 font-semibold uppercase">Description</th>
@@ -168,7 +167,7 @@ export function SchemaViewerModal({
                       {filteredFields.map((field, idx) => (
                         <tr key={idx} className="hover:bg-surface-hover transition-colors">
                           <td className="py-2.5 px-3 font-mono font-medium text-text">
-                            {field.name}
+                            {field.path || field.name}
                             {field.label && (
                               <span className="block text-[10px] font-sans text-text-muted">
                                 {field.label}
