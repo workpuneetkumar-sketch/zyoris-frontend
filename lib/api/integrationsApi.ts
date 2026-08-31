@@ -13,6 +13,11 @@ import {
   StatusToggleResponse,
   RotateCredentialsPayload,
   RotateCredentialsResponse,
+  FieldMapping,
+  SchemaMappingPayload,
+  SchemaMappingResponse,
+  DiscoverSchemaPayload,
+  DiscoveredEntity,
 } from "@/types/integrations";
 
 /**
@@ -187,6 +192,53 @@ export async function triggerSyncApi(id: string): Promise<SyncResponse> {
 }
 
 /**
+ * Normalizes raw schema discovery responses into standard DiscoveredSchemaResponse
+ */
+function normalizeSchemaResponse(data: any): DiscoveredSchemaResponse {
+  if (!data) {
+    return { entities: [] };
+  }
+  if (Array.isArray(data)) {
+    return { entities: data, recordCount: data.length };
+  }
+  const payload =
+    data.data &&
+    typeof data.data === "object" &&
+    !Array.isArray(data.data) &&
+    (data.data.entities || data.data.fields || data.data.schema)
+      ? data.data
+      : data;
+
+  const rawEntities: DiscoveredEntity[] =
+    Array.isArray(payload?.entities) && payload.entities.length > 0
+      ? payload.entities
+      : Array.isArray(payload?.fields) && payload.fields.length > 0
+      ? [
+          {
+            name: payload.name || payload.provider || "DefaultEntity",
+            label: payload.label || payload.name || "Entity",
+            fields: payload.fields,
+            recordCount: payload.recordCount ?? payload.totalRecords,
+            pagination: payload.pagination,
+            sampleRecords:
+              payload.sampleRecords ?? payload.sampleData ?? payload.records,
+          },
+        ]
+      : [];
+
+  return {
+    ...payload,
+    entities: rawEntities,
+    fields: payload.fields,
+    recordCount: payload.recordCount ?? payload.totalRecords ?? payload.total,
+    pagination: payload.pagination,
+    sampleRecords:
+      payload.sampleRecords ?? payload.sampleData ?? payload.records,
+    sampledAt: payload.sampledAt ?? payload.discoveredAt,
+  };
+}
+
+/**
  * Discover schema, entities, and fields available from a connected integration.
  * GET /api/v1/integrations/{id}/schema
  */
@@ -196,86 +248,71 @@ export async function getIntegrationSchemaApi(
   const response = await api.get(
     `/api/v1/integrations/${encodeURIComponent(id)}/schema`
   );
-  const data = response.data;
-  if (Array.isArray(data)) {
-    return { entities: data, recordCount: data.length };
-  }
-  if (Array.isArray(data?.entities)) {
-    return {
-      ...data,
-      entities: data.entities,
-      recordCount: data.recordCount ?? data.totalRecords ?? data.total,
-      pagination: data.pagination,
-      sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
-    };
-  }
-  if (data?.data) {
-    if (Array.isArray(data.data)) {
-      return { entities: data.data, recordCount: data.data.length };
-    }
-    if (Array.isArray(data.data?.entities)) {
-      return {
-        ...data.data,
-        entities: data.data.entities,
-        recordCount:
-          data.data.recordCount ??
-          data.data.totalRecords ??
-          data.recordCount ??
-          data.totalRecords,
-        pagination: data.data.pagination ?? data.pagination,
-        sampleRecords:
-          data.data.sampleRecords ??
-          data.data.sampleData ??
-          data.data.records ??
-          data.sampleRecords,
-      };
-    }
-    if (Array.isArray(data.data?.fields)) {
-      return {
-        entities: [
-          {
-            name: data.data.name || data.data.provider || "DefaultEntity",
-            label: data.data.label || data.data.name || "Entity",
-            fields: data.data.fields,
-            recordCount: data.data.recordCount ?? data.data.totalRecords,
-            pagination: data.data.pagination,
-            sampleRecords:
-              data.data.sampleRecords ??
-              data.data.sampleData ??
-              data.data.records,
-          },
-        ],
-        fields: data.data.fields,
-        recordCount: data.data.recordCount ?? data.data.totalRecords,
-        pagination: data.data.pagination,
-        sampleRecords:
-          data.data.sampleRecords ??
-          data.data.sampleData ??
-          data.data.records,
-      };
-    }
-    return data.data;
-  }
-  if (Array.isArray(data?.fields)) {
-    return {
-      entities: [
-        {
-          name: data.name || data.provider || "DefaultEntity",
-          label: data.label || data.name || "Entity",
-          fields: data.fields,
-          recordCount: data.recordCount ?? data.totalRecords,
-          pagination: data.pagination,
-          sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
-        },
-      ],
-      fields: data.fields,
-      recordCount: data.recordCount ?? data.totalRecords,
-      pagination: data.pagination,
-      sampleRecords: data.sampleRecords ?? data.sampleData ?? data.records,
-    };
-  }
-  return { entities: [] };
+  return normalizeSchemaResponse(response.data);
 }
+
+/**
+ * Discover and infer schema from live connection or sample payload.
+ * POST /api/integrations/{id}/schema/discover
+ */
+export async function discoverIntegrationSchemaApi(
+  id: string,
+  payload?: DiscoverSchemaPayload | Record<string, any>
+): Promise<DiscoveredSchemaResponse> {
+  const response = await api.post(
+    `/api/integrations/${encodeURIComponent(id)}/schema/discover`,
+    payload || {}
+  );
+  return normalizeSchemaResponse(response.data);
+}
+
+/**
+ * Retrieve saved field mappings for an integration.
+ * GET /api/integrations/{id}/schema/mapping
+ */
+export async function getSchemaMappingApi(
+  id: string
+): Promise<SchemaMappingResponse> {
+  const response = await api.get(
+    `/api/integrations/${encodeURIComponent(id)}/schema/mapping`
+  );
+  const data = response.data;
+  if (!data) {
+    return { mappings: [] };
+  }
+  if (Array.isArray(data)) {
+    return { mappings: data };
+  }
+  const payload = data.data || data;
+  if (Array.isArray(payload)) {
+    return { mappings: payload };
+  }
+  return {
+    ...payload,
+    mappings: Array.isArray(payload.mappings) ? payload.mappings : [],
+  };
+}
+
+/**
+ * Save or upsert field mappings for an integration.
+ * POST /api/integrations/{id}/schema/mapping
+ */
+export async function saveSchemaMappingApi(
+  id: string,
+  payload: SchemaMappingPayload
+): Promise<SchemaMappingResponse> {
+  const response = await api.post(
+    `/api/integrations/${encodeURIComponent(id)}/schema/mapping`,
+    payload
+  );
+  const data = response.data;
+  const resPayload = data?.data || data;
+  return {
+    ...resPayload,
+    mappings: Array.isArray(resPayload?.mappings) ? resPayload.mappings : payload.mappings,
+  };
+}
+
 
 /**
  * Test live connectivity, authentication, and credentials against external provider.
