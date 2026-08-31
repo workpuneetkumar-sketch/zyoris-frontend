@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowRight, Loader2, Sparkles } from "lucide-react";
 
 interface WizardFooterProps {
   currentStep: number;
-  totalSteps: number;
+  totalSteps?: number;
   isSubmitting?: boolean;
   submitLabel?: string;
   onPrevious: () => void;
@@ -15,7 +15,7 @@ interface WizardFooterProps {
 
 export function WizardFooter({
   currentStep,
-  totalSteps,
+  totalSteps = 6,
   isSubmitting = false,
   submitLabel = "Finish",
   onPrevious,

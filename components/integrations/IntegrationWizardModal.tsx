@@ -58,6 +58,8 @@ import { toast } from "sonner";
 import {
   testIntegrationConnectionApi,
   getIntegrationSchemaApi,
+  createIntegrationMappingApi,
+  updateIntegrationMappingApi,
 } from "@/lib/api/integrationsApi";
 import { WizardProgress } from "./wizard/WizardProgress";
 import { integrationWizardSteps } from "./wizard/wizardSteps";
@@ -66,6 +68,10 @@ import {
   REST_CONTENT_TYPES,
   parseRequestBody,
 } from "./wizard/restConfiguration";
+import {
+  EntitySelectionMappingFlow,
+  FieldMappingEntry,
+} from "./wizard/EntitySelectionMappingFlow";
 
 interface IntegrationWizardModalProps {
   isOpen: boolean;
@@ -410,8 +416,11 @@ export function IntegrationWizardModal({
   const [selectedEntityName, setSelectedEntityName] = useState<string>("");
   const [showSampleRecordsDrawer, setShowSampleRecordsDrawer] = useState(false);
 
-  // Field Mapping state — initialized from discovered schema
+  // Field Mapping state — initialized from discovered schema and backend mappings
   const [mappedFields, setMappedFields] = useState<Record<string, string>>({});
+  const [rawMappingEntries, setRawMappingEntries] = useState<FieldMappingEntry[]>([]);
+  const [isMappingValid, setIsMappingValid] = useState<boolean>(true);
+  const [missingRequiredFields, setMissingRequiredFields] = useState<string[]>([]);
 
   useEffect(() => {
     setSelectedConnector(initialConnector);
@@ -912,15 +921,41 @@ export function IntegrationWizardModal({
 
   // Final Form Submission
   const onFormSubmit = async (data: FormValues) => {
+    // Strictly only allow submission on Step 6
+    if (step !== 6) {
+      return;
+    }
+
     if (!selectedConnector) {
       toast.error("Please select a connector first.");
       return;
     }
 
-    if (data.authType === "OAUTH2") {
-      await handleInitiateOAuth();
+    // Strict validation: target required fields must be satisfied
+    if (step === 6 && !isMappingValid && missingRequiredFields.length > 0) {
+      toast.error(
+        `Required target fields missing: ${missingRequiredFields.join(
+          ", "
+        )}. Please map all required fields before completing setup.`
+      );
       return;
     }
+
+    // Helper to format backend validation error details
+    const formatBackendError = (err: any): string => {
+      const details = err?.response?.data?.details;
+      if (Array.isArray(details) && details.length > 0) {
+        const detailMsgs = details
+          .map((d: any) => `${d.field || "Field"}: ${d.message}`)
+          .join(" | ");
+        return `${err?.response?.data?.message || "Validation failed"}: ${detailMsgs}`;
+      }
+      return (
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to finalize integration."
+      );
+    };
 
     // If integration was already created during the connection test, update if needed and close
     if (activeIntegrationId && onUpdateIntegration) {
@@ -934,6 +969,49 @@ export function IntegrationWizardModal({
           fieldMappings: mappedFields,
           discoveredAt: discoveredSchema?.discoveredAt || new Date().toISOString(),
         };
+
+        // Sync any unpersisted mappings to backend API
+        if (rawMappingEntries.length > 0) {
+          const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
+          const targetEntName = data.targetEntity || "DefaultEntity";
+
+          for (const entry of rawMappingEntries) {
+            if (entry.sourceField && entry.isDirty) {
+              try {
+                if (entry.backendMappingId) {
+                  await updateIntegrationMappingApi(activeIntegrationId, entry.backendMappingId, {
+                    sourceEntity: sourceEntName,
+                    sourceField: entry.sourceField,
+                    targetEntity: targetEntName,
+                    targetField: entry.targetField,
+                    status: entry.status,
+                    transformation: {
+                      type: entry.transformationType || "none",
+                      config: entry.transformationConfig,
+                      defaultValue: entry.defaultValue,
+                    },
+                  });
+                } else {
+                  await createIntegrationMappingApi(activeIntegrationId, {
+                    sourceEntity: sourceEntName,
+                    sourceField: entry.sourceField,
+                    targetEntity: targetEntName,
+                    targetField: entry.targetField,
+                    status: entry.status || "ACTIVE",
+                    confidence: 1,
+                    transformation: {
+                      type: entry.transformationType || "none",
+                      config: entry.transformationConfig,
+                      defaultValue: entry.defaultValue,
+                    },
+                  });
+                }
+              } catch (mapErr) {
+                console.warn(`Could not sync mapping for ${entry.targetField}:`, mapErr);
+              }
+            }
+          }
+        }
 
         await onUpdateIntegration(activeIntegrationId, {
           displayName: data.displayName,
@@ -950,10 +1028,7 @@ export function IntegrationWizardModal({
         reset();
         onClose();
       } catch (err: any) {
-        const errorMsg =
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to finalize integration.";
+        const errorMsg = formatBackendError(err);
         toast.error(errorMsg);
       } finally {
         setIsSubmitting(false);
@@ -989,15 +1064,42 @@ export function IntegrationWizardModal({
         config: dynamicConfig,
       };
 
-      await onSubmit(payload);
+      const created = await onSubmit(payload);
+      const newIntegrationId = created?.id;
+
+      // If backend created integration instance, sync field mappings
+      if (newIntegrationId && rawMappingEntries.length > 0) {
+        const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
+        const targetEntName = data.targetEntity || "DefaultEntity";
+
+        for (const entry of rawMappingEntries) {
+          if (entry.sourceField) {
+            try {
+              await createIntegrationMappingApi(newIntegrationId, {
+                sourceEntity: sourceEntName,
+                sourceField: entry.sourceField,
+                targetEntity: targetEntName,
+                targetField: entry.targetField,
+                status: entry.status || "ACTIVE",
+                confidence: 1,
+                transformation: {
+                  type: entry.transformationType || "none",
+                  config: entry.transformationConfig,
+                  defaultValue: entry.defaultValue,
+                },
+              });
+            } catch (mapErr) {
+              console.warn(`Could not sync mapping for ${entry.targetField}:`, mapErr);
+            }
+          }
+        }
+      }
+
       toast.success(`Successfully connected ${selectedConnector.name}!`);
       reset();
       onClose();
     } catch (err: any) {
-      const errorMsg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to finalize integration.";
+      const errorMsg = formatBackendError(err);
       toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
@@ -1048,31 +1150,71 @@ export function IntegrationWizardModal({
     return <span className="font-mono text-[11px] text-text">{String(val)}</span>;
   };
 
+  // Memoized handlers for EntitySelectionMappingFlow to prevent re-render loops
+  const handleMappingModuleChange = useCallback((moduleId: string, entityName: string) => {
+    setValue("targetModule", moduleId);
+    setValue("targetEntity", entityName);
+  }, [setValue]);
+
+  const handleValidationChange = useCallback((isValid: boolean, missing: string[]) => {
+    setIsMappingValid((prev) => (prev !== isValid ? isValid : prev));
+    setMissingRequiredFields((prev) => {
+      if (prev.length === missing.length && prev.every((v, i) => v === missing[i])) {
+        return prev;
+      }
+      return missing;
+    });
+  }, []);
+
+  const handleMappingsChange = useCallback((record: Record<string, string>, entries: FieldMappingEntry[]) => {
+    setMappedFields((prev) => {
+      const prevKeys = Object.keys(prev);
+      const newKeys = Object.keys(record);
+      if (prevKeys.length === newKeys.length && prevKeys.every((k) => prev[k] === record[k])) {
+        return prev;
+      }
+      return record;
+    });
+    setRawMappingEntries(entries);
+    setValue("fieldMappings", record);
+  }, [setValue]);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-4xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm transition-all duration-200 ${
+        isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+    >
+      <div className="relative w-full max-w-4xl max-h-[90vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between bg-surface-secondary/50">
+        <div className="p-6 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-              <Zap className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold">
+              {selectedConnector?.iconUrl ? (
+                <img
+                  src={selectedConnector.iconUrl}
+                  alt={selectedConnector.name}
+                  className="w-6 h-6 object-contain"
+                />
+              ) : (
+                <Zap className="w-5 h-5" />
+              )}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-text">
+              <h3 className="text-base font-bold text-text">
                 {selectedConnector
                   ? `Configure ${selectedConnector.name}`
-                  : "Add New Integration"}
-              </h2>
-              <p className="text-xs text-text-muted">
-                Step {step} of 6:{" "}
-                {step === 1 && "Select Connector"}
-                {step === 2 && "Endpoint & Module Mapping"}
-                {step === 3 && "Authentication & Security"}
-                {step === 4 && "Review & Connection Test"}
-                {step === 5 && "Schema Discovery & Sample Data"}
-                {step === 6 && "Field Mapping & Review"}
+                  : "Setup New Integration"}
+              </h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                {step === 1 && "Step 1 of 6: Connector Selection"}
+                {step === 2 && "Step 2 of 6: Protocol & Endpoint Configuration"}
+                {step === 3 && "Step 3 of 6: Authentication & Credentials"}
+                {step === 4 && "Step 4 of 6: Verification & Connection Test"}
+                {step === 5 && "Step 5 of 6: Schema Discovery & Sample Data"}
+                {step === 6 && "Step 6 of 6: Field Mapping & Review"}
               </p>
             </div>
           </div>
@@ -1090,18 +1232,23 @@ export function IntegrationWizardModal({
           steps={integrationWizardSteps}
           currentStep={step}
           onStepChange={(s) => {
-            // Respect Connection Test gating: cannot jump to step 5 or 6 without passed connection test
-            if (s >= 5 && !isSchemaUnlocked) {
-              toast.error("Please complete a successful connection test before accessing Schema Discovery.");
-              return;
-            }
             setStep(s as any);
           }}
         />
 
         {/* Form Body */}
         <form
-          onSubmit={handleSubmit(onFormSubmit)}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (step === 6) {
+              handleSubmit(onFormSubmit)(e);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && step !== 6) {
+              e.preventDefault();
+            }
+          }}
           className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col"
         >
           {/* STEP 1: CONNECTOR SELECTION */}
@@ -1864,30 +2011,14 @@ export function IntegrationWizardModal({
                   <div>
                     <button
                       type="button"
-                      disabled={!isSchemaUnlocked}
                       onClick={() => {
-                        if (isSchemaUnlocked) {
-                          setStep(5);
-                        }
+                        setStep(5);
                       }}
-                      className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                        isSchemaUnlocked
-                          ? "bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
-                          : "bg-surface-secondary text-text-muted border border-border cursor-not-allowed opacity-60"
-                      }`}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
                     >
-                      {isSchemaUnlocked ? (
-                        <>
-                          <Database className="w-3.5 h-3.5" />
-                          <span>Discover Schema</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>Schema Locked</span>
-                        </>
-                      )}
+                      <Database className="w-3.5 h-3.5" />
+                      <span>Discover Schema & Mapping</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -2229,86 +2360,20 @@ export function IntegrationWizardModal({
             </div>
           )}
 
-          {/* STEP 6: FIELD MAPPING & REVIEW */}
+          {/* STEP 6: ENTITY SELECTION & FIELD MAPPING */}
           {step === 6 && (
-            <div className="space-y-5 flex-1 flex flex-col">
-              <div className="p-4 rounded-xl border border-border bg-surface-secondary/30 flex items-center justify-between gap-3">
-                <div>
-                  <h4 className="text-sm font-bold text-text">
-                    Field Mapping: {selectedConnector?.name} → Zyoris {currentModuleConfig.label}
-                  </h4>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    Map discovered remote schema fields to Zyoris {currentModuleConfig.entity} attributes. Discovered schema loaded from wizard state.
-                  </p>
-                </div>
-                <div className="px-2.5 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-text">
-                  {Object.keys(mappedFields).filter((k) => mappedFields[k]).length} of{" "}
-                  {currentModuleConfig.targetFields.length} Mapped
-                </div>
-              </div>
-
-              {/* Mappings Table */}
-              <div className="flex-1 overflow-y-auto border border-border rounded-xl bg-surface max-h-[380px]">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-surface-secondary/70 text-text-muted border-b border-border sticky top-0 z-10">
-                    <tr>
-                      <th className="py-2.5 px-3 font-semibold uppercase text-[10px] w-1/3">
-                        Zyoris Target Field ({currentModuleConfig.entity})
-                      </th>
-                      <th className="py-2.5 px-3 font-semibold uppercase text-[10px] text-center w-12">
-                        Map
-                      </th>
-                      <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">
-                        Remote Discovered Field ({selectedConnector?.name || "Provider"})
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {currentModuleConfig.targetFields.map((tf) => {
-                      const currentVal = mappedFields[tf.key] || "";
-                      return (
-                        <tr key={tf.key} className="hover:bg-surface-hover transition-colors">
-                          <td className="py-2.5 px-3">
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-semibold text-text">{tf.label}</span>
-                              {tf.required && (
-                                <span className="text-[10px] font-bold text-error">*</span>
-                              )}
-                            </div>
-                            <span className="font-mono text-[10px] text-text-muted">
-                              zyoris.{currentTargetModule}.{tf.key}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3 text-center text-text-muted">
-                            <ArrowRight className="w-3.5 h-3.5 mx-auto text-primary" />
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <select
-                              value={currentVal}
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                setMappedFields((prev) => ({
-                                  ...prev,
-                                  [tf.key]: val,
-                                }));
-                              }}
-                              className="w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                            >
-                              <option value="">-- Select Remote Field --</option>
-                              {allFlatFields.map((f) => (
-                                <option key={f.fullPath} value={f.fullPath}>
-                                  {f.fullPath} ({f.type}) {f.required ? "• Required" : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <EntitySelectionMappingFlow
+              connector={selectedConnector}
+              integrationId={activeIntegrationId}
+              discoveredSchema={discoveredSchema}
+              selectedModuleId={watch("targetModule") || "leads"}
+              selectedEntityId={watch("targetEntity") || "Lead"}
+              onModuleChange={handleMappingModuleChange}
+              onValidationChange={handleValidationChange}
+              onMappingsChange={handleMappingsChange}
+              initialMappings={mappedFields}
+              disabled={isSubmitting}
+            />
           )}
 
           {/* Footer Controls */}
@@ -2338,16 +2403,15 @@ export function IntegrationWizardModal({
               {step < 6 ? (
                 <button
                   type="button"
-                  onClick={() => {
+                  key={`wizard-next-step-${step}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     if (!selectedConnector) {
                       toast.error("Please pick a connector first");
                       return;
                     }
-                    if (step === 4 && !isSchemaUnlocked) {
-                      toast.error("Please complete a successful connection test before proceeding to Schema Discovery.");
-                      return;
-                    }
-                    setStep((prev) => (prev + 1) as any);
+                    setStep((prev) => Math.min(6, prev + 1) as any);
                   }}
                   className="flex items-center gap-1 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
                 >
@@ -2356,8 +2420,18 @@ export function IntegrationWizardModal({
                 </button>
               ) : (
                 <button
-                  type="submit"
-                  disabled={isSubmitting || isTesting}
+                  type="button"
+                  key="wizard-finish-step-6"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSubmit(onFormSubmit)(e);
+                  }}
+                  disabled={isSubmitting || isTesting || !isMappingValid}
+                  title={
+                    !isMappingValid
+                      ? `Missing required fields: ${missingRequiredFields.join(", ")}`
+                      : "Finish and connect integration"
+                  }
                   className="flex items-center gap-1.5 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

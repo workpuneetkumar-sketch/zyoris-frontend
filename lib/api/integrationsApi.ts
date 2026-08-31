@@ -13,6 +13,12 @@ import {
   StatusToggleResponse,
   RotateCredentialsPayload,
   RotateCredentialsResponse,
+  IntegrationMapping,
+  CreateMappingRequest,
+  UpdateMappingRequest,
+  MappingListResponse,
+  PreviewTransformationPayload,
+  PreviewTransformationResponse,
 } from "@/types/integrations";
 
 /**
@@ -338,3 +344,107 @@ export async function resumeIntegrationApi(
   );
   return response.data;
 }
+
+/**
+ * List all configured field mappings for an integration.
+ * GET /api/v1/integrations/{id}/mappings
+ */
+export async function getIntegrationMappingsApi(
+  id: string,
+  params?: {
+    sourceEntity?: string;
+    targetEntity?: string;
+    status?: string;
+  }
+): Promise<IntegrationMapping[]> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/mappings`,
+    { params }
+  );
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return data;
+  }
+  if (Array.isArray(data?.mappings)) {
+    return data.mappings;
+  }
+  if (Array.isArray(data?.data)) {
+    return data.data;
+  }
+  return [];
+}
+
+/**
+ * Create a new field mapping for an integration.
+ * POST /api/v1/integrations/{id}/mappings
+ */
+export async function createIntegrationMappingApi(
+  id: string,
+  payload: CreateMappingRequest
+): Promise<IntegrationMapping> {
+  const response = await api.post(
+    `/api/v1/integrations/${encodeURIComponent(id)}/mappings`,
+    payload
+  );
+  return response.data?.mapping || response.data?.data || response.data;
+}
+
+/**
+ * Get single field mapping by ID.
+ * GET /api/v1/integrations/{id}/mappings/{mappingId}
+ */
+export async function getIntegrationMappingByIdApi(
+  id: string,
+  mappingId: string
+): Promise<IntegrationMapping> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/mappings/${encodeURIComponent(mappingId)}`
+  );
+  return response.data?.mapping || response.data?.data || response.data;
+}
+
+/**
+ * Update an existing field mapping.
+ * PATCH /api/v1/integrations/{id}/mappings/{mappingId}
+ */
+export async function updateIntegrationMappingApi(
+  id: string,
+  mappingId: string,
+  payload: UpdateMappingRequest
+): Promise<IntegrationMapping> {
+  const response = await api.patch(
+    `/api/v1/integrations/${encodeURIComponent(id)}/mappings/${encodeURIComponent(mappingId)}`,
+    payload
+  );
+  return response.data?.mapping || response.data?.data || response.data;
+}
+
+/**
+ * Delete a field mapping.
+ * DELETE /api/v1/integrations/{id}/mappings/{mappingId}
+ */
+export async function deleteIntegrationMappingApi(
+  id: string,
+  mappingId: string
+): Promise<{ success: boolean; message?: string }> {
+  const response = await api.delete(
+    `/api/v1/integrations/${encodeURIComponent(id)}/mappings/${encodeURIComponent(mappingId)}`
+  );
+  return response.data;
+}
+
+/**
+ * Preview transformation rules on a sample value.
+ * POST /integrations/{id}/transform/preview
+ */
+export async function previewTransformationApi(
+  id: string,
+  payload: PreviewTransformationPayload
+): Promise<PreviewTransformationResponse> {
+  const response = await api.post(
+    `/integrations/${encodeURIComponent(id)}/transform/preview`,
+    payload
+  );
+  return response.data;
+}
+

@@ -13,6 +13,9 @@ import {
   RotateCredentialsPayload,
   RotateCredentialsResponse,
   ReconnectPayload,
+  IntegrationMapping,
+  CreateMappingRequest,
+  UpdateMappingRequest,
 } from "@/types/integrations";
 import {
   getConnectorsApi,
@@ -28,6 +31,10 @@ import {
   pauseIntegrationApi,
   resumeIntegrationApi,
   connectOAuthApi,
+  getIntegrationMappingsApi,
+  createIntegrationMappingApi,
+  updateIntegrationMappingApi,
+  deleteIntegrationMappingApi,
 } from "@/lib/api/integrationsApi";
 
 export type StatusFilter =
@@ -436,6 +443,35 @@ export function useIntegrations() {
     return await connectOAuthApi(provider, payload);
   };
 
+  const getMappings = async (
+    id: string,
+    params?: { sourceEntity?: string; targetEntity?: string; status?: string }
+  ): Promise<IntegrationMapping[]> => {
+    return await getIntegrationMappingsApi(id, params);
+  };
+
+  const createMapping = async (
+    id: string,
+    payload: CreateMappingRequest
+  ): Promise<IntegrationMapping> => {
+    return await createIntegrationMappingApi(id, payload);
+  };
+
+  const updateMapping = async (
+    id: string,
+    mappingId: string,
+    payload: UpdateMappingRequest
+  ): Promise<IntegrationMapping> => {
+    return await updateIntegrationMappingApi(id, mappingId, payload);
+  };
+
+  const deleteMapping = async (
+    id: string,
+    mappingId: string
+  ): Promise<{ success: boolean; message?: string }> => {
+    return await deleteIntegrationMappingApi(id, mappingId);
+  };
+
   return {
     connectors,
     integrations,
@@ -462,5 +498,9 @@ export function useIntegrations() {
     testConnection,
     fetchSchema,
     initiateOAuth,
+    getMappings,
+    createMapping,
+    updateMapping,
+    deleteMapping,
   };
 }
