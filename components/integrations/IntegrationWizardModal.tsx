@@ -65,6 +65,10 @@ interface IntegrationWizardModalProps {
   ) => Promise<TestConnectionResponse>;
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
   onUpdateIntegration?: (id: string, payload: UpdateIntegrationPayload) => Promise<any>;
+  onFetchSchema?: (id: string) => Promise<any>;
+  onDiscoverSchema?: (id: string, payload?: any) => Promise<any>;
+  onGetMapping?: (id: string) => Promise<any>;
+  onSaveMapping?: (id: string, payload: any) => Promise<any>;
   onViewSchema?: (connector: Connector) => void;
 }
 
@@ -176,6 +180,10 @@ export function IntegrationWizardModal({
   onTestConnection,
   onOAuthConnect,
   onUpdateIntegration,
+  onFetchSchema,
+  onDiscoverSchema,
+  onGetMapping,
+  onSaveMapping,
   onViewSchema,
 }: IntegrationWizardModalProps) {
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(

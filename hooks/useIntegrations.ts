@@ -13,6 +13,10 @@ import {
   RotateCredentialsPayload,
   RotateCredentialsResponse,
   ReconnectPayload,
+  FieldMapping,
+  SchemaMappingPayload,
+  SchemaMappingResponse,
+  DiscoverSchemaPayload,
 } from "@/types/integrations";
 import {
   getConnectorsApi,
@@ -24,6 +28,9 @@ import {
   rotateCredentialsApi,
   triggerSyncApi,
   getIntegrationSchemaApi,
+  discoverIntegrationSchemaApi,
+  getSchemaMappingApi,
+  saveSchemaMappingApi,
   testIntegrationConnectionApi,
   pauseIntegrationApi,
   resumeIntegrationApi,
@@ -429,6 +436,26 @@ export function useIntegrations() {
     return await getIntegrationSchemaApi(id);
   };
 
+  const discoverSchema = async (
+    id: string,
+    payload?: DiscoverSchemaPayload | Record<string, any>
+  ): Promise<DiscoveredSchemaResponse> => {
+    return await discoverIntegrationSchemaApi(id, payload);
+  };
+
+  const getSchemaMapping = async (
+    id: string
+  ): Promise<SchemaMappingResponse> => {
+    return await getSchemaMappingApi(id);
+  };
+
+  const saveSchemaMapping = async (
+    id: string,
+    payload: SchemaMappingPayload
+  ): Promise<SchemaMappingResponse> => {
+    return await saveSchemaMappingApi(id, payload);
+  };
+
   const initiateOAuth = async (
     provider: string,
     payload?: Record<string, any>
@@ -461,6 +488,9 @@ export function useIntegrations() {
     resumeIntegration,
     testConnection,
     fetchSchema,
+    discoverSchema,
+    getSchemaMapping,
+    saveSchemaMapping,
     initiateOAuth,
   };
 }

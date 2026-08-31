@@ -248,8 +248,9 @@ export interface DiscoveredPagination {
 }
 
 export interface DiscoveredField {
-  name: string;
+  name?: string;
   path?: string;
+  nestedPath?: string;
   label?: string;
   type: string;
   required?: boolean;
@@ -282,10 +283,14 @@ export interface DiscoveredEntity {
 }
 
 export interface DiscoveredSchemaResponse {
+  success?: boolean;
+  integrationId?: string;
+  provider?: string;
+  fields?: DiscoveredField[];
   entities: DiscoveredEntity[];
   discoveredAt?: string;
+  sampledAt?: string;
   version?: string;
-  provider?: string;
   recordCount?: number;
   totalRecords?: number;
   pagination?: DiscoveredPagination;
@@ -341,4 +346,44 @@ export interface StatusToggleResponse {
   success: boolean;
   status: IntegrationStatus;
   message?: string;
+}
+
+export interface FieldMapping {
+  id?: string;
+  sourceField: string;
+  targetField: string;
+  transformation?: string;
+  defaultValue?: any;
+  required?: boolean;
+  sourceType?: string;
+  targetType?: string;
+  description?: string;
+  [key: string]: any;
+}
+
+export interface SchemaMappingPayload {
+  integrationId?: string;
+  mappings: FieldMapping[];
+  targetModule?: string;
+  targetEntity?: string;
+  version?: string;
+  [key: string]: any;
+}
+
+export interface SchemaMappingResponse {
+  success?: boolean;
+  integrationId?: string;
+  mappings: FieldMapping[];
+  targetModule?: string;
+  targetEntity?: string;
+  updatedAt?: string;
+  createdAt?: string;
+  [key: string]: any;
+}
+
+export interface DiscoverSchemaPayload {
+  samplePayload?: Record<string, any> | any[];
+  targetEntity?: string;
+  targetModule?: string;
+  [key: string]: any;
 }
