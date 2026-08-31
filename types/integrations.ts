@@ -440,3 +440,124 @@ export interface StatusToggleResponse {
   status: IntegrationStatus;
   message?: string;
 }
+
+export type MappingStatus = "ACTIVE" | "INACTIVE" | "PENDING" | "ERROR";
+
+export type TransformationRuleType =
+  | "none"
+  | "UPPERCASE"
+  | "LOWERCASE"
+  | "TRIM"
+  | "PARSE_DATE"
+  | "DEFAULT_VALUE"
+  | "REGEX_REPLACE"
+  | (string & {});
+
+export interface MappingTransformation {
+  type: TransformationRuleType;
+  config?: Record<string, any>;
+  defaultValue?: any;
+}
+
+export interface IntegrationMapping {
+  id: string;
+  integrationId: string;
+  organizationId: string;
+  sourceEntity: string;
+  sourceField: string;
+  targetEntity: string;
+  targetField: string;
+  status: MappingStatus;
+  confidence: number;
+  required: boolean;
+  transformation: MappingTransformation;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateMappingRequest {
+  sourceEntity: string;
+  sourceField: string;
+  targetEntity: string;
+  targetField: string;
+  status?: MappingStatus;
+  confidence?: number;
+  required?: boolean;
+  transformation?: MappingTransformation;
+}
+
+export interface UpdateMappingRequest {
+  sourceEntity?: string;
+  sourceField?: string;
+  targetEntity?: string;
+  targetField?: string;
+  status?: MappingStatus;
+  confidence?: number;
+  required?: boolean;
+  transformation?: MappingTransformation;
+}
+
+export interface MappingListResponse {
+  mappings: IntegrationMapping[];
+  total: number;
+}
+
+export interface TransformationRuleItem {
+  type: TransformationRuleType;
+  params?: Record<string, any>;
+}
+
+export interface PreviewTransformationPayload {
+  sampleValue: string;
+  rules: TransformationRuleItem[];
+}
+
+export interface TransformationStepTrace {
+  ruleIndex: number;
+  ruleType: string;
+  output: string;
+  success: boolean;
+  error?: string | null;
+}
+
+export interface PreviewTransformationResponse {
+  success: boolean;
+  data: {
+    originalValue: string;
+    transformedValue: string;
+    steps: TransformationStepTrace[];
+    appliedRulesCount: number;
+  };
+}
+
+export interface TargetFieldDefinition {
+  key: string;
+  name?: string;
+  label: string;
+  type?: string;
+  dataType?: string;
+  required?: boolean;
+  nullable?: boolean;
+  readOnly?: boolean;
+  description?: string;
+  options?: ConnectorFieldOption[];
+  defaultValue?: any;
+  example?: any;
+}
+
+export interface TargetEntityDefinition {
+  id: string;
+  name: string;
+  label: string;
+  description?: string;
+  targetFields: TargetFieldDefinition[];
+  supportedOperations?: ("READ" | "WRITE" | "SYNC")[];
+}
+
+export interface TargetModuleDefinition {
+  id: string;
+  label: string;
+  name?: string;
+  description?: string;
+  entities: TargetEntityDefinition[];
+}
