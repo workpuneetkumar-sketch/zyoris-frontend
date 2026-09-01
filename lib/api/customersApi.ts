@@ -39,6 +39,13 @@ import type {
   ConvertLeadResult,
   ConvertCompanyPayload,
   ConvertCompanyResult,
+  PreflightPayload,
+  PreflightResult,
+  MergeCustomerPayload,
+  MergeCustomerResult,
+  MergeAuditRecord,
+  CustomerPreferences,
+  CustomerOwnershipPayload,
 } from "@/types/customers";
 import { CUSTOMERS_PER_PAGE } from "@/types/customers";
 
@@ -722,13 +729,31 @@ export async function resolveCustomerIdentity(
   payload: IdentityResolvePayload
 ): Promise<IdentityResolveResult> {
   try {
-    const res = await api.post(`${CUSTOMERS_BASE}/resolve`, payload);
+    const cleanedPayload: Record<string, any> = { ...payload };
+    Object.keys(cleanedPayload).forEach((key) => {
+      if (cleanedPayload[key] === "" || cleanedPayload[key] === null || cleanedPayload[key] === undefined) {
+        delete cleanedPayload[key];
+      }
+    });
+
+    const res = await api.post(`${CUSTOMERS_BASE}/resolve`, cleanedPayload);
     const data = unwrapEnvelope<any>(res.data);
+
+    const matchesList = Array.isArray(data?.matches)
+      ? data.matches
+      : Array.isArray(data?.candidates)
+      ? data.candidates
+      : Array.isArray(data?.results)
+      ? data.results
+      : [];
+
+    const matchedCustomer = data?.customer ?? data?.matchedCustomer ?? data?.match ?? (data?.resolved && matchesList[0] ? matchesList[0] : null);
+
     return {
-      resolved: Boolean(data?.resolved),
-      customer: data?.customer ?? null,
-      confidence: typeof data?.confidence === "number" ? data.confidence : null,
-      matches: Array.isArray(data?.matches) ? data.matches : [],
+      resolved: Boolean(data?.resolved ?? data?.isResolved ?? (matchedCustomer != null)),
+      customer: matchedCustomer,
+      confidence: typeof data?.confidence === "number" ? data.confidence : (typeof data?.confidenceScore === "number" ? data.confidenceScore : (matchesList[0]?.confidence ?? null)),
+      matches: matchesList,
       metadata: data?.metadata ?? null,
     } as IdentityResolveResult;
   } catch (err) {
@@ -806,5 +831,142 @@ export async function fetchCustomerOwners(): Promise<Array<{ id: string; name: s
     })).filter((m: { id: string }) => m.id);
   } catch {
     return [];
+  }
+}
+
+// ── POST /api/customers/preflight ──────────────────────────────────────────────────
+
+export async function preflightCustomer(
+  payload: PreflightPayload
+): Promise<PreflightResult> {
+  try {
+    const res = await api.post(`${CUSTOMERS_BASE}/preflight`, payload);
+    const data = unwrapEnvelope<any>(res.data);
+    return {
+      action: data?.action ?? "allow_create",
+      existingCustomerId: data?.existingCustomerId ?? null,
+      existingCustomerName: data?.existingCustomerName ?? null,
+      confidence: typeof data?.confidence === "number" ? data.confidence : null,
+      matches: Array.isArray(data?.matches) ? data.matches : [],
+      metadata: data?.metadata ?? null,
+      message: data?.message ?? null,
+    } as PreflightResult;
+  } catch (err) {
+    throw toCustomerApiError(err, "preflight check");
+  }
+}
+
+// ── POST /api/customers/:id/merge ──────────────────────────────────────────────────
+
+export async function mergeCustomers(
+  survivorId: string,
+  payload: MergeCustomerPayload
+): Promise<MergeCustomerResult> {
+  if (!survivorId) throw new CustomerApiError("not_found", "No survivor customer id was provided.", 404);
+  if (!payload.loserIds || payload.loserIds.length === 0) {
+    throw new CustomerApiError("unknown", "At least one loser customer ID is required for merge.");
+  }
+  try {
+    const res = await api.post(`${CUSTOMERS_BASE}/${encodeURIComponent(survivorId)}/merge`, payload);
+    const data = unwrapEnvelope<any>(res.data);
+    return {
+      survivorId: data?.survivorId ?? data?.survivor?.id ?? survivorId,
+      survivor: data?.survivor ?? null,
+      auditId: data?.auditId ?? null,
+      message: data?.message ?? "Customers merged successfully.",
+    };
+  } catch (err: any) {
+    const ax = err as AxiosError;
+    if (ax?.isAxiosError && ax.response?.status === 400) {
+      throw new CustomerApiError(
+        "unknown",
+        (ax.response?.data as any)?.message || "Invalid merge — check for self-merge or invalid input.",
+        400
+      );
+    }
+    throw toCustomerApiError(err, "merging customers");
+  }
+}
+
+// ── GET /api/customers/:id/merge-audit ──────────────────────────────────────────────
+
+export async function fetchMergeAudit(
+  customerId: string
+): Promise<MergeAuditRecord[]> {
+  if (!customerId) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(customerId)}/merge-audit`);
+    const raw = unwrapEnvelope<any>(res.data);
+    const list =
+      Array.isArray(raw)       ? raw :
+      Array.isArray(raw?.data) ? raw.data :
+      Array.isArray(raw?.audits) ? raw.audits :
+      [];
+    return list as MergeAuditRecord[];
+  } catch (err) {
+    throw toCustomerApiError(err, "merge audit history");
+  }
+}
+
+// ── GET /api/customers/:id/preferences ──────────────────────────────────────────────
+
+export async function fetchCustomerPreferences(
+  customerId: string
+): Promise<CustomerPreferences> {
+  if (!customerId) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(customerId)}/preferences`);
+    const data = unwrapEnvelope<CustomerPreferences>(res.data);
+    return data as CustomerPreferences;
+  } catch (err) {
+    throw toCustomerApiError(err, "customer preferences");
+  }
+}
+
+// ── PATCH /api/customers/:id/preferences ───────────────────────────────────────────
+
+export async function updateCustomerPreferences(
+  customerId: string,
+  payload: CustomerPreferences
+): Promise<CustomerPreferences> {
+  if (!customerId) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.patch(`${CUSTOMERS_BASE}/${encodeURIComponent(customerId)}/preferences`, payload);
+    const data = unwrapEnvelope<CustomerPreferences>(res.data);
+    return data as CustomerPreferences;
+  } catch (err: any) {
+    const ax = err as AxiosError;
+    if (ax?.isAxiosError && ax.response?.status === 400) {
+      throw new CustomerApiError(
+        "unknown",
+        (ax.response?.data as any)?.message || "Invalid preference format.",
+        400
+      );
+    }
+    throw toCustomerApiError(err, "updating customer preferences");
+  }
+}
+
+// ── PATCH /api/customers/:id/ownership ──────────────────────────────────────────────
+
+export async function updateCustomerOwnership(
+  customerId: string,
+  payload: CustomerOwnershipPayload
+): Promise<CanonicalCustomer> {
+  if (!customerId) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.patch(`${CUSTOMERS_BASE}/${encodeURIComponent(customerId)}/ownership`, payload);
+    const data = unwrapEnvelope<CanonicalCustomer>(res.data);
+    return data as CanonicalCustomer;
+  } catch (err: any) {
+    const ax = err as AxiosError;
+    if (ax?.isAxiosError && ax.response?.status === 400) {
+      throw new CustomerApiError(
+        "unknown",
+        (ax.response?.data as any)?.message || "Invalid owner assignment.",
+        400
+      );
+    }
+    throw toCustomerApiError(err, "updating customer ownership");
   }
 }

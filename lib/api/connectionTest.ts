@@ -25,6 +25,14 @@ const sensitiveAssignmentPattern = new RegExp(
 );
 
 function sanitizeText(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "object") {
+    try {
+      return sanitizeText(JSON.stringify(value));
+    } catch {
+      return undefined;
+    }
+  }
   if (typeof value !== "string" || !value.trim()) return undefined;
   if (/\n\s*at\s+|\b(?:Error|AxiosError):\s*[^\n]+\n/.test(value)) return undefined;
 
@@ -43,7 +51,23 @@ function getStatus(error: unknown): number | undefined {
   return typeof status === "number" ? status : undefined;
 }
 
+function mapBackendCategory(rawCat?: string): ConnectionErrorCategory | undefined {
+  if (!rawCat) return undefined;
+  const upper = rawCat.toUpperCase();
+  if (upper === "AUTHENTICATION" || upper === "AUTH") return "AUTH";
+  if (upper === "TIMEOUT") return "TIMEOUT";
+  if (upper === "NETWORK") return "NETWORK";
+  if (upper === "RATE_LIMIT") return "RATE_LIMIT";
+  if (upper === "CONFIGURATION" || upper === "CONFIG") return "CONFIG";
+  if (upper === "SERVER") return "SERVER";
+  return "UNKNOWN";
+}
+
 function classifyError(error: unknown, status?: number): ConnectionErrorCategory {
+  const responseData = (error as { response?: { data?: any } })?.response?.data;
+  const backendCategory = mapBackendCategory(responseData?.error?.category || responseData?.category);
+  if (backendCategory) return backendCategory;
+
   const code = (error as { code?: unknown })?.code;
   const message = sanitizeText((error as { message?: unknown })?.message)?.toLowerCase() || "";
 
@@ -74,16 +98,26 @@ export function normalizeConnectionSuccess(
   response: TestConnectionResponse,
   latencyMs: number
 ): NormalizedConnectionTestResult {
-  const records = response.recordsDetected ?? response.detectedRecords ?? response.recordsCount;
+  const records = response.recordCount ?? response.recordsDetected ?? response.detectedRecords ?? response.recordsCount;
   const entities = response.entitiesDetected ?? response.entitiesCount;
-  const diagnostics = sanitizeText(response.diagnostics) || sanitizeText(response.details?.message);
+  
+  let diagnosticsText: string | undefined;
+  if (typeof response.diagnostics === "string") {
+    diagnosticsText = sanitizeText(response.diagnostics);
+  } else if (response.diagnostics && typeof response.diagnostics === "object") {
+    diagnosticsText = sanitizeText(
+      `Provider: ${response.diagnostics.provider || response.provider || "-"} | Status: ${response.diagnostics.httpStatus || response.httpStatus || 200} | Latency: ${response.diagnostics.responseTimeMs ?? response.responseTimeMs ?? latencyMs}ms`
+    );
+  } else if (response.details?.message) {
+    diagnosticsText = sanitizeText(response.details.message);
+  }
 
   return {
     success: true,
-    statusCode: response.statusCode || response.httpStatus || 200,
-    latencyMs: response.latencyMs ?? response.responseTime ?? latencyMs,
+    statusCode: response.httpStatus || response.statusCode || 200,
+    latencyMs: response.responseTimeMs ?? response.latencyMs ?? response.responseTime ?? latencyMs,
     message: sanitizeText(response.message) || "Connection established and verified successfully.",
-    diagnostics,
+    diagnostics: diagnosticsText,
     recordsDetected: typeof records === "number" ? records : undefined,
     entitiesDetected: typeof entities === "number" ? entities : undefined,
     testedAt: response.testedAt || response.timestamp || new Date().toISOString(),
@@ -97,10 +131,16 @@ export function normalizeConnectionError(
   const rawStatus = getStatus(error);
   const statusCode = typeof rawStatus === "number" && rawStatus >= 400 ? rawStatus : undefined;
   const category = classifyError(error, rawStatus);
-  const responseData = (error as { response?: { data?: unknown } })?.response?.data;
+  const responseData = (error as { response?: { data?: any } })?.response?.data;
   const rawMessage = (error as { message?: unknown })?.message;
+  
+  const backendError = responseData?.error;
+  const backendErrorMsg = typeof backendError === "object" ? backendError?.message : undefined;
+  const retryable = typeof backendError === "object" ? backendError?.retryable : undefined;
+  const retryAfterSeconds = typeof backendError === "object" ? backendError?.retryAfterSeconds : undefined;
+
   const message = responseData && typeof responseData === "object"
-    ? sanitizeText((responseData as { message?: unknown; error?: unknown }).message || (responseData as { error?: unknown }).error)
+    ? sanitizeText(backendErrorMsg || responseData.message || responseData.error)
     : (typeof rawMessage === "string" && !rawMessage.includes("AsyncRequestError") ? sanitizeText(rawMessage) : undefined);
 
   return {
@@ -109,5 +149,7 @@ export function normalizeConnectionError(
     latencyMs,
     message: message || connectionErrorMessages[category],
     errorCategory: category,
+    retryable,
+    retryAfterSeconds,
   };
 }

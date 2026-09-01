@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -12,6 +12,9 @@ import {
   UpdateIntegrationPayload,
   TestConnectionResponse,
   NormalizedConnectionTestResult,
+  DiscoveredSchemaResponse,
+  DiscoveredEntity,
+  DiscoveredField,
 } from "@/types/integrations";
 import { AsyncRequestError, useAsyncRequest } from "@/hooks/useAsyncRequest";
 import {
@@ -41,9 +44,22 @@ import {
   Activity,
   Layers,
   Check,
+  Search,
+  ChevronRight,
+  ChevronDown,
+  FileCode,
+  Sliders,
+  Table,
+  Hash,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
-
+import {
+  testIntegrationConnectionApi,
+  getIntegrationSchemaApi,
+  createIntegrationMappingApi,
+  updateIntegrationMappingApi,
+} from "@/lib/api/integrationsApi";
 import { WizardProgress } from "./wizard/WizardProgress";
 import { WizardFooter } from "./wizard/WizardFooter";
 import { integrationWizardSteps } from "./wizard/wizardSteps";
@@ -52,6 +68,10 @@ import {
   REST_CONTENT_TYPES,
   parseRequestBody,
 } from "./wizard/restConfiguration";
+import {
+  EntitySelectionMappingFlow,
+  FieldMappingEntry,
+} from "./wizard/EntitySelectionMappingFlow";
 
 interface IntegrationWizardModalProps {
   isOpen: boolean;
@@ -65,8 +85,8 @@ interface IntegrationWizardModalProps {
   ) => Promise<TestConnectionResponse>;
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
   onUpdateIntegration?: (id: string, payload: UpdateIntegrationPayload) => Promise<any>;
-  onFetchSchema?: (id: string) => Promise<any>;
-  onDiscoverSchema?: (id: string, payload?: any) => Promise<any>;
+  onFetchSchema?: (id: string) => Promise<DiscoveredSchemaResponse>;
+  onDiscoverSchema?: (id: string, payload?: any) => Promise<DiscoveredSchemaResponse>;
   onGetMapping?: (id: string) => Promise<any>;
   onSaveMapping?: (id: string, payload: any) => Promise<any>;
   onViewSchema?: (connector: Connector) => void;
@@ -101,6 +121,7 @@ const integrationFormSchema = z.object({
     "BEARER_TOKEN",
     "BASIC_AUTH",
     "WEBHOOK_SECRET",
+    "CUSTOM",
     "NONE",
   ] as const),
   // Auth specific credentials
@@ -152,6 +173,8 @@ const integrationFormSchema = z.object({
     },
     { message: "Request body must contain valid JSON" }
   ),
+  // Dynamic field mappings: targetField -> remoteFieldPath
+  fieldMappings: z.record(z.string(), z.string()).optional(),
   // Additional dynamic config
   dynamicFields: z.record(z.string(), z.any()).optional(),
 });
@@ -159,17 +182,198 @@ const integrationFormSchema = z.object({
 type FormValues = z.infer<typeof integrationFormSchema>;
 
 const AVAILABLE_MODULES = [
-  { id: "leads", label: "Leads (CRM)", entity: "Lead" },
-  { id: "deals", label: "Deals / Pipeline (CRM)", entity: "Deal" },
-  { id: "contacts", label: "Contacts (CRM)", entity: "Contact" },
-  { id: "companies", label: "Companies (CRM)", entity: "Company" },
-  { id: "finance", label: "Invoices & Payments (Finance)", entity: "Invoice" },
-  { id: "hr", label: "Employees & Attendance (HR)", entity: "Employee" },
-  { id: "tasks", label: "Tasks & Workflows", entity: "Task" },
-  { id: "communications", label: "Communications (Email/Chat)", entity: "Message" },
-  { id: "projects", label: "Projects & Boards", entity: "Project" },
-  { id: "custom", label: "Custom Entity", entity: "CustomRecord" },
+  {
+    id: "leads",
+    label: "Leads (CRM)",
+    entity: "Lead",
+    targetFields: [
+      { key: "name", label: "Full Name", required: true },
+      { key: "email", label: "Email Address", required: true },
+      { key: "company", label: "Company Name" },
+      { key: "phone", label: "Phone Number" },
+      { key: "status", label: "Lead Status" },
+      { key: "source", label: "Lead Source" },
+      { key: "value", label: "Estimated Value" },
+      { key: "notes", label: "Notes / Description" },
+    ],
+  },
+  {
+    id: "deals",
+    label: "Deals / Pipeline (CRM)",
+    entity: "Deal",
+    targetFields: [
+      { key: "title", label: "Deal Title", required: true },
+      { key: "amount", label: "Deal Value / Amount", required: true },
+      { key: "stage", label: "Pipeline Stage" },
+      { key: "company", label: "Associated Company" },
+      { key: "closeDate", label: "Expected Close Date" },
+      { key: "owner", label: "Deal Owner" },
+    ],
+  },
+  {
+    id: "contacts",
+    label: "Contacts (CRM)",
+    entity: "Contact",
+    targetFields: [
+      { key: "firstName", label: "First Name", required: true },
+      { key: "lastName", label: "Last Name", required: true },
+      { key: "email", label: "Email Address", required: true },
+      { key: "phone", label: "Phone Number" },
+      { key: "jobTitle", label: "Job Title" },
+      { key: "department", label: "Department" },
+    ],
+  },
+  {
+    id: "companies",
+    label: "Companies (CRM)",
+    entity: "Company",
+    targetFields: [
+      { key: "name", label: "Company Name", required: true },
+      { key: "domain", label: "Website / Domain" },
+      { key: "industry", label: "Industry" },
+      { key: "size", label: "Employee Count" },
+      { key: "city", label: "City" },
+      { key: "country", label: "Country" },
+    ],
+  },
+  {
+    id: "finance",
+    label: "Invoices & Payments (Finance)",
+    entity: "Invoice",
+    targetFields: [
+      { key: "invoiceNumber", label: "Invoice Number", required: true },
+      { key: "amount", label: "Total Amount", required: true },
+      { key: "currency", label: "Currency Code" },
+      { key: "dueDate", label: "Due Date" },
+      { key: "status", label: "Payment Status" },
+      { key: "customerEmail", label: "Customer Email" },
+    ],
+  },
+  {
+    id: "hr",
+    label: "Employees & Attendance (HR)",
+    entity: "Employee",
+    targetFields: [
+      { key: "employeeId", label: "Employee ID", required: true },
+      { key: "name", label: "Full Name", required: true },
+      { key: "email", label: "Work Email", required: true },
+      { key: "role", label: "Designation" },
+      { key: "department", label: "Department" },
+      { key: "status", label: "Employment Status" },
+    ],
+  },
+  {
+    id: "tasks",
+    label: "Tasks & Workflows",
+    entity: "Task",
+    targetFields: [
+      { key: "title", label: "Task Title", required: true },
+      { key: "description", label: "Description" },
+      { key: "status", label: "Status" },
+      { key: "priority", label: "Priority" },
+      { key: "dueDate", label: "Due Date" },
+    ],
+  },
+  {
+    id: "communications",
+    label: "Communications (Email/Chat)",
+    entity: "Message",
+    targetFields: [
+      { key: "subject", label: "Subject / Header", required: true },
+      { key: "body", label: "Message Content" },
+      { key: "sender", label: "Sender" },
+      { key: "recipient", label: "Recipient" },
+      { key: "sentAt", label: "Timestamp" },
+    ],
+  },
+  {
+    id: "projects",
+    label: "Projects & Boards",
+    entity: "Project",
+    targetFields: [
+      { key: "name", label: "Project Name", required: true },
+      { key: "description", label: "Description" },
+      { key: "status", label: "Status" },
+      { key: "budget", label: "Budget" },
+    ],
+  },
+  {
+    id: "custom",
+    label: "Custom Entity",
+    entity: "CustomRecord",
+    targetFields: [
+      { key: "externalId", label: "External Record ID", required: true },
+      { key: "title", label: "Title / Name", required: true },
+      { key: "data", label: "Payload Data" },
+      { key: "updatedAt", label: "Last Modified" },
+    ],
+  },
 ];
+
+/**
+ * Sanitizes and redacts sensitive error messages before display
+ */
+function sanitizeDiagnosticMessage(msg?: string): string {
+  if (!msg) return "";
+  return msg
+    // Redact Bearer tokens
+    .replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, "Bearer [REDACTED]")
+    // Redact sensitive key/value pairs
+    .replace(
+      /(api_?key|password|secret|client_secret|access_token|refresh_token|authorization|auth|token)[=:\s]+[^\s,;&]+/gi,
+      "$1: [REDACTED]"
+    )
+    // Redact credentials in URLs
+    .replace(/:\/\/[^:]+:[^@]+@/g, "://[REDACTED]@")
+    // Redact internal file system paths
+    .replace(
+      /([a-zA-Z]:\\[^\s:<>|"?*]+|\/(var|etc|usr|home|app|root|tmp)\/[^\s:<>|"?*]+)/gi,
+      "[SERVER_PATH]"
+    )
+    .trim();
+}
+
+/**
+ * Recursively flattens fields and preserves dot-notation hierarchical paths
+ */
+interface FlatDiscoveredField extends DiscoveredField {
+  fullPath: string;
+  depth: number;
+  hasChildren: boolean;
+}
+
+function flattenFieldsTree(
+  fields: DiscoveredField[],
+  parentPath = "",
+  depth = 0
+): FlatDiscoveredField[] {
+  const result: FlatDiscoveredField[] = [];
+
+  for (const field of fields) {
+    const fieldName = field.name || field.path || "field";
+    const fullPath = field.path || (parentPath ? `${parentPath}.${fieldName}` : fieldName);
+    const childList =
+      field.fields ||
+      field.children ||
+      (field.properties ? Object.values(field.properties) : undefined);
+
+    const hasChildren = Array.isArray(childList) && childList.length > 0;
+
+    result.push({
+      ...field,
+      fullPath,
+      depth,
+      hasChildren,
+    });
+
+    if (hasChildren && childList) {
+      const nested = flattenFieldsTree(childList, fullPath, depth + 1);
+      result.push(...nested);
+    }
+  }
+
+  return result;
+}
 
 export function IntegrationWizardModal({
   isOpen,
@@ -189,7 +393,7 @@ export function IntegrationWizardModal({
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(
     initialConnector
   );
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -200,6 +404,20 @@ export function IntegrationWizardModal({
   const resetConnectionTest = connectionTest.reset;
   const isTesting = connectionTest.status === "loading";
   const [isSchemaUnlocked, setIsSchemaUnlocked] = useState(false);
+
+  // Schema Discovery state — preserved in wizard state
+  const [discoveredSchema, setDiscoveredSchema] = useState<DiscoveredSchemaResponse | null>(null);
+  const [isLoadingSchema, setIsLoadingSchema] = useState(false);
+  const [schemaError, setSchemaError] = useState<string | null>(null);
+  const [schemaSearchQuery, setSchemaSearchQuery] = useState("");
+  const [selectedEntityName, setSelectedEntityName] = useState<string>("");
+  const [showSampleRecordsDrawer, setShowSampleRecordsDrawer] = useState(false);
+
+  // Field Mapping state — initialized from discovered schema and backend mappings
+  const [mappedFields, setMappedFields] = useState<Record<string, string>>({});
+  const [rawMappingEntries, setRawMappingEntries] = useState<FieldMappingEntry[]>([]);
+  const [isMappingValid, setIsMappingValid] = useState<boolean>(true);
+  const [missingRequiredFields, setMissingRequiredFields] = useState<string[]>([]);
 
   useEffect(() => {
     setSelectedConnector(initialConnector);
@@ -216,13 +434,15 @@ export function IntegrationWizardModal({
     }
     resetConnectionTest();
     setIsSchemaUnlocked(false);
+    setDiscoveredSchema(null);
+    setSchemaError(null);
+    setMappedFields({});
   }, [initialConnector, isOpen, resetConnectionTest]);
 
   const defaultValues: Partial<FormValues> = {
     displayName: selectedConnector ? `${selectedConnector.name} Integration` : "",
     targetModule: "leads",
     targetEntity: "Lead",
-    // API URL: Use connector's configured default if available, otherwise require user input
     apiUrl: selectedConnector?.configSchema?.endpoint?.defaultUrl || "",
     httpMethod:
       (selectedConnector?.configSchema?.endpoint?.defaultMethod as HttpMethod) ||
@@ -246,6 +466,7 @@ export function IntegrationWizardModal({
     contentType: DEFAULT_REST_CONFIGURATION.contentType,
     queryParams: DEFAULT_REST_CONFIGURATION.queryParams,
     requestBody: DEFAULT_REST_CONFIGURATION.requestBody,
+    fieldMappings: {},
     dynamicFields: {},
   };
 
@@ -334,9 +555,7 @@ export function IntegrationWizardModal({
   useEffect(() => {
     const currentAuthType = watch("authType");
     
-    // Only clear when explicitly changing auth type (not on initial load)
     if (previousAuthTypeRef.current !== undefined && previousAuthTypeRef.current !== currentAuthType) {
-      // Clear all auth-specific fields when switching auth type
       setValue("apiKeyName", "");
       setValue("apiKeyValue", "");
       setValue("bearerToken", "");
@@ -347,7 +566,6 @@ export function IntegrationWizardModal({
       setValue("oauthScopes", "");
       setValue("webhookSecret", "");
 
-      // Reset to defaults for new auth type
       if (currentAuthType === "API_KEY") {
         setValue("apiKeyName", "X-API-Key");
       }
@@ -359,14 +577,19 @@ export function IntegrationWizardModal({
     previousAuthTypeRef.current = currentAuthType;
   }, [watchedAuthType, watch, setValue]);
 
-  if (!isOpen) return null;
-
   const currentAuthType = watch("authType");
   const currentTargetModule = watch("targetModule");
   const currentHttpMethod = watch("httpMethod");
   const supportsRequestBody = ["POST", "PUT", "PATCH"].includes(
     currentHttpMethod
   );
+
+  const currentModuleConfig = useMemo(() => {
+    return (
+      AVAILABLE_MODULES.find((m) => m.id === currentTargetModule) ||
+      AVAILABLE_MODULES[0]
+    );
+  }, [currentTargetModule]);
 
   const getVerifiedExistingIntegrationId = (
     connector: Connector | null,
@@ -547,7 +770,6 @@ export function IntegrationWizardModal({
               syncFrequency: payload.syncFrequency,
             });
           } catch (updateErr) {
-            // Non-fatal, continue with payload in test request
             console.warn("Failed to sync updated configuration before test:", updateErr);
           }
         }
@@ -558,12 +780,10 @@ export function IntegrationWizardModal({
           );
         }
 
-        if (!onTestConnection) {
-          throw new Error("Test connection service is currently unavailable.");
-        }
+        const testFn = onTestConnection || testIntegrationConnectionApi;
 
         try {
-          const response = await onTestConnection(currentTargetId, payload);
+          const response = await testFn(currentTargetId, payload);
           const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
 
           if (response.success) {
@@ -613,7 +833,6 @@ export function IntegrationWizardModal({
   };
 
   const handleRetryConnection = async () => {
-    const values = watch();
     const startTime = performance.now();
     try {
       const result = await connectionTest.retry();
@@ -630,6 +849,134 @@ export function IntegrationWizardModal({
       toast.error(normalized.message || "Connection test failed.");
     }
   };
+
+  /**
+   * Real Schema Discovery Handler
+   * Calls backend API: GET /api/v1/integrations/{id}/schema
+   * Prevents unnecessary refetches when schema is already stored in wizard state
+   */
+  const handleDiscoverSchema = useCallback(
+    async (forceRefetch = false) => {
+      const targetId =
+        activeIntegrationId ||
+        selectedConnector?.connectionId ||
+        selectedConnector?.connectionState?.id ||
+        (selectedConnector?.isConnected ? selectedConnector?.id : null) ||
+        selectedConnector?.id ||
+        selectedConnector?.provider;
+
+      if (!targetId) {
+        toast.error("No active integration identifier available for schema discovery.");
+        return;
+      }
+
+      if (discoveredSchema && !forceRefetch) {
+        return;
+      }
+
+      if (isLoadingSchema) return;
+
+      setIsLoadingSchema(true);
+      setSchemaError(null);
+
+      try {
+        const schemaRes = onDiscoverSchema
+          ? await onDiscoverSchema(targetId)
+          : onFetchSchema
+          ? await onFetchSchema(targetId)
+          : await getIntegrationSchemaApi(targetId);
+
+        setDiscoveredSchema(schemaRes);
+
+        const entityList = schemaRes?.entities || [];
+        if (entityList.length > 0 && !selectedEntityName) {
+          setSelectedEntityName(entityList[0].name || entityList[0].id || "Default");
+        }
+
+        // Auto-seed field mappings for matching names
+        if (entityList.length > 0) {
+          const firstEntityFields = flattenFieldsTree(entityList[0].fields || []);
+          const initialMap: Record<string, string> = { ...mappedFields };
+
+          currentModuleConfig.targetFields.forEach((tf) => {
+            if (!initialMap[tf.key]) {
+              const directMatch = firstEntityFields.find(
+                (f) =>
+                  f.name?.toLowerCase() === tf.key.toLowerCase() ||
+                  f.fullPath?.toLowerCase() === tf.key.toLowerCase() ||
+                  f.label?.toLowerCase() === tf.label.toLowerCase()
+              );
+              if (directMatch) {
+                initialMap[tf.key] = directMatch.fullPath;
+              }
+            }
+          });
+          setMappedFields(initialMap);
+        }
+
+        toast.success("Remote schema discovered successfully!");
+      } catch (err: any) {
+        const errMsg =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Failed to discover remote schema. Remote endpoint may be unreachable.";
+        setSchemaError(sanitizeDiagnosticMessage(errMsg));
+        toast.error("Schema discovery failed.");
+      } finally {
+        setIsLoadingSchema(false);
+      }
+    },
+    [
+      activeIntegrationId,
+      selectedConnector,
+      discoveredSchema,
+      isLoadingSchema,
+      onDiscoverSchema,
+      onFetchSchema,
+      selectedEntityName,
+      mappedFields,
+      currentModuleConfig.targetFields,
+    ]
+  );
+
+  // Automatically trigger schema discovery when step 5 is active and schema not loaded yet
+  useEffect(() => {
+    if (step === 5 && isSchemaUnlocked && !discoveredSchema && !isLoadingSchema && !schemaError) {
+      handleDiscoverSchema();
+    }
+  }, [step, isSchemaUnlocked, discoveredSchema, isLoadingSchema, schemaError, handleDiscoverSchema]);
+
+  // Current entity schema
+  const activeEntity = useMemo<DiscoveredEntity | null>(() => {
+    if (!discoveredSchema?.entities || discoveredSchema.entities.length === 0) {
+      return null;
+    }
+    return (
+      discoveredSchema.entities.find(
+        (e) => e.name === selectedEntityName || e.id === selectedEntityName
+      ) || discoveredSchema.entities[0]
+    );
+  }, [discoveredSchema, selectedEntityName]);
+
+  // Flattened field list for active entity
+  const allFlatFields = useMemo<FlatDiscoveredField[]>(() => {
+    if (!activeEntity?.fields) return [];
+    return flattenFieldsTree(activeEntity.fields);
+  }, [activeEntity]);
+
+  // Filtered fields based on search query
+  const filteredFields = useMemo(() => {
+    if (!schemaSearchQuery.trim()) return allFlatFields;
+    const q = schemaSearchQuery.toLowerCase().trim();
+    return allFlatFields.filter((f) => {
+      const matchPath = f.fullPath.toLowerCase().includes(q);
+      const matchName = (f.name || "").toLowerCase().includes(q);
+      const matchLabel = (f.label || "").toLowerCase().includes(q);
+      const matchType = (f.type || "").toLowerCase().includes(q);
+      const matchDesc = (f.description || "").toLowerCase().includes(q);
+      return matchPath || matchName || matchLabel || matchType || matchDesc;
+    });
+  }, [allFlatFields, schemaSearchQuery]);
 
   // Trigger OAuth Connect
   const handleInitiateOAuth = async () => {
@@ -680,21 +1027,85 @@ export function IntegrationWizardModal({
 
   // Final Form Submission
   const onFormSubmit = async (data: FormValues) => {
+    if (step !== 6) {
+      return;
+    }
+
     if (!selectedConnector) {
       toast.error("Please select a connector first.");
       return;
     }
 
-    if (data.authType === "OAUTH2") {
-      await handleInitiateOAuth();
+    if (step === 6 && !isMappingValid && missingRequiredFields.length > 0) {
+      toast.error(
+        `Required target fields missing: ${missingRequiredFields.join(
+          ", "
+        )}. Please map all required fields before completing setup.`
+      );
       return;
     }
 
-    // If integration was already created during the connection test, update if needed and close
+    const formatBackendError = (err: any): string => {
+      const details = err?.response?.data?.details;
+      if (Array.isArray(details) && details.length > 0) {
+        const detailMsgs = details
+          .map((d: any) => `${d.field || "Field"}: ${d.message}`)
+          .join(" | ");
+        return `${err?.response?.data?.message || "Validation failed"}: ${detailMsgs}`;
+      }
+      return (
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to finalize integration."
+      );
+    };
+
     if (activeIntegrationId && onUpdateIntegration) {
       setIsSubmitting(true);
       try {
         const payload = buildPayload(data);
+
+        if (rawMappingEntries.length > 0) {
+          const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
+          const targetEntName = data.targetEntity || "DefaultEntity";
+
+          for (const entry of rawMappingEntries) {
+            if (entry.sourceField && entry.isDirty) {
+              try {
+                if (entry.backendMappingId) {
+                  await updateIntegrationMappingApi(activeIntegrationId, entry.backendMappingId, {
+                    sourceEntity: sourceEntName,
+                    sourceField: entry.sourceField,
+                    targetEntity: targetEntName,
+                    targetField: entry.targetField,
+                    status: entry.status,
+                    transformation: {
+                      type: entry.transformationType || "none",
+                      config: entry.transformationConfig,
+                      defaultValue: entry.defaultValue,
+                    },
+                  });
+                } else {
+                  await createIntegrationMappingApi(activeIntegrationId, {
+                    sourceEntity: sourceEntName,
+                    sourceField: entry.sourceField,
+                    targetEntity: targetEntName,
+                    targetField: entry.targetField,
+                    status: entry.status || "ACTIVE",
+                    confidence: 1,
+                    transformation: {
+                      type: entry.transformationType || "none",
+                      config: entry.transformationConfig,
+                      defaultValue: entry.defaultValue,
+                    },
+                  });
+                }
+              } catch (mapErr) {
+                console.warn(`Could not sync mapping for ${entry.targetField}:`, mapErr);
+              }
+            }
+          }
+        }
 
         await onUpdateIntegration(activeIntegrationId, {
           displayName: payload.displayName,
@@ -710,10 +1121,7 @@ export function IntegrationWizardModal({
         reset();
         onClose();
       } catch (err: any) {
-        const errorMsg =
-          err?.response?.data?.message ||
-          err?.message ||
-          "Failed to finalize integration.";
+        const errorMsg = formatBackendError(err);
         toast.error(errorMsg);
       } finally {
         setIsSubmitting(false);
@@ -725,42 +1133,156 @@ export function IntegrationWizardModal({
     try {
       const payload = buildPayload(data);
 
-      await onSubmit(payload);
+      const created = await onSubmit(payload);
+      const newIntegrationId = created?.id;
+
+      if (newIntegrationId && rawMappingEntries.length > 0) {
+        const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
+        const targetEntName = data.targetEntity || "DefaultEntity";
+
+        for (const entry of rawMappingEntries) {
+          if (entry.sourceField) {
+            try {
+              await createIntegrationMappingApi(newIntegrationId, {
+                sourceEntity: sourceEntName,
+                sourceField: entry.sourceField,
+                targetEntity: targetEntName,
+                targetField: entry.targetField,
+                status: entry.status || "ACTIVE",
+                confidence: 1,
+                transformation: {
+                  type: entry.transformationType || "none",
+                  config: entry.transformationConfig,
+                  defaultValue: entry.defaultValue,
+                },
+              });
+            } catch (mapErr) {
+              console.warn(`Could not sync mapping for ${entry.targetField}:`, mapErr);
+            }
+          }
+        }
+      }
+
       toast.success(`Successfully connected ${selectedConnector.name}!`);
       reset();
       onClose();
     } catch (err: any) {
-      const errorMsg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to create integration. Please check your configuration.";
+      const errorMsg = formatBackendError(err);
       toast.error(errorMsg);
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  // Safe Sample Value Formatter
+  const renderSampleValue = (val: any) => {
+    if (val === undefined || val === null) {
+      return <span className="text-text-muted italic text-[11px]">null</span>;
+    }
+    if (typeof val === "boolean") {
+      return (
+        <span className="font-mono text-[11px] font-semibold text-primary">
+          {val ? "true" : "false"}
+        </span>
+      );
+    }
+    if (typeof val === "number") {
+      return (
+        <span className="font-mono text-[11px] font-semibold text-info">
+          {val}
+        </span>
+      );
+    }
+    if (typeof val === "string") {
+      const sanitized = sanitizeDiagnosticMessage(val);
+      return (
+        <span className="font-mono text-[11px] text-text truncate max-w-[180px] inline-block">
+          &quot;{sanitized}&quot;
+        </span>
+      );
+    }
+    if (Array.isArray(val)) {
+      return (
+        <span className="px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 font-mono text-[10px]">
+          Array[{val.length}]
+        </span>
+      );
+    }
+    if (typeof val === "object") {
+      return (
+        <span className="px-1.5 py-0.5 rounded bg-cat-comm-bg text-cat-comm border border-cat-comm/20 font-mono text-[10px]">
+          Object&#123;...&#125;
+        </span>
+      );
+    }
+    return <span className="font-mono text-[11px] text-text">{String(val)}</span>;
+  };
+
+  // Memoized handlers for EntitySelectionMappingFlow to prevent re-render loops
+  const handleMappingModuleChange = useCallback((moduleId: string, entityName: string) => {
+    setValue("targetModule", moduleId);
+    setValue("targetEntity", entityName);
+  }, [setValue]);
+
+  const handleValidationChange = useCallback((isValid: boolean, missing: string[]) => {
+    setIsMappingValid((prev) => (prev !== isValid ? isValid : prev));
+    setMissingRequiredFields((prev) => {
+      if (prev.length === missing.length && prev.every((v, i) => v === missing[i])) {
+        return prev;
+      }
+      return missing;
+    });
+  }, []);
+
+  const handleMappingsChange = useCallback((record: Record<string, string>, entries: FieldMappingEntry[]) => {
+    setMappedFields((prev) => {
+      const prevKeys = Object.keys(prev);
+      const newKeys = Object.keys(record);
+      if (prevKeys.length === newKeys.length && prevKeys.every((k) => prev[k] === record[k])) {
+        return prev;
+      }
+      return record;
+    });
+    setRawMappingEntries(entries);
+    setValue("fieldMappings", record);
+  }, [setValue]);
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-3xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm transition-all duration-200 ${
+        isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
+    >
+      <div className="relative w-full max-w-4xl max-h-[90vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between bg-surface-secondary/50">
+        <div className="p-6 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
-              <Zap className="w-5 h-5" />
+            <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold">
+              {selectedConnector?.iconUrl ? (
+                <img
+                  src={selectedConnector.iconUrl}
+                  alt={selectedConnector.name}
+                  className="w-6 h-6 object-contain"
+                />
+              ) : (
+                <Zap className="w-5 h-5" />
+              )}
             </div>
             <div>
-              <h2 className="text-lg font-bold text-text">
+              <h3 className="text-base font-bold text-text">
                 {selectedConnector
                   ? `Configure ${selectedConnector.name}`
-                  : "Add New Integration"}
-              </h2>
-              <p className="text-xs text-text-muted">
-                Step {step} of 4:{" "}
-                {step === 1 && "Select Connector"}
-                {step === 2 && "Endpoint & Module Mapping"}
-                {step === 3 && "Authentication & Security"}
-                {step === 4 && "Review & Connection Test"}
+                  : "Setup New Integration"}
+              </h3>
+              <p className="text-xs text-text-secondary mt-0.5">
+                {step === 1 && "Step 1 of 6: Connector Selection"}
+                {step === 2 && "Step 2 of 6: Protocol & Endpoint Configuration"}
+                {step === 3 && "Step 3 of 6: Authentication & Credentials"}
+                {step === 4 && "Step 4 of 6: Verification & Connection Test"}
+                {step === 5 && "Step 5 of 6: Schema Discovery & Sample Data"}
+                {step === 6 && "Step 6 of 6: Field Mapping & Review"}
               </p>
             </div>
           </div>
@@ -773,42 +1295,29 @@ export function IntegrationWizardModal({
           </button>
         </div>
 
-        {/* Step Progress Indicator */}
-        <div className="grid grid-cols-4 border-b border-border bg-surface-secondary/30 text-xs">
-          {[
-            { num: 1, label: "Connector" },
-            { num: 2, label: "Endpoint" },
-            { num: 3, label: "Authentication" },
-            { num: 4, label: "Verify & Test" },
-          ].map((s) => (
-            <button
-              key={s.num}
-              type="button"
-              onClick={() => {
-                if (s.num === 1 || selectedConnector) {
-                  setStep(s.num as any);
-                }
-              }}
-              className={`py-2.5 px-3 text-center border-b-2 font-medium transition-all ${
-                step === s.num
-                  ? "border-primary text-primary bg-primary/5"
-                  : step > s.num
-                  ? "border-success text-success"
-                  : "border-transparent text-text-muted"
-              }`}
-            >
-              <span className="hidden sm:inline">
-                {s.num}. {s.label}
-              </span>
-              <span className="sm:hidden">Step {s.num}</span>
-            </button>
-          ))}
-        </div>
+        {/* Dynamic Wizard Progress Indicator */}
+        <WizardProgress
+          steps={integrationWizardSteps}
+          currentStep={step}
+          onStepChange={(s) => {
+            setStep(s as any);
+          }}
+        />
 
         {/* Form Body */}
         <form
-          onSubmit={handleSubmit(onFormSubmit)}
-          className="flex-1 overflow-y-auto p-6 space-y-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (step === 6) {
+              handleSubmit(onFormSubmit)(e);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && step !== 6) {
+              e.preventDefault();
+            }
+          }}
+          className="flex-1 overflow-y-auto p-6 space-y-6 flex flex-col"
         >
           {/* STEP 1: CONNECTOR SELECTION */}
           {step === 1 && (
@@ -1568,47 +2077,369 @@ export function IntegrationWizardModal({
                   <div>
                     <button
                       type="button"
-                      disabled={!isSchemaUnlocked}
                       onClick={() => {
-                        if (isSchemaUnlocked && onViewSchema) {
-                          const connectorToView: Connector = {
-                            ...(selectedConnector || {
-                              id: activeIntegrationId || "custom",
-                              provider: "custom",
-                              name: watch("displayName") || "Integration",
-                              description: "",
-                              category: "CUSTOM",
-                            }),
-                            connectionId:
-                              activeIntegrationId || selectedConnector?.connectionId,
-                            isConnected: true,
-                            status: "ACTIVE",
-                          };
-                          onViewSchema(connectorToView);
-                        }
+                        setStep(5);
                       }}
-                      className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
-                        isSchemaUnlocked
-                          ? "bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
-                          : "bg-surface-secondary text-text-muted border border-border cursor-not-allowed opacity-60"
-                      }`}
+                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
                     >
-                      {isSchemaUnlocked ? (
-                        <>
-                          <Database className="w-3.5 h-3.5" />
-                          <span>Discover Schema</span>
-                        </>
-                      ) : (
-                        <>
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>Schema Locked</span>
-                        </>
-                      )}
+                      <Database className="w-3.5 h-3.5" />
+                      <span>Discover Schema & Mapping</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
               </div>
             </div>
+          )}
+
+          {/* STEP 5: SCHEMA DISCOVERY & SAMPLE DATA */}
+          {step === 5 && (
+            <div className="space-y-4 flex-1 flex flex-col">
+              {/* Header & Status Bar */}
+              <div className="p-4 rounded-xl border border-border bg-surface-secondary/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-info/10 border border-info/20 text-info flex items-center justify-center flex-shrink-0">
+                    <Database className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-text">
+                        Discovered External Schema
+                      </h4>
+                      {discoveredSchema && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/10 text-success border border-success/20 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" /> Live Schema Ready
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-text-secondary mt-0.5">
+                      Inspect field paths, types, required flags, and live sample values from{" "}
+                      <span className="font-semibold text-text">
+                        GET /api/integrations/{"{id}"}/schema
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {discoveredSchema?.sampleRecords && discoveredSchema.sampleRecords.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowSampleRecordsDrawer(!showSampleRecordsDrawer)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-medium transition-colors"
+                    >
+                      <FileCode className="w-3.5 h-3.5 text-primary" />
+                      <span>
+                        {showSampleRecordsDrawer ? "Hide Sample JSON" : "View Sample JSON"}
+                      </span>
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleDiscoverSchema(true)}
+                    disabled={isLoadingSchema}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-medium transition-colors disabled:opacity-50"
+                    title="Re-fetch schema from backend"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${isLoadingSchema ? "animate-spin text-primary" : "text-text-muted"}`}
+                    />
+                    <span>{isLoadingSchema ? "Refetching..." : "Refresh Schema"}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Sample Records JSON Drawer */}
+              {showSampleRecordsDrawer && discoveredSchema?.sampleRecords && (
+                <div className="p-4 rounded-xl border border-border bg-surface-secondary/50 space-y-2 animate-in fade-in duration-150">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-text flex items-center gap-1.5">
+                      <FileCode className="w-3.5 h-3.5 text-primary" />
+                      Detected Live Sample Records ({discoveredSchema.sampleRecords.length})
+                    </span>
+                    <span className="text-[11px] text-text-muted font-mono">
+                      Read-only live API payload
+                    </span>
+                  </div>
+                  <pre className="p-3 rounded-lg bg-surface text-text border border-border text-[11px] font-mono overflow-x-auto max-h-48 overflow-y-auto">
+                    {JSON.stringify(discoveredSchema.sampleRecords, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Schema Body: Loading / Error / Content */}
+              {isLoadingSchema ? (
+                <div className="p-12 rounded-xl border border-border bg-surface flex flex-col items-center justify-center text-center space-y-3 flex-1 min-h-[260px]">
+                  <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                  <p className="text-sm font-semibold text-text">
+                    Discovering schema from remote integration...
+                  </p>
+                  <p className="text-xs text-text-secondary max-w-sm">
+                    Fetching field definitions, types, constraints, and sample data from the external provider endpoint.
+                  </p>
+                </div>
+              ) : schemaError ? (
+                <div className="p-8 rounded-xl border border-error/20 bg-error/5 flex flex-col items-center justify-center text-center space-y-3 flex-1 min-h-[260px]">
+                  <div className="w-10 h-10 rounded-xl bg-error/10 border border-error/20 flex items-center justify-center text-error">
+                    <AlertCircle className="w-5 h-5" />
+                  </div>
+                  <h4 className="text-sm font-bold text-text">
+                    Schema Discovery Failed
+                  </h4>
+                  <p className="text-xs text-text-secondary max-w-md">
+                    {schemaError}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleDiscoverSchema(true)}
+                    className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold shadow-sm hover:bg-primary-dark transition-all inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Retry Discovery</span>
+                  </button>
+                </div>
+              ) : !activeEntity || allFlatFields.length === 0 ? (
+                <div className="p-10 rounded-xl border border-dashed border-border bg-surface flex flex-col items-center justify-center text-center space-y-3 flex-1 min-h-[260px]">
+                  <div className="w-10 h-10 rounded-xl bg-surface-secondary border border-border flex items-center justify-center text-text-muted">
+                    <Layers className="w-5 h-5 opacity-50" />
+                  </div>
+                  <h4 className="text-sm font-bold text-text">
+                    No Schema Fields Found
+                  </h4>
+                  <p className="text-xs text-text-secondary max-w-md">
+                    The remote endpoint responded but returned no discoverable fields or entities for this configuration.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleDiscoverSchema(true)}
+                    className="px-3.5 py-1.5 rounded-lg border border-border bg-surface hover:bg-surface-hover text-xs font-semibold text-text transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-text-muted" />
+                    <span>Try Discovery Again</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-3 flex-1 flex flex-col min-h-0">
+                  {/* Entity Selector Tabs & Search Filter Bar */}
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    {/* Entity Tabs (if multiple) */}
+                    {discoveredSchema?.entities && discoveredSchema.entities.length > 1 ? (
+                      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                        {discoveredSchema.entities.map((ent) => (
+                          <button
+                            key={ent.name || ent.id}
+                            type="button"
+                            onClick={() => setSelectedEntityName(ent.name || ent.id || "")}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                              (activeEntity?.name === ent.name || activeEntity?.id === ent.id)
+                                ? "bg-primary text-primary-foreground font-semibold shadow-sm"
+                                : "border border-border bg-surface text-text-secondary hover:bg-surface-hover hover:text-text"
+                            }`}
+                          >
+                            <span>{ent.label || ent.name}</span>
+                            <span className="text-[10px] opacity-75">
+                              ({ent.fields?.length || 0})
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="font-semibold text-text">
+                          Entity: {activeEntity.label || activeEntity.name}
+                        </span>
+                        {typeof activeEntity.recordCount === "number" && (
+                          <span className="px-2 py-0.5 rounded bg-surface-secondary text-text-secondary border border-border text-[10px]">
+                            {activeEntity.recordCount} records
+                          </span>
+                        )}
+                        {activeEntity.pagination && (
+                          <span className="px-2 py-0.5 rounded bg-surface-secondary text-text-muted border border-border text-[10px]">
+                            Page {activeEntity.pagination.page || 1}
+                            {activeEntity.pagination.totalPages ? ` of ${activeEntity.pagination.totalPages}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Field Search Input */}
+                    <div className="relative w-full sm:w-64 flex-shrink-0">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                      <input
+                        type="text"
+                        value={schemaSearchQuery}
+                        onChange={(e) => setSchemaSearchQuery(e.target.value)}
+                        placeholder="Search field path or name..."
+                        className="w-full pl-8 pr-7 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                      />
+                      {schemaSearchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSchemaSearchQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text p-0.5"
+                          aria-label="Clear search"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Schema Summary Metadata Bar */}
+                  <div className="flex items-center justify-between text-[11px] text-text-muted px-1">
+                    <span>
+                      Showing {filteredFields.length} of {allFlatFields.length} fields
+                    </span>
+                    <div className="flex items-center gap-3">
+                      {discoveredSchema?.discoveredAt && (
+                        <span>
+                          Discovered: {new Date(discoveredSchema.discoveredAt).toLocaleTimeString()}
+                        </span>
+                      )}
+                      {discoveredSchema?.recordCount !== undefined && (
+                        <span className="font-medium text-text">
+                          Total Records: {discoveredSchema.recordCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fields Table / Tree */}
+                  <div className="flex-1 overflow-y-auto border border-border rounded-xl bg-surface max-h-[380px]">
+                    {filteredFields.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-text-muted space-y-1">
+                        <Search className="w-5 h-5 mx-auto opacity-40 mb-1" />
+                        <p className="font-medium text-text">No matching fields found</p>
+                        <p>No schema fields match query &quot;{schemaSearchQuery}&quot;</p>
+                      </div>
+                    ) : (
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead className="bg-surface-secondary/70 text-text-muted border-b border-border sticky top-0 z-10">
+                          <tr>
+                            <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">
+                              Field Path & Hierarchy
+                            </th>
+                            <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">
+                              Data Type
+                            </th>
+                            <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">
+                              Attributes
+                            </th>
+                            <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">
+                              Live Sample Value
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {filteredFields.map((field, idx) => (
+                            <tr
+                              key={`${field.fullPath}-${idx}`}
+                              className="hover:bg-surface-hover transition-colors group"
+                            >
+                              {/* Field Path with nesting indentation */}
+                              <td className="py-2.5 px-3">
+                                <div
+                                  className="flex items-center gap-1.5"
+                                  style={{ paddingLeft: `${field.depth * 14}px` }}
+                                >
+                                  {field.depth > 0 && (
+                                    <span className="text-text-muted font-mono text-[10px]">
+                                      └
+                                    </span>
+                                  )}
+                                  <span className="font-mono font-semibold text-text">
+                                    {field.name}
+                                  </span>
+                                  {field.fullPath !== field.name && (
+                                    <span className="text-[10px] font-mono text-text-muted">
+                                      ({field.fullPath})
+                                    </span>
+                                  )}
+                                  {field.label && field.label !== field.name && (
+                                    <span className="text-[10px] text-text-secondary">
+                                      — {field.label}
+                                    </span>
+                                  )}
+                                </div>
+                                {field.description && (
+                                  <p
+                                    className="text-[10px] text-text-muted mt-0.5 line-clamp-1"
+                                    style={{ paddingLeft: `${field.depth * 14 + (field.depth > 0 ? 16 : 0)}px` }}
+                                  >
+                                    {field.description}
+                                  </p>
+                                )}
+                              </td>
+
+                              {/* Data Type Badge */}
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <span className="px-2 py-0.5 rounded font-mono text-[11px] font-medium bg-primary/10 text-primary border border-primary/20">
+                                  {field.type || "string"}
+                                </span>
+                              </td>
+
+                              {/* Attributes */}
+                              <td className="py-2.5 px-3 whitespace-nowrap">
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {field.required && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-error/10 text-error border border-error/20">
+                                      Required
+                                    </span>
+                                  )}
+                                  {field.nullable === false && !field.required && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-warning/10 text-warning border border-warning/20">
+                                      Non-Nullable
+                                    </span>
+                                  )}
+                                  {field.readOnly && (
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-surface-secondary text-text-muted border border-border">
+                                      Read-Only
+                                    </span>
+                                  )}
+                                  {!field.required && field.nullable !== false && !field.readOnly && (
+                                    <span className="text-[10px] text-text-muted font-mono">
+                                      optional
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+
+                              {/* Sample Value */}
+                              <td className="py-2.5 px-3">
+                                {renderSampleValue(
+                                  field.sampleValue ??
+                                    field.sample ??
+                                    field.example ??
+                                    (field.name ? activeEntity.sampleRecords?.[0]?.[field.name] : undefined) ??
+                                    activeEntity.sampleRecords?.[0]?.[field.fullPath]
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEP 6: ENTITY SELECTION & FIELD MAPPING */}
+          {step === 6 && (
+            <EntitySelectionMappingFlow
+              connector={selectedConnector}
+              integrationId={activeIntegrationId}
+              discoveredSchema={discoveredSchema}
+              selectedModuleId={watch("targetModule") || "leads"}
+              selectedEntityId={watch("targetEntity") || "Lead"}
+              onModuleChange={handleMappingModuleChange}
+              onValidationChange={handleValidationChange}
+              onMappingsChange={handleMappingsChange}
+              initialMappings={mappedFields}
+              disabled={isSubmitting}
+            />
           )}
 
           {/* Footer Controls */}
@@ -1635,15 +2466,18 @@ export function IntegrationWizardModal({
                 Cancel
               </button>
 
-              {step < 4 ? (
+              {step < 6 ? (
                 <button
                   type="button"
-                  onClick={() => {
+                  key={`wizard-next-step-${step}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     if (!selectedConnector) {
                       toast.error("Please pick a connector first");
                       return;
                     }
-                    setStep((prev) => (prev + 1) as any);
+                    setStep((prev) => Math.min(6, prev + 1) as any);
                   }}
                   className="flex items-center gap-1 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
                 >
@@ -1652,8 +2486,18 @@ export function IntegrationWizardModal({
                 </button>
               ) : (
                 <button
-                  type="submit"
-                  disabled={isSubmitting || isTesting}
+                  type="button"
+                  key="wizard-finish-step-6"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleSubmit(onFormSubmit)(e);
+                  }}
+                  disabled={isSubmitting || isTesting || !isMappingValid}
+                  title={
+                    !isMappingValid
+                      ? `Missing required fields: ${missingRequiredFields.join(", ")}`
+                      : "Finish and connect integration"
+                  }
                   className="flex items-center gap-1.5 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (

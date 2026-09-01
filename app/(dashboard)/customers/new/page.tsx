@@ -99,8 +99,11 @@ export default function NewCustomerPage() {
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof CreateCustomerPayload, string>> = {};
     if (!form.name.trim()) newErrors.name = "Customer name is required";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+    if (form.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
       newErrors.email = "Please enter a valid email address";
+    }
+    if (form.phone?.trim() && !/^[+0-9\s\-()]{7,20}$/.test(form.phone.trim())) {
+      newErrors.phone = "Please enter a valid phone number (min 7 digits)";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -236,8 +239,11 @@ export default function NewCustomerPage() {
                     value={form.phone}
                     onChange={handleChange}
                     placeholder="+1 555 000 0000"
-                    className={INPUT_CLASS}
+                    className={errors.phone ? INPUT_ERROR_CLASS : INPUT_CLASS}
                   />
+                  {errors.phone && (
+                    <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.phone}</p>
+                  )}
                 </div>
                 <div>
                   <FieldLabel icon={<Briefcase size={13} />}>Canonical Type</FieldLabel>

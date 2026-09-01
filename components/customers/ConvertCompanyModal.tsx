@@ -36,6 +36,7 @@ export function ConvertCompanyModal({ isOpen, onClose, onSuccess }: ConvertCompa
   const [loadingLists, setLoadingLists] = useState(true);
   const [converting, setConverting] = useState(false);
   const [result, setResult] = useState<ConvertCompanyResult | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!isOpen) return;
@@ -63,14 +64,21 @@ export function ConvertCompanyModal({ isOpen, onClose, onSuccess }: ConvertCompa
 
   const setField = <K extends keyof ConvertCompanyPayload>(k: K, v: ConvertCompanyPayload[K]) => {
     setPayload((p) => ({ ...p, [k]: v }));
+    if (errors[k]) setErrors((p) => ({ ...p, [k]: "" }));
+  };
+
+  const validate = (): boolean => {
+    const newErrors: Record<string, string> = {};
+    if (!payload.companyId) {
+      newErrors.companyId = "Please select a company to convert";
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleConvert = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!payload.companyId) {
-      toast.warning("Please select a company to convert.");
-      return;
-    }
+    if (!validate()) return;
     setConverting(true);
     try {
       const finalPayload: ConvertCompanyPayload = { ...payload };
@@ -170,7 +178,7 @@ export function ConvertCompanyModal({ isOpen, onClose, onSuccess }: ConvertCompa
                     disabled={loadingLists || converting}
                     value={payload.companyId}
                     onChange={(e) => setField("companyId", e.target.value)}
-                    className={INPUT_CLASS + " appearance-none pr-9 cursor-pointer" + (loadingLists ? " opacity-60" : "")}
+                    className={INPUT_CLASS + " appearance-none pr-9 cursor-pointer" + (loadingLists ? " opacity-60" : "") + (errors.companyId ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                   >
                     <option value="">Select a company…</option>
                     {companies.map((c) => (
@@ -178,6 +186,7 @@ export function ConvertCompanyModal({ isOpen, onClose, onSuccess }: ConvertCompa
                     ))}
                   </select>
                 </div>
+                {errors.companyId && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.companyId}</p>}
               </div>
 
               <div>

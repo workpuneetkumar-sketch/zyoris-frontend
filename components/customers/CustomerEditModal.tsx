@@ -81,8 +81,11 @@ export function CustomerEditModal({ isOpen, customer, onClose, onSaved }: Custom
   const validate = (): boolean => {
     const newErrors: Partial<Record<string, string>> = {};
     if (!form.name?.trim()) newErrors.name = "Customer name is required";
-    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      newErrors.email = "Please enter a valid email";
+    if (form.email?.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      newErrors.email = "Please enter a valid email address";
+    }
+    if (form.phone?.trim() && !/^[+0-9\s\-()]{7,20}$/.test(form.phone.trim())) {
+      newErrors.phone = "Please enter a valid phone number (min 7 digits)";
     }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -178,8 +181,10 @@ export function CustomerEditModal({ isOpen, customer, onClose, onSaved }: Custom
                   <input
                     value={form.phone || ""}
                     onChange={(e) => setField("phone", e.target.value)}
-                    className={INPUT_CLASS}
+                    className={errors.phone ? INPUT_ERROR_CLASS : INPUT_CLASS}
+                    placeholder="+1 555 000 0000"
                   />
+                  {errors.phone && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.phone}</p>}
                 </div>
                 <div>
                   <label className="text-xs font-semibold mb-1 flex items-center gap-1.5" style={{ color: "var(--color-text-secondary)" }}>

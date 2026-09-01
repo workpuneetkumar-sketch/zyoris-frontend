@@ -12,8 +12,9 @@
 //   • Every section below is a self-contained component with a stable id/anchor;
 //     graph and timeline own their loading / error / empty state internally.
 
+import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Building2, ExternalLink, Edit3 } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, Edit3, Briefcase } from "lucide-react";
 import { useCustomer360 } from "@/hooks/useCustomer360";
 import { CustomerApiError } from "@/lib/api/customersApi";
 import type { CanonicalCustomer } from "@/types/customers";
@@ -30,6 +31,7 @@ import { ProductsSection } from "./sections/ProductsSection";
 import { FinancialsSection } from "./sections/FinancialsSection";
 import { ServiceSection } from "./sections/ServiceSection";
 import { AiInsightsSection } from "./sections/AiInsightsSection";
+import { MeetingPrepDrawer } from "./MeetingPrepDrawer";
 
 const SECTION_NAV = [
   { id: "context", label: "Context" },
@@ -54,6 +56,7 @@ export function Customer360Page({
 }) {
   const router = useRouter();
   const { summary, graph } = useCustomer360(customerId);
+  const [isMeetingPrepOpen, setIsMeetingPrepOpen] = useState(false);
 
   if (summary.loading) {
     return <Customer360Skeleton />;
@@ -171,6 +174,13 @@ export function Customer360Page({
                 <Edit3 size={14} /> Edit
               </button>
             )}
+            <button
+              type="button"
+              onClick={() => setIsMeetingPrepOpen(true)}
+              className="flex items-center gap-1.5 h-9 px-4 rounded-lg text-text-secondary text-sm font-semibold border border-border bg-surface hover:bg-surface-hover shadow-sm transition-all"
+            >
+              <Briefcase size={14} /> Meeting Prep
+            </button>
           </div>
         )}
       </header>
@@ -201,9 +211,14 @@ export function Customer360Page({
         <div className="flex flex-col gap-6">
           <TimelineSection customerId={customer.id} />
           <GraphSection graph={graph} />
-          <AiInsightsSection insights={customer.aiInsights} />
+          <AiInsightsSection customerId={customer.id} />
         </div>
       </div>
+      <MeetingPrepDrawer 
+        customerId={customer.id} 
+        isOpen={isMeetingPrepOpen} 
+        onClose={() => setIsMeetingPrepOpen(false)} 
+      />
     </div>
   );
 }

@@ -176,3 +176,72 @@ export interface ConvertCompanyResult {
   customerId?: string;
   message?: string;
 }
+
+// ── Preflight ──────────────────────────────────────────────────────────────
+
+export interface PreflightPayload {
+  email?: string;
+  phone?: string;
+  externalId?: string;
+  externalSystem?: string;
+  contactId?: string;
+  companyId?: string;
+  leadId?: string;
+  name?: string;
+}
+
+export type PreflightAction = "allow_create" | "link_existing" | "merge_required";
+
+export interface PreflightResult {
+  action: PreflightAction;
+  existingCustomerId?: string | null;
+  existingCustomerName?: string | null;
+  confidence?: number | null;
+  matches?: Array<{ customerId: string; customerName: string; confidence: number; matchedFields: string[] }>;
+  metadata?: Record<string, unknown> | null;
+  message?: string | null;
+}
+
+// ── Merge ──────────────────────────────────────────────────────────────────
+
+export interface MergeCustomerPayload {
+  loserIds: string[];
+  fieldOverrides?: Record<string, unknown>;
+}
+
+export interface MergeCustomerResult {
+  survivorId: string;
+  survivor?: CanonicalCustomer | null;
+  auditId?: string | null;
+  message?: string;
+}
+
+export interface MergeAuditRecord {
+  id: string;
+  survivorId: string;
+  loserIds: string[];
+  fieldOverrides?: Record<string, unknown> | null;
+  mergedBy?: string | null;
+  mergedAt: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+// ── Preferences ────────────────────────────────────────────────────────────
+
+export interface CustomerPreferences {
+  language?: string | null;
+  timezone?: string | null;
+  preferredChannel?: string | null;
+  consentStatus?: string | null;
+  doNotContact?: boolean | null;
+  importantDates?: Record<string, unknown> | null;
+  preferences?: Record<string, unknown> | null;
+}
+
+// ── Ownership ──────────────────────────────────────────────────────────────
+
+export interface CustomerOwnershipPayload {
+  ownerId?: string;
+  team?: string;
+  accountPlan?: string;
+}
