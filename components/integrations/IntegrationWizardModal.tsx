@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -12,7 +12,6 @@ import {
   UpdateIntegrationPayload,
   TestConnectionResponse,
   NormalizedConnectionTestResult,
-  ConnectionErrorCategory,
   DiscoveredSchemaResponse,
   DiscoveredEntity,
   DiscoveredField,
@@ -62,6 +61,7 @@ import {
   updateIntegrationMappingApi,
 } from "@/lib/api/integrationsApi";
 import { WizardProgress } from "./wizard/WizardProgress";
+import { WizardFooter } from "./wizard/WizardFooter";
 import { integrationWizardSteps } from "./wizard/wizardSteps";
 import {
   DEFAULT_REST_CONFIGURATION,
@@ -86,6 +86,9 @@ interface IntegrationWizardModalProps {
   onOAuthConnect: (provider: string, payload?: Record<string, any>) => Promise<any>;
   onUpdateIntegration?: (id: string, payload: UpdateIntegrationPayload) => Promise<any>;
   onFetchSchema?: (id: string) => Promise<DiscoveredSchemaResponse>;
+  onDiscoverSchema?: (id: string, payload?: any) => Promise<DiscoveredSchemaResponse>;
+  onGetMapping?: (id: string) => Promise<any>;
+  onSaveMapping?: (id: string, payload: any) => Promise<any>;
   onViewSchema?: (connector: Connector) => void;
 }
 
@@ -112,29 +115,6 @@ const integrationFormSchema = z.object({
       { message: "Please enter a valid HTTP/HTTPS URL" }
     ),
   httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"] as const),
-  contentType: z.enum(REST_CONTENT_TYPES).optional(),
-  queryParams: z
-    .array(
-      z.object({
-        key: z.string().min(1, "Parameter name required"),
-        value: z.string().min(1, "Parameter value required"),
-      })
-    )
-    .optional(),
-  requestBody: z
-    .string()
-    .refine(
-      (value) => {
-        try {
-          parseRequestBody(value);
-          return true;
-        } catch {
-          return false;
-        }
-      },
-      { message: "Request body must contain valid JSON" }
-    )
-    .optional(),
   authType: z.enum([
     "OAUTH2",
     "API_KEY",
@@ -173,6 +153,26 @@ const integrationFormSchema = z.object({
       })
     )
     .optional(),
+  contentType: z.enum(REST_CONTENT_TYPES),
+  queryParams: z
+    .array(
+      z.object({
+        key: z.string().min(1, "Parameter name required"),
+        value: z.string().min(1, "Parameter value required"),
+      })
+    )
+    .optional(),
+  requestBody: z.string().refine(
+    (value) => {
+      try {
+        parseRequestBody(value);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: "Request body must contain valid JSON" }
+  ),
   // Dynamic field mappings: targetField -> remoteFieldPath
   fieldMappings: z.record(z.string(), z.string()).optional(),
   // Additional dynamic config
@@ -302,22 +302,20 @@ const AVAILABLE_MODULES = [
     label: "Custom Entity",
     entity: "CustomRecord",
     targetFields: [
-      { key: "recordId", label: "External Record ID", required: true },
-      { key: "title", label: "Primary Label / Title", required: true },
-      { key: "data", label: "JSON Payload" },
+      { key: "externalId", label: "External Record ID", required: true },
+      { key: "title", label: "Title / Name", required: true },
+      { key: "data", label: "Payload Data" },
+      { key: "updatedAt", label: "Last Modified" },
     ],
   },
 ];
 
 /**
- * Sanitizes any diagnostic or error message by removing sensitive tokens, passwords, keys, and paths
+ * Sanitizes and redacts sensitive error messages before display
  */
-function sanitizeDiagnosticMessage(rawMessage?: string): string {
-  if (!rawMessage || typeof rawMessage !== "string") return "";
-
-  return rawMessage
-    // Redact JWT tokens
-    .replace(/ey[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+/g, "[TOKEN_REDACTED]")
+function sanitizeDiagnosticMessage(msg?: string): string {
+  if (!msg) return "";
+  return msg
     // Redact Bearer tokens
     .replace(/Bearer\s+[A-Za-z0-9_\-\.]+/gi, "Bearer [REDACTED]")
     // Redact sensitive key/value pairs
@@ -387,6 +385,9 @@ export function IntegrationWizardModal({
   onOAuthConnect,
   onUpdateIntegration,
   onFetchSchema,
+  onDiscoverSchema,
+  onGetMapping,
+  onSaveMapping,
   onViewSchema,
 }: IntegrationWizardModalProps) {
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(
@@ -396,16 +397,12 @@ export function IntegrationWizardModal({
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Live Connection Test state
+  // Live Connection Test & Schema Discovery state
   const [activeIntegrationId, setActiveIntegrationId] = useState<string | null>(null);
   const connectionTest = useAsyncRequest<NormalizedConnectionTestResult>();
   const connectionTestStatus = connectionTest.status;
   const resetConnectionTest = connectionTest.reset;
   const isTesting = connectionTest.status === "loading";
-  const testResult = connectionTest.data ||
-    (connectionTest.error instanceof AsyncRequestError
-      ? connectionTest.error.data
-      : null);
   const [isSchemaUnlocked, setIsSchemaUnlocked] = useState(false);
 
   // Schema Discovery state — preserved in wizard state
@@ -430,10 +427,10 @@ export function IntegrationWizardModal({
         initialConnector.connectionState?.id ||
         (initialConnector.isConnected ? initialConnector.id : null);
       setActiveIntegrationId(existingId);
-      setStep(2);
+      setStep(2); // Jump straight to configuration if a connector was clicked directly
     } else {
       setActiveIntegrationId(null);
-      setStep(1);
+      setStep(1); // Select connector first if opened without pre-selection
     }
     resetConnectionTest();
     setIsSchemaUnlocked(false);
@@ -442,24 +439,11 @@ export function IntegrationWizardModal({
     setMappedFields({});
   }, [initialConnector, isOpen, resetConnectionTest]);
 
-  const prov = (selectedConnector?.provider || selectedConnector?.id || selectedConnector?.name || "").toLowerCase();
   const defaultValues: Partial<FormValues> = {
     displayName: selectedConnector ? `${selectedConnector.name} Integration` : "",
     targetModule: "leads",
     targetEntity: "Lead",
-    apiUrl:
-      selectedConnector?.configSchema?.endpoint?.defaultUrl ||
-      (prov.includes("salesforce")
-        ? "https://login.salesforce.com/services/data/v58.0"
-        : prov.includes("hubspot")
-        ? "https://api.hubapi.com/crm/v3/objects"
-        : prov.includes("zoho")
-        ? "https://www.zohoapis.com/crm/v2"
-        : prov.includes("stripe")
-        ? "https://api.stripe.com/v1"
-        : prov.includes("slack")
-        ? "https://slack.com/api"
-        : "https://api.example.com/v1"),
+    apiUrl: selectedConnector?.configSchema?.endpoint?.defaultUrl || "",
     httpMethod:
       (selectedConnector?.configSchema?.endpoint?.defaultMethod as HttpMethod) ||
       "POST",
@@ -500,6 +484,14 @@ export function IntegrationWizardModal({
     mode: "onBlur",
   });
 
+  const testResult: NormalizedConnectionTestResult | null =
+    connectionTest.data ||
+    (connectionTest.error instanceof AsyncRequestError
+      ? (connectionTest.error.data as NormalizedConnectionTestResult)
+      : connectionTest.error
+      ? normalizeConnectionError(connectionTest.error, undefined)
+      : null);
+
   const { fields, append, remove } = useFieldArray({
     control,
     name: "headers",
@@ -517,21 +509,9 @@ export function IntegrationWizardModal({
   useEffect(() => {
     if (selectedConnector) {
       setValue("displayName", `${selectedConnector.name} Integration`);
-      const p = (selectedConnector.provider || selectedConnector.id || selectedConnector.name || "").toLowerCase();
-      const defaultUrl =
-        selectedConnector.configSchema?.endpoint?.defaultUrl ||
-        (p.includes("salesforce")
-          ? "https://login.salesforce.com/services/data/v58.0"
-          : p.includes("hubspot")
-          ? "https://api.hubapi.com/crm/v3/objects"
-          : p.includes("zoho")
-          ? "https://www.zohoapis.com/crm/v2"
-          : p.includes("stripe")
-          ? "https://api.stripe.com/v1"
-          : p.includes("slack")
-          ? "https://slack.com/api"
-          : "https://api.example.com/v1");
-      setValue("apiUrl", defaultUrl);
+      if (selectedConnector.configSchema?.endpoint?.defaultUrl) {
+        setValue("apiUrl", selectedConnector.configSchema.endpoint.defaultUrl);
+      }
       if (selectedConnector.authType) {
         setValue("authType", selectedConnector.authType as AuthType);
       }
@@ -543,7 +523,7 @@ export function IntegrationWizardModal({
     }
   }, [selectedConnector, setValue]);
 
-  // Invalidate previous test and schema when sensitive credentials/endpoint change in step 2 or 3
+  // Invalidate previous test result when sensitive credentials/endpoint change in step 2 or 3
   const watchedApiUrl = watch("apiUrl");
   const watchedHttpMethod = watch("httpMethod");
   const watchedAuthType = watch("authType");
@@ -556,7 +536,6 @@ export function IntegrationWizardModal({
     if (step < 4 && connectionTestStatus !== "idle") {
       resetConnectionTest();
       setIsSchemaUnlocked(false);
-      setDiscoveredSchema(null);
     }
   }, [
     step,
@@ -571,10 +550,39 @@ export function IntegrationWizardModal({
     watchedWebhookSecret,
   ]);
 
+  // Clear auth credentials when auth type changes to prevent old secrets from being submitted
+  const previousAuthTypeRef = React.useRef<AuthType | undefined>();
+  useEffect(() => {
+    const currentAuthType = watch("authType");
+    
+    if (previousAuthTypeRef.current !== undefined && previousAuthTypeRef.current !== currentAuthType) {
+      setValue("apiKeyName", "");
+      setValue("apiKeyValue", "");
+      setValue("bearerToken", "");
+      setValue("basicUsername", "");
+      setValue("basicPassword", "");
+      setValue("oauthClientId", "");
+      setValue("oauthClientSecret", "");
+      setValue("oauthScopes", "");
+      setValue("webhookSecret", "");
+
+      if (currentAuthType === "API_KEY") {
+        setValue("apiKeyName", "X-API-Key");
+      }
+      if (currentAuthType === "OAUTH2") {
+        setValue("oauthScopes", "read, write");
+      }
+    }
+    
+    previousAuthTypeRef.current = currentAuthType;
+  }, [watchedAuthType, watch, setValue]);
+
   const currentAuthType = watch("authType");
   const currentTargetModule = watch("targetModule");
   const currentHttpMethod = watch("httpMethod");
-  const supportsRequestBody = currentHttpMethod !== "GET" && currentHttpMethod !== "DELETE";
+  const supportsRequestBody = ["POST", "PUT", "PATCH"].includes(
+    currentHttpMethod
+  );
 
   const currentModuleConfig = useMemo(() => {
     return (
@@ -582,6 +590,85 @@ export function IntegrationWizardModal({
       AVAILABLE_MODULES[0]
     );
   }, [currentTargetModule]);
+
+  const getVerifiedExistingIntegrationId = (
+    connector: Connector | null,
+    payload?: CreateIntegrationPayload
+  ): string | null => {
+    if (!connector || !payload) return null;
+
+    const connectorMatchesById =
+      !!connector.id &&
+      !!payload.connectorId &&
+      connector.id.toLowerCase() === payload.connectorId.toLowerCase();
+
+    const connectorMatchesByProvider =
+      !!connector.provider &&
+      !!payload.provider &&
+      connector.provider.toLowerCase() === payload.provider.toLowerCase();
+
+    if (!connectorMatchesById && !connectorMatchesByProvider) {
+      return null;
+    }
+
+    return (
+      connector.connectionId ||
+      connector.connectionState?.id ||
+      (connector.isConnected ? connector.id : null)
+    );
+  };
+
+  const buildPayload = (data: FormValues): CreateIntegrationPayload => {
+    const connector = selectedConnector || initialConnector || {
+      id: "custom",
+      provider: "custom",
+      name: data.displayName || "Custom Integration",
+    };
+
+    const credentials: Record<string, any> = {};
+    if (data.authType === "API_KEY") {
+      credentials.headerName = data.apiKeyName || "X-API-Key";
+      credentials.apiKey = data.apiKeyValue;
+    } else if (data.authType === "BEARER_TOKEN") {
+      credentials.token = data.bearerToken;
+    } else if (data.authType === "BASIC_AUTH") {
+      credentials.username = data.basicUsername;
+      credentials.password = data.basicPassword;
+    } else if (data.authType === "WEBHOOK_SECRET") {
+      credentials.secret = data.webhookSecret;
+    }
+
+    const headers: Record<string, string> = {};
+    data.headers?.forEach((header) => {
+      if (header.key.trim() && header.value.trim()) {
+        headers[header.key.trim()] = header.value.trim();
+      }
+    });
+
+    return {
+      connectorId: connector.id,
+      provider: connector.provider,
+      name: data.displayName,
+      displayName: data.displayName,
+      targetModule: data.targetModule,
+      targetEntity: data.targetEntity,
+      apiUrl: data.apiUrl,
+      httpMethod: data.httpMethod,
+      authType: data.authType,
+      credentials,
+      syncDirection: data.syncDirection,
+      syncFrequency: data.syncFrequency,
+      headers,
+      config: {
+        ...(data.dynamicFields || {}),
+        contentType: data.contentType,
+        queryParams: data.queryParams?.filter(
+          (param) => param.key.trim() && param.value.trim()
+        ),
+        requestBody: parseRequestBody(data.requestBody),
+      },
+    };
+  };
 
   const toggleSecretVisibility = (key: string) => {
     setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -596,42 +683,40 @@ export function IntegrationWizardModal({
     }
   };
 
-  // Helper to compile credentials payload
-  const buildCredentialsObject = (values: FormValues): Record<string, any> => {
-    const credentials: Record<string, any> = {};
-    if (values.authType === "API_KEY") {
-      credentials.headerName = values.apiKeyName || "X-API-Key";
-      credentials.apiKey = values.apiKeyValue;
-    } else if (values.authType === "BEARER_TOKEN") {
-      credentials.token = values.bearerToken;
-    } else if (values.authType === "BASIC_AUTH") {
-      credentials.username = values.basicUsername;
-      credentials.password = values.basicPassword;
-    } else if (values.authType === "WEBHOOK_SECRET") {
-      credentials.secret = values.webhookSecret;
+  // Helper to extract integration database ID from various API response shapes
+  const extractIntegrationId = (target: any): string | null => {
+    if (!target) return null;
+    if (typeof target === "string" && target.trim().length > 3) return target.trim();
+    if (typeof target !== "object") return null;
+
+    if (typeof target.id === "string" && target.id.trim()) return target.id.trim();
+    if (typeof target._id === "string" && target._id.trim()) return target._id.trim();
+    if (typeof target.integrationId === "string" && target.integrationId.trim()) return target.integrationId.trim();
+    if (typeof target.connectionId === "string" && target.connectionId.trim()) return target.connectionId.trim();
+
+    if (target.data) {
+      const fromData = extractIntegrationId(target.data);
+      if (fromData) return fromData;
     }
-    return credentials;
+    if (target.integration) {
+      const fromIntegration = extractIntegrationId(target.integration);
+      if (fromIntegration) return fromIntegration;
+    }
+    if (target.result) {
+      const fromResult = extractIntegrationId(target.result);
+      if (fromResult) return fromResult;
+    }
+    if (Array.isArray(target) && target.length > 0) {
+      const fromArray = extractIntegrationId(target[0]);
+      if (fromArray) return fromArray;
+    }
+    return null;
   };
 
-  // Helper to compile headers object
-  const buildHeadersObject = (
-    headersList?: Array<{ key: string; value: string }>
-  ): Record<string, string> => {
-    const headerObject: Record<string, string> = {};
-    headersList?.forEach((h) => {
-      if (h.key.trim() && h.value.trim()) {
-        headerObject[h.key.trim()] = h.value.trim();
-      }
-    });
-    return headerObject;
-  };
-
-  /**
-   * Real Connection Test Handler
-   * Calls REAL backend API: POST /api/v1/integrations/{id}/test
-   * Prevents duplicate simultaneous requests, provides loading state & normalized feedback
-   */
+  // Real connection test handler for the integration test endpoint.
   const handleTestConnection = async () => {
+    if (isTesting) return; // Prevent duplicate requests
+
     const values = watch();
     if (!values.apiUrl) {
       toast.error("Please enter a valid API URL before testing connectivity.");
@@ -641,80 +726,95 @@ export function IntegrationWizardModal({
     const startTime = performance.now();
 
     try {
-      let targetId =
-        activeIntegrationId ||
-        selectedConnector?.connectionId ||
-        selectedConnector?.connectionState?.id;
-
-      // If no backend integration ID exists yet, create the instance with encrypted credentials
-      if (!targetId && selectedConnector) {
-        const credentials = buildCredentialsObject(values);
-        const headerObject = buildHeadersObject(values.headers);
-        const createPayload: CreateIntegrationPayload = {
-          connectorId: selectedConnector.id,
-          provider: selectedConnector.provider,
-          name: values.displayName,
-          displayName: values.displayName,
-          targetModule: values.targetModule,
-          targetEntity: values.targetEntity,
-          apiUrl: values.apiUrl,
-          baseUrl: values.apiUrl,
-          httpMethod: values.httpMethod,
-          authType: values.authType,
-          credentials,
-          syncDirection: values.syncDirection,
-          syncFrequency: values.syncFrequency,
-          headers: headerObject,
-          config: values.dynamicFields,
-        };
-        try {
-          const created = await onSubmit(createPayload);
-          if (created?.id) {
-            targetId = created.id;
-            setActiveIntegrationId(created.id);
-          }
-        } catch {
-          // Fall back to connector identifier if creation endpoint is handled alternatively
-        }
-      }
-
-      targetId =
-        targetId ||
-        selectedConnector?.id ||
-        selectedConnector?.provider ||
-        "custom";
-
-      const testPayload = {
-        apiUrl: values.apiUrl,
-        httpMethod: values.httpMethod,
-        authType: values.authType,
-        credentials: buildCredentialsObject(values),
-        headers: buildHeadersObject(values.headers),
-        targetModule: values.targetModule,
-        targetEntity: values.targetEntity,
-        ...(values.dynamicFields || {}),
-      };
-
       const result = await connectionTest.execute(async () => {
-        const response = onTestConnection
-          ? await onTestConnection(targetId, testPayload)
-          : await testIntegrationConnectionApi(targetId, testPayload);
-        const latencyMs = Math.round(performance.now() - startTime);
-        const normalized = response.success
-          ? normalizeConnectionSuccess(response, latencyMs)
-          : normalizeConnectionError(
+        const payload = buildPayload(values);
+        const verifiedExistingTargetId = getVerifiedExistingIntegrationId(
+          selectedConnector,
+          payload
+        );
+
+        let currentTargetId = activeIntegrationId || verifiedExistingTargetId || null;
+
+        // For a brand-new integration, the test must use the newly-created ID from
+        // the successful POST /api/integrations response. Any stale connector
+        // connectionId from a different provider must not override that fresh ID.
+        if (!currentTargetId && onSubmit) {
+          try {
+            const created = await onSubmit(payload);
+            const createdId = extractIntegrationId(created);
+            if (createdId) {
+              currentTargetId = createdId;
+              setActiveIntegrationId(createdId);
+            }
+          } catch (createErr: any) {
+            const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+            const normalized = normalizeConnectionError(createErr, latencyMs);
+            throw new AsyncRequestError(
+              normalized,
+              normalized.message || "Failed to establish integration target."
+            );
+          }
+        }
+
+        // If active integration was already created and user edited fields before re-testing, sync configuration
+        if (activeIntegrationId && onUpdateIntegration) {
+          try {
+            await onUpdateIntegration(activeIntegrationId, {
+              displayName: payload.displayName,
+              apiUrl: payload.apiUrl,
+              httpMethod: payload.httpMethod,
+              credentials: payload.credentials,
+              headers: payload.headers,
+              config: payload.config,
+              syncDirection: payload.syncDirection,
+              syncFrequency: payload.syncFrequency,
+            });
+          } catch (updateErr) {
+            console.warn("Failed to sync updated configuration before test:", updateErr);
+          }
+        }
+
+        if (!currentTargetId) {
+          throw new Error(
+            "An integration instance could not be established for your organization. Please verify your configuration."
+          );
+        }
+
+        const testFn = onTestConnection || testIntegrationConnectionApi;
+
+        try {
+          const response = await testFn(currentTargetId, payload);
+          const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+
+          if (response.success) {
+            const normalized = normalizeConnectionSuccess(response, latencyMs);
+            return normalized;
+          } else {
+            const normalized = normalizeConnectionError(
               {
                 response: {
-                  status: response.statusCode && response.statusCode >= 400 ? response.statusCode : undefined,
+                  status: response.statusCode || response.httpStatus || 400,
                   data: response,
                 },
               },
               latencyMs
             );
-        if (!normalized.success) {
-          throw new AsyncRequestError(normalized, normalized.message || "Connection test failed.");
+            throw new AsyncRequestError(
+              normalized,
+              normalized.message || response.message || "Connection test failed."
+            );
+          }
+        } catch (apiErr) {
+          if (apiErr instanceof AsyncRequestError) {
+            throw apiErr;
+          }
+          const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+          const normalized = normalizeConnectionError(apiErr, latencyMs);
+          throw new AsyncRequestError(
+            normalized,
+            normalized.message || "Connection test failed."
+          );
         }
-        return normalized;
       });
 
       if (!result) return;
@@ -722,32 +822,37 @@ export function IntegrationWizardModal({
       toast.success("Connection test passed!");
       return result;
     } catch (err) {
-      const normalizedErr = err instanceof AsyncRequestError
-        ? err.data
-        : normalizeConnectionError(err, Math.round(performance.now() - startTime));
       setIsSchemaUnlocked(false);
+      const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+      const normalizedErr =
+        err instanceof AsyncRequestError
+          ? err.data
+          : normalizeConnectionError(err, latencyMs);
       toast.error(normalizedErr.message || "Connection test failed.");
     }
   };
 
   const handleRetryConnection = async () => {
+    const startTime = performance.now();
     try {
       const result = await connectionTest.retry();
       if (!result) return;
       setIsSchemaUnlocked(true);
       toast.success("Connection test passed!");
     } catch (err) {
-      const normalizedErr = err instanceof AsyncRequestError
-        ? err.data
-        : normalizeConnectionError(err);
       setIsSchemaUnlocked(false);
-      toast.error(normalizedErr.message || "Connection test failed.");
+      const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+      const normalized =
+        err instanceof AsyncRequestError
+          ? err.data
+          : normalizeConnectionError(err, latencyMs);
+      toast.error(normalized.message || "Connection test failed.");
     }
   };
 
   /**
    * Real Schema Discovery Handler
-   * Calls REAL backend API: GET /api/v1/integrations/{id}/schema
+   * Calls backend API: GET /api/v1/integrations/{id}/schema
    * Prevents unnecessary refetches when schema is already stored in wizard state
    */
   const handleDiscoverSchema = useCallback(
@@ -765,7 +870,6 @@ export function IntegrationWizardModal({
         return;
       }
 
-      // If schema already discovered in wizard state and not forced, reuse it!
       if (discoveredSchema && !forceRefetch) {
         return;
       }
@@ -776,13 +880,14 @@ export function IntegrationWizardModal({
       setSchemaError(null);
 
       try {
-        const schemaRes = onFetchSchema
+        const schemaRes = onDiscoverSchema
+          ? await onDiscoverSchema(targetId)
+          : onFetchSchema
           ? await onFetchSchema(targetId)
           : await getIntegrationSchemaApi(targetId);
 
         setDiscoveredSchema(schemaRes);
 
-        // Select first entity if available
         const entityList = schemaRes?.entities || [];
         if (entityList.length > 0 && !selectedEntityName) {
           setSelectedEntityName(entityList[0].name || entityList[0].id || "Default");
@@ -826,6 +931,7 @@ export function IntegrationWizardModal({
       selectedConnector,
       discoveredSchema,
       isLoadingSchema,
+      onDiscoverSchema,
       onFetchSchema,
       selectedEntityName,
       mappedFields,
@@ -921,7 +1027,6 @@ export function IntegrationWizardModal({
 
   // Final Form Submission
   const onFormSubmit = async (data: FormValues) => {
-    // Strictly only allow submission on Step 6
     if (step !== 6) {
       return;
     }
@@ -931,7 +1036,6 @@ export function IntegrationWizardModal({
       return;
     }
 
-    // Strict validation: target required fields must be satisfied
     if (step === 6 && !isMappingValid && missingRequiredFields.length > 0) {
       toast.error(
         `Required target fields missing: ${missingRequiredFields.join(
@@ -941,7 +1045,6 @@ export function IntegrationWizardModal({
       return;
     }
 
-    // Helper to format backend validation error details
     const formatBackendError = (err: any): string => {
       const details = err?.response?.data?.details;
       if (Array.isArray(details) && details.length > 0) {
@@ -957,20 +1060,11 @@ export function IntegrationWizardModal({
       );
     };
 
-    // If integration was already created during the connection test, update if needed and close
     if (activeIntegrationId && onUpdateIntegration) {
       setIsSubmitting(true);
       try {
-        const headerObject = buildHeadersObject(data.headers);
-        const credentials = buildCredentialsObject(data);
+        const payload = buildPayload(data);
 
-        const dynamicConfig = {
-          ...(data.dynamicFields || {}),
-          fieldMappings: mappedFields,
-          discoveredAt: discoveredSchema?.discoveredAt || new Date().toISOString(),
-        };
-
-        // Sync any unpersisted mappings to backend API
         if (rawMappingEntries.length > 0) {
           const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
           const targetEntName = data.targetEntity || "DefaultEntity";
@@ -1014,15 +1108,14 @@ export function IntegrationWizardModal({
         }
 
         await onUpdateIntegration(activeIntegrationId, {
-          displayName: data.displayName,
-          syncDirection: data.syncDirection,
-          syncFrequency: data.syncFrequency,
-          apiUrl: data.apiUrl,
-          httpMethod: data.httpMethod,
-          headers: headerObject,
-          config: dynamicConfig,
-          credentials:
-            Object.keys(credentials).length > 0 ? credentials : undefined,
+          displayName: payload.displayName,
+          syncDirection: payload.syncDirection,
+          syncFrequency: payload.syncFrequency,
+          apiUrl: payload.apiUrl,
+          httpMethod: payload.httpMethod,
+          headers: payload.headers,
+          credentials: payload.credentials,
+          config: payload.config,
         });
         toast.success(`Successfully configured ${selectedConnector.name}!`);
         reset();
@@ -1038,36 +1131,11 @@ export function IntegrationWizardModal({
 
     setIsSubmitting(true);
     try {
-      const credentials = buildCredentialsObject(data);
-      const headerObject = buildHeadersObject(data.headers);
-
-      const dynamicConfig = {
-        ...(data.dynamicFields || {}),
-        fieldMappings: mappedFields,
-        discoveredAt: discoveredSchema?.discoveredAt || new Date().toISOString(),
-      };
-
-      const payload: CreateIntegrationPayload = {
-        connectorId: selectedConnector.id,
-        provider: selectedConnector.provider,
-        name: data.displayName,
-        displayName: data.displayName,
-        targetModule: data.targetModule,
-        targetEntity: data.targetEntity,
-        apiUrl: data.apiUrl,
-        httpMethod: data.httpMethod,
-        authType: data.authType,
-        credentials,
-        syncDirection: data.syncDirection,
-        syncFrequency: data.syncFrequency,
-        headers: headerObject,
-        config: dynamicConfig,
-      };
+      const payload = buildPayload(data);
 
       const created = await onSubmit(payload);
       const newIntegrationId = created?.id;
 
-      // If backend created integration instance, sync field mappings
       if (newIntegrationId && rawMappingEntries.length > 0) {
         const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
         const targetEntName = data.targetEntity || "DefaultEntity";
@@ -1924,9 +1992,7 @@ export function IntegrationWizardModal({
                         className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20 text-xs font-semibold transition-colors disabled:opacity-50"
                       >
                         <RefreshCw
-                          className={`w-3.5 h-3.5 ${
-                            connectionTest.isRetrying ? "animate-spin" : ""
-                          }`}
+                          className={`w-3.5 h-3.5 ${isTesting ? "animate-spin" : ""}`}
                         />
                         <span>Retry Test</span>
                       </button>
@@ -1988,7 +2054,7 @@ export function IntegrationWizardModal({
                     <div>
                       <div className="flex items-center gap-2">
                         <h5 className="text-xs font-bold text-text">
-                          Schema Discovery & Sample Data
+                          Schema Discovery & Entity Mapping
                         </h5>
                         {isSchemaUnlocked ? (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/10 text-success border border-success/20 flex items-center gap-1">
@@ -2002,7 +2068,7 @@ export function IntegrationWizardModal({
                       </div>
                       <p className="text-xs text-text-secondary mt-1">
                         {isSchemaUnlocked
-                          ? "Connection verified! You can now explore remote schema fields, data types, sample values, and configure field mappings."
+                          ? "Connection verified! You can now explore remote schema, discovered entities, and field structures."
                           : "Schema Discovery is locked. Test connection successfully to discover available entities and field definitions."}
                       </p>
                     </div>
@@ -2437,12 +2503,23 @@ export function IntegrationWizardModal({
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Saving Integration...</span>
+                      <span>
+                        {currentAuthType === "OAUTH2"
+                          ? "Redirecting to Provider..."
+                          : "Saving Integration..."}
+                      </span>
+                    </>
+                  ) : currentAuthType === "OAUTH2" ? (
+                    <>
+                      <Zap className="w-4 h-4" />
+                      <span>
+                        Authorize with {selectedConnector?.name || "Provider"}
+                      </span>
                     </>
                   ) : (
                     <>
                       <Sparkles className="w-4 h-4" />
-                      <span>Finish & Connect</span>
+                      <span>Connect Integration</span>
                     </>
                   )}
                 </button>

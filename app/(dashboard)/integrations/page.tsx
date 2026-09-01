@@ -77,6 +77,9 @@ export default function IntegrationsPage() {
     resumeIntegration,
     testConnection,
     fetchSchema,
+    discoverSchema,
+    getSchemaMapping,
+    saveSchemaMapping,
     initiateOAuth,
   } = useIntegrations();
 
@@ -403,6 +406,15 @@ export default function IntegrationsPage() {
         onFetchSchema={async (id: string) => {
           return await fetchSchema(id);
         }}
+        onDiscoverSchema={async (id: string, payload?: any) => {
+          return await discoverSchema(id, payload);
+        }}
+        onGetMapping={async (id: string) => {
+          return await getSchemaMapping(id);
+        }}
+        onSaveMapping={async (id: string, payload: any) => {
+          return await saveSchemaMapping(id, payload);
+        }}
         onViewSchema={(connector: Connector) => {
           handleViewSchema(connector);
         }}
@@ -460,6 +472,15 @@ export default function IntegrationsPage() {
         connector={selectedConnectorForSchema}
         onFetchSchema={async (id: string) => {
           return await fetchSchema(id);
+        }}
+        onDiscoverSchema={async (id: string, payload?: any) => {
+          return await discoverSchema(id, payload);
+        }}
+        onGetMapping={async (id: string) => {
+          return await getSchemaMapping(id);
+        }}
+        onSaveMapping={async (id: string, payload: any) => {
+          return await saveSchemaMapping(id, payload);
         }}
       />
 
