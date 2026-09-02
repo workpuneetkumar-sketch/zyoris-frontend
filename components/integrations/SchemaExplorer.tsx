@@ -682,13 +682,18 @@ export function SchemaExplorer({
   }, [sampleJsonString, isOversizedPreview]);
 
   // -------------------------------------------------------------------------
+  // -------------------------------------------------------------------------
   // Check for Malformed / Unsupported / No Records States
   // -------------------------------------------------------------------------
+  const hasError = Boolean(error);
   const isMalformed =
-    Boolean(error) ||
-    (schemaResponse && typeof schemaResponse !== "object");
+    !hasError &&
+    schemaResponse !== undefined &&
+    schemaResponse !== null &&
+    typeof schemaResponse !== "object";
 
   const isUnsupported =
+    !hasError &&
     !isMalformed &&
     schemaResponse &&
     !Array.isArray(schemaResponse.fields) &&
@@ -698,6 +703,7 @@ export function SchemaExplorer({
 
   const isNoRecords =
     !isLoading &&
+    !hasError &&
     !isMalformed &&
     !isUnsupported &&
     allFields.length === 0 &&
@@ -723,7 +729,34 @@ export function SchemaExplorer({
   }
 
   // -------------------------------------------------------------------------
-  // Render State 11: Malformed Response State
+  // Render State 11: Error State
+  // -------------------------------------------------------------------------
+  if (hasError) {
+    return (
+      <div className={classNames("p-8 flex flex-col items-center justify-center text-center space-y-3", className)}>
+        <div className="w-12 h-12 rounded-2xl bg-error/10 border border-error/20 flex items-center justify-center text-error">
+          <AlertCircle className="w-6 h-6" />
+        </div>
+        <h3 className="text-sm font-bold text-text">Schema Discovery Failed</h3>
+        <p className="text-xs text-text-secondary max-w-md">
+          {error}
+        </p>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-2 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-surface border border-border hover:bg-surface-hover text-xs font-semibold text-text transition-colors shadow-sm"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Retry Discovery</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Render State 11b: Malformed Response State
   // -------------------------------------------------------------------------
   if (isMalformed) {
     return (
@@ -733,8 +766,7 @@ export function SchemaExplorer({
         </div>
         <h3 className="text-sm font-bold text-text">Malformed Schema Response</h3>
         <p className="text-xs text-text-secondary max-w-md">
-          {error ||
-            "The remote API returned a response structure that could not be parsed into valid schema metadata or fields."}
+          The remote API returned a response structure that could not be parsed into valid schema metadata or fields.
         </p>
         {onRetry && (
           <button

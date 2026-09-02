@@ -30,6 +30,7 @@ import {
   reconnectIntegrationApi,
   rotateCredentialsApi,
   triggerSyncApi,
+  syncHubSpotApi,
   getIntegrationSchemaApi,
   discoverIntegrationSchemaApi,
   getSchemaMappingApi,
@@ -376,6 +377,12 @@ export function useIntegrations() {
     return res;
   };
 
+  const syncHubSpot = async () => {
+    const res = await syncHubSpotApi();
+    await fetchData();
+    return res;
+  };
+
   const pauseIntegration = async (id: string) => {
     // Optimistically pause ONLY the targeted connector
     setConnectors((prev) =>
@@ -520,6 +527,7 @@ export function useIntegrations() {
     reconnectIntegration,
     rotateCredentials,
     triggerSync,
+    syncHubSpot,
     pauseIntegration,
     resumeIntegration,
     testConnection,

@@ -188,13 +188,32 @@ export async function rotateCredentialsApi(
 }
 
 /**
- * Trigger manual synchronization run for an integration.
- * POST /api/v1/integrations/{id}/sync
+ * Trigger manual synchronization run for an integration or provider.
+ * POST /integrations/{id}/sync (e.g. POST /integrations/hubspot/sync for Day 5 API)
  */
 export async function triggerSyncApi(id: string): Promise<SyncResponse> {
-  const response = await api.post(
-    `/api/v1/integrations/${encodeURIComponent(id)}/sync`
-  );
+  try {
+    const response = await api.post(
+      `/integrations/${encodeURIComponent(id)}/sync`
+    );
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      const fallback = await api.post(
+        `/api/v1/integrations/${encodeURIComponent(id)}/sync`
+      );
+      return fallback.data;
+    }
+    throw err;
+  }
+}
+
+/**
+ * Explicit Day 5 HubSpot sync API endpoint.
+ * POST /integrations/hubspot/sync
+ */
+export async function syncHubSpotApi(): Promise<SyncResponse> {
+  const response = await api.post("/integrations/hubspot/sync");
   return response.data;
 }
 
@@ -247,69 +266,98 @@ function normalizeSchemaResponse(data: any): DiscoveredSchemaResponse {
 
 /**
  * Discover schema, entities, and fields available from a connected integration.
- * GET /api/v1/integrations/{id}/schema
+ * GET /integrations/{id}/schema
  */
 export async function getIntegrationSchemaApi(
   id: string
 ): Promise<DiscoveredSchemaResponse> {
-  const response = await api.get(
-    `/api/v1/integrations/${encodeURIComponent(id)}/schema`
-  );
-  return normalizeSchemaResponse(response.data);
+  try {
+    const response = await api.get(
+      `/integrations/${encodeURIComponent(id)}/schema`
+    );
+    return normalizeSchemaResponse(response.data);
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      const fallback = await api.get(
+        `/api/v1/integrations/${encodeURIComponent(id)}/schema`
+      );
+      return normalizeSchemaResponse(fallback.data);
+    }
+    throw err;
+  }
 }
 
 /**
  * Discover and infer schema from live connection or sample payload.
- * POST /api/integrations/{id}/schema/discover
+ * POST /integrations/{id}/schema/discover (with fallback to GET /integrations/{id}/schema)
  */
 export async function discoverIntegrationSchemaApi(
   id: string,
   payload?: DiscoverSchemaPayload | Record<string, any>
 ): Promise<DiscoveredSchemaResponse> {
-  const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/schema/discover`,
-    payload || {}
-  );
-  return normalizeSchemaResponse(response.data);
+  try {
+    const response = await api.post(
+      `/integrations/${encodeURIComponent(id)}/schema/discover`,
+      payload || {}
+    );
+    return normalizeSchemaResponse(response.data);
+  } catch (err: any) {
+    if (err?.response?.status === 404 || err?.response?.status === 405) {
+      return await getIntegrationSchemaApi(id);
+    }
+    throw err;
+  }
 }
 
 /**
  * Retrieve saved field mappings for an integration.
- * GET /api/integrations/{id}/schema/mapping
+ * GET /integrations/{id}/schema/mapping
  */
 export async function getSchemaMappingApi(
   id: string
 ): Promise<SchemaMappingResponse> {
-  const response = await api.get(
-    `/api/integrations/${encodeURIComponent(id)}/schema/mapping`
-  );
-  const data = response.data;
-  if (!data) {
-    return { mappings: [] };
+  try {
+    const response = await api.get(
+      `/integrations/${encodeURIComponent(id)}/schema/mapping`
+    );
+    const data = response.data;
+    if (!data) {
+      return { mappings: [] };
+    }
+    if (Array.isArray(data)) {
+      return { mappings: data };
+    }
+    const payload = data.data || data;
+    if (Array.isArray(payload)) {
+      return { mappings: payload };
+    }
+    return {
+      ...payload,
+      mappings: Array.isArray(payload.mappings) ? payload.mappings : [],
+    };
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      const fallback = await api.get(
+        `/api/v1/integrations/${encodeURIComponent(id)}/mappings`
+      );
+      const data = fallback.data;
+      const list = Array.isArray(data) ? data : data?.mappings || data?.data || [];
+      return { mappings: list };
+    }
+    throw err;
   }
-  if (Array.isArray(data)) {
-    return { mappings: data };
-  }
-  const payload = data.data || data;
-  if (Array.isArray(payload)) {
-    return { mappings: payload };
-  }
-  return {
-    ...payload,
-    mappings: Array.isArray(payload.mappings) ? payload.mappings : [],
-  };
 }
 
 /**
  * Save or upsert field mappings for an integration.
- * POST /api/integrations/{id}/schema/mapping
+ * POST /integrations/{id}/schema/mapping
  */
 export async function saveSchemaMappingApi(
   id: string,
   payload: SchemaMappingPayload
 ): Promise<SchemaMappingResponse> {
   const response = await api.post(
-    `/api/integrations/${encodeURIComponent(id)}/schema/mapping`,
+    `/integrations/${encodeURIComponent(id)}/schema/mapping`,
     payload
   );
   const data = response.data;

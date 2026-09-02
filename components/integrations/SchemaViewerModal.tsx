@@ -38,7 +38,11 @@ export function SchemaViewerModal({
   const [mappings, setMappings] = useState<FieldMapping[]>([]);
   const [isSavingMapping, setIsSavingMapping] = useState<boolean>(false);
 
-  const targetId = connector?.connectionId || connector?.id;
+  const targetId =
+    connector?.connectionId ||
+    connector?.connectionState?.id ||
+    connector?.id ||
+    connector?.provider;
 
   const loadSchema = useCallback(() => {
     if (!targetId) return;
