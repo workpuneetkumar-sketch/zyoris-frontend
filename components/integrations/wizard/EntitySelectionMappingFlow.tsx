@@ -11,6 +11,7 @@ import {
   TargetFieldDefinition,
   TargetEntityDefinition,
   TargetModuleDefinition,
+  TransformationStepTrace,
 } from "@/types/integrations";
 import {
   getIntegrationMappingsApi,
@@ -25,7 +26,6 @@ import {
   Sparkles,
   AlertCircle,
   CheckCircle2,
-  HelpCircle,
   Sliders,
   Trash2,
   Save,
@@ -39,6 +39,10 @@ import {
   Database,
   Tag,
   Code,
+  Info,
+  ExternalLink,
+  HelpCircle,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -244,6 +248,7 @@ export interface FieldMappingEntry {
   status: "ACTIVE" | "INACTIVE" | "PENDING" | "ERROR";
   isDirty?: boolean;
   isPersisted?: boolean;
+  validationError?: string | null;
 }
 
 export interface EntitySelectionMappingFlowProps {
@@ -278,13 +283,23 @@ export function EntitySelectionMappingFlow({
   const [selectedDiscoveredEntityName, setSelectedDiscoveredEntityName] = useState<string>("");
   const [expandedTransformField, setExpandedTransformField] = useState<string | null>(null);
   const [fieldFilterQuery, setFieldFilterQuery] = useState<string>("");
-  const [previewStates, setPreviewStates] = useState<Record<string, { loading: boolean; result?: string; error?: string }>>({});
+  const [previewStates, setPreviewStates] = useState<
+    Record<
+      string,
+      {
+        loading: boolean;
+        original?: string;
+        result?: string;
+        error?: string;
+        steps?: TransformationStepTrace[];
+      }
+    >
+  >({});
   const [savingFieldKeys, setSavingFieldKeys] = useState<Record<string, boolean>>({});
 
   // 1. Resolve Available Target Modules & Entities dynamically from Connector configSchema or Default Catalog
   const availableModules = useMemo<TargetModuleDefinition[]>(() => {
     if (connector?.configSchema?.modules && Array.isArray(connector.configSchema.modules) && connector.configSchema.modules.length > 0) {
-      // Convert connector module schema if provided by backend
       return connector.configSchema.modules.map((m: any) => {
         const matchingDefault = DEFAULT_TARGET_MODULES.find((dm) => dm.id.toLowerCase() === (m.id || "").toLowerCase());
         const entities: TargetEntityDefinition[] = Array.isArray(m.entities)
@@ -341,7 +356,7 @@ export function EntitySelectionMappingFlow({
     return currentModule.entities[0];
   }, [currentModule, selectedEntityId]);
 
-  // 2. Discovered External Source Entities & Fields from Schema Discovery Step
+  // 2. Discovered External Source Entities & Fields from Schema Discovery Step ONLY
   const discoveredEntities = useMemo<DiscoveredEntity[]>(() => {
     return discoveredSchema?.entities || [];
   }, [discoveredSchema]);
@@ -355,24 +370,37 @@ export function EntitySelectionMappingFlow({
     return discoveredEntities[0];
   }, [discoveredEntities, selectedDiscoveredEntityName]);
 
-  // Flatten discovered fields with dot-notation for nested structures
+  // Flatten discovered fields with dot-notation for nested structures — ZERO MOCK DATA
   const flattenedSourceFields = useMemo(() => {
-    const result: Array<{ path: string; name: string; type: string; label?: string; required?: boolean; sampleValue?: any; description?: string }> = [];
+    const result: Array<{
+      path: string;
+      name: string;
+      type: string;
+      label?: string;
+      required?: boolean;
+      sampleValue?: any;
+      description?: string;
+    }> = [];
 
-    // 1. If discovered schema has fields, use them
+    // 1. If active discovered entity has fields, extract recursively
     if (activeDiscoveredEntity?.fields && activeDiscoveredEntity.fields.length > 0) {
       function traverse(fields: DiscoveredField[], parentPath = "") {
         for (const f of fields) {
           const fieldName = f.name || f.path || "field";
           const fullPath = f.path || (parentPath ? `${parentPath}.${fieldName}` : fieldName);
-          
+
           result.push({
             path: fullPath,
             name: fieldName,
             type: f.type || f.dataType || "string",
             label: f.label || fieldName,
             required: f.required || f.isRequired || false,
-            sampleValue: f.sampleValue ?? f.sample ?? f.example ?? (f.name ? activeDiscoveredEntity?.sampleRecords?.[0]?.[f.name] : undefined),
+            sampleValue:
+              f.sampleValue ??
+              f.sample ??
+              f.example ??
+              (f.name ? activeDiscoveredEntity?.sampleRecords?.[0]?.[f.name] : undefined) ??
+              (f.path ? activeDiscoveredEntity?.sampleRecords?.[0]?.[f.path] : undefined),
             description: f.description,
           });
 
@@ -387,7 +415,24 @@ export function EntitySelectionMappingFlow({
       return result;
     }
 
-    // 2. If connector has configSchema fields or endpoint fields, use them
+    // 2. If top-level discovered schema has fields directly
+    if (discoveredSchema?.fields && discoveredSchema.fields.length > 0) {
+      discoveredSchema.fields.forEach((f) => {
+        const fieldName = f.name || f.path || "field";
+        result.push({
+          path: f.path || fieldName,
+          name: fieldName,
+          type: f.type || "string",
+          label: f.label || fieldName,
+          required: f.required || false,
+          sampleValue: f.sampleValue ?? f.sample ?? f.example,
+          description: f.description,
+        });
+      });
+      return result;
+    }
+
+    // 3. If connector has configSchema fields
     if (connector?.configSchema?.fields && Array.isArray(connector.configSchema.fields) && connector.configSchema.fields.length > 0) {
       connector.configSchema.fields.forEach((cf) => {
         result.push({
@@ -396,47 +441,16 @@ export function EntitySelectionMappingFlow({
           type: cf.type || "string",
           label: cf.label || cf.name,
           required: cf.required || false,
-          sampleValue: cf.defaultValue ?? "sample_data",
+          sampleValue: cf.defaultValue,
           description: cf.description,
         });
       });
       return result;
     }
 
-    // 3. Fallback candidate provider schema fields for testing / demonstration
-    const providerName = (connector?.provider || connector?.name || "Provider").toLowerCase();
-    const candidateFields: Array<{ path: string; name: string; type: string; label: string; required?: boolean; sampleValue?: any; description?: string }> = providerName.includes("stripe")
-      ? [
-          { path: "id", name: "id", type: "string", label: "Object ID", required: true, sampleValue: "ch_3MtwBwLkdIwHu7ix28a3tqPa" },
-          { path: "amount", name: "amount", type: "number", label: "Amount (cents)", required: true, sampleValue: 2000 },
-          { path: "currency", name: "currency", type: "string", label: "Currency", required: false, sampleValue: "usd" },
-          { path: "customer.email", name: "email", type: "string", label: "Customer Email", required: true, sampleValue: "customer@example.com" },
-          { path: "customer.name", name: "name", type: "string", label: "Customer Name", required: false, sampleValue: "Jane Doe" },
-          { path: "status", name: "status", type: "string", label: "Status", required: false, sampleValue: "succeeded" },
-          { path: "description", name: "description", type: "string", label: "Description", required: false, sampleValue: "Monthly subscription" },
-        ]
-      : providerName.includes("hubspot") || providerName.includes("crm") || providerName.includes("salesforce") || providerName.includes("zoho")
-      ? [
-          { path: "properties.firstname", name: "firstname", type: "string", label: "First Name", required: true, sampleValue: "Sarah" },
-          { path: "properties.lastname", name: "lastname", type: "string", label: "Last Name", required: true, sampleValue: "Connor" },
-          { path: "properties.email", name: "email", type: "string", label: "Email Address", required: true, sampleValue: "sarah.connor@example.com" },
-          { path: "properties.phone", name: "phone", type: "string", label: "Phone Number", required: false, sampleValue: "+1-555-0199" },
-          { path: "properties.company", name: "company", type: "string", label: "Company", required: false, sampleValue: "Cyberdyne Systems" },
-          { path: "properties.dealname", name: "dealname", type: "string", label: "Deal Name", required: true, sampleValue: "Enterprise License Q3" },
-          { path: "properties.amount", name: "amount", type: "number", label: "Deal Value", required: true, sampleValue: 45000 },
-          { path: "properties.dealstage", name: "dealstage", type: "string", label: "Deal Stage", required: false, sampleValue: "presentationscheduled" },
-        ]
-      : [
-          { path: "id", name: "id", type: "string", label: "Identifier", required: true, sampleValue: "rec_1001" },
-          { path: "name", name: "name", type: "string", label: "Full Name", required: true, sampleValue: "Alex Morgan" },
-          { path: "email", name: "email", type: "string", label: "Email", required: true, sampleValue: "alex@example.com" },
-          { path: "phone", name: "phone", type: "string", label: "Phone", required: false, sampleValue: "+1-202-555-0143" },
-          { path: "amount", name: "amount", type: "number", label: "Amount", required: false, sampleValue: 1250 },
-          { path: "status", name: "status", type: "string", label: "Status", required: false, sampleValue: "ACTIVE" },
-        ];
-
-    return candidateFields;
-  }, [activeDiscoveredEntity, connector]);
+    // Return strictly empty array if schema discovery has not been completed
+    return result;
+  }, [activeDiscoveredEntity, discoveredSchema, connector]);
 
   // 3. Load Existing Mappings from Backend if active integrationId is present
   const loadBackendMappings = useCallback(async () => {
@@ -464,6 +478,7 @@ export function EntitySelectionMappingFlow({
               status: bm.status || "ACTIVE",
               isDirty: false,
               isPersisted: true,
+              validationError: null,
             };
           }
         });
@@ -484,7 +499,7 @@ export function EntitySelectionMappingFlow({
   }, [integrationId, loadBackendMappings]);
 
   // Seed initial mappings once if passed from parent form state
-  const isInitializedRef = React.useRef(false);
+  const isInitializedRef = useRef(false);
   useEffect(() => {
     if (!isInitializedRef.current && initialMappings && Object.keys(initialMappings).length > 0) {
       isInitializedRef.current = true;
@@ -499,6 +514,7 @@ export function EntitySelectionMappingFlow({
               status: "ACTIVE",
               isDirty: true,
               isPersisted: false,
+              validationError: null,
             };
           }
         });
@@ -510,7 +526,7 @@ export function EntitySelectionMappingFlow({
   // 4. Smart Auto-Map Matching
   const handleAutoMap = () => {
     if (flattenedSourceFields.length === 0) {
-      toast.info("No discovered external fields available to auto-map.");
+      toast.info("No discovered external schema fields available to auto-map.");
       return;
     }
 
@@ -548,6 +564,7 @@ export function EntitySelectionMappingFlow({
               targetField: tf.key,
               sourceField: directMatch.path,
               isDirty: true,
+              validationError: null,
             };
             mappedCount++;
           }
@@ -558,7 +575,7 @@ export function EntitySelectionMappingFlow({
     });
 
     if (mappedCount > 0) {
-      toast.success(`Auto-mapped ${mappedCount} fields based on schema attribute matching!`);
+      toast.success(`Auto-mapped ${mappedCount} fields based on schema attribute matching.`);
     } else {
       toast.info("No new matching field pairs found automatically.");
     }
@@ -580,7 +597,6 @@ export function EntitySelectionMappingFlow({
     setMappingEntries((prev) => {
       const existing = prev[targetKey];
       if (!sourcePath) {
-        // Clear mapping
         const updated = { ...prev };
         delete updated[targetKey];
         return updated;
@@ -597,6 +613,7 @@ export function EntitySelectionMappingFlow({
           status: existing?.status || "ACTIVE",
           isDirty: true,
           isPersisted: existing?.isPersisted || false,
+          validationError: null,
         },
       };
     });
@@ -612,7 +629,28 @@ export function EntitySelectionMappingFlow({
         [targetKey]: {
           ...existing,
           transformationType: ruleType,
+          transformationConfig: {},
           isDirty: true,
+          validationError: null,
+        },
+      };
+    });
+  };
+
+  const handleTransformationConfigParamChange = (targetKey: string, paramKey: string, value: any) => {
+    setMappingEntries((prev) => {
+      const existing = prev[targetKey];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        [targetKey]: {
+          ...existing,
+          transformationConfig: {
+            ...(existing.transformationConfig || {}),
+            [paramKey]: value,
+          },
+          isDirty: true,
+          validationError: null,
         },
       };
     });
@@ -628,6 +666,7 @@ export function EntitySelectionMappingFlow({
           ...existing,
           defaultValue: defaultVal,
           isDirty: true,
+          validationError: null,
         },
       };
     });
@@ -635,7 +674,10 @@ export function EntitySelectionMappingFlow({
 
   // 5. Direct Save Mapping to Backend API
   const handleSaveMappingDirectly = async (targetKey: string) => {
-    if (!integrationId) return;
+    if (!integrationId) {
+      toast.error("Save is only available after the integration instance has been created.");
+      return;
+    }
 
     const entry = mappingEntries[targetKey];
     if (!entry || !entry.sourceField) {
@@ -673,6 +715,7 @@ export function EntitySelectionMappingFlow({
             backendMappingId: updated.id,
             isDirty: false,
             isPersisted: true,
+            validationError: null,
           },
         }));
         toast.success(`Updated mapping for ${targetKey}`);
@@ -696,12 +739,24 @@ export function EntitySelectionMappingFlow({
             backendMappingId: created.id,
             isDirty: false,
             isPersisted: true,
+            validationError: null,
           },
         }));
         toast.success(`Saved mapping for ${targetKey}`);
       }
     } catch (err: any) {
-      const errMsg = err?.response?.data?.message || err?.message || "Failed to persist mapping";
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Failed to persist mapping";
+      setMappingEntries((prev) => ({
+        ...prev,
+        [targetKey]: {
+          ...prev[targetKey],
+          validationError: errMsg,
+        },
+      }));
       toast.error(errMsg);
     } finally {
       setSavingFieldKeys((prev) => ({ ...prev, [targetKey]: false }));
@@ -738,26 +793,41 @@ export function EntitySelectionMappingFlow({
   // 6. Test / Preview Transformation
   const handlePreviewTransformation = async (targetKey: string) => {
     const entry = mappingEntries[targetKey];
-    if (!entry || !entry.sourceField || !integrationId) return;
+    if (!entry || !entry.sourceField) return;
+
+    if (!integrationId) {
+      toast.info("Preview connects to the live backend API once the integration is initialized.");
+      return;
+    }
 
     const sourceFieldObj = flattenedSourceFields.find((f) => f.path === entry.sourceField);
     const sampleVal = String(sourceFieldObj?.sampleValue ?? "Sample Value");
 
-    setPreviewStates((prev) => ({ ...prev, [targetKey]: { loading: true } }));
+    setPreviewStates((prev) => ({
+      ...prev,
+      [targetKey]: { loading: true, original: sampleVal },
+    }));
 
     try {
       const rules = [];
       if (entry.transformationType && entry.transformationType !== "none") {
         rules.push({
           type: entry.transformationType,
-          params: entry.transformationType === "DEFAULT_VALUE" ? { defaultValue: entry.defaultValue } : entry.transformationConfig,
+          params:
+            entry.transformationType === "DEFAULT_VALUE"
+              ? { defaultValue: entry.defaultValue }
+              : entry.transformationConfig,
         });
       }
 
       if (rules.length === 0) {
         setPreviewStates((prev) => ({
           ...prev,
-          [targetKey]: { loading: false, result: sampleVal },
+          [targetKey]: {
+            loading: false,
+            original: sampleVal,
+            result: sampleVal,
+          },
         }));
         return;
       }
@@ -771,15 +841,23 @@ export function EntitySelectionMappingFlow({
         ...prev,
         [targetKey]: {
           loading: false,
+          original: res?.data?.originalValue || sampleVal,
           result: res?.data?.transformedValue || String(res),
+          steps: res?.data?.steps,
         },
       }));
     } catch (err: any) {
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Transformation preview failed";
       setPreviewStates((prev) => ({
         ...prev,
         [targetKey]: {
           loading: false,
-          error: err?.response?.data?.message || err?.message || "Transformation preview failed",
+          original: sampleVal,
+          error: errMsg,
         },
       }));
     }
@@ -799,7 +877,6 @@ export function EntitySelectionMappingFlow({
 
     const isSatisfied = missingFields.length === 0;
     const totalCount = currentEntity.targetFields.length;
-    // Strictly count only mapped fields that belong to the active currentEntity
     const mappedCount = currentEntity.targetFields.filter(
       (tf) => mappingEntries[tf.key]?.sourceField && mappingEntries[tf.key]?.sourceField.trim() !== ""
     ).length;
@@ -814,7 +891,7 @@ export function EntitySelectionMappingFlow({
     };
   }, [currentEntity.targetFields, mappingEntries]);
 
-  // Synchronize validation & mappings changes to parent safely (prevent infinite update loops)
+  // Synchronize validation & mappings changes to parent safely
   const prevValidationRef = useRef<string>("");
   useEffect(() => {
     if (onValidationChange) {
@@ -937,7 +1014,7 @@ export function EntitySelectionMappingFlow({
             <div className="flex-1 space-y-1">
               <label className="text-xs font-bold text-text flex items-center gap-1.5">
                 <Tag className="w-3.5 h-3.5 text-warning" />
-                Source Discovered Entity
+                Discovered Source Entity
               </label>
               <select
                 value={activeDiscoveredEntity?.name || ""}
@@ -955,6 +1032,20 @@ export function EntitySelectionMappingFlow({
           )}
         </div>
       </div>
+
+      {/* ── Empty Schema Discovery Warning Banner (No fake data!) ────────────────────────── */}
+      {flattenedSourceFields.length === 0 && (
+        <div className="p-4 rounded-xl border border-warning/30 bg-warning/10 text-warning flex items-start gap-3">
+          <Info className="w-5 h-5 flex-shrink-0 mt-0.5 text-warning" />
+          <div className="text-xs">
+            <h5 className="font-bold text-warning">No Discovered Schema Fields Detected</h5>
+            <p className="text-text-secondary mt-0.5">
+              Source fields are populated directly from the Schema Discovery step. Ensure you have run schema discovery
+              against the connected connector before proceeding with field mapping.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Required Field Validation Alert Banner ────────────────────────────────────────── */}
       {!validationStatus.isValid && (
@@ -989,7 +1080,7 @@ export function EntitySelectionMappingFlow({
             onClick={handleAutoMap}
             disabled={disabled || flattenedSourceFields.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 font-semibold transition-all shadow-xs disabled:opacity-50"
-            title="Auto-match remote fields to target fields based on name and semantic similarity"
+            title="Auto-match remote fields to target fields based on name similarity"
           >
             <Sparkles className="w-3.5 h-3.5" />
             <span>Auto-Map Matching Fields</span>
@@ -1057,7 +1148,7 @@ export function EntitySelectionMappingFlow({
           </button>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto border border-border rounded-xl bg-surface max-h-[380px] relative">
+        <div className="border border-border rounded-xl bg-surface overflow-y-auto min-h-[300px] max-h-[420px] shadow-xs relative">
           <table className="w-full text-left text-xs border-separate border-spacing-0">
             <thead className="sticky top-0 z-20 shadow-xs bg-white">
               <tr>
@@ -1116,6 +1207,12 @@ export function EntitySelectionMappingFlow({
                             {tf.description}
                           </p>
                         )}
+                        {entry?.validationError && (
+                          <div className="mt-1 text-[11px] text-error flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3" />
+                            <span>{entry.validationError}</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Direction Arrow */}
@@ -1132,7 +1229,7 @@ export function EntitySelectionMappingFlow({
                         <div className="space-y-1.5">
                           <select
                             value={entry?.sourceField || ""}
-                            disabled={disabled || isSaving}
+                            disabled={disabled || isSaving || flattenedSourceFields.length === 0}
                             onChange={(e) => handleSourceFieldSelect(tf.key, e.target.value)}
                             className={`w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border focus:outline-none font-mono transition-colors ${
                               isMissingRequired
@@ -1142,7 +1239,11 @@ export function EntitySelectionMappingFlow({
                                 : "border-border focus:border-primary"
                             }`}
                           >
-                            <option value="">-- Select Discovered Source Field --</option>
+                            <option value="">
+                              {flattenedSourceFields.length === 0
+                                ? "-- Run Schema Discovery First --"
+                                : "-- Select Discovered Source Field --"}
+                            </option>
                             {flattenedSourceFields.map((sf) => (
                               <option key={sf.path} value={sf.path}>
                                 {sf.path} ({sf.type}) {sf.required ? "• Required" : ""}
@@ -1153,7 +1254,7 @@ export function EntitySelectionMappingFlow({
                           {/* Source Field Sample Value / Metadata preview */}
                           {entry?.sourceField && (
                             <div className="flex items-center justify-between text-[10px] text-text-muted font-mono px-1">
-                              <span className="truncate max-w-[200px]">
+                              <span className="truncate max-w-[200px]" title={String(flattenedSourceFields.find((f) => f.path === entry.sourceField)?.sampleValue ?? "null")}>
                                 Sample:{" "}
                                 {String(
                                   flattenedSourceFields.find((f) => f.path === entry.sourceField)?.sampleValue ?? "null"
@@ -1229,21 +1330,21 @@ export function EntitySelectionMappingFlow({
                     {isExpanded && isMapped && (
                       <tr className="bg-surface-secondary/50">
                         <td colSpan={4} className="p-3 border-t border-b border-border/70">
-                          <div className="p-3 rounded-lg bg-surface border border-border space-y-3">
+                          <div className="p-3.5 rounded-lg bg-surface border border-border space-y-3">
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-bold text-text flex items-center gap-1.5">
                                 <Sliders className="w-3.5 h-3.5 text-primary" />
                                 Transformation Rule for {tf.label}
                               </span>
                               <span className="text-[11px] text-text-muted">
-                                Applied before syncing into Zyoris
+                                Applied during ingest before writing into Zyoris
                               </span>
                             </div>
 
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
                               <div>
                                 <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                  Rule Type
+                                  Transformation Operation
                                 </label>
                                 <select
                                   value={entry.transformationType || "none"}
@@ -1253,18 +1354,22 @@ export function EntitySelectionMappingFlow({
                                       e.target.value as TransformationRuleType
                                     )
                                   }
-                                  className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                                  className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-medium"
                                 >
                                   <option value="none">None (Direct Pass-through)</option>
-                                  <option value="TRIM">TRIM (Strip whitespace)</option>
-                                  <option value="UPPERCASE">UPPERCASE</option>
-                                  <option value="LOWERCASE">LOWERCASE</option>
-                                  <option value="PARSE_DATE">PARSE_DATE (ISO format)</option>
-                                  <option value="DEFAULT_VALUE">DEFAULT_VALUE (Fallback)</option>
-                                  <option value="REGEX_REPLACE">REGEX_REPLACE</option>
+                                  <option value="TRIM">TRIM (Strip surrounding whitespace)</option>
+                                  <option value="UPPERCASE">UPPERCASE (Convert text to uppercase)</option>
+                                  <option value="LOWERCASE">LOWERCASE (Convert text to lowercase)</option>
+                                  <option value="PARSE_DATE">PARSE_DATE (Parse & Format Date/Time)</option>
+                                  <option value="DEFAULT_VALUE">DEFAULT_VALUE (Fallback if null/empty)</option>
+                                  <option value="REGEX_REPLACE">REGEX_REPLACE (Regular Expression)</option>
+                                  <option value="SPLIT">SPLIT (Extract substring by delimiter)</option>
+                                  <option value="COMBINE">COMBINE (Concatenate field with suffix)</option>
+                                  <option value="PHONE_NORMALIZATION">PHONE_NORMALIZATION (E.164 standard)</option>
                                 </select>
                               </div>
 
+                              {/* Operation-specific Parameter Inputs */}
                               {entry.transformationType === "DEFAULT_VALUE" && (
                                 <div>
                                   <label className="text-[11px] font-semibold text-text-secondary block mb-1">
@@ -1273,45 +1378,180 @@ export function EntitySelectionMappingFlow({
                                   <input
                                     type="text"
                                     value={entry.defaultValue || ""}
-                                    onChange={(e) =>
-                                      handleDefaultValueChange(tf.key, e.target.value)
-                                    }
+                                    onChange={(e) => handleDefaultValueChange(tf.key, e.target.value)}
                                     placeholder="Enter fallback value..."
                                     className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                                  />
+                                </div>
+                              )}
+
+                              {entry.transformationType === "PARSE_DATE" && (
+                                <>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Target Date Format
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={entry.transformationConfig?.format || "YYYY-MM-DD"}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "format", e.target.value)
+                                      }
+                                      placeholder="e.g. YYYY-MM-DD or ISO_8601"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Timezone (Optional)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={entry.transformationConfig?.timezone || "UTC"}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "timezone", e.target.value)
+                                      }
+                                      placeholder="UTC"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              {entry.transformationType === "REGEX_REPLACE" && (
+                                <>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Pattern (Regex)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={entry.transformationConfig?.pattern || ""}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "pattern", e.target.value)
+                                      }
+                                      placeholder="e.g. [^0-9]"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Replacement
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={entry.transformationConfig?.replacement || ""}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "replacement", e.target.value)
+                                      }
+                                      placeholder="Replacement string"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Flags (Optional)
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={entry.transformationConfig?.flags || "g"}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "flags", e.target.value)
+                                      }
+                                      placeholder="g, i, gi"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              {entry.transformationType === "SPLIT" && (
+                                <>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Delimiter
+                                    </label>
+                                    <input
+                                      type="text"
+                                      value={entry.transformationConfig?.delimiter || " "}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "delimiter", e.target.value)
+                                      }
+                                      placeholder="e.g. ' ' or ','"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                      Index
+                                    </label>
+                                    <input
+                                      type="number"
+                                      value={entry.transformationConfig?.index ?? 0}
+                                      onChange={(e) =>
+                                        handleTransformationConfigParamChange(tf.key, "index", parseInt(e.target.value, 10) || 0)
+                                      }
+                                      placeholder="0"
+                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                                    />
+                                  </div>
+                                </>
+                              )}
+
+                              {entry.transformationType === "PHONE_NORMALIZATION" && (
+                                <div>
+                                  <label className="text-[11px] font-semibold text-text-secondary block mb-1">
+                                    Default Country Code
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={entry.transformationConfig?.countryCode || "+1"}
+                                    onChange={(e) =>
+                                      handleTransformationConfigParamChange(tf.key, "countryCode", e.target.value)
+                                    }
+                                    placeholder="+1, +91, +44"
+                                    className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
                                   />
                                 </div>
                               )}
                             </div>
 
                             {/* Preview Transformation Button & Output */}
-                            {integrationId && (
-                              <div className="pt-2 border-t border-border flex items-center justify-between text-xs">
-                                <button
-                                  type="button"
-                                  onClick={() => handlePreviewTransformation(tf.key)}
-                                  disabled={previewStates[tf.key]?.loading}
-                                  className="px-3 py-1 rounded-md bg-surface-secondary border border-border hover:bg-surface-hover text-text font-semibold flex items-center gap-1.5 text-[11px]"
-                                >
-                                  {previewStates[tf.key]?.loading ? (
-                                    <Loader2 className="w-3 h-3 animate-spin text-primary" />
-                                  ) : (
-                                    <Code className="w-3 h-3 text-primary" />
-                                  )}
-                                  <span>Test / Preview Transformation</span>
-                                </button>
+                            <div className="pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                              <button
+                                type="button"
+                                onClick={() => handlePreviewTransformation(tf.key)}
+                                disabled={previewStates[tf.key]?.loading}
+                                className="px-3 py-1.5 rounded-md bg-surface-secondary border border-border hover:bg-surface-hover text-text font-semibold flex items-center gap-1.5 text-[11px] transition-colors"
+                              >
+                                {previewStates[tf.key]?.loading ? (
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+                                ) : (
+                                  <Code className="w-3.5 h-3.5 text-primary" />
+                                )}
+                                <span>Preview Transformation on Sample</span>
+                              </button>
 
-                                {previewStates[tf.key]?.result && (
-                                  <span className="font-mono text-[11px] text-success">
-                                    Result: &quot;{previewStates[tf.key]?.result}&quot;
+                              {/* Before / After Preview Values */}
+                              {previewStates[tf.key]?.result !== undefined && (
+                                <div className="flex items-center gap-2 font-mono text-[11px] bg-surface-secondary px-3 py-1 rounded-md border border-border">
+                                  <span className="text-text-muted">
+                                    Original: &quot;{previewStates[tf.key]?.original ?? "—"}&quot;
                                   </span>
-                                )}
-                                {previewStates[tf.key]?.error && (
-                                  <span className="text-[11px] text-error">
-                                    {previewStates[tf.key]?.error}
+                                  <ArrowRight className="w-3 h-3 text-text-muted" />
+                                  <span className="text-success font-bold">
+                                    Preview: &quot;{previewStates[tf.key]?.result}&quot;
                                   </span>
-                                )}
-                              </div>
-                            )}
+                                </div>
+                              )}
+
+                              {previewStates[tf.key]?.error && (
+                                <span className="text-[11px] text-error font-medium flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3" />
+                                  {previewStates[tf.key]?.error}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>

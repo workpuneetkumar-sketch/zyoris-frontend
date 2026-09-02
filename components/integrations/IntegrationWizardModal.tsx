@@ -2491,92 +2491,92 @@ export function IntegrationWizardModal({
               disabled={isSubmitting}
             />
           )}
+        </form>
 
-          {/* Footer Controls */}
-          <div className="pt-4 border-t border-border flex items-center justify-between gap-3">
-            <div>
-              {step > 1 && (
-                <button
-                  type="button"
-                  onClick={() => setStep((prev) => (prev - 1) as any)}
-                  className="flex items-center gap-1 px-4 py-2 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-medium transition-colors"
-                >
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span>Previous</span>
-                </button>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
+        {/* Stable Fixed Footer */}
+        <div className="p-4 px-6 border-t border-border bg-surface flex items-center justify-between gap-3 flex-shrink-0 z-30 shadow-xs">
+          <div>
+            {step > 1 && (
               <button
                 type="button"
-                onClick={onClose}
-                className="px-4 py-2 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-medium transition-colors"
+                onClick={() => setStep((prev) => (prev - 1) as any)}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text text-xs font-semibold transition-colors"
               >
-                Cancel
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Previous</span>
               </button>
-
-              {step < 6 ? (
-                <button
-                  type="button"
-                  key={`wizard-next-step-${step}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (!selectedConnector) {
-                      toast.error("Please pick a connector first");
-                      return;
-                    }
-                    setStep((prev) => Math.min(6, prev + 1) as any);
-                  }}
-                  className="flex items-center gap-1 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
-                >
-                  <span>Next Step</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  key="wizard-finish-step-6"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    handleSubmit(onFormSubmit)(e);
-                  }}
-                  disabled={isSubmitting || isTesting || !isMappingValid}
-                  title={
-                    !isMappingValid
-                      ? `Missing required fields: ${missingRequiredFields.join(", ")}`
-                      : "Finish and connect integration"
-                  }
-                  className="flex items-center gap-1.5 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>
-                        {currentAuthType === "OAUTH2"
-                          ? "Redirecting to Provider..."
-                          : "Saving Integration..."}
-                      </span>
-                    </>
-                  ) : currentAuthType === "OAUTH2" ? (
-                    <>
-                      <Zap className="w-4 h-4" />
-                      <span>
-                        Authorize with {selectedConnector?.name || "Provider"}
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4" />
-                      <span>Connect Integration</span>
-                    </>
-                  )}
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        </form>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-semibold transition-colors"
+            >
+              Cancel
+            </button>
+
+            {step < 6 ? (
+              <button
+                type="button"
+                key={`wizard-next-step-${step}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!selectedConnector) {
+                    toast.error("Please pick a connector first");
+                    return;
+                  }
+                  setStep((prev) => Math.min(6, prev + 1) as any);
+                }}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
+              >
+                <span>Next Step</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                key="wizard-finish-step-6"
+                onClick={(e) => {
+                  e.preventDefault();
+                  handleSubmit(onFormSubmit)(e);
+                }}
+                disabled={isSubmitting || isTesting || !isMappingValid}
+                title={
+                  !isMappingValid
+                    ? `Missing required fields: ${missingRequiredFields.join(", ")}`
+                    : "Finish and connect integration"
+                }
+                className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>
+                      {currentAuthType === "OAUTH2"
+                        ? "Redirecting to Provider..."
+                        : "Saving Integration..."}
+                    </span>
+                  </>
+                ) : currentAuthType === "OAUTH2" ? (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    <span>
+                      Authorize with {selectedConnector?.name || "Provider"}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Connect Integration</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
