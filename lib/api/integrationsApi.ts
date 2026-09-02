@@ -1,4 +1,5 @@
 import api from "@/lib/api/api";
+export * from "./webhooksApi";
 import {
   Connector,
   IntegrationInstance,

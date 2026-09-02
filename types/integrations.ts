@@ -445,7 +445,7 @@ export interface FieldMapping {
   id?: string;
   sourceField: string;
   targetField: string;
-  transformation?: string;
+  transformation?: string | MappingTransformation;
   defaultValue?: any;
   required?: boolean;
   sourceType?: string;
@@ -601,3 +601,81 @@ export interface TargetModuleDefinition {
   description?: string;
   entities: TargetEntityDefinition[];
 }
+
+export type WebhookProvider =
+  | "CRM"
+  | "FACEBOOK"
+  | "GOOGLE"
+  | "WEBSITE"
+  | "FINANCE"
+  | "PAYMENTS"
+  | "INVOICE"
+  | "HR"
+  | "ATTENDANCE"
+  | "EMPLOYEE"
+  | "LEAVE"
+  | "PROJECT"
+  | "TASK"
+  | "MEETING"
+  | "MARKETING"
+  | "COMMUNICATION"
+  | "NOTIFICATION"
+  | "DASHBOARD"
+  | "ANALYTICS"
+  | "INSIGHTS"
+  | (string & {});
+
+export interface WebhookEventMetadata {
+  organizationId?: string;
+  externalId?: string;
+  requestId?: string;
+  timestamp?: string;
+  [key: string]: any;
+}
+
+export interface WebhookIngressPayload {
+  source: string;
+  event: string;
+  payload: Record<string, any>;
+  metadata?: WebhookEventMetadata;
+}
+
+export interface WebhookIngressResponse {
+  success: boolean;
+  requestId?: string;
+  message: string;
+  data?: any;
+}
+
+export interface WebhookValidationErrorDetail {
+  field?: string;
+  message: string;
+  code?: string;
+}
+
+export interface WebhookErrorResponse {
+  success: false;
+  error: string;
+  message: string;
+  requestId?: string;
+  details?: WebhookValidationErrorDetail[];
+}
+
+export interface WorkspaceMappingState {
+  sourceEntity: string;
+  targetModule: string;
+  targetEntity: string;
+  mappings: Record<string, {
+    sourceField: string;
+    sourceType?: string;
+    targetField: string;
+    targetType?: string;
+    transformation?: MappingTransformation;
+    skipped?: boolean;
+    required?: boolean;
+    isCustom?: boolean;
+  }>;
+  isDirty: boolean;
+  lastSavedAt?: string;
+}
+
