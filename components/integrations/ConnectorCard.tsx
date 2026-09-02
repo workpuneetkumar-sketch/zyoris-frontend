@@ -25,6 +25,7 @@ import {
   Unlink,
   Play,
   Pause,
+  Activity,
 } from "lucide-react";
 
 interface ConnectorCardProps {
@@ -35,6 +36,7 @@ interface ConnectorCardProps {
   onSyncNow?: (connector: Connector) => Promise<void>;
   onTestConnection?: (connector: Connector) => Promise<NormalizedConnectionTestResult>;
   onViewSchema?: (connector: Connector) => void;
+  onViewSyncRuns?: (connector: Connector) => void;
   onTogglePause?: (connector: Connector) => Promise<void>;
   onReconnect?: (connector: Connector) => void | Promise<void>;
   onDisconnect?: (connector: Connector) => void;
@@ -49,6 +51,7 @@ export function ConnectorCard({
   onSyncNow,
   onTestConnection,
   onViewSchema,
+  onViewSyncRuns,
   onTogglePause,
   onReconnect,
   onDisconnect,
@@ -396,6 +399,19 @@ export function ConnectorCard({
                     >
                       <Database className="w-3.5 h-3.5 text-info" />
                       <span>View Schema</span>
+                    </button>
+                  )}
+
+                  {onViewSyncRuns && (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onViewSyncRuns(connector);
+                      }}
+                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                    >
+                      <Activity className="w-3.5 h-3.5 text-primary" />
+                      <span>Sync Runs & Errors</span>
                     </button>
                   )}
 

@@ -601,3 +601,78 @@ export interface TargetModuleDefinition {
   description?: string;
   entities: TargetEntityDefinition[];
 }
+
+export type SyncRunStatus =
+  | "PENDING"
+  | "RUNNING"
+  | "SUCCESS"
+  | "COMPLETED"
+  | "PARTIAL_SUCCESS"
+  | "FAILED"
+  | "CANCELLED";
+
+export interface SyncRun {
+  id: string;
+  integrationId: string;
+  organizationId?: string;
+  status: SyncRunStatus;
+  direction?: SyncDirection | string;
+  recordsRead?: number;
+  recordsWritten?: number;
+  recordsFailed?: number;
+  recordsProcessed?: number;
+  totalRecords?: number;
+  errorCount?: number;
+  errorMessage?: string | null;
+  startedAt?: string;
+  completedAt?: string | null;
+  durationMs?: number;
+  metadata?: Record<string, any>;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface SyncRunListResponse {
+  success?: boolean;
+  data: SyncRun[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  runs?: SyncRun[];
+}
+
+export interface SyncRunResponse {
+  success?: boolean;
+  data: SyncRun;
+  run?: SyncRun;
+}
+
+export interface SyncErrorItem {
+  id: string;
+  syncRunId?: string;
+  integrationId: string;
+  organizationId?: string;
+  sourceRecordId?: string;
+  targetRecordId?: string;
+  errorCode?: string;
+  errorMessage: string;
+  fieldPath?: string;
+  ruleIndex?: number;
+  retryable: boolean;
+  payload?: any;
+  stackTrace?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SyncErrorListResponse {
+  success?: boolean;
+  data: SyncErrorItem[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  errors?: SyncErrorItem[];
+}
+

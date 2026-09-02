@@ -25,6 +25,11 @@ import {
   MappingListResponse,
   PreviewTransformationPayload,
   PreviewTransformationResponse,
+  SyncRun,
+  SyncRunListResponse,
+  SyncRunResponse,
+  SyncErrorItem,
+  SyncErrorListResponse,
 } from "@/types/integrations";
 
 /**
@@ -471,17 +476,182 @@ export async function deleteIntegrationMappingApi(
 }
 
 /**
- * Preview transformation rules on a sample value.
- * POST /integrations/{id}/transform/preview
+ * Preview transformation execution on sample input value.
+ * POST /api/v1/integrations/{id}/mappings/preview
  */
 export async function previewTransformationApi(
   id: string,
   payload: PreviewTransformationPayload
 ): Promise<PreviewTransformationResponse> {
+  try {
+    const response = await api.post(
+      `/api/v1/integrations/${encodeURIComponent(id)}/mappings/preview`,
+      payload
+    );
+    return response.data;
+  } catch (err: any) {
+    // If 404 on /api/v1, try fallback route /integrations/{id}/transform/preview
+    if (err?.response?.status === 404) {
+      const fallbackResponse = await api.post(
+        `/integrations/${encodeURIComponent(id)}/transform/preview`,
+        payload
+      );
+      return fallbackResponse.data;
+    }
+    throw err;
+  }
+}
+
+/**
+ * List sync runs for an integration with filtering and pagination.
+ * GET /api/v1/integrations/{id}/sync-runs
+ */
+export async function getSyncRunsApi(
+  id: string,
+  params?: {
+    page?: number;
+    limit?: number;
+    status?: string;
+  }
+): Promise<SyncRunListResponse> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-runs`,
+    { params }
+  );
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return { data, total: data.length, page: params?.page || 1, limit: params?.limit || 20 };
+  }
+  if (Array.isArray(data?.data)) {
+    return {
+      data: data.data,
+      total: data.total ?? data.data.length,
+      page: data.page ?? params?.page ?? 1,
+      limit: data.limit ?? params?.limit ?? 20,
+      totalPages: data.totalPages,
+    };
+  }
+  if (Array.isArray(data?.runs)) {
+    return {
+      data: data.runs,
+      total: data.total ?? data.runs.length,
+      page: data.page ?? params?.page ?? 1,
+      limit: data.limit ?? params?.limit ?? 20,
+      totalPages: data.totalPages,
+    };
+  }
+  return { data: [], total: 0, page: 1, limit: 20 };
+}
+
+/**
+ * Get detailed information for a specific sync run.
+ * GET /api/v1/integrations/{id}/sync-runs/{runId}
+ */
+export async function getSyncRunByIdApi(
+  id: string,
+  runId: string
+): Promise<SyncRun> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-runs/${encodeURIComponent(runId)}`
+  );
+  return response.data?.data || response.data?.run || response.data;
+}
+
+/**
+ * Cancel an ongoing sync run.
+ * POST /api/v1/integrations/{id}/sync-runs/{runId}/cancel
+ */
+export async function cancelSyncRunApi(
+  id: string,
+  runId: string
+): Promise<{ success: boolean; message?: string }> {
   const response = await api.post(
-    `/integrations/${encodeURIComponent(id)}/transform/preview`,
-    payload
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-runs/${encodeURIComponent(runId)}/cancel`
   );
   return response.data;
 }
+
+/**
+ * List record-level sync errors for a specific run.
+ * GET /api/v1/integrations/{id}/sync-runs/{runId}/errors
+ */
+export async function getSyncRunErrorsApi(
+  id: string,
+  runId: string,
+  params?: {
+    retryable?: boolean;
+    page?: number;
+    limit?: number;
+  }
+): Promise<SyncErrorListResponse> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-runs/${encodeURIComponent(runId)}/errors`,
+    { params }
+  );
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return { data, total: data.length, page: params?.page || 1, limit: params?.limit || 20 };
+  }
+  if (Array.isArray(data?.data)) {
+    return {
+      data: data.data,
+      total: data.total ?? data.data.length,
+      page: data.page ?? params?.page ?? 1,
+      limit: data.limit ?? params?.limit ?? 20,
+      totalPages: data.totalPages,
+    };
+  }
+  if (Array.isArray(data?.errors)) {
+    return {
+      data: data.errors,
+      total: data.total ?? data.errors.length,
+      page: data.page ?? params?.page ?? 1,
+      limit: data.limit ?? params?.limit ?? 20,
+      totalPages: data.totalPages,
+    };
+  }
+  return { data: [], total: 0, page: 1, limit: 20 };
+}
+
+/**
+ * List all sync errors across an integration.
+ * GET /api/v1/integrations/{id}/sync-errors
+ */
+export async function getIntegrationSyncErrorsApi(
+  id: string,
+  params?: {
+    retryable?: boolean;
+    page?: number;
+    limit?: number;
+  }
+): Promise<SyncErrorListResponse> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-errors`,
+    { params }
+  );
+  const data = response.data;
+  if (Array.isArray(data)) {
+    return { data, total: data.length, page: params?.page || 1, limit: params?.limit || 20 };
+  }
+  if (Array.isArray(data?.data)) {
+    return {
+      data: data.data,
+      total: data.total ?? data.data.length,
+      page: data.page ?? params?.page ?? 1,
+      limit: data.limit ?? params?.limit ?? 20,
+      totalPages: data.totalPages,
+    };
+  }
+  if (Array.isArray(data?.errors)) {
+    return {
+      data: data.errors,
+      total: data.total ?? data.errors.length,
+      page: data.page ?? params?.page ?? 1,
+      limit: data.limit ?? params?.limit ?? 20,
+      totalPages: data.totalPages,
+    };
+  }
+  return { data: [], total: 0, page: 1, limit: 20 };
+}
+
 
