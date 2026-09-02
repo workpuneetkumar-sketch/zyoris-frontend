@@ -140,8 +140,16 @@ export default function IntegrationsPage() {
   };
 
   const handleSyncNow = async (connector: Connector) => {
+    const isHubSpot =
+      (connector.provider || "").toLowerCase().includes("hubspot") ||
+      (connector.id || "").toLowerCase().includes("hubspot") ||
+      (connector.name || "").toLowerCase().includes("hubspot");
+
     const targetId =
-      connector.connectionId || connector.connectionState?.id || connector.id;
+      connector.connectionId ||
+      connector.connectionState?.id ||
+      (isHubSpot ? "hubspot" : connector.id || connector.provider);
+
     if (!targetId) return;
     try {
       const res = await triggerSync(targetId);
