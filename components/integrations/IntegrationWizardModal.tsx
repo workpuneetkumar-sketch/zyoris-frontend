@@ -56,6 +56,7 @@ import {
 import { toast } from "sonner";
 import {
   testIntegrationConnectionApi,
+  testPreflightConnectionApi,
   getIntegrationSchemaApi,
   createIntegrationMappingApi,
   updateIntegrationMappingApi,
@@ -735,9 +736,58 @@ export function IntegrationWizardModal({
 
         let currentTargetId = activeIntegrationId || verifiedExistingTargetId || null;
 
-        // For a brand-new integration, the test must use the newly-created ID from
-        // the successful POST /api/integrations response. Any stale connector
-        // connectionId from a different provider must not override that fresh ID.
+        // Use pre-flight test connection endpoint if available for validating credentials without saving
+        if (!currentTargetId) {
+          try {
+            const preflightRes = await testPreflightConnectionApi({
+              provider: payload.provider,
+              authType: payload.authType,
+              credentials: payload.credentials || {},
+              config: {
+                apiUrl: payload.apiUrl,
+                httpMethod: payload.httpMethod,
+                headers: payload.headers,
+                ...(payload.config || {}),
+              },
+            });
+
+            const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+            if (preflightRes.success) {
+              const normalized = normalizeConnectionSuccess(preflightRes as any, latencyMs);
+              return normalized;
+            } else {
+              const normalized = normalizeConnectionError(
+                {
+                  response: {
+                    status: 400,
+                    data: preflightRes,
+                  },
+                },
+                latencyMs
+              );
+              throw new AsyncRequestError(
+                normalized,
+                normalized.message || "Pre-flight connection validation failed."
+              );
+            }
+          } catch (preflightErr: any) {
+            if (preflightErr instanceof AsyncRequestError) {
+              throw preflightErr;
+            }
+            // If preflight failed with 401/403/400, normalize and report directly
+            if (preflightErr?.response?.status && preflightErr.response.status !== 404) {
+              const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+              const normalized = normalizeConnectionError(preflightErr, latencyMs);
+              throw new AsyncRequestError(
+                normalized,
+                normalized.message || "Pre-flight credential verification failed."
+              );
+            }
+            // Otherwise fallback to instance creation flow
+          }
+        }
+
+        // For a brand-new integration fallback, establish target via onSubmit
         if (!currentTargetId && onSubmit) {
           try {
             const created = await onSubmit(payload);

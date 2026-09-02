@@ -14,6 +14,7 @@ import {
 import {
   FlatSourceField,
   flattenDiscoveredFields,
+  getFieldTypeIcon,
 } from "./SourceFieldSelector";
 import { MappingRow, MappingRowData } from "./MappingRow";
 import {
@@ -33,6 +34,9 @@ import {
   ChevronRight,
   Database,
   Tag,
+  GripVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from "lucide-react";
 import classNames from "classnames";
 import { toast } from "sonner";
@@ -50,12 +54,11 @@ export interface MappingWorkspaceProps {
   onSelectTargetEntity?: (entityId: string) => void;
   initialMappings?: FieldMapping[];
   onSaveMappings: (payload: SchemaMappingPayload) => Promise<void>;
+  integrationId?: string;
   isSaving?: boolean;
   disabled?: boolean;
   className?: string;
 }
-
-const PAGE_SIZE = 10;
 
 function parseTransformation(t?: string | MappingTransformation): MappingTransformation | undefined {
   if (!t) return undefined;
@@ -76,6 +79,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
   onSelectTargetEntity,
   initialMappings = [],
   onSaveMappings,
+  integrationId,
   isSaving = false,
   disabled = false,
   className,
@@ -140,8 +144,12 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
 
   // Search & Filter & Pagination state
   const [searchQuery, setSearchQuery] = useState("");
+  const [sourceSearchQuery, setSourceSearchQuery] = useState("");
   const [filterType, setFilterType] = useState<MappingFilterType>("ALL");
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [showSourceSidebar, setShowSourceSidebar] = useState(true);
+  const [backendValidationError, setBackendValidationError] = useState<string | null>(null);
 
   // Combined Target Fields (Standard + Custom)
   const allTargetFields = useMemo(() => {
@@ -160,8 +168,21 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
       : {};
   }, [currentSourceEntity]);
 
+  // Filtered Source Fields for Sidebar Drag & Drop
+  const filteredSourceFields = useMemo(() => {
+    if (!sourceSearchQuery.trim()) return flatSourceFields;
+    const q = sourceSearchQuery.toLowerCase().trim();
+    return flatSourceFields.filter(
+      (f) =>
+        f.path.toLowerCase().includes(q) ||
+        f.name.toLowerCase().includes(q) ||
+        f.type.toLowerCase().includes(q)
+    );
+  }, [flatSourceFields, sourceSearchQuery]);
+
   // 4. Update Single Mapping
   const handleUpdateRow = useCallback((data: MappingRowData) => {
+    setBackendValidationError(null);
     setLocalMappings((prev) => ({
       ...prev,
       [data.targetFieldKey]: {
@@ -172,6 +193,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
   }, []);
 
   const handleRemoveRow = useCallback((targetKey: string) => {
+    setBackendValidationError(null);
     setLocalMappings((prev) => {
       const next = { ...prev };
       delete next[targetKey];
@@ -181,6 +203,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
 
   // 5. Smart Auto-Mapping
   const handleAutoMap = useCallback(() => {
+    setBackendValidationError(null);
     let matchCount = 0;
     const updated = { ...localMappings };
 
@@ -225,6 +248,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
 
   // 6. Reset / Revert Mappings
   const handleRevert = useCallback(() => {
+    setBackendValidationError(null);
     const initial: Record<string, MappingRowData> = {};
     for (const m of initialMappings) {
       if (m.targetField) {
@@ -244,6 +268,22 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
 
   // 7. Save Mappings
   const handleSave = async () => {
+    setBackendValidationError(null);
+
+    // Validate required target fields
+    const missingReq = allTargetFields.filter((t) => {
+      if (!t.required) return false;
+      const m = localMappings[t.key];
+      return !m || !m.sourceFieldPath || m.skipped;
+    });
+
+    if (missingReq.length > 0) {
+      const msg = `Required target field(s) unmapped: ${missingReq.map((f) => f.label).join(", ")}`;
+      setBackendValidationError(msg);
+      toast.error(msg);
+      return;
+    }
+
     const mappingsList: FieldMapping[] = Object.values(localMappings)
       .filter((m) => m.sourceFieldPath && !m.skipped)
       .map((m) => ({
@@ -254,6 +294,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
       }));
 
     const payload: SchemaMappingPayload = {
+      integrationId,
       mappings: mappingsList,
       targetModule: currentModule.id,
       targetEntity: currentTargetEntity?.id || currentTargetEntity?.name || "Lead",
@@ -269,11 +310,14 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
         }
         return next;
       });
-      toast.success("Field mappings saved successfully.");
+      toast.success("Field mappings persisted successfully.");
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.message || err?.message || "Failed to save schema mappings."
-      );
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Failed to save schema mappings due to invalid integration or entity reference.";
+      setBackendValidationError(errMsg);
+      toast.error(errMsg);
     }
   };
 
@@ -325,16 +369,18 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
   }, [allTargetFields, localMappings, filterType, searchQuery]);
 
   // 10. Pagination
-  const totalPages = Math.ceil(filteredTargetFields.length / PAGE_SIZE) || 1;
+  const effectivePageSize = pageSize === 0 ? filteredTargetFields.length || 1 : pageSize;
+  const totalPages = Math.ceil(filteredTargetFields.length / effectivePageSize) || 1;
   const paginatedFields = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filteredTargetFields.slice(start, start + PAGE_SIZE);
-  }, [filteredTargetFields, currentPage]);
+    if (pageSize === 0) return filteredTargetFields;
+    const start = (currentPage - 1) * pageSize;
+    return filteredTargetFields.slice(start, start + pageSize);
+  }, [filteredTargetFields, currentPage, pageSize]);
 
   return (
-    <div className={classNames("flex flex-col h-full space-y-4", className)}>
+    <div className={classNames("flex flex-col h-full space-y-3.5", className)}>
       {/* Top Bar: Entity & Module Selectors */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3.5 rounded-2xl border border-border bg-surface-secondary/40">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 p-3 rounded-2xl border border-border bg-surface-secondary/40">
         {/* Source Entity Picker */}
         <div>
           <label className="text-[11px] font-semibold text-text-muted flex items-center gap-1.5 mb-1.5">
@@ -355,35 +401,33 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
           </select>
         </div>
 
-        {/* Target Module & Entity Picker */}
+        {/* Target Module Picker */}
         <div>
           <label className="text-[11px] font-semibold text-text-muted flex items-center gap-1.5 mb-1.5">
             <Layers className="w-3.5 h-3.5 text-info" />
             <span>Target Zyoris Data Module</span>
           </label>
-          <div className="flex gap-2">
-            <select
-              value={selectedTargetModuleId}
-              onChange={(e) => onSelectTargetModule?.(e.target.value)}
-              disabled={disabled}
-              className="flex-1 px-3 py-2 rounded-xl border border-border bg-surface text-xs font-semibold text-text focus:outline-hidden focus:ring-1 focus:ring-primary shadow-xs"
-            >
-              {targetModules.map((mod) => (
-                <option key={mod.id} value={mod.id}>
-                  {mod.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={selectedTargetModuleId}
+            onChange={(e) => onSelectTargetModule?.(e.target.value)}
+            disabled={disabled}
+            className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-xs font-semibold text-text focus:outline-hidden focus:ring-1 focus:ring-primary shadow-xs"
+          >
+            {targetModules.map((mod) => (
+              <option key={mod.id} value={mod.id}>
+                {mod.label}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
       {/* Stats and Unsaved Changes Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 p-3 rounded-2xl border border-border bg-surface shadow-xs">
-        {/* Chips */}
+        {/* Statistics Chips */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="px-2.5 py-1 rounded-lg bg-surface-secondary border border-border text-xs flex items-center gap-1.5">
-            <span className="text-text-muted">Total Fields:</span>
+            <span className="text-text-muted">Total:</span>
             <span className="font-bold text-text">{totalTargetCount}</span>
           </div>
 
@@ -409,14 +453,30 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
           {unsavedCount > 0 && (
             <div className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-600 flex items-center gap-1.5 animate-pulse">
               <span className="w-2 h-2 rounded-full bg-amber-500" />
-              <span>Unsaved changes:</span>
+              <span>Unsaved:</span>
               <span className="font-bold">{unsavedCount}</span>
             </div>
           )}
         </div>
 
-        {/* Global Actions */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowSourceSidebar(!showSourceSidebar)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-surface hover:bg-surface-hover text-text text-xs font-medium transition-colors shadow-xs"
+            title="Toggle Draggable Source Fields Sidebar"
+          >
+            {showSourceSidebar ? (
+              <PanelLeftClose className="w-3.5 h-3.5 text-text-muted" />
+            ) : (
+              <PanelLeftOpen className="w-3.5 h-3.5 text-text-muted" />
+            )}
+            <span className="hidden sm:inline">
+              {showSourceSidebar ? "Hide Drag Tray" : "Show Drag Tray"}
+            </span>
+          </button>
+
           <button
             type="button"
             onClick={handleAutoMap}
@@ -424,7 +484,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold transition-colors shadow-xs"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Auto-Map Fields</span>
+            <span>Auto-Map</span>
           </button>
 
           {unsavedCount > 0 && (
@@ -455,20 +515,28 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Validation Warning Alert if Required Fields are Missing */}
-      {missingRequiredFields.length > 0 && (
-        <div className="p-3 rounded-xl bg-error/10 border border-error/20 flex items-center gap-2.5 text-xs text-error">
-          <AlertCircle className="w-4 h-4 flex-shrink-0" />
-          <span>
-            <strong>Required fields unmapped:</strong>{" "}
-            {missingRequiredFields.map((f) => f.label).join(", ")}. Please map or configure these fields to ensure successful synchronization.
-          </span>
+      {/* Backend Validation Feedback Error Banner */}
+      {backendValidationError && (
+        <div className="p-3.5 rounded-xl bg-error/10 border border-error/20 flex items-start justify-between gap-2.5 text-xs text-error">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-bold">Validation Feedback / Save Rejected</p>
+              <p className="opacity-90">{backendValidationError}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setBackendValidationError(null)}
+            className="text-error hover:opacity-75"
+          >
+            ×
+          </button>
         </div>
       )}
 
-      {/* Search & Filters */}
+      {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
-        {/* Search */}
         <div className="relative w-full sm:w-72">
           <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
@@ -483,70 +551,148 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
           />
         </div>
 
-        {/* Filter Tabs */}
-        <div className="flex items-center gap-1 bg-surface-secondary/60 p-1 rounded-xl border border-border text-xs w-full sm:w-auto overflow-x-auto">
-          {(["ALL", "REQUIRED", "MAPPED", "UNMAPPED", "UNSAVED"] as MappingFilterType[]).map(
-            (tab) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => {
-                  setFilterType(tab);
-                  setCurrentPage(1);
-                }}
-                className={classNames(
-                  "px-3 py-1 rounded-lg font-semibold text-xs transition-colors capitalize whitespace-nowrap",
-                  filterType === tab
-                    ? "bg-surface text-text shadow-xs border border-border"
-                    : "text-text-muted hover:text-text"
-                )}
-              >
-                {tab.toLowerCase()}
-              </button>
-            )
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-between">
+          {/* Filter Tabs */}
+          <div className="flex items-center gap-1 bg-surface-secondary/60 p-1 rounded-xl border border-border text-xs overflow-x-auto">
+            {(["ALL", "REQUIRED", "MAPPED", "UNMAPPED", "UNSAVED"] as MappingFilterType[]).map(
+              (tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    setFilterType(tab);
+                    setCurrentPage(1);
+                  }}
+                  className={classNames(
+                    "px-3 py-1 rounded-lg font-semibold text-xs transition-colors capitalize whitespace-nowrap",
+                    filterType === tab
+                      ? "bg-surface text-text shadow-xs border border-border"
+                      : "text-text-muted hover:text-text"
+                  )}
+                >
+                  {tab.toLowerCase()}
+                </button>
+              )
+            )}
+          </div>
+
+          {/* Page Size Selector */}
+          <select
+            value={pageSize}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="px-2.5 py-1 rounded-xl border border-border bg-surface text-xs text-text focus:outline-hidden focus:ring-1 focus:ring-primary shadow-xs"
+          >
+            <option value={10}>10 / page</option>
+            <option value={25}>25 / page</option>
+            <option value={50}>50 / page</option>
+            <option value={0}>All fields</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Main Workspace Area (Split: Left Drag Tray + Right Mapping Canvas) */}
+      <div className="flex-1 flex gap-3 min-h-60 overflow-hidden">
+        {/* Left Drag Tray: Available Source Fields */}
+        {showSourceSidebar && (
+          <div className="w-64 flex-shrink-0 flex flex-col border border-border rounded-2xl bg-surface-secondary/30 p-3 space-y-2 hidden lg:flex">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-text flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-primary" />
+                <span>Source Fields ({flatSourceFields.length})</span>
+              </span>
+            </div>
+
+            <div className="relative">
+              <Search className="w-3 h-3 absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={sourceSearchQuery}
+                onChange={(e) => setSourceSearchQuery(e.target.value)}
+                placeholder="Search drag fields..."
+                className="w-full pl-7 pr-2 py-1 rounded-lg border border-border bg-surface text-[11px] text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 focus:ring-primary"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 text-xs">
+              {filteredSourceFields.length === 0 ? (
+                <p className="text-[11px] text-text-muted text-center py-4">
+                  No source fields match
+                </p>
+              ) : (
+                filteredSourceFields.map((f) => (
+                  <div
+                    key={f.path}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        "application/x-zyoris-field",
+                        JSON.stringify({ path: f.path, type: f.type, name: f.name })
+                      );
+                      e.dataTransfer.setData("text/plain", f.path);
+                    }}
+                    className="p-2 rounded-xl border border-border bg-surface hover:border-primary/50 hover:bg-surface-hover cursor-grab transition-all shadow-2xs group flex items-center justify-between gap-1.5"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0 truncate">
+                      <GripVertical className="w-3 h-3 text-text-muted opacity-40 group-hover:opacity-100 flex-shrink-0" />
+                      {getFieldTypeIcon(f.type)}
+                      <span className="font-mono text-[11px] text-text font-medium truncate">
+                        {f.path}
+                      </span>
+                    </div>
+                    <span className="px-1 py-0.5 rounded text-[9px] font-mono bg-surface-secondary text-text-muted border border-border flex-shrink-0">
+                      {f.type}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Right Mapping Canvas Table */}
+        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+          {paginatedFields.length === 0 ? (
+            <div className="p-12 text-center rounded-2xl border border-dashed border-border bg-surface/50 space-y-2">
+              <Tag className="w-8 h-8 text-text-muted mx-auto" />
+              <h4 className="text-sm font-bold text-text">No Mapping Fields Found</h4>
+              <p className="text-xs text-text-muted max-w-sm mx-auto">
+                No target schema fields matched your current search or active filter settings.
+              </p>
+            </div>
+          ) : (
+            paginatedFields.map((targetField) => {
+              const mappingData = localMappings[targetField.key];
+              const sampleVal = mappingData?.sourceFieldPath
+                ? sampleData?.[mappingData.sourceFieldPath]
+                : undefined;
+
+              return (
+                <MappingRow
+                  key={targetField.key}
+                  targetField={targetField}
+                  sourceFields={flatSourceFields}
+                  mapping={mappingData}
+                  onUpdateMapping={handleUpdateRow}
+                  onRemoveMapping={() => handleRemoveRow(targetField.key)}
+                  sampleSourceValue={sampleVal}
+                  integrationId={integrationId}
+                  disabled={disabled}
+                />
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* Main Mapping Canvas Table / List */}
-      <div className="flex-1 overflow-y-auto space-y-2 pr-1 min-h-60">
-        {paginatedFields.length === 0 ? (
-          <div className="p-12 text-center rounded-2xl border border-dashed border-border bg-surface/50 space-y-2">
-            <Tag className="w-8 h-8 text-text-muted mx-auto" />
-            <h4 className="text-sm font-bold text-text">No Mapping Fields Found</h4>
-            <p className="text-xs text-text-muted max-w-sm mx-auto">
-              No target schema fields matched your current search or active filter settings.
-            </p>
-          </div>
-        ) : (
-          paginatedFields.map((targetField) => {
-            const mappingData = localMappings[targetField.key];
-            const sampleVal = mappingData?.sourceFieldPath
-              ? sampleData?.[mappingData.sourceFieldPath]
-              : undefined;
-
-            return (
-              <MappingRow
-                key={targetField.key}
-                targetField={targetField}
-                sourceFields={flatSourceFields}
-                mapping={mappingData}
-                onUpdateMapping={handleUpdateRow}
-                onRemoveMapping={() => handleRemoveRow(targetField.key)}
-                sampleSourceValue={sampleVal}
-                disabled={disabled}
-              />
-            );
-          })
-        )}
-      </div>
-
       {/* Pagination Footer */}
-      {totalPages > 1 && (
+      {totalPages > 1 && pageSize > 0 && (
         <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-text-muted">
           <span>
-            Showing {(currentPage - 1) * PAGE_SIZE + 1} -{" "}
-            {Math.min(currentPage * PAGE_SIZE, filteredTargetFields.length)} of{" "}
+            Showing {(currentPage - 1) * pageSize + 1} -{" "}
+            {Math.min(currentPage * pageSize, filteredTargetFields.length)} of{" "}
             {filteredTargetFields.length} fields
           </span>
           <div className="flex items-center gap-1">

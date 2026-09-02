@@ -17,6 +17,7 @@ import { DisconnectConfirmationModal } from "@/components/integrations/Disconnec
 import { EditIntegrationModal } from "@/components/integrations/EditIntegrationModal";
 import { RotateCredentialsModal } from "@/components/integrations/RotateCredentialsModal";
 import { ReconnectModal } from "@/components/integrations/ReconnectModal";
+import { IntegrationMonitoringDashboard } from "@/components/integrations/IntegrationMonitoringDashboard";
 import {
   Layers,
   Plus,
@@ -25,6 +26,7 @@ import {
   SearchX,
   ShieldAlert,
   FolderPlus,
+  Activity,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -32,6 +34,7 @@ import {
   RotateCredentialsResponse,
   ReconnectPayload,
 } from "@/types/integrations";
+import classNames from "classnames";
 
 export default function IntegrationsPage() {
   const { user } = useAuth();
@@ -55,6 +58,7 @@ export default function IntegrationsPage() {
 
   const {
     connectors,
+    integrations,
     filteredConnectors,
     stats,
     isLoading,
@@ -107,6 +111,9 @@ export default function IntegrationsPage() {
   const [isReconnectOpen, setIsReconnectOpen] = useState(false);
   const [selectedConnectorForReconnect, setSelectedConnectorForReconnect] =
     useState<Connector | null>(null);
+
+  // Top Page View Tab (Marketplace vs Production Monitoring)
+  const [pageTab, setPageTab] = useState<"CATALOG" | "MONITORING">("CATALOG");
 
   // Actions Handlers
   const handleOpenConnect = (connector: Connector) => {
@@ -283,15 +290,57 @@ export default function IntegrationsPage() {
         </div>
       </div>
 
-      {/* Permission banner for restricted roles */}
-      {!canManageIntegrations && (
-        <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/20 text-warning text-xs flex items-center gap-2.5">
-          <ShieldAlert className="w-4 h-4 flex-shrink-0" />
-          <span>
-            You have read-only access to the Integration Marketplace. Connector configurations and actions require administrator privileges.
-          </span>
-        </div>
-      )}
+      {/* Page Tabs: Catalog vs Audit Logs & Monitoring */}
+      <div className="flex items-center gap-2 border-b border-border pb-2">
+        <button
+          type="button"
+          onClick={() => setPageTab("CATALOG")}
+          className={classNames(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+            pageTab === "CATALOG"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-text-muted hover:text-text hover:bg-surface-secondary"
+          )}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span>Marketplace Catalog</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPageTab("MONITORING")}
+          className={classNames(
+            "px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2",
+            pageTab === "MONITORING"
+              ? "bg-primary text-primary-foreground shadow-sm"
+              : "text-text-muted hover:text-text hover:bg-surface-secondary"
+          )}
+        >
+          <Activity className="w-3.5 h-3.5" />
+          <span>Audit Logs & Production Monitoring</span>
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+        </button>
+      </div>
+
+      {/* Render Monitoring Dashboard if tab is selected */}
+      {pageTab === "MONITORING" ? (
+        <IntegrationMonitoringDashboard
+          integrations={integrations}
+          onTriggerSync={async (id: string) => {
+            await triggerSync(id);
+          }}
+        />
+      ) : (
+        <>
+          {/* Permission banner for restricted roles */}
+          {!canManageIntegrations && (
+            <div className="p-3.5 rounded-xl bg-warning/10 border border-warning/20 text-warning text-xs flex items-center gap-2.5">
+              <ShieldAlert className="w-4 h-4 flex-shrink-0" />
+              <span>
+                You have read-only access to the Integration Marketplace. Connector configurations and actions require administrator privileges.
+              </span>
+            </div>
+          )}
 
       {/* Content Rendering based on State */}
       {isLoading ? (
@@ -387,6 +436,8 @@ export default function IntegrationsPage() {
             </div>
           )}
         </div>
+      )}
+      </>
       )}
 
       {/* MODALS */}

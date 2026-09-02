@@ -506,6 +506,13 @@ export function useIntegrations() {
     return await deleteIntegrationMappingApi(id, mappingId);
   };
 
+  const testPreflightConnection = async (
+    payload: import("@/types/integrations").PreflightTestPayload
+  ): Promise<import("@/types/integrations").PreflightTestResponse> => {
+    const { testPreflightConnectionApi } = await import("@/lib/api/integrationsApi");
+    return await testPreflightConnectionApi(payload);
+  };
+
   return {
     connectors,
     integrations,
@@ -531,6 +538,7 @@ export function useIntegrations() {
     pauseIntegration,
     resumeIntegration,
     testConnection,
+    testPreflightConnection,
     fetchSchema,
     discoverSchema,
     getSchemaMapping,

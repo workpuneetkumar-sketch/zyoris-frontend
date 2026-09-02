@@ -15,6 +15,7 @@ import {
   X,
   Sparkles,
   Layers,
+  GripVertical,
 } from "lucide-react";
 import classNames from "classnames";
 
@@ -87,7 +88,10 @@ export function getFieldTypeIcon(type?: string) {
 export interface SourceFieldSelectorProps {
   fields: DiscoveredField[] | FlatSourceField[];
   selectedPath?: string;
-  onSelect: (field: FlatSourceField | null) => void;
+  selectedFieldPath?: string;
+  onSelect?: (field: FlatSourceField | null) => void;
+  onSelectField?: (fieldPath: string, fieldType?: string) => void;
+  onClear?: () => void;
   disabled?: boolean;
   placeholder?: string;
   targetExpectedType?: string;
@@ -98,15 +102,20 @@ export interface SourceFieldSelectorProps {
 export const SourceFieldSelector: React.FC<SourceFieldSelectorProps> = ({
   fields,
   selectedPath,
+  selectedFieldPath,
   onSelect,
+  onSelectField,
+  onClear,
   disabled = false,
-  placeholder = "Select source field...",
+  placeholder = "Select or drag source field...",
   targetExpectedType,
   className,
   showSamplePreview = true,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
+
+  const activePath = selectedFieldPath !== undefined ? selectedFieldPath : selectedPath;
 
   const flatList = useMemo(() => {
     if (fields.length === 0) return [];
@@ -129,9 +138,31 @@ export const SourceFieldSelector: React.FC<SourceFieldSelectorProps> = ({
   }, [flatList, search]);
 
   const selectedField = useMemo(() => {
-    if (!selectedPath) return null;
-    return flatList.find((f) => f.path === selectedPath) || null;
-  }, [flatList, selectedPath]);
+    if (!activePath) return null;
+    return flatList.find((f) => f.path === activePath) || null;
+  }, [flatList, activePath]);
+
+  const handleChooseField = (f: FlatSourceField) => {
+    if (onSelectField) {
+      onSelectField(f.path, f.type);
+    }
+    if (onSelect) {
+      onSelect(f);
+    }
+    setIsOpen(false);
+  };
+
+  const handleClear = () => {
+    if (onClear) {
+      onClear();
+    }
+    if (onSelectField) {
+      onSelectField("", undefined);
+    }
+    if (onSelect) {
+      onSelect(null);
+    }
+  };
 
   return (
     <div className={classNames("relative w-full", className)}>
@@ -170,7 +201,7 @@ export const SourceFieldSelector: React.FC<SourceFieldSelectorProps> = ({
             <span
               onClick={(e) => {
                 e.stopPropagation();
-                onSelect(null);
+                handleClear();
               }}
               className="p-1 rounded-md text-text-muted hover:text-text hover:bg-surface-hover transition-colors cursor-pointer"
               title="Clear selection"
@@ -225,28 +256,33 @@ export const SourceFieldSelector: React.FC<SourceFieldSelectorProps> = ({
                 </div>
               ) : (
                 filteredFields.map((f) => {
-                  const isSelected = f.path === selectedPath;
+                  const isSelected = f.path === activePath;
                   const isCompatible =
                     !targetExpectedType ||
                     targetExpectedType.toLowerCase() === f.type.toLowerCase() ||
                     targetExpectedType.toLowerCase() === "string";
 
                   return (
-                    <button
+                    <div
                       key={f.path}
-                      type="button"
-                      onClick={() => {
-                        onSelect(f);
-                        setIsOpen(false);
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(
+                          "application/x-zyoris-field",
+                          JSON.stringify({ path: f.path, type: f.type, name: f.name })
+                        );
+                        e.dataTransfer.setData("text/plain", f.path);
                       }}
+                      onClick={() => handleChooseField(f)}
                       className={classNames(
-                        "w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors text-xs group",
+                        "w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg text-left transition-colors text-xs cursor-pointer group",
                         isSelected
                           ? "bg-primary/10 text-primary font-medium"
                           : "hover:bg-surface-hover text-text"
                       )}
                     >
-                      <div className="flex items-center gap-2 min-w-0 truncate">
+                      <div className="flex items-center gap-1.5 min-w-0 truncate">
+                        <GripVertical className="w-3 h-3 text-text-muted opacity-40 group-hover:opacity-100 cursor-grab flex-shrink-0" />
                         {getFieldTypeIcon(f.type)}
                         <span
                           className="font-mono truncate"
@@ -284,7 +320,7 @@ export const SourceFieldSelector: React.FC<SourceFieldSelectorProps> = ({
                           <Check className="w-3.5 h-3.5 text-primary" />
                         )}
                       </div>
-                    </button>
+                    </div>
                   );
                 })
               )}

@@ -534,3 +534,59 @@ export async function previewTransformationApi(
   return response.data;
 }
 
+/**
+ * Pre-flight connection test — validate credentials without saving.
+ * POST /api/integrations/test-connection
+ */
+export async function testPreflightConnectionApi(
+  payload: import("@/types/integrations").PreflightTestPayload
+): Promise<import("@/types/integrations").PreflightTestResponse> {
+  try {
+    const response = await api.post("/api/integrations/test-connection", payload);
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      // Fallback route without /api prefix
+      const fallback = await api.post("/integrations/test-connection", payload);
+      return fallback.data;
+    }
+    throw err;
+  }
+}
+
+/**
+ * List sync run history logs for production monitoring.
+ * GET /integrations/logs
+ */
+export async function getIntegrationLogsApi(
+  query?: import("@/types/integrations").SyncLogsQuery
+): Promise<import("@/types/integrations").SyncLogsResponse> {
+  const response = await api.get("/integrations/logs", { params: query });
+  return response.data;
+}
+
+/**
+ * List sync error records for production monitoring and root cause analysis.
+ * GET /integrations/errors
+ */
+export async function getIntegrationErrorsApi(
+  query?: import("@/types/integrations").SyncErrorsQuery
+): Promise<import("@/types/integrations").SyncErrorsResponse> {
+  const response = await api.get("/integrations/errors", { params: query });
+  return response.data;
+}
+
+/**
+ * Get aggregate dashboard statistics for production monitoring.
+ * GET /integrations/stats
+ */
+export async function getIntegrationStatsApi(
+  integrationId?: string
+): Promise<import("@/types/integrations").IntegrationMonitoringStatsResponse> {
+  const response = await api.get("/integrations/stats", {
+    params: integrationId ? { integrationId } : undefined,
+  });
+  return response.data;
+}
+
+

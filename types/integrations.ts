@@ -679,3 +679,143 @@ export interface WorkspaceMappingState {
   lastSavedAt?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Day 7: Pre-Flight Test Connection & Monitoring Audit Logs / Errors / Stats
+// ---------------------------------------------------------------------------
+
+export interface PreflightTestPayload {
+  provider: string;
+  authType?: string;
+  credentials: Record<string, any>;
+  config?: Record<string, any>;
+}
+
+export interface PreflightTestResponse {
+  success: boolean;
+  status?: "CONNECTED" | "FAILED" | "PENDING";
+  latencyMs?: number;
+  message?: string;
+  details?: {
+    reachable?: boolean;
+    authValid?: boolean;
+    scopesGranted?: string[];
+    apiVersion?: string;
+    [key: string]: any;
+  };
+  error?: string;
+  data?: any;
+}
+
+export interface SyncLogItem {
+  id: string;
+  integrationId: string;
+  integrationName?: string;
+  provider?: string;
+  status: "PENDING" | "RUNNING" | "SUCCESS" | "FAILED" | "PARTIAL_SUCCESS" | "CANCELLED" | string;
+  direction: "INBOUND" | "OUTBOUND" | "BIDIRECTIONAL" | string;
+  trigger: "SCHEDULED" | "MANUAL" | "WEBHOOK" | "SYSTEM" | string;
+  entityType?: string;
+  startedAt: string;
+  completedAt?: string;
+  durationMs?: number;
+  recordsProcessed?: number;
+  successfulRecords?: number;
+  failedRecords?: number;
+  errorMessage?: string;
+  createdAt?: string;
+}
+
+export interface SyncLogsQuery {
+  page?: number;
+  limit?: number;
+  integrationId?: string;
+  status?: string;
+  direction?: string;
+  trigger?: string;
+  entityType?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface SyncLogsResponse {
+  success: boolean;
+  data: SyncLogItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface SyncErrorItem {
+  id: string;
+  syncRunId?: string;
+  integrationId?: string;
+  integrationName?: string;
+  entityType?: string;
+  errorCode?: string;
+  errorMessage: string;
+  errorStack?: string;
+  rawPayload?: Record<string, any>;
+  retryable: boolean;
+  retryCount: number;
+  resolved: boolean;
+  resolvedAt?: string;
+  createdAt: string;
+  updatedAt?: string;
+  syncRun?: {
+    id: string;
+    entityType: string;
+    status: string;
+    integrationId: string;
+  };
+}
+
+export interface SyncErrorsQuery {
+  page?: number;
+  limit?: number;
+  syncRunId?: string;
+  integrationId?: string;
+  errorCode?: string;
+  entityType?: string;
+  resolved?: boolean;
+  retryable?: boolean;
+  startDate?: string;
+  endDate?: string;
+}
+
+export interface SyncErrorsResponse {
+  success: boolean;
+  data: SyncErrorItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface IntegrationMonitoringStats {
+  totalRuns: number;
+  totalSuccessful: number;
+  totalFailed: number;
+  totalPartialSuccess: number;
+  totalRunning: number;
+  totalPending: number;
+  totalCancelled: number;
+  totalErrors: number;
+  unresolvedErrors: number;
+  activeIntegrations: number;
+  totalRecordsSynced: number;
+  totalRecordsFailed: number;
+  failureRate: number | null;
+  lastSyncAt: string | null;
+}
+
+export interface IntegrationMonitoringStatsResponse {
+  success: boolean;
+  data: IntegrationMonitoringStats;
+}
+
+
