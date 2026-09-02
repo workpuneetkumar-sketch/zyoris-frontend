@@ -17,6 +17,7 @@ import { DisconnectConfirmationModal } from "@/components/integrations/Disconnec
 import { EditIntegrationModal } from "@/components/integrations/EditIntegrationModal";
 import { RotateCredentialsModal } from "@/components/integrations/RotateCredentialsModal";
 import { ReconnectModal } from "@/components/integrations/ReconnectModal";
+import { SyncRunsModal } from "@/components/integrations/SyncRunsModal";
 import {
   Layers,
   Plus,
@@ -108,6 +109,10 @@ export default function IntegrationsPage() {
   const [selectedConnectorForReconnect, setSelectedConnectorForReconnect] =
     useState<Connector | null>(null);
 
+  const [isSyncRunsOpen, setIsSyncRunsOpen] = useState(false);
+  const [selectedConnectorForSyncRuns, setSelectedConnectorForSyncRuns] =
+    useState<Connector | null>(null);
+
   // Actions Handlers
   const handleOpenConnect = (connector: Connector) => {
     setSelectedConnectorForWizard(connector);
@@ -132,6 +137,11 @@ export default function IntegrationsPage() {
   const handleViewSchema = (connector: Connector) => {
     setSelectedConnectorForSchema(connector);
     setIsSchemaOpen(true);
+  };
+
+  const handleOpenSyncRuns = (connector: Connector) => {
+    setSelectedConnectorForSyncRuns(connector);
+    setIsSyncRunsOpen(true);
   };
 
   const handleOpenDisconnect = (connector: Connector) => {
@@ -378,6 +388,7 @@ export default function IntegrationsPage() {
                   onSyncNow={handleSyncNow}
                   onTestConnection={handleTestConnection}
                   onViewSchema={handleViewSchema}
+                  onViewSyncRuns={handleOpenSyncRuns}
                   onTogglePause={handleTogglePause}
                   onReconnect={handleOpenReconnectModal}
                   onDisconnect={handleOpenDisconnect}
@@ -503,6 +514,16 @@ export default function IntegrationsPage() {
         onConfirmDisconnect={async (id: string) => {
           await deleteIntegration(id);
         }}
+      />
+
+      {/* Sync Runs & Errors Modal */}
+      <SyncRunsModal
+        isOpen={isSyncRunsOpen}
+        onClose={() => {
+          setIsSyncRunsOpen(false);
+          setSelectedConnectorForSyncRuns(null);
+        }}
+        connector={selectedConnectorForSyncRuns}
       />
     </div>
   );
