@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test tests/transformations.test.ts tests/suggestions.test.ts"
+    "test": "node --experimental-strip-types --test tests/transformations.test.ts tests/suggestions.test.ts tests/monitoring.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

@@ -718,9 +718,16 @@ export interface SyncLogItem {
   startedAt: string;
   completedAt?: string;
   durationMs?: number;
+  duration?: number;
   recordsProcessed?: number;
   successfulRecords?: number;
   failedRecords?: number;
+  fetched?: number;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: number;
+  jobId?: string;
   errorMessage?: string;
   createdAt?: string;
 }
@@ -768,6 +775,13 @@ export interface SyncRun {
   recordsFailed?: number;
   recordsProcessed?: number;
   totalRecords?: number;
+  fetched?: number;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: number;
+  duration?: number;
+  jobId?: string;
   errorCount?: number;
   errorMessage?: string | null;
   startedAt?: string;
@@ -874,6 +888,15 @@ export interface IntegrationMonitoringStats {
   totalRecordsFailed: number;
   failureRate: number | null;
   lastSyncAt: string | null;
+  // Day 10 Metrics
+  totalFetched?: number;
+  totalCreated?: number;
+  totalUpdated?: number;
+  totalSkipped?: number;
+  lastSuccessfulSyncAt?: string | null;
+  nextScheduledSyncAt?: string | null;
+  currentHealth?: "HEALTHY" | "DEGRADED" | "CRITICAL" | "SYNCING" | "IDLE";
+  recentErrorsCount?: number;
 }
 
 export interface IntegrationMonitoringStatsResponse {
