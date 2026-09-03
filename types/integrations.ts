@@ -904,3 +904,94 @@ export interface IntegrationMonitoringStatsResponse {
   data: IntegrationMonitoringStats;
 }
 
+export interface SyncErrorDetailResponse {
+  id: string;
+  integrationId: string;
+  syncRunId: string;
+  record?: string | null;
+  field?: string | null;
+  reason: string;
+  retryable: boolean;
+  retryCount?: number;
+  resolved?: boolean;
+  createdAt: string;
+}
+
+export interface RetrySyncErrorResponse {
+  success: boolean;
+  message: string;
+  error?: SyncErrorDetailResponse | SyncErrorItem;
+  retryRun?: SyncRun;
+}
+
+export interface DashboardAggregateCounters {
+  fetched?: number;
+  created?: number;
+  updated?: number;
+  skipped?: number;
+  failed?: number;
+}
+
+export interface AllIntegrationsDashboardOverview {
+  totalIntegrations?: number;
+  activeIntegrations?: number;
+  healthyIntegrations?: number;
+  degradedIntegrations?: number;
+  unhealthyIntegrations?: number;
+  inactiveIntegrations?: number;
+  totalRuns?: number;
+  overallSuccessRate?: number;
+  aggregateCounters?: DashboardAggregateCounters;
+}
+
+export interface DashboardIntegrationSummary {
+  id: string;
+  name: string;
+  provider: string;
+  status: string;
+  health: "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "INACTIVE" | string;
+  enabled: boolean;
+  lastSyncedAt?: string | null;
+  nextScheduledSync?: string | null;
+  errorCount?: number;
+  totalRuns?: number;
+  successRate?: number;
+}
+
+export interface AllIntegrationsDashboardResponse {
+  overview: AllIntegrationsDashboardOverview;
+  integrations: DashboardIntegrationSummary[];
+}
+
+export interface IntegrationDashboardIntegrationInfo {
+  id: string;
+  name: string;
+  provider: string;
+  category?: string;
+  status: string;
+  health: "HEALTHY" | "DEGRADED" | "UNHEALTHY" | "INACTIVE" | string;
+  enabled: boolean;
+  lastSyncedAt?: string | null;
+  lastSuccessfulSync?: string | null;
+  nextScheduledSync?: string | null;
+  syncFrequencyMinutes?: number;
+  errorCount?: number;
+  errorMessage?: string | null;
+}
+
+export interface IntegrationDashboardMetrics {
+  totalRuns?: number;
+  successfulRuns?: number;
+  failedRuns?: number;
+  partialSuccessRuns?: number;
+  successRate?: number;
+  aggregateCounters?: DashboardAggregateCounters;
+}
+
+export interface IntegrationDashboardResponse {
+  integration: IntegrationDashboardIntegrationInfo;
+  metrics: IntegrationDashboardMetrics;
+  recentFailures: (SyncErrorDetailResponse | SyncErrorItem)[];
+  recentRuns: SyncRun[];
+}
+
