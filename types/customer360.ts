@@ -74,20 +74,58 @@ export interface CustomerContextSummary {
   tags?: string[];
 }
 
+export interface CustomerHealthFactor {
+  label: string;
+  impact: "positive" | "negative" | "neutral";
+  weight?: number | null;
+  detail?: string | null;
+  source?: string | null;
+  provenance?: Provenance | null;
+}
+
 export interface CustomerHealth {
-  score?: SourcedOptional<number>; // 0–100
+  score?: SourcedOptional<number> | number | null; // 0–100
   band?: HealthBand | null;
   trend?: "up" | "down" | "flat" | null;
-  factors?: Array<
-    Sourced<{
-      label: string;
-      impact: "positive" | "negative" | "neutral";
-      weight?: number | null;
-      detail?: string | null;
-    }>
-  >;
+  factors?: Array<Sourced<{
+    label: string;
+    impact: "positive" | "negative" | "neutral";
+    weight?: number | null;
+    detail?: string | null;
+  }> | CustomerHealthFactor>;
   lastEvaluatedAt?: string | null;
+  lastCalculatedAt?: string | null;
 }
+
+// ── GET /api/customers/:id/engagement ────────────────────────────────────────
+
+/**
+ * Activity contribution to the engagement score:
+ * Σ activityWeight × e^(−λ × daysSince)
+ */
+export interface EngagementContribution {
+  id?: string;
+  activityType?: string;
+  type?: string;
+  activityWeight?: number;
+  weight?: number;
+  daysSince?: number;
+  contribution?: number;
+  timestamp?: string;
+  occurredAt?: string;
+  source?: string;
+  provenance?: Provenance | null;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface EngagementScore {
+  score: number;
+  lambda?: number;
+  contributions?: EngagementContribution[];
+  lastCalculatedAt?: string | null;
+  calculatedAt?: string | null;
+}
+
 
 export interface CustomerStakeholder {
   id: string;
@@ -177,44 +215,56 @@ export interface CustomerSummary {
   provenance?: Provenance | null;
 }
 
-// ── GET /api/customers/:id/graph ─────────────────────────────────────────────
+// ── GET /api/customers/:id/graph (Manish — relationship graph) ───────────────
 
-export type CustomerGraphNodeType =
-  | "customer"
-  | "company"
-  | "contact"
-  | "deal"
-  | "user"
-  | "product"
-  | "parent_account"
-  | "subsidiary";
-
+/**
+ * Backend Swagger DTO node in the customer relationship graph.
+ */
 export interface CustomerGraphNode {
   id: string;
-  type: CustomerGraphNodeType;
+  nodeType: string; // e.g. "PERSON", "ORGANIZATION", "COMPANY", "DEAL", etc.
+  refId?: string | null;
   label: string;
-  /** True for the customer this page is about. */
+  metadata?: Record<string, unknown> | null;
+  source?: string | null;
+
+  // Compatibility aliases
+  type?: string;
   isRoot?: boolean;
   meta?: Record<string, unknown> | null;
   provenance?: Provenance | null;
 }
 
+/**
+ * Backend Swagger DTO edge in the customer relationship graph.
+ */
 export interface CustomerGraphEdge {
   id: string;
-  source: string; // node id
-  target: string; // node id
+  fromNodeId: string;
+  toNodeId: string;
+  relationshipType: string; // e.g. "WORKS_AT", "OWNS", etc.
+  strength?: number | null;
+  source?: string | null;
+
+  // Compatibility aliases
+  target?: string | null;
   label?: string | null;
-  kind?: string | null; // e.g. "reports_to", "owns", "parent_of"
+  kind?: string | null;
   provenance?: Provenance | null;
 }
 
 /** Canonical response of GET /api/customers/:id/graph */
 export interface CustomerGraph {
-  customerId: string;
+  rootNodeId: string;
+  depth?: number;
   nodes: CustomerGraphNode[];
   edges: CustomerGraphEdge[];
+
+  // Compatibility aliases
+  customerId?: string;
   generatedAt?: string | null;
 }
+
 
 // ── GET /api/customers/:id/timeline (Customer Timeline service — Prashant) ────
 
@@ -286,8 +336,8 @@ export function unwrap<T>(v: Sourced<T> | T | null | undefined): T | null {
 
 /** Extract provenance from a `Sourced<T>` or an object that carries `provenance`. */
 export function provenanceOf(
-  v: Sourced<unknown> | { provenance?: Provenance | null } | null | undefined
+  v: unknown
 ): Provenance | null {
   if (!v || typeof v !== "object") return null;
-  return ("provenance" in v ? v.provenance : null) ?? null;
+  return ("provenance" in v ? (v as { provenance?: Provenance | null }).provenance : null) ?? null;
 }
