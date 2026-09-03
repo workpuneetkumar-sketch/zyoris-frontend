@@ -20,6 +20,7 @@ import {
   Trash2,
   AlertCircle,
   CheckCircle2,
+  Check,
   Eye,
   EyeOff,
   Code,
@@ -31,6 +32,7 @@ import {
 } from "lucide-react";
 import classNames from "classnames";
 import { previewTransformationApi } from "@/lib/api/integrationsApi";
+import { executeTransformationPipeline } from "@/lib/transformations/engine";
 import { toast } from "sonner";
 
 export interface MappingRowData {
@@ -41,6 +43,11 @@ export interface MappingRowData {
   skipped?: boolean;
   isDirty?: boolean;
   error?: string;
+  confidence?: number;
+  confidenceTier?: "high" | "medium" | "low";
+  matchReason?: string;
+  isSuggested?: boolean;
+  isConfirmed?: boolean;
 }
 
 export interface MappingRowProps {
@@ -49,6 +56,8 @@ export interface MappingRowProps {
   mapping?: MappingRowData;
   onUpdateMapping: (updated: MappingRowData) => void;
   onRemoveMapping: () => void;
+  onAcceptSuggestion?: () => void;
+  onRejectSuggestion?: () => void;
   disabled?: boolean;
   sampleSourceValue?: any;
   integrationId?: string;
@@ -99,32 +108,22 @@ export function applyClientTransformation(
   value: any,
   transformation?: MappingTransformation
 ): string {
-  if (value === undefined || value === null) {
-    return transformation?.defaultValue || "";
-  }
-  const str = String(value);
   if (!transformation || transformation.type === "none") {
-    return str;
+    if (value === undefined || value === null) return "";
+    return String(value);
   }
-  switch (transformation.type) {
-    case "UPPERCASE":
-      return str.toUpperCase();
-    case "LOWERCASE":
-      return str.toLowerCase();
-    case "TRIM":
-      return str.trim();
-    case "PARSE_DATE":
-      try {
-        const d = new Date(str);
-        return isNaN(d.getTime()) ? str : d.toISOString();
-      } catch {
-        return str;
-      }
-    case "DEFAULT_VALUE":
-      return str.trim() ? str : transformation.defaultValue || "";
-    default:
-      return str;
-  }
+
+  const result = executeTransformationPipeline(value, [
+    {
+      type: transformation.type,
+      params:
+        transformation.type === "DEFAULT_VALUE"
+          ? { defaultValue: transformation.defaultValue }
+          : transformation.config,
+    },
+  ]);
+
+  return result.transformedValue;
 }
 
 export const MappingRow: React.FC<MappingRowProps> = ({
@@ -133,6 +132,8 @@ export const MappingRow: React.FC<MappingRowProps> = ({
   mapping,
   onUpdateMapping,
   onRemoveMapping,
+  onAcceptSuggestion,
+  onRejectSuggestion,
   disabled = false,
   sampleSourceValue,
   integrationId,
@@ -302,7 +303,11 @@ export const MappingRow: React.FC<MappingRowProps> = ({
             : isSkipped
             ? "border-border/60 bg-surface-secondary/30 opacity-70"
             : isMissingRequired
-            ? "border-error/30 bg-error/5"
+            ? "border-error/30 bg-error/5 border-l-4 border-l-error"
+            : mapping?.isSuggested && !mapping?.isConfirmed
+            ? "border-indigo-500 bg-indigo-50/15 dark:bg-indigo-950/20 border-l-4 border-l-indigo-500"
+            : mapping?.isConfirmed
+            ? "border-emerald-500/50 bg-emerald-50/10 dark:bg-emerald-950/10 border-l-4 border-l-emerald-500"
             : isMapped
             ? "border-border bg-surface hover:border-border-hover shadow-2xs"
             : "border-border/80 bg-surface/80"
@@ -330,6 +335,20 @@ export const MappingRow: React.FC<MappingRowProps> = ({
             <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-surface-secondary text-text-secondary border border-border">
               {targetField.type}
             </span>
+
+            {mapping?.isSuggested && !mapping?.isConfirmed && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-700">
+                <Sparkles className="w-2.5 h-2.5 text-indigo-500 animate-pulse" />
+                Suggested ({Math.round((mapping.confidence ?? 0.85) * 100)}%)
+              </span>
+            )}
+
+            {mapping?.isConfirmed && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300 border border-emerald-300">
+                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" />
+                Confirmed
+              </span>
+            )}
 
             {isSkipped && (
               <span className="px-1.5 py-0.5 rounded text-[9px] font-semibold bg-surface-secondary text-text-muted border border-border uppercase">
@@ -401,7 +420,36 @@ export const MappingRow: React.FC<MappingRowProps> = ({
           )}
 
           {/* Inline Transformation & Action Buttons */}
-          <div className="flex items-center gap-1 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {mapping?.isSuggested && !mapping?.isConfirmed && (
+              <>
+                {onAcceptSuggestion && (
+                  <button
+                    type="button"
+                    onClick={onAcceptSuggestion}
+                    disabled={disabled}
+                    title="Accept suggested mapping"
+                    className="flex items-center gap-1 px-2 py-1 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-[11px] shadow-2xs transition-colors"
+                  >
+                    <Check className="w-3 h-3" />
+                    <span>Accept</span>
+                  </button>
+                )}
+                {onRejectSuggestion && (
+                  <button
+                    type="button"
+                    onClick={onRejectSuggestion}
+                    disabled={disabled}
+                    title="Reject suggested mapping"
+                    className="flex items-center gap-1 px-2 py-1 rounded-md border border-border bg-surface text-text-secondary hover:text-error hover:border-error/30 hover:bg-error/10 font-semibold text-[11px] transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>Reject</span>
+                  </button>
+                )}
+              </>
+            )}
+
             {isMapped && !isSkipped && (
               <button
                 type="button"

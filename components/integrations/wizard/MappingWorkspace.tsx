@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useEffect } from "react";
 import {
   TargetModuleDefinition,
   TargetEntityDefinition,
@@ -18,10 +18,15 @@ import {
 } from "./SourceFieldSelector";
 import { MappingRow, MappingRowData } from "./MappingRow";
 import {
+  generateMappingSuggestions,
+  validateFieldAcceptance,
+} from "@/lib/transformations/suggestions";
+import {
   Layers,
   Sparkles,
   Search,
   CheckCircle2,
+  Check,
   AlertCircle,
   AlertTriangle,
   RotateCcw,
@@ -246,6 +251,95 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
     }
   }, [allTargetFields, flatSourceFields, localMappings]);
 
+  // Generate suggestions for unmapped target fields from discovered source fields
+  useEffect(() => {
+    if (flatSourceFields.length === 0 || allTargetFields.length === 0) return;
+
+    const suggestions = generateMappingSuggestions(
+      allTargetFields,
+      flatSourceFields,
+      localMappings
+    );
+
+    setLocalMappings((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      suggestions.forEach((sugg) => {
+        const existing = next[sugg.targetFieldKey];
+        if (existing?.isConfirmed) return;
+        if (!existing?.sourceFieldPath || existing.isSuggested) {
+          next[sugg.targetFieldKey] = {
+            targetFieldKey: sugg.targetFieldKey,
+            sourceFieldPath: sugg.sourceFieldPath,
+            sourceType: sugg.sourceType,
+            transformation: existing?.transformation,
+            skipped: false,
+            isDirty: existing?.isDirty || false,
+            confidence: sugg.confidence,
+            confidenceTier: sugg.confidenceTier,
+            matchReason: sugg.reason,
+            isSuggested: true,
+            isConfirmed: false,
+          };
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [flatSourceFields, allTargetFields]);
+
+  // Handle accepting a suggested mapping with strict validation
+  const handleAcceptSuggestion = (targetKey: string) => {
+    const target = allTargetFields.find((t) => t.key === targetKey);
+    const m = localMappings[targetKey];
+    if (!target || !m) return;
+
+    const validation = validateFieldAcceptance(
+      target,
+      {
+        sourceFieldPath: m.sourceFieldPath,
+        defaultValue: m.transformation?.defaultValue,
+        transformation: m.transformation,
+      },
+      flatSourceFields.map((f) => f.path)
+    );
+
+    if (!validation.canAccept) {
+      toast.error(validation.error || `Cannot accept required field '${target.label}'.`);
+      setLocalMappings((prev) => ({
+        ...prev,
+        [targetKey]: {
+          ...prev[targetKey],
+          error: validation.error,
+        },
+      }));
+      return;
+    }
+
+    setLocalMappings((prev) => ({
+      ...prev,
+      [targetKey]: {
+        ...prev[targetKey],
+        isConfirmed: true,
+        isSuggested: false,
+        isDirty: true,
+        error: undefined,
+      },
+    }));
+    toast.success(`Confirmed mapping for ${target.label}`);
+  };
+
+  // Handle rejecting a suggested mapping
+  const handleRejectSuggestion = (targetKey: string) => {
+    const target = allTargetFields.find((t) => t.key === targetKey);
+    setLocalMappings((prev) => {
+      const next = { ...prev };
+      delete next[targetKey];
+      return next;
+    });
+    toast.info(`Rejected suggestion for ${target?.label || targetKey}`);
+  };
+
   // 6. Reset / Revert Mappings
   const handleRevert = useCallback(() => {
     setBackendValidationError(null);
@@ -259,6 +353,8 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
           transformation: parseTransformation(m.transformation),
           skipped: false,
           isDirty: false,
+          isConfirmed: true,
+          isSuggested: false,
         };
       }
     }
@@ -270,15 +366,26 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
   const handleSave = async () => {
     setBackendValidationError(null);
 
-    // Validate required target fields
+    // Validate required target fields with explicit support for defaults
     const missingReq = allTargetFields.filter((t) => {
       if (!t.required) return false;
       const m = localMappings[t.key];
-      return !m || !m.sourceFieldPath || m.skipped;
+      const check = validateFieldAcceptance(
+        t,
+        m
+          ? {
+              sourceFieldPath: m.sourceFieldPath,
+              defaultValue: m.transformation?.defaultValue,
+              transformation: m.transformation,
+            }
+          : null,
+        flatSourceFields.map((f) => f.path)
+      );
+      return !check.canAccept || m?.skipped;
     });
 
     if (missingReq.length > 0) {
-      const msg = `Required target field(s) unmapped: ${missingReq.map((f) => f.label).join(", ")}`;
+      const msg = `Required target field(s) unmapped or invalid: ${missingReq.map((f) => f.label).join(", ")}`;
       setBackendValidationError(msg);
       toast.error(msg);
       return;
@@ -677,6 +784,8 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
                   mapping={mappingData}
                   onUpdateMapping={handleUpdateRow}
                   onRemoveMapping={() => handleRemoveRow(targetField.key)}
+                  onAcceptSuggestion={() => handleAcceptSuggestion(targetField.key)}
+                  onRejectSuggestion={() => handleRejectSuggestion(targetField.key)}
                   sampleSourceValue={sampleVal}
                   integrationId={integrationId}
                   disabled={disabled}
