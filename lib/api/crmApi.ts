@@ -1,8 +1,9 @@
 import api from "./api";
+import { fetchCustomers } from "./customersApi";
 
 export interface SearchResult {
   id: string;
-  type: "Lead" | "Deal" | "Contact" | "Company";
+  type: "Lead" | "Deal" | "Contact" | "Company" | "Customer";
   title: string;
   secondary?: string;
 }
@@ -12,6 +13,7 @@ export interface SearchResponse {
   deals?: SearchResult[];
   contacts?: SearchResult[];
   companies?: SearchResult[];
+  customers?: SearchResult[];
 }
 
 interface BackendSearchItem {
@@ -55,9 +57,29 @@ function extractResult(item: BackendSearchItem): SearchResult {
   };
 }
 
+// Helper to convert a customer object to a SearchResult
+function customerToSearchResult(customer: any): SearchResult {
+  // Assuming customer has at least an id and a name
+  const title = customer.name || customer.companyName || customer.organizationName || "Unknown Customer";
+  const secondary = customer.email || customer.phone || customer.website || "";
+
+  return {
+    id: customer.id || customer._id || String(Date.now()),
+    type: "Customer",
+    title,
+    secondary: secondary || undefined,
+  };
+}
+
 export async function searchCrm(query: string): Promise<SearchResponse> {
-  const res = await api.get<BackendSearchResponse>("/crm/search", {
-    params: { q: query },
+  // Execute both searches in parallel
+  const [crmRes, customersRes] = await Promise.all([
+    api.get<BackendSearchResponse>("/crm/search", { params: { q: query } }),
+    fetchCustomers({ page: 1, limit: 10, filters: { search: query } }),
+  ]).catch((err) => {
+    // If one of the requests fails, we still want to proceed with the other
+    console.error("One of the search requests failed:", err);
+    return [undefined, undefined] as const;
   });
 
   // Group results into our format
@@ -66,10 +88,12 @@ export async function searchCrm(query: string): Promise<SearchResponse> {
     deals: [],
     contacts: [],
     companies: [],
+    customers: [],
   };
 
-  if (res.data.results && Array.isArray(res.data.results)) {
-    res.data.results.forEach((item) => {
+  // Process CRM search results (leads, deals, contacts, companies)
+  if (crmRes?.data?.results && Array.isArray(crmRes.data.results)) {
+    crmRes.data.results.forEach((item) => {
       const result = extractResult(item);
       switch (result.type) {
         case "Lead":
@@ -85,6 +109,14 @@ export async function searchCrm(query: string): Promise<SearchResponse> {
           response.companies?.push(result);
           break;
       }
+    });
+  }
+
+  // Process customer search results
+  if (customersRes?.customers && Array.isArray(customersRes.customers)) {
+    customersRes.customers.forEach((customer) => {
+      const result = customerToSearchResult(customer);
+      response.customers?.push(result);
     });
   }
 

@@ -15,6 +15,8 @@ const getIconForType = (type: SearchResult["type"]) => {
       return <Users size={14} />;
     case "Company":
       return <Building2 size={14} />;
+    case "Customer":
+      return <UsersRound size={14} />;
   }
 };
 
@@ -107,24 +109,27 @@ export function CrmSearch() {
     };
   }, []);
 
-  const navigateToResult = useCallback((result: SearchResult) => {
-    switch (result.type) {
-      case "Lead":
-        router.push(`/leads/${result.id}`);
-        break;
-      case "Deal":
-        router.push(`/deals/${result.id}`);
-        break;
-      case "Contact":
-        router.push("/contacts");
-        break;
-      case "Company":
-        router.push("/companies");
-        break;
-    }
-    setIsOpen(false);
-    setQuery("");
-  }, [router]);
+const navigateToResult = useCallback((result: SearchResult) => {
+  switch (result.type) {
+    case "Lead":
+      router.push(`/dashboard/leads/${result.id}`);
+      break;
+    case "Deal":
+      router.push(`/dashboard/deals/${result.id}`);
+      break;
+    case "Contact":
+      router.push(`/dashboard/contacts`);
+      break;
+    case "Company":
+      router.push(`/dashboard/companies`);
+      break;
+    case "Customer":
+      router.push(`/dashboard/customers/${result.id}`);
+      break;
+  }
+  setIsOpen(false);
+  setQuery("");
+}, [router]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -162,7 +167,7 @@ export function CrmSearch() {
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search leads, deals, contacts, companies..."
+          placeholder="Search leads, deals, contacts, companies, customers..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
