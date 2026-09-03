@@ -11,9 +11,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CustomerApiError,
   fetchCustomerById,
+  fetchCustomerEngagement,
   fetchCustomerGraph,
+  fetchCustomerHealth,
 } from "@/lib/api/customersApi";
-import type { CustomerGraph, CustomerSummary } from "@/types/customer360";
+import type {
+  CustomerGraph,
+  CustomerHealth,
+  CustomerSummary,
+  EngagementScore,
+} from "@/types/customer360";
 
 export interface AsyncResource<T> {
   data: T | null;
@@ -69,7 +76,6 @@ function useAsyncResource<T>(
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, nonce, loader]);
 
   return { data, loading, error, reload };
@@ -78,13 +84,33 @@ function useAsyncResource<T>(
 export interface UseCustomer360Result {
   summary: AsyncResource<CustomerSummary>;
   graph: AsyncResource<CustomerGraph>;
+  health: AsyncResource<CustomerHealth>;
+  engagement: AsyncResource<EngagementScore>;
+  graphDepth: number;
+  setGraphDepth: (depth: number) => void;
 }
 
 export function useCustomer360(customerId: string | null | undefined): UseCustomer360Result {
   const id = customerId ? String(customerId) : null;
+  const [graphDepth, setGraphDepth] = useState<number>(2);
+
+  const graphLoader = useCallback(
+    (key: string) => fetchCustomerGraph(key, graphDepth),
+    [graphDepth]
+  );
 
   const summary = useAsyncResource<CustomerSummary>(id, fetchCustomerById);
-  const graph = useAsyncResource<CustomerGraph>(id, fetchCustomerGraph);
+  const graph = useAsyncResource<CustomerGraph>(id, graphLoader);
+  const health = useAsyncResource<CustomerHealth>(id, fetchCustomerHealth);
+  const engagement = useAsyncResource<EngagementScore>(id, fetchCustomerEngagement);
 
-  return { summary, graph };
+  return {
+    summary,
+    graph,
+    health,
+    engagement,
+    graphDepth,
+    setGraphDepth,
+  };
 }
+

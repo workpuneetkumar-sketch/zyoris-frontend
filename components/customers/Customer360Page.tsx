@@ -55,7 +55,8 @@ export function Customer360Page({
   canonicalCustomer?: CanonicalCustomer | null;
 }) {
   const router = useRouter();
-  const { summary, graph } = useCustomer360(customerId);
+  const { summary, graph, health, engagement, graphDepth, setGraphDepth } =
+    useCustomer360(customerId);
   const [isMeetingPrepOpen, setIsMeetingPrepOpen] = useState(false);
 
   if (summary.loading) {
@@ -202,7 +203,11 @@ export function Customer360Page({
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
         <div className="flex flex-col gap-6">
           <ContextSummarySection customer={customer} />
-          <HealthSection health={customer.health} />
+          <HealthSection
+            health={health}
+            engagement={engagement}
+            fallbackHealth={customer.health}
+          />
           <StakeholdersSection stakeholders={customer.stakeholders} />
           <ProductsSection products={customer.products} />
           <FinancialsSection financials={customer.financials} />
@@ -210,7 +215,11 @@ export function Customer360Page({
         </div>
         <div className="flex flex-col gap-6">
           <TimelineSection customerId={customer.id} />
-          <GraphSection graph={graph} />
+          <GraphSection
+            graph={graph}
+            depth={graphDepth}
+            onDepthChange={setGraphDepth}
+          />
           <AiInsightsSection customerId={customer.id} />
         </div>
       </div>

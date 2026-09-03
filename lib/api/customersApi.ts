@@ -21,11 +21,12 @@ import type {
   CustomerGraph,
   CustomerGraphEdge,
   CustomerGraphNode,
-  CustomerGraphNodeType,
+  CustomerHealth,
   CustomerSummary,
   CustomerTimelineEvent,
   CustomerTimelinePage,
   CustomerTimelineQuery,
+  EngagementScore,
 } from "@/types/customer360";
 import type {
   CanonicalCustomer,
@@ -175,166 +176,53 @@ function mockId(prefix: string, salt: string, idx = 0): string {
 
 function normalizeGraphNodes(rawNodes: any[]): CustomerGraphNode[] {
   return rawNodes.map((rn: any) => {
-    const nodeType: CustomerGraphNodeType =
-      (rn.nodeType ?? rn.type ?? "customer").toLowerCase();
+    const rawType = rn.nodeType ?? rn.type ?? "PERSON";
+    const nodeType = String(rawType).toUpperCase();
+    const id = String(rn.id ?? rn.refId ?? "");
+    const label = String(rn.label ?? rn.name ?? nodeType);
+    const metadata = rn.metadata ?? rn.meta ?? null;
+    const source = rn.source ?? rn.provenance?.source ?? null;
+
     return {
-      id: String(rn.id ?? rn.refId ?? mockId("n", JSON.stringify(rn))),
-      type: nodeType,
-      label: String(rn.label ?? rn.name ?? nodeType),
+      id,
+      nodeType,
+      refId: rn.refId ? String(rn.refId) : null,
+      label,
+      metadata,
+      source,
+      // Compatibility aliases
+      type: nodeType.toLowerCase(),
       isRoot: Boolean(rn.isRoot),
-      meta: rn.meta ?? rn.metadata ?? null,
-      provenance: rn.provenance ?? null,
+      meta: metadata,
+      provenance: rn.provenance ?? (source ? { source: String(source) } : null),
     };
   });
 }
 
 function normalizeGraphEdges(rawEdges: any[]): CustomerGraphEdge[] {
-  return rawEdges.map((re: any) => ({
-    id: String(re.id ?? mockId("e", JSON.stringify(re))),
-    source: String(re.source ?? re.fromNodeId ?? ""),
-    target: String(re.target ?? re.toNodeId ?? ""),
-    label: re.label ?? null,
-    kind: re.kind ?? re.relationshipType ?? null,
-    provenance: re.provenance ?? null,
-  }));
-}
+  return rawEdges.map((re: any) => {
+    const fromNodeId = String(re.fromNodeId ?? re.source ?? "");
+    const toNodeId = String(re.toNodeId ?? re.target ?? "");
+    const rawRel = re.relationshipType ?? re.kind ?? re.label ?? "RELATED_TO";
+    const relationshipType = String(rawRel).toUpperCase();
+    const source = re.source ?? re.provenance?.source ?? null;
+    const strength = typeof re.strength === "number" ? re.strength : null;
+    const id = String(re.id ?? `${fromNodeId}-${relationshipType}-${toNodeId}`);
 
-function buildMockGraph(customerId: string, customerName: string): CustomerGraph {
-  const now = new Date();
-  const rootId = mockId("n", customerId + "root");
-  const companyId = mockId("n", customerId + "co");
-  const contact1Id = mockId("n", customerId + "c1");
-  const contact2Id = mockId("n", customerId + "c2");
-  const dealId = mockId("n", customerId + "d1");
-  const ownerId = mockId("n", customerId + "owner");
-  const productId = mockId("n", customerId + "prod");
-
-  const nodes: CustomerGraphNode[] = [
-    {
-      id: rootId,
-      type: "customer",
-      label: customerName || "Customer account",
-      isRoot: true,
-      meta: null,
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: companyId,
-      type: "company",
-      label: customerName ? `${customerName} HQ` : "Parent company",
-      meta: null,
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: contact1Id,
-      type: "contact",
-      label: "Jane Doe",
-      meta: { title: "VP of Engineering", email: "jane.doe@example.com" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: contact2Id,
-      type: "contact",
-      label: "Raj Patel",
-      meta: { title: "Procurement Manager", email: "raj.patel@example.com" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: dealId,
-      type: "deal",
-      label: "Q3 Enterprise Renewal",
-      meta: { amount: 48000, currency: "USD", stage: "Negotiation" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: ownerId,
-      type: "user",
-      label: "Demo User",
-      meta: { role: "Account Owner", email: "demo@zyoris.ai" },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: productId,
-      type: "product",
-      label: "Zyoris Platform - Enterprise",
-      meta: { sku: "ZYR-ENT-ANN", seats: 120 },
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-  ];
-
-  const edges: CustomerGraphEdge[] = [
-    {
-      id: mockId("e", customerId + "root-co", 1),
-      source: rootId,
-      target: companyId,
-      label: "Belongs to",
-      kind: "belongs_to",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-c1", 2),
-      source: rootId,
-      target: contact1Id,
-      label: "Stakeholder",
-      kind: "stakeholder",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-c2", 3),
-      source: rootId,
-      target: contact2Id,
-      label: "Buyer",
-      kind: "buyer",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-d1", 4),
-      source: rootId,
-      target: dealId,
-      label: "Open deal",
-      kind: "has_deal",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-owner", 5),
-      source: rootId,
-      target: ownerId,
-      label: "Owned by",
-      kind: "owned_by",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "root-prod", 6),
-      source: rootId,
-      target: productId,
-      label: "Subscribed to",
-      kind: "subscribed_to",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "c1-co", 7),
-      source: contact1Id,
-      target: companyId,
-      label: "Works at",
-      kind: "works_at",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-    {
-      id: mockId("e", customerId + "c2-co", 8),
-      source: contact2Id,
-      target: companyId,
-      label: "Works at",
-      kind: "works_at",
-      provenance: { ...BACKEND_PENDING_PROVENANCE },
-    },
-  ];
-
-  return {
-    customerId,
-    nodes,
-    edges,
-    generatedAt: now.toISOString(),
-  };
+    return {
+      id,
+      fromNodeId,
+      toNodeId,
+      relationshipType,
+      strength,
+      source,
+      // Compatibility aliases
+      target: toNodeId,
+      label: re.label ?? relationshipType.replace(/_/g, " "),
+      kind: relationshipType.toLowerCase(),
+      provenance: re.provenance ?? (source ? { source: String(source) } : null),
+    };
+  });
 }
 
 function buildMockTimeline(
@@ -472,10 +360,15 @@ function buildMockTimeline(
 
 // ── GET /api/customers/:id/graph ────────────────────────────────────────────
 
-export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
+export async function fetchCustomerGraph(
+  id: string,
+  depth: number = 2
+): Promise<CustomerGraph> {
   if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
   try {
-    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/graph`);
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/graph`, {
+      params: { depth },
+    });
     const raw = unwrapEnvelope<any>(res.data);
 
     const rawNodes =
@@ -488,29 +381,99 @@ export async function fetchCustomerGraph(id: string): Promise<CustomerGraph> {
       Array.isArray(raw?.data?.edges) ? raw.data.edges :
       [];
 
-    // Empty backend response → empty graph, let the UI render its empty state.
-    // No mocking here — only 404 / unreachable endpoints fall back to placeholders.
+    const rootNodeId = String(raw?.rootNodeId ?? raw?.customerId ?? id);
+
     return {
-      customerId: raw?.customerId ?? raw?.rootNodeId ?? id,
+      rootNodeId,
+      depth: typeof raw?.depth === "number" ? raw.depth : depth,
       nodes: normalizeGraphNodes(rawNodes),
       edges: normalizeGraphEdges(rawEdges),
+      // Compatibility aliases
+      customerId: rootNodeId,
       generatedAt: raw?.generatedAt ?? null,
     };
   } catch (err) {
-    const ax = err as AxiosError;
-    const status = ax?.isAxiosError ? ax.response?.status : undefined;
-    const isNotFoundOrUnroutable =
-      status === 404 ||
-      status === 501 ||
-      status === 502 ||
-      !ax?.isAxiosError;
-
-    if (isNotFoundOrUnroutable) {
-      return buildMockGraph(id, `Customer ${id}`);
-    }
     throw toCustomerApiError(err, "the relationship graph");
   }
 }
+
+// ── GET /api/customers/:id/health ───────────────────────────────────────────
+
+export async function fetchCustomerHealth(id: string): Promise<CustomerHealth> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/health`);
+    const raw = unwrapEnvelope<any>(res.data);
+    return raw as CustomerHealth;
+  } catch (err) {
+    throw toCustomerApiError(err, "the customer health score");
+  }
+}
+
+// ── GET /api/customers/:id/engagement ───────────────────────────────────────
+
+export async function fetchCustomerEngagement(id: string): Promise<EngagementScore> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/engagement`);
+    const raw = unwrapEnvelope<any>(res.data);
+
+    const rawScore = raw?.score;
+    const scoreVal =
+      typeof rawScore === "number"
+        ? rawScore
+        : Array.isArray(rawScore)
+        ? Number(rawScore[0]) || 0
+        : Number(rawScore) || 0;
+
+    const rawLambda = raw?.lambda;
+    const lambdaVal =
+      typeof rawLambda === "number"
+        ? rawLambda
+        : Array.isArray(rawLambda)
+        ? Number(rawLambda[0])
+        : typeof rawLambda === "string"
+        ? Number(rawLambda)
+        : undefined;
+
+    const rawContributions = Array.isArray(raw?.contributions) ? raw.contributions : [];
+    const contributions = rawContributions.map((c: any) => ({
+      id: c.id ? String(c.id) : undefined,
+      activityType: c.activityType ?? c.type ?? "ACTIVITY",
+      type: c.type ?? c.activityType ?? "ACTIVITY",
+      activityWeight:
+        typeof c.activityWeight === "number"
+          ? c.activityWeight
+          : typeof c.weight === "number"
+          ? c.weight
+          : undefined,
+      weight:
+        typeof c.weight === "number"
+          ? c.weight
+          : typeof c.activityWeight === "number"
+          ? c.activityWeight
+          : undefined,
+      daysSince: typeof c.daysSince === "number" ? c.daysSince : undefined,
+      contribution: typeof c.contribution === "number" ? c.contribution : undefined,
+      timestamp: c.timestamp ?? c.occurredAt ?? null,
+      occurredAt: c.occurredAt ?? c.timestamp ?? null,
+      source: c.source ?? c.provenance?.source ?? null,
+      provenance: c.provenance ?? (c.source ? { source: String(c.source) } : null),
+      metadata: c.metadata ?? null,
+    }));
+
+    return {
+      score: scoreVal,
+      lambda: typeof lambdaVal === "number" && !Number.isNaN(lambdaVal) ? lambdaVal : undefined,
+      contributions,
+      lastCalculatedAt: raw?.lastCalculatedAt ?? raw?.calculatedAt ?? null,
+      calculatedAt: raw?.calculatedAt ?? raw?.lastCalculatedAt ?? null,
+    };
+  } catch (err) {
+    throw toCustomerApiError(err, "the customer engagement score");
+  }
+}
+
 
 // ── GET /api/customers/:id/timeline ─────────────────────────────────────────
 // Cursor-paginated. Filters mirror the backend query contract exactly:
