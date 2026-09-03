@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, User, Briefcase, Users, Building2, Loader2, X } from "lucide-react";
+import { Search, User, Briefcase, Users, Building2, Loader2, X, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { searchCrm, SearchResult } from "@/lib/api/crmApi";
 
@@ -57,6 +57,7 @@ export function CrmSearch() {
         ...(data.deals || []),
         ...(data.contacts || []),
         ...(data.companies || []),
+        ...(data.customers || []),
       ];
       setResults(flattenedResults);
       setSelectedIndex(-1);
@@ -109,27 +110,27 @@ export function CrmSearch() {
     };
   }, []);
 
-const navigateToResult = useCallback((result: SearchResult) => {
-  switch (result.type) {
-    case "Lead":
-      router.push(`/dashboard/leads/${result.id}`);
-      break;
-    case "Deal":
-      router.push(`/dashboard/deals/${result.id}`);
-      break;
-    case "Contact":
-      router.push(`/dashboard/contacts`);
-      break;
-    case "Company":
-      router.push(`/dashboard/companies`);
-      break;
-    case "Customer":
-      router.push(`/dashboard/customers/${result.id}`);
-      break;
-  }
-  setIsOpen(false);
-  setQuery("");
-}, [router]);
+  const navigateToResult = useCallback((result: SearchResult) => {
+    switch (result.type) {
+      case "Lead":
+        router.push(`/leads/${result.id}`);
+        break;
+      case "Deal":
+        router.push(`/deals/${result.id}`);
+        break;
+      case "Contact":
+        router.push(`/contacts`);
+        break;
+      case "Company":
+        router.push(`/companies`);
+        break;
+      case "Customer":
+        router.push(`/customers/${result.id}`);
+        break;
+    }
+    setIsOpen(false);
+    setQuery("");
+  }, [router]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {

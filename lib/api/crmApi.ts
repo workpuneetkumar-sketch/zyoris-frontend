@@ -17,7 +17,7 @@ export interface SearchResponse {
 }
 
 interface BackendSearchItem {
-  type: "lead" | "deal" | "contact" | "company";
+  type: "lead" | "deal" | "contact" | "company" | "customer";
   data: any;
 }
 
@@ -32,6 +32,7 @@ function extractResult(item: BackendSearchItem): SearchResult {
     deal: "Deal",
     contact: "Contact",
     company: "Company",
+    customer: "Customer",
   };
 
   const data = item.data;
@@ -39,7 +40,7 @@ function extractResult(item: BackendSearchItem): SearchResult {
   let secondary: string | undefined;
 
   if (item.type === "lead" || item.type === "contact") {
-    title = data.name || data.fullName || data.firstName + " " + data.lastName || "Unknown";
+    title = data.name || data.fullName || (data.firstName ? `${data.firstName} ${data.lastName || ""}`.trim() : "") || "Unknown";
     secondary = data.email || data.company || data.phone;
   } else if (item.type === "deal") {
     title = data.name || data.title || "Unknown Deal";
@@ -47,21 +48,23 @@ function extractResult(item: BackendSearchItem): SearchResult {
   } else if (item.type === "company") {
     title = data.name || data.companyName || "Unknown Company";
     secondary = data.website || data.industry;
+  } else if (item.type === "customer") {
+    title = data.name || data.companyName || data.organizationName || "Unknown Customer";
+    secondary = data.email || data.phone || data.canonicalType || data.lifecycleState;
   }
 
   return {
     id: data.id || data._id || String(Date.now()),
     type: typeMap[item.type] || "Lead",
     title,
-    secondary,
+    secondary: secondary || undefined,
   };
 }
 
 // Helper to convert a customer object to a SearchResult
 function customerToSearchResult(customer: any): SearchResult {
-  // Assuming customer has at least an id and a name
   const title = customer.name || customer.companyName || customer.organizationName || "Unknown Customer";
-  const secondary = customer.email || customer.phone || customer.website || "";
+  const secondary = customer.email || customer.phone || customer.canonicalType || customer.lifecycleState || customer.website || "";
 
   return {
     id: customer.id || customer._id || String(Date.now()),
@@ -72,15 +75,20 @@ function customerToSearchResult(customer: any): SearchResult {
 }
 
 export async function searchCrm(query: string): Promise<SearchResponse> {
-  // Execute both searches in parallel
-  const [crmRes, customersRes] = await Promise.all([
+  // Execute both searches in parallel with allSettled so failure of one does not block the other
+  const [crmSettled, customersSettled] = await Promise.allSettled([
     api.get<BackendSearchResponse>("/crm/search", { params: { q: query } }),
-    fetchCustomers({ page: 1, limit: 10, filters: { search: query } }),
-  ]).catch((err) => {
-    // If one of the requests fails, we still want to proceed with the other
-    console.error("One of the search requests failed:", err);
-    return [undefined, undefined] as const;
-  });
+    fetchCustomers(
+      1,
+      {
+        search: query,
+        lifecycleState: "All States",
+        canonicalType: "All Types",
+        ownerId: "All Owners",
+      },
+      10
+    ),
+  ]);
 
   // Group results into our format
   const response: SearchResponse = {
@@ -91,9 +99,9 @@ export async function searchCrm(query: string): Promise<SearchResponse> {
     customers: [],
   };
 
-  // Process CRM search results (leads, deals, contacts, companies)
-  if (crmRes?.data?.results && Array.isArray(crmRes.data.results)) {
-    crmRes.data.results.forEach((item) => {
+  // Process CRM search results (leads, deals, contacts, companies, customers)
+  if (crmSettled.status === "fulfilled" && crmSettled.value?.data?.results && Array.isArray(crmSettled.value.data.results)) {
+    crmSettled.value.data.results.forEach((item) => {
       const result = extractResult(item);
       switch (result.type) {
         case "Lead":
@@ -108,16 +116,27 @@ export async function searchCrm(query: string): Promise<SearchResponse> {
         case "Company":
           response.companies?.push(result);
           break;
+        case "Customer":
+          response.customers?.push(result);
+          break;
       }
     });
+  } else if (crmSettled.status === "rejected") {
+    console.error("CRM search request failed:", crmSettled.reason);
   }
 
   // Process customer search results
-  if (customersRes?.customers && Array.isArray(customersRes.customers)) {
-    customersRes.customers.forEach((customer) => {
+  if (customersSettled.status === "fulfilled" && customersSettled.value?.customers && Array.isArray(customersSettled.value.customers)) {
+    const existingCustomerIds = new Set(response.customers?.map((c) => c.id));
+    customersSettled.value.customers.forEach((customer) => {
       const result = customerToSearchResult(customer);
-      response.customers?.push(result);
+      if (!existingCustomerIds.has(result.id)) {
+        response.customers?.push(result);
+        existingCustomerIds.add(result.id);
+      }
     });
+  } else if (customersSettled.status === "rejected") {
+    console.error("Customer search request failed:", customersSettled.reason);
   }
 
   return response;

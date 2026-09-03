@@ -68,23 +68,30 @@ export async function fetchContacts(
     if (filters.source !== "All Sources") params.source = filters.source;
     if (filters.search) params.search = filters.search;
 
-    const res = await api.get("/api/contact/get-contacts", { params });
+    try {
+        const res = await api.get("/api/contact/get-contacts", { params });
 
-    // Normalise response shape — handle array, { data, pagination }, { contacts, total }
-    const raw = res.data;
-    if (Array.isArray(raw)) {
-        return { contacts: raw, total: raw.length };
+        // Normalise response shape — handle array, { data, pagination }, { contacts, total }
+        const raw = res.data;
+        if (Array.isArray(raw)) {
+            return { contacts: raw, total: raw.length };
+        }
+        if (Array.isArray(raw.data)) {
+            return {
+                contacts: raw.data,
+                total: raw.pagination?.total ?? raw.data.length,
+            };
+        }
+        if (Array.isArray(raw.contacts)) {
+            return { contacts: raw.contacts, total: raw.total ?? raw.contacts.length };
+        }
+        return { contacts: [], total: 0 };
+    } catch (err: any) {
+        if (err?.response?.status === 404) {
+            return { contacts: [], total: 0 };
+        }
+        throw err;
     }
-    if (Array.isArray(raw.data)) {
-        return {
-            contacts: raw.data,
-            total: raw.pagination?.total ?? raw.data.length,
-        };
-    }
-    if (Array.isArray(raw.contacts)) {
-        return { contacts: raw.contacts, total: raw.total ?? raw.contacts.length };
-    }
-    return { contacts: [], total: 0 };
 }
 
 // ── POST create contact ───────────────────────────────────────────────────────
