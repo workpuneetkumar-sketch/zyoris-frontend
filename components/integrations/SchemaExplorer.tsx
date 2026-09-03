@@ -641,7 +641,11 @@ export function SchemaExplorer({
       );
       if (existing) {
         setTargetFieldInput(existing.targetField || selectedNode.name);
-        setTransformationInput(existing.transformation || "DIRECT");
+        setTransformationInput(
+          typeof existing.transformation === "string"
+            ? existing.transformation
+            : existing.transformation?.type || "DIRECT"
+        );
       } else {
         setTargetFieldInput(selectedNode.name);
         setTransformationInput("DIRECT");
