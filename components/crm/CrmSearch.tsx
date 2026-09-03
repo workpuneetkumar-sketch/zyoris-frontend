@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Search, User, Briefcase, Users, Building2, Loader2, X } from "lucide-react";
+import { Search, User, Briefcase, Users, Building2, Loader2, X, UsersRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { searchCrm, SearchResult } from "@/lib/api/crmApi";
 
@@ -15,6 +15,8 @@ const getIconForType = (type: SearchResult["type"]) => {
       return <Users size={14} />;
     case "Company":
       return <Building2 size={14} />;
+    case "Customer":
+      return <UsersRound size={14} />;
   }
 };
 
@@ -55,6 +57,7 @@ export function CrmSearch() {
         ...(data.deals || []),
         ...(data.contacts || []),
         ...(data.companies || []),
+        ...(data.customers || []),
       ];
       setResults(flattenedResults);
       setSelectedIndex(-1);
@@ -116,10 +119,13 @@ export function CrmSearch() {
         router.push(`/deals/${result.id}`);
         break;
       case "Contact":
-        router.push("/contacts");
+        router.push(`/contacts`);
         break;
       case "Company":
-        router.push("/companies");
+        router.push(`/companies`);
+        break;
+      case "Customer":
+        router.push(`/customers/${result.id}`);
         break;
     }
     setIsOpen(false);
@@ -162,7 +168,7 @@ export function CrmSearch() {
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search leads, deals, contacts, companies..."
+          placeholder="Search leads, deals, contacts, companies, customers..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
