@@ -1,6 +1,6 @@
 import axios, {
-    AxiosError,
-    InternalAxiosRequestConfig,
+    type AxiosError,
+    type InternalAxiosRequestConfig,
 } from "axios";
 
 const BASE_URL = (
