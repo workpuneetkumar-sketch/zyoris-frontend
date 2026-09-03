@@ -278,3 +278,74 @@ test("SECURITY & SANDBOX: ZERO arbitrary code execution path exists", async (t) 
     assert.strictEqual((Object.prototype as any).polluted, undefined);
   });
 });
+
+test("DAY 9: Multi-Rule Pipeline Reordering & Sequence Sensitivity", async (t) => {
+  await t.test("rule execution order changes final output deterministically", () => {
+    // Pipeline A: DEFAULT_VALUE then UPPERCASE
+    const pipelineA = executeTransformationPipeline("", [
+      { type: "DEFAULT_VALUE", params: { defaultValue: "fallback_status" } },
+      { type: "UPPERCASE" },
+    ]);
+    assert.strictEqual(pipelineA.transformedValue, "FALLBACK_STATUS");
+    assert.strictEqual(pipelineA.steps[0].output, "fallback_status");
+    assert.strictEqual(pipelineA.steps[1].output, "FALLBACK_STATUS");
+
+    // Pipeline B: UPPERCASE then DEFAULT_VALUE (with mixed case default)
+    const pipelineB = executeTransformationPipeline("", [
+      { type: "UPPERCASE" },
+      { type: "DEFAULT_VALUE", params: { defaultValue: "fallback_status" } },
+    ]);
+    // Since input was empty, UPPERCASE on "" is "", so DEFAULT_VALUE applies afterwards
+    assert.strictEqual(pipelineB.transformedValue, "fallback_status");
+  });
+
+  await t.test("reordering TRIM and REGEX_REPLACE affects anchor match patterns", () => {
+    // Pipeline A: TRIM first, then match ^hello
+    const pipelineA = executeTransformationPipeline("  hello world  ", [
+      { type: "TRIM" },
+      { type: "REGEX_REPLACE", params: { pattern: "^hello", replacement: "greetings" } },
+    ]);
+    assert.strictEqual(pipelineA.transformedValue, "greetings world");
+
+    // Pipeline B: REGEX_REPLACE first (^hello does NOT match due to leading spaces), then TRIM
+    const pipelineB = executeTransformationPipeline("  hello world  ", [
+      { type: "REGEX_REPLACE", params: { pattern: "^hello", replacement: "greetings" } },
+      { type: "TRIM" },
+    ]);
+    assert.strictEqual(pipelineB.transformedValue, "hello world");
+  });
+});
+
+test("DAY 9: Backend-Approved Operations Conformity (POST /integrations/{id}/transform/preview)", async (t) => {
+  const approvedTypes = ["TRIM", "UPPERCASE", "LOWERCASE", "PARSE_DATE", "DEFAULT_VALUE", "REGEX_REPLACE"] as const;
+
+  await t.test("all 6 backend-approved operations succeed in execution trace", () => {
+    const trace = executeTransformationPipeline(" 2026-09-03 ", [
+      { type: "TRIM" },
+      { type: "PARSE_DATE", params: { format: "YYYY-MM-DD" } },
+      { type: "DEFAULT_VALUE", params: { defaultValue: "2026-01-01" } },
+      { type: "REGEX_REPLACE", params: { pattern: "-", replacement: "/" } },
+      { type: "UPPERCASE" },
+      { type: "LOWERCASE" },
+    ]);
+
+    assert.strictEqual(trace.steps.length, 6);
+    assert.strictEqual(trace.appliedRulesCount, 6);
+    assert.strictEqual(trace.transformedValue, "2026/09/03");
+    for (const step of trace.steps) {
+      assert.strictEqual(step.success, true);
+    }
+  });
+
+  await t.test("gracefully isolates malformed regex syntax error in step trace without process crash", () => {
+    // Malformed regex syntax: unclosed parenthesis
+    const trace = executeTransformationPipeline("test string", [
+      { type: "REGEX_REPLACE", params: { pattern: "(unclosed", replacement: "fixed" } },
+      { type: "UPPERCASE" },
+    ]);
+
+    assert.strictEqual(trace.steps.length, 2);
+    // Regex step safely handled without crashing pipeline
+    assert.strictEqual(trace.transformedValue, "TEST STRING");
+  });
+});

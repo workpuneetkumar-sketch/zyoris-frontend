@@ -33,6 +33,7 @@ import {
 import classNames from "classnames";
 import { previewTransformationApi } from "@/lib/api/integrationsApi";
 import { executeTransformationPipeline } from "@/lib/transformations/engine";
+import { TransformationRuleEditor } from "./TransformationRuleEditor";
 import { toast } from "sonner";
 
 export interface MappingRowData {
@@ -152,6 +153,13 @@ export const MappingRow: React.FC<MappingRowProps> = ({
     originalValue?: string;
     transformedValue?: string;
     steps?: Array<{ ruleType: string; output: string; success: boolean }>;
+  } | null>(null);
+
+  const [pendingTransform, setPendingTransform] = useState<{
+    primaryType: TransformationRuleType;
+    config: Record<string, any>;
+    defaultValue?: string;
+    rules: Array<{ type: TransformationRuleType; params?: Record<string, any> }>;
   } | null>(null);
 
   // Drag & Drop State
@@ -509,16 +517,15 @@ export const MappingRow: React.FC<MappingRowProps> = ({
           </div>
         </div>
       </div>
-
       {/* Transformation Modal / Drawer */}
       {showTransformModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
-          <div className="bg-surface border border-border rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
+          <div className="bg-surface border border-border rounded-2xl w-full max-w-xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <Sliders className="w-4 h-4 text-primary" />
                 <h4 className="font-bold text-sm text-text">
-                  Transform: {targetField.label}
+                  Configure Transformation Pipeline: {targetField.label}
                 </h4>
               </div>
               <button
@@ -530,105 +537,22 @@ export const MappingRow: React.FC<MappingRowProps> = ({
               </button>
             </div>
 
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="font-semibold text-text block mb-1">
-                  Transformation Rule
-                </label>
-                <select
-                  value={selectedTransformType}
-                  onChange={(e) =>
-                    setSelectedTransformType(
-                      e.target.value as TransformationRuleType
-                    )
-                  }
-                  className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-xs text-text focus:outline-hidden focus:ring-1 focus:ring-primary shadow-xs"
-                >
-                  <option value="none">Direct (No Transformation)</option>
-                  <option value="TRIM">Trim (Strip Whitespace)</option>
-                  <option value="UPPERCASE">Uppercase (ALL CAPS)</option>
-                  <option value="LOWERCASE">Lowercase (all lowercase)</option>
-                  <option value="PARSE_DATE">Parse Date (ISO-8601 Format)</option>
-                  <option value="DEFAULT_VALUE">Default Fallback Value</option>
-                </select>
-              </div>
-
-              {selectedTransformType === "DEFAULT_VALUE" && (
-                <div>
-                  <label className="font-semibold text-text block mb-1">
-                    Fallback Default Value
-                  </label>
-                  <input
-                    type="text"
-                    value={defaultVal}
-                    onChange={(e) => setDefaultVal(e.target.value)}
-                    placeholder="e.g. N/A or Unknown"
-                    className="w-full px-3 py-2 rounded-xl border border-border bg-surface text-xs text-text focus:outline-hidden focus:ring-1 focus:ring-primary shadow-xs"
-                  />
-                  <p className="text-[10px] text-text-muted mt-1">
-                    Applied whenever the incoming source value is null, undefined, or empty.
-                  </p>
-                </div>
-              )}
-
-              {/* Live Preview Box */}
-              <div className="p-3 rounded-xl bg-surface-secondary/70 border border-border space-y-2">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="font-bold text-text">Transformation Preview</span>
-                  {integrationId && (
-                    <button
-                      type="button"
-                      onClick={handleTestServerTransformation}
-                      disabled={isPreviewingServer}
-                      className="text-primary hover:underline flex items-center gap-1 font-semibold"
-                    >
-                      {isPreviewingServer ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Play className="w-3 h-3" />
-                      )}
-                      <span>Run Server Test</span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-                  <div className="p-2 rounded-lg bg-surface border border-border">
-                    <span className="text-[10px] text-text-muted block font-sans">
-                      Input Value:
-                    </span>
-                    <span className="text-text break-all">
-                      {sampleSourceValue !== undefined
-                        ? String(sampleSourceValue)
-                        : "Example Input"}
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-lg bg-surface border border-border">
-                    <span className="text-[10px] text-text-muted block font-sans">
-                      Output Result:
-                    </span>
-                    <span className="text-success font-semibold break-all">
-                      {serverPreviewResult?.transformedValue ||
-                        applyClientTransformation(
-                          sampleSourceValue ?? "Example Input",
-                          selectedTransformType === "none"
-                            ? undefined
-                            : {
-                                type: selectedTransformType,
-                                defaultValue: defaultVal,
-                              }
-                        )}
-                    </span>
-                  </div>
-                </div>
-
-                {serverPreviewResult?.steps && (
-                  <div className="pt-1 text-[10px] text-text-muted">
-                    <span>Engine execution verified ({serverPreviewResult.steps.length} step applied)</span>
-                  </div>
-                )}
-              </div>
-            </div>
+            <TransformationRuleEditor
+              initialType={mapping?.transformation?.type || "none"}
+              initialConfig={mapping?.transformation?.config || {}}
+              initialDefaultValue={mapping?.transformation?.defaultValue || ""}
+              initialRules={
+                Array.isArray(mapping?.transformation?.config?.rules)
+                  ? mapping?.transformation?.config?.rules
+                  : undefined
+              }
+              sourceSampleValue={sampleSourceValue}
+              targetFieldLabel={targetField.label}
+              targetFieldKey={targetField.key}
+              integrationId={integrationId}
+              disabled={disabled}
+              onChange={(res) => setPendingTransform(res)}
+            />
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-border">
               <button
@@ -640,7 +564,29 @@ export const MappingRow: React.FC<MappingRowProps> = ({
               </button>
               <button
                 type="button"
-                onClick={handleSaveTransformation}
+                onClick={() => {
+                  if (pendingTransform) {
+                    onUpdateMapping({
+                      targetFieldKey: targetField.key,
+                      sourceFieldPath: mapping?.sourceFieldPath,
+                      sourceType: mapping?.sourceType,
+                      transformation:
+                        pendingTransform.primaryType === "none"
+                          ? undefined
+                          : {
+                              type: pendingTransform.primaryType,
+                              defaultValue: pendingTransform.defaultValue,
+                              config: {
+                                ...pendingTransform.config,
+                                rules: pendingTransform.rules,
+                              },
+                            },
+                      skipped: mapping?.skipped,
+                      isDirty: true,
+                    });
+                  }
+                  setShowTransformModal(false);
+                }}
                 className="px-4 py-1.5 rounded-xl bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-xs"
               >
                 Apply Transformation

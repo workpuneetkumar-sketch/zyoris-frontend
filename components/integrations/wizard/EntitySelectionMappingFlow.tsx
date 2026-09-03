@@ -30,6 +30,7 @@ import {
   ConfidenceTier,
 } from "@/lib/transformations/suggestions";
 import { executeTransformationPipeline } from "@/lib/transformations/engine";
+import { TransformationRuleEditor } from "./TransformationRuleEditor";
 import {
   Layers,
   ArrowRight,
@@ -1684,229 +1685,35 @@ export function EntitySelectionMappingFlow({
                     {isExpanded && (
                       <tr className="bg-surface-secondary/50">
                         <td colSpan={4} className="p-3 border-t border-b border-border/70">
-                          <div className="p-3.5 rounded-lg bg-surface border border-border space-y-3">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="font-bold text-text flex items-center gap-1.5">
-                                <Sliders className="w-3.5 h-3.5 text-primary" />
-                                Transformation Rule for {tf.label}
-                              </span>
-                              <span className="text-[11px] text-text-muted">
-                                Applied during ingest before writing into Zyoris
-                              </span>
-                            </div>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 text-xs">
-                              <div>
-                                <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                  Transformation Operation
-                                </label>
-                                <select
-                                  value={entry.transformationType || "none"}
-                                  onChange={(e) =>
-                                    handleTransformationTypeChange(
-                                      tf.key,
-                                      e.target.value as TransformationRuleType
-                                    )
-                                  }
-                                  className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-medium"
-                                >
-                                  <option value="none">None (Direct Pass-through)</option>
-                                  <option value="TRIM">TRIM (Strip surrounding whitespace)</option>
-                                  <option value="UPPERCASE">UPPERCASE (Convert text to uppercase)</option>
-                                  <option value="LOWERCASE">LOWERCASE (Convert text to lowercase)</option>
-                                  <option value="PARSE_DATE">PARSE_DATE (Parse & Format Date/Time)</option>
-                                  <option value="DEFAULT_VALUE">DEFAULT_VALUE (Fallback if null/empty)</option>
-                                  <option value="REGEX_REPLACE">REGEX_REPLACE (Regular Expression)</option>
-                                  <option value="SPLIT">SPLIT (Extract substring by delimiter)</option>
-                                  <option value="COMBINE">COMBINE (Concatenate field with suffix)</option>
-                                  <option value="PHONE_NORMALIZATION">PHONE_NORMALIZATION (E.164 standard)</option>
-                                </select>
-                              </div>
-
-                              {/* Operation-specific Parameter Inputs */}
-                              {entry.transformationType === "DEFAULT_VALUE" && (
-                                <div>
-                                  <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                    Default Fallback Value
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={entry.defaultValue || ""}
-                                    onChange={(e) => handleDefaultValueChange(tf.key, e.target.value)}
-                                    placeholder="Enter fallback value..."
-                                    className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
-                                  />
-                                </div>
-                              )}
-
-                              {entry.transformationType === "PARSE_DATE" && (
-                                <>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Target Date Format
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={entry.transformationConfig?.format || "YYYY-MM-DD"}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "format", e.target.value)
-                                      }
-                                      placeholder="e.g. YYYY-MM-DD or ISO_8601"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Timezone (Optional)
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={entry.transformationConfig?.timezone || "UTC"}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "timezone", e.target.value)
-                                      }
-                                      placeholder="UTC"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
-                                    />
-                                  </div>
-                                </>
-                              )}
-
-                              {entry.transformationType === "REGEX_REPLACE" && (
-                                <>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Pattern (Regex)
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={entry.transformationConfig?.pattern || ""}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "pattern", e.target.value)
-                                      }
-                                      placeholder="e.g. [^0-9]"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Replacement
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={entry.transformationConfig?.replacement || ""}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "replacement", e.target.value)
-                                      }
-                                      placeholder="Replacement string"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Flags (Optional)
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={entry.transformationConfig?.flags || "g"}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "flags", e.target.value)
-                                      }
-                                      placeholder="g, i, gi"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                                    />
-                                  </div>
-                                </>
-                              )}
-
-                              {entry.transformationType === "SPLIT" && (
-                                <>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Delimiter
-                                    </label>
-                                    <input
-                                      type="text"
-                                      value={entry.transformationConfig?.delimiter || " "}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "delimiter", e.target.value)
-                                      }
-                                      placeholder="e.g. ' ' or ','"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                      Index
-                                    </label>
-                                    <input
-                                      type="number"
-                                      value={entry.transformationConfig?.index ?? 0}
-                                      onChange={(e) =>
-                                        handleTransformationConfigParamChange(tf.key, "index", parseInt(e.target.value, 10) || 0)
-                                      }
-                                      placeholder="0"
-                                      className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                                    />
-                                  </div>
-                                </>
-                              )}
-
-                              {entry.transformationType === "PHONE_NORMALIZATION" && (
-                                <div>
-                                  <label className="text-[11px] font-semibold text-text-secondary block mb-1">
-                                    Default Country Code
-                                  </label>
-                                  <input
-                                    type="text"
-                                    value={entry.transformationConfig?.countryCode || "+1"}
-                                    onChange={(e) =>
-                                      handleTransformationConfigParamChange(tf.key, "countryCode", e.target.value)
-                                    }
-                                    placeholder="+1, +91, +44"
-                                    className="w-full px-2.5 py-1.5 rounded-md bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                                  />
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Preview Transformation Button & Output */}
-                            <div className="pt-3 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => handlePreviewTransformation(tf.key)}
-                                disabled={previewStates[tf.key]?.loading}
-                                className="px-3 py-1.5 rounded-md bg-surface-secondary border border-border hover:bg-surface-hover text-text font-semibold flex items-center gap-1.5 text-[11px] transition-colors"
-                              >
-                                {previewStates[tf.key]?.loading ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                                ) : (
-                                  <Code className="w-3.5 h-3.5 text-primary" />
-                                )}
-                                <span>Preview Transformation on Sample</span>
-                              </button>
-
-                              {/* Before / After Preview Values */}
-                              {previewStates[tf.key]?.result !== undefined && (
-                                <div className="flex items-center gap-2 font-mono text-[11px] bg-surface-secondary px-3 py-1 rounded-md border border-border">
-                                  <span className="text-text-muted">
-                                    Original: &quot;{previewStates[tf.key]?.original ?? "—"}&quot;
-                                  </span>
-                                  <ArrowRight className="w-3 h-3 text-text-muted" />
-                                  <span className="text-success font-bold">
-                                    Preview: &quot;{previewStates[tf.key]?.result}&quot;
-                                  </span>
-                                </div>
-                              )}
-
-                              {previewStates[tf.key]?.error && (
-                                <span className="text-[11px] text-error font-medium flex items-center gap-1">
-                                  <AlertCircle className="w-3 h-3" />
-                                  {previewStates[tf.key]?.error}
-                                </span>
-                              )}
-                            </div>
-                          </div>
+                          <TransformationRuleEditor
+                            initialType={(entry.transformationType as any) || "none"}
+                            initialConfig={entry.transformationConfig || {}}
+                            initialDefaultValue={entry.defaultValue || ""}
+                            initialRules={
+                              Array.isArray(entry.transformationConfig?.rules)
+                                ? entry.transformationConfig.rules
+                                : undefined
+                            }
+                            sourceSampleValue={
+                              flattenedSourceFields.find((f) => f.path === entry?.sourceField)?.sampleValue ??
+                              entry?.defaultValue ??
+                              undefined
+                            }
+                            targetFieldLabel={tf.label}
+                            targetFieldKey={tf.key}
+                            integrationId={integrationId || undefined}
+                            disabled={disabled}
+                            onChange={({ primaryType, config, defaultValue, rules }) => {
+                              handleTransformationTypeChange(tf.key, primaryType);
+                              if (defaultValue !== undefined) {
+                                handleDefaultValueChange(tf.key, defaultValue);
+                              }
+                              handleTransformationConfigParamChange(tf.key, "rules", rules);
+                              Object.entries(config).forEach(([k, v]) => {
+                                handleTransformationConfigParamChange(tf.key, k, v);
+                              });
+                            }}
+                          />
                         </td>
                       </tr>
                     )}

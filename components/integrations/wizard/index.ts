@@ -7,3 +7,4 @@ export * from "./WizardFooter";
 export * from "./WizardProgress";
 export * from "./restConfiguration";
 export * from "./wizardSteps";
+export * from "./TransformationRuleEditor";

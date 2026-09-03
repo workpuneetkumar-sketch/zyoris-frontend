@@ -248,18 +248,20 @@ export function executeTransformation(
   }
 }
 
+export interface TransformationPipelineTrace {
+  originalValue: string;
+  transformedValue: string;
+  steps: TransformationStepTrace[];
+  appliedRulesCount: number;
+}
+
 /**
  * Sequential multi-step transformation pipeline with execution tracing.
  */
 export function executeTransformationPipeline(
   value: any,
   rules: TransformationRuleItem[]
-): {
-  originalValue: string;
-  transformedValue: string;
-  steps: TransformationStepTrace[];
-  appliedRulesCount: number;
-} {
+): TransformationPipelineTrace {
   const original = safeString(value);
   let current = original;
   const steps: TransformationStepTrace[] = [];

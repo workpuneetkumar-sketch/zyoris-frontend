@@ -13,6 +13,7 @@ import {
   getIntegrationLogsApi,
   getIntegrationErrorsApi,
   getIntegrationStatsApi,
+  getSyncRunErrorsApi,
 } from "@/lib/api/integrationsApi";
 import {
   Activity,
@@ -78,6 +79,52 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
   const [errorsTotalPages, setErrorsTotalPages] = useState(1);
   const [errorsResolvedFilter, setErrorsResolvedFilter] = useState<string>("");
   const [selectedErrorForDetail, setSelectedErrorForDetail] = useState<SyncErrorItem | null>(null);
+
+  // Run Details & Record Errors State
+  const [selectedRunForDetail, setSelectedRunForDetail] = useState<SyncLogItem | null>(null);
+  const [runErrors, setRunErrors] = useState<any[]>([]);
+  const [isLoadingRunErrors, setIsLoadingRunErrors] = useState(false);
+  const [isRetryingRun, setIsRetryingRun] = useState(false);
+  const [runIdFilter, setRunIdFilter] = useState("");
+
+  const handleOpenRunDetail = async (run: SyncLogItem) => {
+    setSelectedRunForDetail(run);
+    setIsLoadingRunErrors(true);
+    try {
+      const res = await getSyncRunErrorsApi(run.integrationId, run.id);
+      if (res && Array.isArray(res.data)) {
+        setRunErrors(res.data);
+      } else {
+        setRunErrors([]);
+      }
+    } catch (err) {
+      console.warn("Could not query run specific errors via API, using fallback:", err);
+      const matching = errors.filter(
+        (e) => (e as any).runId === run.id || (e as any).syncRunId === run.id
+      );
+      setRunErrors(matching);
+    } finally {
+      setIsLoadingRunErrors(false);
+    }
+  };
+
+  const handleRetryRun = async (integrationIdToRetry: string) => {
+    if (!onTriggerSync) {
+      toast.info("Manual retry action triggered for run.");
+      return;
+    }
+    setIsRetryingRun(true);
+    try {
+      await onTriggerSync(integrationIdToRetry);
+      toast.success("Sync job successfully re-queued for retry execution.");
+      fetchLogs();
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to trigger retry for sync run.");
+    } finally {
+      setIsRetryingRun(false);
+    }
+  };
 
   // 1. Fetch Aggregate Statistics
   const fetchStats = useCallback(async () => {
@@ -169,16 +216,30 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
     toast.success("Monitoring logs refreshed.");
   };
 
-  // Filter logs locally if search query is provided
+  // Filter logs locally if search query or run ID filter is provided
   const filteredLogs = logs.filter((log) => {
+    if (runIdFilter.trim() && !log.id.toLowerCase().includes(runIdFilter.toLowerCase().trim())) {
+      return false;
+    }
     if (!logsSearchQuery.trim()) return true;
     const q = logsSearchQuery.toLowerCase().trim();
     return (
       (log.integrationName && log.integrationName.toLowerCase().includes(q)) ||
       (log.provider && log.provider.toLowerCase().includes(q)) ||
       (log.entityType && log.entityType.toLowerCase().includes(q)) ||
-      (log.status && log.status.toLowerCase().includes(q))
+      (log.status && log.status.toLowerCase().includes(q)) ||
+      (log.id && log.id.toLowerCase().includes(q))
     );
+  });
+
+  const filteredErrors = errors.filter((err) => {
+    if (
+      runIdFilter.trim() &&
+      !((err as any).runId || (err as any).syncRunId || "").toLowerCase().includes(runIdFilter.toLowerCase().trim())
+    ) {
+      return false;
+    }
+    return true;
   });
 
   return (
@@ -335,7 +396,18 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
         {/* Filters */}
         {activeTab === "LOGS" ? (
           <div className="flex items-center gap-2">
-            <div className="relative w-48 hidden sm:block">
+            <div className="relative w-40 hidden sm:block">
+              <Filter className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={runIdFilter}
+                onChange={(e) => setRunIdFilter(e.target.value)}
+                placeholder="Filter by Run ID..."
+                className="w-full pl-8 pr-2.5 py-1 rounded-xl border border-border bg-surface text-xs text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 focus:ring-primary font-mono text-[11px]"
+              />
+            </div>
+
+            <div className="relative w-44 hidden sm:block">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"
@@ -363,6 +435,17 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
           </div>
         ) : (
           <div className="flex items-center gap-2">
+            <div className="relative w-40 hidden sm:block">
+              <Filter className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
+              <input
+                type="text"
+                value={runIdFilter}
+                onChange={(e) => setRunIdFilter(e.target.value)}
+                placeholder="Filter by Run ID..."
+                className="w-full pl-8 pr-2.5 py-1 rounded-xl border border-border bg-surface text-xs text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 focus:ring-primary font-mono text-[11px]"
+              />
+            </div>
+
             <select
               value={errorsResolvedFilter}
               onChange={(e) => {
@@ -404,6 +487,7 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Duration</th>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Processed / Records</th>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Status</th>
+                    <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -470,6 +554,17 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                           {log.status}
                         </span>
                       </td>
+
+                      <td className="py-2.5 px-3">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenRunDetail(log)}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text text-[11px] font-semibold transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-primary" />
+                          <span>Inspect Run</span>
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -510,7 +605,7 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
               <Loader2 className="w-6 h-6 animate-spin mx-auto text-primary" />
               <p>Loading sync error records...</p>
             </div>
-          ) : errors.length === 0 ? (
+          ) : filteredErrors.length === 0 ? (
             <div className="p-12 text-center text-xs text-text-muted space-y-2">
               <CheckCircle2 className="w-8 h-8 text-success mx-auto" />
               <h4 className="font-bold text-sm text-text">No Sync Errors Detected</h4>
@@ -530,7 +625,7 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {errors.map((err) => (
+                  {filteredErrors.map((err) => (
                     <tr key={err.id} className="hover:bg-surface-hover transition-colors">
                       <td className="py-2.5 px-3 font-mono text-[11px] text-text-muted">
                         {new Date(err.createdAt).toLocaleString()}
@@ -668,6 +763,200 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
               <button
                 type="button"
                 onClick={() => setSelectedErrorForDetail(null)}
+                className="px-4 py-1.5 rounded-xl bg-surface border border-border text-text hover:bg-surface-hover text-xs font-semibold"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Run Details, Job Progress & Error Retryability Modal */}
+      {selectedRunForDetail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-surface border border-border rounded-2xl w-full max-w-2xl p-5 shadow-2xl space-y-4 max-h-[88vh] flex flex-col">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center flex-shrink-0">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-text">
+                    Sync Run Telemetry & Job Progress
+                  </h4>
+                  <p className="text-[11px] text-text-muted font-mono">
+                    Run ID: {selectedRunForDetail.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedRunForDetail(null)}
+                className="p-1 rounded-lg text-text-muted hover:text-text hover:bg-surface-hover"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="space-y-4 overflow-y-auto flex-1 text-xs pr-1">
+              {/* Job Progress & Execution Status Bar */}
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary/50 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-text">Job Execution Progress</span>
+                  <span
+                    className={classNames(
+                      "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                      selectedRunForDetail.status === "SUCCESS"
+                        ? "bg-success/10 text-success border border-success/20"
+                        : selectedRunForDetail.status === "FAILED"
+                        ? "bg-error/10 text-error border border-error/20"
+                        : selectedRunForDetail.status === "RUNNING"
+                        ? "bg-info/10 text-info border border-info/20 animate-pulse"
+                        : "bg-surface-secondary text-text-muted border border-border"
+                    )}
+                  >
+                    {selectedRunForDetail.status}
+                  </span>
+                </div>
+
+                {/* Progress Bar calculation */}
+                {(() => {
+                  const processed = selectedRunForDetail.recordsProcessed || selectedRunForDetail.successfulRecords || 0;
+                  const total = Math.max(
+                    1,
+                    (selectedRunForDetail.successfulRecords || 0) + (selectedRunForDetail.failedRecords || 0) || processed || 1
+                  );
+                  const pct =
+                    selectedRunForDetail.status === "SUCCESS"
+                      ? 100
+                      : selectedRunForDetail.status === "RUNNING"
+                      ? Math.min(95, Math.round((processed / total) * 100))
+                      : Math.min(100, Math.round((processed / total) * 100));
+
+                  return (
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-[11px] text-text-muted font-mono">
+                        <span>Progress: {pct}% complete</span>
+                        <span>
+                          Duration: {selectedRunForDetail.durationMs !== undefined ? `${selectedRunForDetail.durationMs}ms` : "—"}
+                        </span>
+                      </div>
+                      <div className="w-full h-2 rounded-full bg-border overflow-hidden">
+                        <div
+                          className={classNames(
+                            "h-full transition-all duration-500",
+                            selectedRunForDetail.status === "SUCCESS"
+                              ? "bg-success"
+                              : selectedRunForDetail.status === "FAILED"
+                              ? "bg-error"
+                              : "bg-primary"
+                          )}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Records Breakdown Metrics */}
+                <div className="grid grid-cols-3 gap-2 pt-1 font-mono text-[11px]">
+                  <div className="p-2 rounded-lg bg-surface border border-border">
+                    <span className="text-[10px] text-text-muted block font-sans">Processed</span>
+                    <span className="text-text font-bold">
+                      {selectedRunForDetail.recordsProcessed ?? (selectedRunForDetail.successfulRecords || 0)}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-success/5 border border-success/20">
+                    <span className="text-[10px] text-success block font-sans">Successful</span>
+                    <span className="text-success font-bold">
+                      +{selectedRunForDetail.successfulRecords ?? 0}
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-lg bg-error/5 border border-error/20">
+                    <span className="text-[10px] text-error block font-sans">Failed</span>
+                    <span className="text-error font-bold">
+                      -{selectedRunForDetail.failedRecords ?? 0}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Record-Level Errors Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-bold text-xs text-text flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 text-warning" />
+                    <span>Record-Level Sync Errors & Retryability ({runErrors.length})</span>
+                  </h5>
+                  {Boolean(selectedRunForDetail.failedRecords || runErrors.length > 0) && (
+                    <button
+                      type="button"
+                      onClick={() => handleRetryRun(selectedRunForDetail.integrationId)}
+                      disabled={isRetryingRun}
+                      className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-warning/10 hover:bg-warning/20 border border-warning/30 text-warning font-semibold text-[11px] transition-colors shadow-2xs"
+                    >
+                      {isRetryingRun ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-3 h-3" />
+                      )}
+                      <span>Retry Sync Run</span>
+                    </button>
+                  )}
+                </div>
+
+                {isLoadingRunErrors ? (
+                  <div className="p-6 text-center text-xs text-text-muted space-y-1.5">
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto text-primary" />
+                    <p>Querying record-level sync errors for this run...</p>
+                  </div>
+                ) : runErrors.length === 0 ? (
+                  <div className="p-5 text-center text-xs text-text-muted border border-border rounded-xl bg-surface-secondary/30 space-y-1">
+                    <CheckCircle2 className="w-5 h-5 text-success mx-auto opacity-70" />
+                    <p className="font-semibold text-text">No Sync Errors Detected</p>
+                    <p className="text-[11px]">All records in this run processed and persisted successfully.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border rounded-xl border border-border bg-surface overflow-hidden">
+                    {runErrors.map((err: any, idx: number) => (
+                      <div key={err.id || idx} className="p-3 space-y-1.5 hover:bg-surface-hover transition-colors">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-mono font-bold text-error text-[11px]">
+                            {err.errorCode || "SYNC_ERROR"}
+                          </span>
+                          <span
+                            className={classNames(
+                              "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                              err.retryable
+                                ? "bg-warning/10 text-warning border border-warning/20"
+                                : "bg-surface-secondary text-text-muted border border-border"
+                            )}
+                          >
+                            {err.retryable ? `Retryable (Attempts: ${err.retryCount ?? 0})` : "Fatal / Non-retryable"}
+                          </span>
+                        </div>
+                        <p className="text-text font-medium text-xs">{err.errorMessage}</p>
+                        {err.entityType && (
+                          <span className="text-[10px] font-mono text-text-muted block">
+                            Entity: {err.entityType} {err.recordId ? `• ID: ${err.recordId}` : ""}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-border">
+              <span className="text-[11px] text-text-muted">
+                Trigger: <strong className="text-text">{selectedRunForDetail.trigger || "MANUAL"}</strong> • Direction:{" "}
+                <strong className="text-text">{selectedRunForDetail.direction || "INBOUND"}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedRunForDetail(null)}
                 className="px-4 py-1.5 rounded-xl bg-surface border border-border text-text hover:bg-surface-hover text-xs font-semibold"
               >
                 Close
