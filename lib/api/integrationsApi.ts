@@ -621,6 +621,51 @@ export async function cancelSyncRunApi(
 }
 
 /**
+ * Start an integration background sync job via BullMQ worker.
+ * Day 10 Endpoint: POST /integrations/{id}/sync/start
+ * Fallbacks: POST /api/v1/integrations/{id}/sync/start, POST /api/v1/integrations/{id}/sync
+ */
+export async function startIntegrationSyncJobApi(
+  id: string,
+  payload?: { entityType?: string }
+): Promise<{
+  success: boolean;
+  message?: string;
+  data?: {
+    jobId?: string;
+    integrationId?: string;
+    entityType?: string;
+  };
+}> {
+  try {
+    const response = await api.post(
+      `/integrations/${encodeURIComponent(id)}/sync/start`,
+      payload || { entityType: "contacts" }
+    );
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      try {
+        const fallback1 = await api.post(
+          `/api/v1/integrations/${encodeURIComponent(id)}/sync/start`,
+          payload || { entityType: "contacts" }
+        );
+        return fallback1.data;
+      } catch (fErr: any) {
+        if (fErr?.response?.status === 404) {
+          const fallback2 = await api.post(
+            `/api/v1/integrations/${encodeURIComponent(id)}/sync`,
+            payload || {}
+          );
+          return fallback2.data;
+        }
+        throw fErr;
+      }
+    }
+    throw err;
+  }
+}
+
 /**
  * Pre-flight connection test — validate credentials without saving.
  * POST /api/integrations/test-connection
