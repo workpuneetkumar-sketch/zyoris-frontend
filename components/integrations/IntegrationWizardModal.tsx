@@ -1358,6 +1358,12 @@ export function IntegrationWizardModal({
           steps={integrationWizardSteps}
           currentStep={step}
           onStepChange={(s) => {
+            if (s > 4 && !isSchemaUnlocked) {
+              toast.error(
+                "Please test and verify the connection successfully before proceeding to Schema Discovery."
+              );
+              return;
+            }
             setStep(s as any);
           }}
         />
@@ -2129,17 +2135,27 @@ export function IntegrationWizardModal({
                   </div>
 
                   <div>
-                    <button
+                    {/* <button
                       type="button"
                       onClick={() => {
+                        if (!isSchemaUnlocked) {
+                          toast.error("Please test and verify the connection successfully before proceeding to Schema Discovery.");
+                          return;
+                        }
                         setStep(5);
                       }}
-                      className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
+                      disabled={!isSchemaUnlocked}
+                      className={`flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                        isSchemaUnlocked
+                          ? "bg-primary hover:bg-primary-dark text-primary-foreground shadow-sm cursor-pointer"
+                          : "bg-surface-secondary text-text-muted border border-border cursor-not-allowed opacity-60"
+                      }`}
+                      title={isSchemaUnlocked ? "Discover Schema & Mapping" : "Pass connection test to unlock schema discovery"}
                     >
                       <Database className="w-3.5 h-3.5" />
                       <span>Discover Schema & Mapping</span>
                       <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
+                    </button> */}
                   </div>
                 </div>
               </div>
@@ -2567,9 +2583,16 @@ export function IntegrationWizardModal({
                     toast.error("Please pick a connector first");
                     return;
                   }
+                  if (step === 4 && !isSchemaUnlocked) {
+                    toast.error(
+                      "Please test and verify the connection successfully before proceeding to Schema Discovery."
+                    );
+                    return;
+                  }
                   setStep((prev) => Math.min(7, prev + 1) as any);
                 }}
-                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
+                disabled={step === 4 && !isSchemaUnlocked}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <span>Next Step</span>
                 <ArrowRight className="w-3.5 h-3.5" />

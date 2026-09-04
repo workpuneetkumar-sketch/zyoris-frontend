@@ -44,7 +44,7 @@ export function DisconnectConfirmationModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-2xl p-6 space-y-4">
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-xl bg-error/10 border border-error/20 flex items-center justify-center text-error flex-shrink-0">

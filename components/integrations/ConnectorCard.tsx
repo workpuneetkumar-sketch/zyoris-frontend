@@ -83,7 +83,15 @@ export function ConnectorCard({
   const isConnected = !!connector.isConnected;
   const status = (connector.status || (isConnected ? "CONNECTED" : "NOT_CONNECTED")).toUpperCase();
   const isPaused = status === "PAUSED";
-  const isError = status === "ERROR" || (connector.connectionState?.errorCount && connector.connectionState.errorCount > 0);
+  const isAuthAttention =
+    status === "AUTH_ATTENTION" ||
+    status === "PENDING_AUTH" ||
+    status === "AUTHENTICATION_REQUIRED";
+  const isRequiresAction = status === "REQUIRES_ACTION";
+  const isError =
+    status === "ERROR" ||
+    status === "FAILED" ||
+    !!(connector.connectionState?.errorCount && connector.connectionState.errorCount > 0);
 
   // Category badge styling helper using semantic CSS tokens
   const getCategoryClasses = (category?: string) => {
@@ -102,7 +110,19 @@ export function ConnectorCard({
       case "PROJECTS":
         return "bg-cat-projects-bg text-cat-projects border-cat-projects/20";
       default:
-        return "bg-cat-custom-bg text-cat-custom border-cat-custom/20";
+        return "bg-surface-secondary text-text-secondary border-border";
+    }
+  };
+
+  const handleTestClick = (isRetry = false) => {
+    if (!onTestConnection) return;
+    const targetId = connector.connectionId || connector.connectionState?.id || connector.id;
+    if (!targetId) return;
+
+    if (isRetry) {
+      connectionTest.retry();
+    } else {
+      connectionTest.execute(() => onTestConnection(connector));
     }
   };
 
@@ -116,34 +136,19 @@ export function ConnectorCard({
     }
   };
 
-  const handleTestClick = async (retry = false) => {
-    if (!onTestConnection || connectionTest.status === "loading") return;
-    try {
-      await connectionTest.execute(() => onTestConnection(connector), retry);
-    } catch (error) {
-      if (!(error instanceof AsyncRequestError)) {
-        normalizeConnectionError(error);
-      }
-    } finally {
-      setIsMenuOpen(false);
-    }
-  };
-
   return (
-    <div className="rounded-xl border border-border bg-surface hover:border-border-light transition-all shadow-sm flex flex-col justify-between p-5 group relative">
+    <div className="bg-surface rounded-2xl border border-border p-5 shadow-sm hover:shadow-md hover:border-border-hover transition-all duration-200 flex flex-col justify-between group">
       <div>
-        {/* Top Header Row */}
+        {/* Header: Icon, Name & Status */}
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3">
-            {/* Logo / Icon */}
-            <div className="w-12 h-12 rounded-xl bg-surface-secondary border border-border flex items-center justify-center overflow-hidden flex-shrink-0 text-text font-bold text-base shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-surface-secondary border border-border p-2 flex items-center justify-center text-primary font-bold overflow-hidden flex-shrink-0 group-hover:scale-105 transition-transform">
               {connector.iconUrl || connector.logoUrl ? (
                 <img
                   src={connector.iconUrl || connector.logoUrl}
                   alt={connector.name}
-                  className="w-8 h-8 object-contain"
+                  className="w-full h-full object-contain"
                   onError={(e) => {
-                    // Fallback to text initials on image error
                     e.currentTarget.style.display = "none";
                   }}
                 />
@@ -183,13 +188,23 @@ export function ConnectorCard({
           {/* Connection Status Badge */}
           <div>
             {isConnected ? (
-              isError ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/10 text-error border border-error/20">
+              isAuthAttention ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/10 text-error border border-error/20" title="Authentication / Credentials required">
+                  <KeyRound className="w-3.5 h-3.5" />
+                  Auth Attention
+                </span>
+              ) : isRequiresAction ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20" title="User action required">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Requires Action
+                </span>
+              ) : isError ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-error/10 text-error border border-error/20" title="Errors detected">
                   <AlertCircle className="w-3.5 h-3.5" />
                   Attention
                 </span>
               ) : isPaused ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20">
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-warning/10 text-warning border border-warning/20" title="Synchronization paused">
                   <PauseCircle className="w-3.5 h-3.5" />
                   Paused
                 </span>

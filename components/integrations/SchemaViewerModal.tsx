@@ -133,7 +133,7 @@ export function SchemaViewerModal({
   if (!isOpen || !connector) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="relative w-full max-w-5xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col h-[85vh] max-h-[85vh]">
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-border flex items-center justify-between bg-surface-secondary/50 flex-shrink-0">
