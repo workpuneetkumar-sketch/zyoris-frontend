@@ -618,6 +618,29 @@ export default function IntegrationsPage() {
         }}
         connector={selectedConnectorForDashboard}
         integrationId={selectedIntegrationIdForDashboard}
+        canManage={canManageIntegrations}
+        onSyncNow={async (c: Connector) => {
+          const targetId = c.connectionId || c.connectionState?.id || c.id;
+          if (targetId) await triggerSync(targetId);
+        }}
+        onTogglePause={async (c: Connector) => {
+          const targetId = c.connectionId || c.connectionState?.id || c.id;
+          if (!targetId) return;
+          const statusUpper = (c.status || "").toUpperCase();
+          if (statusUpper === "PAUSED") {
+            await resumeIntegration(targetId);
+          } else {
+            await pauseIntegration(targetId);
+          }
+        }}
+        onReconnect={async (c: Connector) => {
+          setSelectedConnectorForReconnect(c);
+          setIsReconnectOpen(true);
+        }}
+        onDelete={(c: Connector) => {
+          setSelectedConnectorForDisconnect(c);
+          setIsDisconnectOpen(true);
+        }}
       />
     </div>
   );

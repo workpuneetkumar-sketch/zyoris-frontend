@@ -31,6 +31,10 @@ import {
   BarChart3,
   ChevronRight,
   Sparkles,
+  Play,
+  Pause,
+  KeyRound,
+  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -39,6 +43,11 @@ interface IntegrationDashboardModalProps {
   onClose: () => void;
   connector: Connector | null;
   integrationId?: string | null;
+  canManage?: boolean;
+  onSyncNow?: (connector: Connector) => Promise<void>;
+  onTogglePause?: (connector: Connector) => Promise<void>;
+  onReconnect?: (connector: Connector) => Promise<void>;
+  onDelete?: (connector: Connector) => void;
 }
 
 export function IntegrationDashboardModal({
@@ -46,12 +55,21 @@ export function IntegrationDashboardModal({
   onClose,
   connector,
   integrationId: propIntegrationId,
+  canManage = true,
+  onSyncNow,
+  onTogglePause,
+  onReconnect,
+  onDelete,
 }: IntegrationDashboardModalProps) {
   const [activeTab, setActiveTab] = useState<"overview" | "runs" | "errors">("overview");
   const [isLoading, setIsLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState<IntegrationDashboardResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryingErrorId, setRetryingErrorId] = useState<string | null>(null);
+
+  // Local Action Loading States
+  const [isSyncingNow, setIsSyncingNow] = useState(false);
+  const [isTogglingPause, setIsTogglingPause] = useState(false);
 
   const targetIntegrationId =
     propIntegrationId ||
@@ -90,6 +108,52 @@ export function IntegrationDashboardModal({
     }
   }, [isOpen, targetIntegrationId, fetchDashboard]);
 
+  const handleSyncNowClick = async () => {
+    if (!connector || !onSyncNow) return;
+    setIsSyncingNow(true);
+    try {
+      await onSyncNow(connector);
+      toast.success(`Sync job triggered for ${connector.name}`);
+      await fetchDashboard();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to trigger manual sync.");
+    } finally {
+      setIsSyncingNow(false);
+    }
+  };
+
+  const handleTogglePauseClick = async () => {
+    if (!connector || !onTogglePause) return;
+    setIsTogglingPause(true);
+    try {
+      const currentStatus = (dashboardData?.integration?.status || connector?.status || "").toUpperCase();
+      const isCurrentlyPaused = currentStatus === "PAUSED";
+      const updatedConnector: Connector = {
+        ...connector,
+        status: isCurrentlyPaused ? "PAUSED" : "ACTIVE",
+      };
+      await onTogglePause(updatedConnector);
+      const nextStatus = isCurrentlyPaused ? "ACTIVE" : "PAUSED";
+      setDashboardData((prev) =>
+        prev
+          ? {
+              ...prev,
+              integration: {
+                ...prev.integration,
+                status: nextStatus,
+                health: nextStatus === "PAUSED" ? "DEGRADED" : "HEALTHY",
+              },
+            }
+          : null
+      );
+      await fetchDashboard();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to change pause state.");
+    } finally {
+      setIsTogglingPause(false);
+    }
+  };
+
   const handleRetryError = async (errorId: string) => {
     if (!targetIntegrationId) return;
     setRetryingErrorId(errorId);
@@ -113,6 +177,12 @@ export function IntegrationDashboardModal({
   const integration = dashboardData?.integration;
   const metrics = dashboardData?.metrics;
   const health = integration?.health || "INACTIVE";
+  const statusUpper = (integration?.status || connector?.status || "").toUpperCase();
+  const isPaused = statusUpper === "PAUSED";
+  const isAuthAttention =
+    statusUpper === "AUTH_ATTENTION" ||
+    statusUpper === "PENDING_AUTH" ||
+    statusUpper === "AUTHENTICATION_REQUIRED";
   const successRate = metrics?.successRate ?? 0;
   const counters = metrics?.aggregateCounters;
 
@@ -133,7 +203,7 @@ export function IntegrationDashboardModal({
     >
       <div className="relative w-full max-w-4xl max-h-[90vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between gap-4">
+        <div className="p-5 border-b border-border flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center font-bold flex-shrink-0">
               {connector?.iconUrl ? (
@@ -151,7 +221,11 @@ export function IntegrationDashboardModal({
                   {health}
                 </span>
                 {integration?.status && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-surface-secondary text-text-secondary border border-border">
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono border uppercase font-bold ${
+                    isPaused ? "bg-warning/10 text-warning border-warning/20" :
+                    isAuthAttention ? "bg-error/10 text-error border-error/20" :
+                    "bg-surface-secondary text-text-secondary border-border"
+                  }`}>
                     {integration.status}
                   </span>
                 )}
@@ -162,17 +236,81 @@ export function IntegrationDashboardModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Action Toolbar */}
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Sync Now Action */}
+            {onSyncNow && connector && (
+              <button
+                type="button"
+                onClick={handleSyncNowClick}
+                disabled={!canManage || isSyncingNow || isPaused}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={isPaused ? "Integration is currently paused" : "Trigger manual synchronization"}
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingNow ? "animate-spin text-primary" : "text-primary"}`} />
+                <span>{isSyncingNow ? "Syncing..." : "Sync Now"}</span>
+              </button>
+            )}
+
+            {/* Pause / Resume Action */}
+            {onTogglePause && connector && (
+              <button
+                type="button"
+                onClick={handleTogglePauseClick}
+                disabled={!canManage || isTogglingPause}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title={isPaused ? "Resume synchronization" : "Pause synchronization"}
+              >
+                {isTogglingPause ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-warning" />
+                ) : isPaused ? (
+                  <Play className="w-3.5 h-3.5 text-success" />
+                ) : (
+                  <Pause className="w-3.5 h-3.5 text-warning" />
+                )}
+                <span>{isTogglingPause ? "Updating..." : isPaused ? "Resume" : "Pause"}</span>
+              </button>
+            )}
+
+            {/* Reconnect Action */}
+            {onReconnect && connector && (
+              <button
+                type="button"
+                onClick={() => connector && onReconnect(connector)}
+                disabled={!canManage}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Reconnect API integration credentials"
+              >
+                <KeyRound className="w-3.5 h-3.5 text-primary" />
+                <span>Reconnect</span>
+              </button>
+            )}
+
+            {/* Delete / Disconnect Action */}
+            {onDelete && connector && (
+              <button
+                type="button"
+                onClick={() => connector && onDelete(connector)}
+                disabled={!canManage}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-error/20 bg-error/5 text-error hover:bg-error/10 text-xs font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Delete or disconnect integration"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-error" />
+                <span>Delete</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={fetchDashboard}
               disabled={isLoading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-semibold transition-colors disabled:opacity-50"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-medium transition-colors disabled:opacity-50"
               title="Refresh live metrics"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin text-primary" : "text-text-muted"}`} />
-              <span>{isLoading ? "Refreshing..." : "Refresh"}</span>
+              <span className="hidden sm:inline">{isLoading ? "Refreshing..." : "Refresh"}</span>
             </button>
+
             <button
               type="button"
               onClick={onClose}
