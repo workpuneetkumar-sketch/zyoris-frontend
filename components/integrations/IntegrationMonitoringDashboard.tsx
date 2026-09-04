@@ -16,8 +16,11 @@ import {
   getSyncRunErrorsApi,
   startIntegrationSyncJobApi,
   cancelSyncRunApi,
+  resolveIntegrationErrorApi,
+  retrySyncErrorRecordApi,
 } from "@/lib/api/integrationsApi";
 import { getAuditLogs, AuditLog } from "@/lib/api/auditApi";
+import { WebhookConfigurationPanel } from "./WebhookConfigurationPanel";
 import {
   Activity,
   AlertCircle,
@@ -49,6 +52,10 @@ import {
   Radio,
   Calendar,
   AlertOctagon,
+  Webhook,
+  ExternalLink,
+  FileCode,
+  RotateCcw,
 } from "lucide-react";
 import classNames from "classnames";
 import { toast } from "sonner";
@@ -57,6 +64,7 @@ export interface IntegrationMonitoringDashboardProps {
   integrationId?: string;
   integrations?: IntegrationInstance[];
   onTriggerSync?: (id: string) => Promise<void>;
+  onNavigateToMapping?: (integrationId: string, entityType?: string) => void;
   className?: string;
 }
 
@@ -64,9 +72,10 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
   integrationId,
   integrations = [],
   onTriggerSync,
+  onNavigateToMapping,
   className,
 }) => {
-  const [activeTab, setActiveTab] = useState<"LOGS" | "ERRORS" | "AUDIT">("LOGS");
+  const [activeTab, setActiveTab] = useState<"LOGS" | "ERRORS" | "WEBHOOKS" | "AUDIT">("LOGS");
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<string>(
     integrationId || ""
   );
@@ -90,6 +99,69 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
   const [errorsTotalPages, setErrorsTotalPages] = useState(1);
   const [errorsResolvedFilter, setErrorsResolvedFilter] = useState<string>("");
   const [selectedErrorForDetail, setSelectedErrorForDetail] = useState<SyncErrorItem | null>(null);
+  const [isRetryingErrorId, setIsRetryingErrorId] = useState<string | null>(null);
+  const [isResolvingErrorId, setIsResolvingErrorId] = useState<string | null>(null);
+  const [errorNotes, setErrorNotes] = useState<string>("");
+
+  const handleToggleErrorResolution = async (errItem: SyncErrorItem, customNotes?: string) => {
+    setIsResolvingErrorId(errItem.id);
+    const nextResolvedState = !errItem.resolved;
+    try {
+      const res = await resolveIntegrationErrorApi(errItem.integrationId, errItem.id, {
+        resolved: nextResolvedState,
+        notes: customNotes || errorNotes,
+        resolvedBy: "Operations User",
+      });
+      // Optimistically update errors list
+      setErrors((prev) =>
+        prev.map((e) =>
+          e.id === errItem.id
+            ? { ...e, resolved: nextResolvedState, resolvedAt: nextResolvedState ? new Date().toISOString() : undefined }
+            : e
+        )
+      );
+      if (selectedErrorForDetail?.id === errItem.id) {
+        setSelectedErrorForDetail((prev) =>
+          prev
+            ? { ...prev, resolved: nextResolvedState, resolvedAt: nextResolvedState ? new Date().toISOString() : undefined }
+            : null
+        );
+      }
+      toast.success(res.message || `Error marked as ${nextResolvedState ? "resolved" : "unresolved"}.`);
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update error resolution.");
+    } finally {
+      setIsResolvingErrorId(null);
+    }
+  };
+
+  const handleRetryErrorRecord = async (errItem: SyncErrorItem) => {
+    if (!errItem.retryable) {
+      toast.error("This error is non-retryable. Please resolve schema or mapping rule first.");
+      return;
+    }
+    setIsRetryingErrorId(errItem.id);
+    try {
+      const res = await retrySyncErrorRecordApi(errItem.integrationId, errItem.id);
+      toast.success(res.message || "Retry job enqueued for this record.");
+      fetchLogs();
+      fetchErrors();
+      fetchStats();
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to retry error record.");
+    } finally {
+      setIsRetryingErrorId(null);
+    }
+  };
+
+  const handleNavigateToMapping = (errItem: SyncErrorItem) => {
+    if (onNavigateToMapping) {
+      onNavigateToMapping(errItem.integrationId, errItem.entityType || "contacts");
+    } else {
+      toast.info(`Opening mapping configuration for entity: ${errItem.entityType || "contacts"}`);
+    }
+  };
 
   // Audit Events State
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
@@ -711,6 +783,25 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
           >
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>Error Records ({stats?.totalErrors ?? errors.length})</span>
+            {errors.some((e) => !e.resolved) && (
+              <span className="px-1.5 py-0.2 rounded-full bg-surface/20 text-[10px] font-bold">
+                {errors.filter((e) => !e.resolved).length} unaddressed
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("WEBHOOKS")}
+            className={classNames(
+              "px-3.5 py-1.5 rounded-xl font-semibold text-xs transition-colors flex items-center gap-1.5",
+              activeTab === "WEBHOOKS"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-text-muted hover:text-text hover:bg-surface-secondary"
+            )}
+          >
+            <Webhook className="w-3.5 h-3.5" />
+            <span>Webhooks & Ingress</span>
           </button>
 
           <button
@@ -771,29 +862,72 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
           </div>
         ) : activeTab === "ERRORS" ? (
           <div className="flex items-center gap-2">
-            <div className="relative w-40 hidden sm:block">
+            <div className="flex items-center rounded-xl bg-surface-secondary p-0.5 border border-border text-xs">
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorsResolvedFilter("");
+                  setErrorsPage(1);
+                }}
+                className={classNames(
+                  "px-2.5 py-1 rounded-lg font-semibold text-[11px] transition-colors",
+                  errorsResolvedFilter === ""
+                    ? "bg-surface text-text shadow-2xs font-bold"
+                    : "text-text-muted hover:text-text"
+                )}
+              >
+                All ({errors.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorsResolvedFilter("unresolved");
+                  setErrorsPage(1);
+                }}
+                className={classNames(
+                  "px-2.5 py-1 rounded-lg font-semibold text-[11px] transition-colors flex items-center gap-1",
+                  errorsResolvedFilter === "unresolved"
+                    ? "bg-error/15 text-error font-bold shadow-2xs"
+                    : "text-text-muted hover:text-text"
+                )}
+              >
+                <span>Unresolved</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-error/20 text-error text-[10px]">
+                  {errors.filter((e) => !e.resolved).length}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorsResolvedFilter("resolved");
+                  setErrorsPage(1);
+                }}
+                className={classNames(
+                  "px-2.5 py-1 rounded-lg font-semibold text-[11px] transition-colors",
+                  errorsResolvedFilter === "resolved"
+                    ? "bg-success/15 text-success font-bold shadow-2xs"
+                    : "text-text-muted hover:text-text"
+                )}
+              >
+                Resolved ({errors.filter((e) => e.resolved).length})
+              </button>
+            </div>
+
+            <div className="relative w-36 hidden md:block">
               <Filter className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
               <input
                 type="text"
                 value={runIdFilter}
                 onChange={(e) => setRunIdFilter(e.target.value)}
-                placeholder="Filter by Run ID..."
+                placeholder="Run ID..."
                 className="w-full pl-8 pr-2.5 py-1 rounded-xl border border-border bg-surface text-xs text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 focus:ring-primary font-mono text-[11px]"
               />
             </div>
-
-            <select
-              value={errorsResolvedFilter}
-              onChange={(e) => {
-                setErrorsResolvedFilter(e.target.value);
-                setErrorsPage(1);
-              }}
-              className="px-2.5 py-1 rounded-xl border border-border bg-surface text-xs text-text focus:outline-hidden focus:ring-1 focus:ring-primary"
-            >
-              <option value="">All Errors</option>
-              <option value="unresolved">Unresolved Only</option>
-              <option value="resolved">Resolved Only</option>
-            </select>
+          </div>
+        ) : activeTab === "WEBHOOKS" ? (
+          <div className="text-xs text-text-muted flex items-center gap-1.5 font-mono">
+            <Radio className="w-3.5 h-3.5 text-primary animate-pulse" />
+            <span>Real-time Ingress Listener</span>
           </div>
         ) : (
           <div className="text-xs text-text-muted font-mono">
@@ -1002,6 +1136,7 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                   <tr>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Timestamp</th>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Error Code / Entity</th>
+                    <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Record / Field Context</th>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Error Message</th>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Retryable</th>
                     <th className="py-2.5 px-3 font-semibold uppercase text-[10px]">Status</th>
@@ -1011,7 +1146,7 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                 <tbody className="divide-y divide-border">
                   {filteredErrors.map((err) => (
                     <tr key={err.id} className="hover:bg-surface-hover transition-colors">
-                      <td className="py-2.5 px-3 font-mono text-[11px] text-text-muted">
+                      <td className="py-2.5 px-3 font-mono text-[11px] text-text-muted whitespace-nowrap">
                         {new Date(err.createdAt).toLocaleString()}
                       </td>
 
@@ -1026,6 +1161,25 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                         )}
                       </td>
 
+                      <td className="py-2.5 px-3">
+                        <div className="space-y-0.5 font-mono text-[11px]">
+                          <div className="flex items-center gap-1 text-text">
+                            <Database className="w-3 h-3 text-text-muted shrink-0" />
+                            <span className="truncate max-w-[130px]" title={`Record ID: ${err.sourceRecordId || err.targetRecordId || err.id}`}>
+                              {err.sourceRecordId || err.targetRecordId || `#${err.id.slice(-6)}`}
+                            </span>
+                          </div>
+                          {err.fieldPath && (
+                            <div className="flex items-center gap-1">
+                              <Code className="w-2.5 h-2.5 text-primary shrink-0" />
+                              <span className="px-1.5 py-0.2 rounded bg-surface-secondary border border-border text-[10px] text-primary font-semibold truncate max-w-[130px]">
+                                {err.fieldPath}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
                       <td className="py-2.5 px-3 max-w-xs">
                         <p className="text-text font-medium line-clamp-2">{err.errorMessage}</p>
                       </td>
@@ -1033,11 +1187,11 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                       <td className="py-2.5 px-3">
                         {err.retryable ? (
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-warning/10 text-warning border border-warning/20">
-                            Retryable ({err.retryCount})
+                            Retryable ({err.retryCount ?? 0})
                           </span>
                         ) : (
                           <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-surface-secondary text-text-muted border border-border">
-                            Fatal
+                            Fatal / Non-retryable
                           </span>
                         )}
                       </td>
@@ -1055,14 +1209,66 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
                       </td>
 
                       <td className="py-2.5 px-3">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedErrorForDetail(err)}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text text-xs font-medium"
-                        >
-                          <Eye className="w-3.5 h-3.5 text-primary" />
-                          <span>Inspect</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {/* Conditional Retry: STRICTLY RENDERED ONLY WHEN retryable === true */}
+                          {err.retryable ? (
+                            <button
+                              type="button"
+                              onClick={() => handleRetryErrorRecord(err)}
+                              disabled={isRetryingErrorId === err.id}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-warning/30 bg-warning/10 hover:bg-warning/20 text-warning text-xs font-semibold transition-colors"
+                              title="Retry sync for this failed record"
+                            >
+                              <RotateCcw className={classNames("w-3 h-3", isRetryingErrorId === err.id && "animate-spin")} />
+                              <span>{isRetryingErrorId === err.id ? "Retrying..." : "Retry"}</span>
+                            </button>
+                          ) : (
+                            <span
+                              className="px-2 py-0.5 rounded text-[10px] font-medium text-text-muted bg-surface-secondary border border-border cursor-not-allowed select-none"
+                              title="This error cannot be retried automatically (schema or rule constraint failure)"
+                            >
+                              Non-Retryable
+                            </span>
+                          )}
+
+                          {/* Navigation to Affected Integration & Mapping */}
+                          <button
+                            type="button"
+                            onClick={() => handleNavigateToMapping(err)}
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text text-xs font-medium transition-colors"
+                            title="Open and fix in mapping workspace"
+                          >
+                            <ExternalLink className="w-3 h-3 text-info" />
+                            <span>Fix Mapping</span>
+                          </button>
+
+                          {/* Quick Resolution Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleErrorResolution(err)}
+                            disabled={isResolvingErrorId === err.id}
+                            className={classNames(
+                              "flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-colors",
+                              err.resolved
+                                ? "border-border bg-surface hover:bg-surface-hover text-text-muted"
+                                : "border-success/30 bg-success/10 hover:bg-success/20 text-success"
+                            )}
+                            title={err.resolved ? "Reopen this error" : "Mark error as resolved"}
+                          >
+                            <Check className="w-3 h-3" />
+                            <span>{err.resolved ? "Reopen" : "Resolve"}</span>
+                          </button>
+
+                          {/* Inspect Deep Diagnostics */}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedErrorForDetail(err)}
+                            className="p-1 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text"
+                            title="Inspect deep diagnostics, stack trace, and payload"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-primary" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1096,6 +1302,12 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
             </div>
           )}
         </div>
+      ) : activeTab === "WEBHOOKS" ? (
+        /* Webhooks Ingress & Subscriptions Panel */
+        <WebhookConfigurationPanel
+          integrationId={selectedIntegrationId || integrations[0]?.id || "crm_default"}
+          defaultProvider="CRM"
+        />
       ) : (
         /* Lifecycle Audit Events View */
         <div className="border border-border rounded-2xl bg-surface overflow-hidden shadow-2xs">
@@ -1570,6 +1782,238 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
               >
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Day 11: Error Diagnostics & Record Context Modal */}
+      {selectedErrorForDetail && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-surface border border-border rounded-2xl max-w-2xl w-full max-h-[90vh] flex flex-col p-5 shadow-2xl space-y-4 animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div className="flex items-center gap-2.5">
+                <div
+                  className={classNames(
+                    "w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border",
+                    selectedErrorForDetail.retryable
+                      ? "bg-warning/10 border-warning/20 text-warning"
+                      : "bg-error/10 border-error/20 text-error"
+                  )}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-text">
+                    Sync Error Diagnostics & Record Context
+                  </h4>
+                  <p className="text-[11px] text-text-muted font-mono">
+                    ID: {selectedErrorForDetail.id} • Integration: {selectedErrorForDetail.integrationName || selectedErrorForDetail.integrationId}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedErrorForDetail(null)}
+                className="p-1 rounded-lg text-text-muted hover:text-text hover:bg-surface-hover"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="space-y-4 overflow-y-auto flex-1 text-xs pr-1">
+              {/* Status & Retryability Banner */}
+              <div className="p-3.5 rounded-xl border border-border bg-surface-secondary/50 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="font-mono font-bold text-sm text-error">
+                    {selectedErrorForDetail.errorCode || "RECORD_TRANSFORMATION_ERROR"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={classNames(
+                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                        selectedErrorForDetail.retryable
+                          ? "bg-warning/10 text-warning border border-warning/20"
+                          : "bg-surface text-text-muted border border-border"
+                      )}
+                    >
+                      {selectedErrorForDetail.retryable
+                        ? `Retryable (Attempts: ${selectedErrorForDetail.retryCount ?? 0})`
+                        : "Fatal / Non-retryable"}
+                    </span>
+                    <span
+                      className={classNames(
+                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase",
+                        selectedErrorForDetail.resolved
+                          ? "bg-success/10 text-success border border-success/20"
+                          : "bg-error/10 text-error border border-error/20"
+                      )}
+                    >
+                      {selectedErrorForDetail.resolved ? "Resolved" : "Unresolved"}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-text font-medium text-xs">
+                  {selectedErrorForDetail.errorMessage}
+                </p>
+              </div>
+
+              {/* Record & Field Context Grid */}
+              <div className="p-3.5 rounded-xl border border-border bg-surface space-y-2">
+                <h5 className="font-bold text-xs text-text flex items-center gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-primary" />
+                  <span>Record & Field Diagnostics</span>
+                </h5>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div className="p-2 rounded-lg bg-surface-secondary">
+                    <span className="text-text-muted block text-[10px] font-sans">Entity Type</span>
+                    <span className="text-text font-bold">
+                      {selectedErrorForDetail.entityType || "contacts"}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-surface-secondary">
+                    <span className="text-text-muted block text-[10px] font-sans">Failing Field Path</span>
+                    <span className="text-primary font-bold">
+                      {selectedErrorForDetail.fieldPath || "schema-level validation"}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-surface-secondary">
+                    <span className="text-text-muted block text-[10px] font-sans">Source Record ID</span>
+                    <span className="text-text truncate block select-all">
+                      {selectedErrorForDetail.sourceRecordId || "src_record_" + selectedErrorForDetail.id.slice(0, 6)}
+                    </span>
+                  </div>
+
+                  <div className="p-2 rounded-lg bg-surface-secondary">
+                    <span className="text-text-muted block text-[10px] font-sans">Target Record ID</span>
+                    <span className="text-text truncate block select-all">
+                      {selectedErrorForDetail.targetRecordId || "tgt_unpersisted"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resolution Notes Input */}
+              <div className="p-3.5 rounded-xl border border-border bg-surface space-y-2">
+                <div className="flex items-center justify-between">
+                  <h5 className="font-bold text-xs text-text flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-success" />
+                    <span>Resolution State & Audit Notes</span>
+                  </h5>
+                  {selectedErrorForDetail.resolvedAt && (
+                    <span className="text-[10px] text-text-muted">
+                      Resolved on: {new Date(selectedErrorForDetail.resolvedAt).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+
+                <textarea
+                  value={errorNotes}
+                  onChange={(e) => setErrorNotes(e.target.value)}
+                  placeholder="Add resolution notes or rationale (e.g. Added phone normalizer rule in mapping workspace)..."
+                  className="w-full p-2.5 rounded-xl border border-border bg-surface-secondary text-xs text-text placeholder:text-text-muted focus:outline-hidden focus:ring-1 focus:ring-primary font-sans resize-none h-16"
+                />
+              </div>
+
+              {/* Raw Record / Payload Viewer */}
+              {(selectedErrorForDetail.rawPayload || selectedErrorForDetail.payload) && (
+                <div className="p-3.5 rounded-xl border border-border bg-surface space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h5 className="font-bold text-xs text-text flex items-center gap-1.5 font-mono">
+                      <Code className="w-3.5 h-3.5 text-primary" />
+                      <span>Failing Record Raw Payload</span>
+                    </h5>
+                  </div>
+                  <pre className="p-2.5 rounded-xl bg-surface-secondary border border-border text-[10px] font-mono text-text overflow-x-auto max-h-36 select-all">
+                    {JSON.stringify(selectedErrorForDetail.rawPayload || selectedErrorForDetail.payload, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Stack Trace / Error Stack */}
+              {(selectedErrorForDetail.errorStack || selectedErrorForDetail.stackTrace) && (
+                <div className="p-3.5 rounded-xl border border-border bg-surface space-y-2">
+                  <h5 className="font-bold text-xs text-text flex items-center gap-1.5 font-mono">
+                    <AlertOctagon className="w-3.5 h-3.5 text-error" />
+                    <span>Error Stack Trace</span>
+                  </h5>
+                  <pre className="p-2.5 rounded-xl bg-surface-secondary border border-border text-[10px] font-mono text-error/90 overflow-x-auto max-h-28 whitespace-pre-wrap select-all">
+                    {selectedErrorForDetail.errorStack || selectedErrorForDetail.stackTrace}
+                  </pre>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-border gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                {/* Strict Retry Enforcement: Only if retryable === true */}
+                {selectedErrorForDetail.retryable ? (
+                  <button
+                    type="button"
+                    onClick={() => handleRetryErrorRecord(selectedErrorForDetail)}
+                    disabled={isRetryingErrorId === selectedErrorForDetail.id}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-warning hover:bg-warning/90 text-warning-foreground font-bold text-xs transition-colors shadow-xs"
+                  >
+                    <RotateCcw className={classNames("w-3.5 h-3.5", isRetryingErrorId === selectedErrorForDetail.id && "animate-spin")} />
+                    <span>{isRetryingErrorId === selectedErrorForDetail.id ? "Retrying Record..." : "Retry Failed Record"}</span>
+                  </button>
+                ) : (
+                  <span className="text-[11px] text-text-muted italic">
+                    Non-retryable constraint error. Fix field mapping first.
+                  </span>
+                )}
+
+                {/* Fix in Mapping Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleNavigateToMapping(selectedErrorForDetail);
+                    setSelectedErrorForDetail(null);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-border bg-surface hover:bg-surface-hover text-text font-semibold text-xs transition-colors shadow-2xs"
+                >
+                  <ExternalLink className="w-3.5 h-3.5 text-info" />
+                  <span>Fix in Mapping</span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Resolution State Toggle */}
+                <button
+                  type="button"
+                  onClick={() => handleToggleErrorResolution(selectedErrorForDetail)}
+                  disabled={isResolvingErrorId === selectedErrorForDetail.id}
+                  className={classNames(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-colors shadow-xs",
+                    selectedErrorForDetail.resolved
+                      ? "border border-border bg-surface hover:bg-surface-hover text-text"
+                      : "bg-success hover:bg-success/90 text-success-foreground"
+                  )}
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>
+                    {isResolvingErrorId === selectedErrorForDetail.id
+                      ? "Updating..."
+                      : selectedErrorForDetail.resolved
+                      ? "Reopen Error"
+                      : "Mark as Resolved"}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedErrorForDetail(null)}
+                  className="px-4 py-1.5 rounded-xl border border-border bg-surface hover:bg-surface-hover text-text font-semibold text-xs"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

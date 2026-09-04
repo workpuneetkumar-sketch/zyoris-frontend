@@ -352,6 +352,20 @@ export default function IntegrationsPage() {
           onTriggerSync={async (id: string) => {
             await triggerSync(id);
           }}
+          onNavigateToMapping={(integrationId: string, entityType?: string) => {
+            const connector =
+              connectors.find(
+                (c) =>
+                  c.id === integrationId ||
+                  c.connectionId === integrationId ||
+                  c.connectionState?.id === integrationId ||
+                  (c.provider && c.provider.toLowerCase() === integrationId.toLowerCase())
+              ) || connectors[0];
+            if (connector) {
+              setSelectedConnectorForWizard(connector);
+              setIsWizardOpen(true);
+            }
+          }}
         />
       ) : (
         <>

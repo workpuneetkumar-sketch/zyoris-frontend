@@ -846,7 +846,7 @@ export interface SyncErrorsQuery {
   integrationId?: string;
   errorCode?: string;
   entityType?: string;
-  resolved?: boolean;
+  resolved?: boolean | "true" | "false" | "all";
   retryable?: boolean;
   startDate?: string;
   endDate?: string;
@@ -993,5 +993,52 @@ export interface IntegrationDashboardResponse {
   metrics: IntegrationDashboardMetrics;
   recentFailures: (SyncErrorDetailResponse | SyncErrorItem)[];
   recentRuns: SyncRun[];
+}
+
+// Day 11 Error Resolution & Webhook Management Types
+
+export interface ErrorResolutionPayload {
+  resolved: boolean;
+  notes?: string;
+  resolvedBy?: string;
+}
+
+export interface ErrorResolutionResponse {
+  success: boolean;
+  message: string;
+  data?: SyncErrorItem;
+}
+
+export interface WebhookSubscription {
+  event: string;
+  description: string;
+  enabled: boolean;
+}
+
+export interface WebhookLastEventStatus {
+  eventId: string;
+  event: string;
+  provider: string;
+  timestamp: string;
+  httpStatus: number;
+  status: "SUCCESS" | "FAILED" | "UNAUTHORIZED" | "PENDING";
+  latencyMs: number;
+  payloadSize: number;
+  signatureVerified: boolean;
+  errorMessage?: string;
+  requestPreview?: Record<string, any>;
+}
+
+export interface WebhookConfig {
+  id?: string;
+  integrationId: string;
+  provider: string;
+  endpointUrl: string;
+  maskedSecret: string; // strictly masked e.g. whsec_••••••••3a8f
+  events: WebhookSubscription[];
+  isActive: boolean;
+  lastEventStatus?: WebhookLastEventStatus | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
