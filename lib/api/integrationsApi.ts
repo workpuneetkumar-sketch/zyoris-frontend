@@ -31,6 +31,10 @@ import {
   SyncRunResponse,
   SyncErrorItem,
   SyncErrorListResponse,
+  SyncErrorDetailResponse,
+  RetrySyncErrorResponse,
+  AllIntegrationsDashboardResponse,
+  IntegrationDashboardResponse,
 } from "@/types/integrations";
 
 /**
@@ -803,6 +807,55 @@ export async function getIntegrationSyncErrorsApi(
   }
   return { data: [], total: 0, page: 1, limit: 20 };
 }
+/**
+ * Retrieve detail of a specific sync error with retryability classification.
+ * GET /api/v1/integrations/{id}/sync-errors/{errorId}
+ */
+export async function getSyncErrorByIdApi(
+  id: string,
+  errorId: string
+): Promise<SyncErrorDetailResponse | SyncErrorItem> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-errors/${encodeURIComponent(errorId)}`
+  );
+  return response.data?.data || response.data?.error || response.data;
+}
+
+/**
+ * Retry a sync error with strict backend retryability verification.
+ * POST /api/v1/integrations/{id}/sync-errors/{errorId}/retry
+ */
+export async function retrySyncErrorApi(
+  id: string,
+  errorId: string
+): Promise<RetrySyncErrorResponse> {
+  const response = await api.post(
+    `/api/v1/integrations/${encodeURIComponent(id)}/sync-errors/${encodeURIComponent(errorId)}/retry`
+  );
+  return response.data;
+}
+
+/**
+ * Retrieve organization-wide integration health and aggregate sync counters.
+ * GET /api/v1/integrations/dashboard
+ */
+export async function getIntegrationsDashboardApi(): Promise<AllIntegrationsDashboardResponse> {
+  const response = await api.get("/api/v1/integrations/dashboard");
+  return response.data?.data || response.data;
+}
+
+/**
+ * Retrieve health, aggregate counters, and recent history for an integration.
+ * GET /api/v1/integrations/{id}/dashboard
+ */
+export async function getIntegrationDashboardByIdApi(
+  id: string
+): Promise<IntegrationDashboardResponse> {
+  const response = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(id)}/dashboard`
+  );
+  return response.data?.data || response.data;
+}
 
 /**
  * Update error resolution state (resolved vs unresolved).
@@ -886,6 +939,3 @@ export async function retrySyncErrorRecordApi(
     throw err;
   }
 }
-
-
-

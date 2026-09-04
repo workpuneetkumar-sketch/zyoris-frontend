@@ -23,4 +23,8 @@ export const integrationWizardSteps = [
     id: 6,
     label: "Field Mapping",
   },
+  {
+    id: 7,
+    label: "Review & Enable",
+  },
 ] as const;

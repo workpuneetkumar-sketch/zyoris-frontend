@@ -54,6 +54,7 @@ import {
   FileText,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ReviewAndEnableStep } from "./wizard/ReviewAndEnableStep";
 import {
   testIntegrationConnectionApi,
   testPreflightConnectionApi,
@@ -91,6 +92,7 @@ interface IntegrationWizardModalProps {
   onGetMapping?: (id: string) => Promise<any>;
   onSaveMapping?: (id: string, payload: any) => Promise<any>;
   onViewSchema?: (connector: Connector) => void;
+  onOpenDashboard?: (connector: Connector, integrationId?: string) => void;
 }
 
 // Zod Validation Schema
@@ -390,13 +392,16 @@ export function IntegrationWizardModal({
   onGetMapping,
   onSaveMapping,
   onViewSchema,
+  onOpenDashboard,
 }: IntegrationWizardModalProps) {
   const [selectedConnector, setSelectedConnector] = useState<Connector | null>(
     initialConnector
   );
-  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7>(1);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activationSuccess, setActivationSuccess] = useState(false);
+  const [isActivationConfirmed, setIsActivationConfirmed] = useState(false);
 
   // Live Connection Test & Schema Discovery state
   const [activeIntegrationId, setActiveIntegrationId] = useState<string | null>(null);
@@ -438,6 +443,8 @@ export function IntegrationWizardModal({
     setDiscoveredSchema(null);
     setSchemaError(null);
     setMappedFields({});
+    setActivationSuccess(false);
+    setIsActivationConfirmed(false);
   }, [initialConnector, isOpen, resetConnectionTest]);
 
   const defaultValues: Partial<FormValues> = {
@@ -490,8 +497,8 @@ export function IntegrationWizardModal({
     (connectionTest.error instanceof AsyncRequestError
       ? (connectionTest.error.data as NormalizedConnectionTestResult)
       : connectionTest.error
-      ? normalizeConnectionError(connectionTest.error, undefined)
-      : null);
+        ? normalizeConnectionError(connectionTest.error, undefined)
+        : null);
 
   const { fields, append, remove } = useFieldArray({
     control,
@@ -555,7 +562,7 @@ export function IntegrationWizardModal({
   const previousAuthTypeRef = React.useRef<AuthType | undefined>();
   useEffect(() => {
     const currentAuthType = watch("authType");
-    
+
     if (previousAuthTypeRef.current !== undefined && previousAuthTypeRef.current !== currentAuthType) {
       setValue("apiKeyName", "");
       setValue("apiKeyValue", "");
@@ -574,7 +581,7 @@ export function IntegrationWizardModal({
         setValue("oauthScopes", "read, write");
       }
     }
-    
+
     previousAuthTypeRef.current = currentAuthType;
   }, [watchedAuthType, watch, setValue]);
 
@@ -933,8 +940,8 @@ export function IntegrationWizardModal({
         const schemaRes = onDiscoverSchema
           ? await onDiscoverSchema(targetId)
           : onFetchSchema
-          ? await onFetchSchema(targetId)
-          : await getIntegrationSchemaApi(targetId);
+            ? await onFetchSchema(targetId)
+            : await getIntegrationSchemaApi(targetId);
 
         setDiscoveredSchema(schemaRes);
 
@@ -1061,14 +1068,14 @@ export function IntegrationWizardModal({
       } else {
         toast.error(
           (res as any)?.message ||
-            `No OAuth authorization URL returned by backend for ${selectedConnector.name}.`
+          `No OAuth authorization URL returned by backend for ${selectedConnector.name}.`
         );
       }
     } catch (err: any) {
       toast.error(
         err?.response?.data?.message ||
-          err?.message ||
-          `Failed to initiate OAuth authorization for ${selectedConnector.name}.`
+        err?.message ||
+        `Failed to initiate OAuth authorization for ${selectedConnector.name}.`
       );
     } finally {
       setIsSubmitting(false);
@@ -1077,7 +1084,7 @@ export function IntegrationWizardModal({
 
   // Final Form Submission
   const onFormSubmit = async (data: FormValues) => {
-    if (step !== 6) {
+    if (step !== 7 && step !== 6) {
       return;
     }
 
@@ -1086,7 +1093,7 @@ export function IntegrationWizardModal({
       return;
     }
 
-    if (step === 6 && !isMappingValid && missingRequiredFields.length > 0) {
+    if (missingRequiredFields.length > 0) {
       toast.error(
         `Required target fields missing: ${missingRequiredFields.join(
           ", "
@@ -1167,9 +1174,8 @@ export function IntegrationWizardModal({
           credentials: payload.credentials,
           config: payload.config,
         });
-        toast.success(`Successfully configured ${selectedConnector.name}!`);
-        reset();
-        onClose();
+        setActivationSuccess(true);
+        toast.success(`Successfully activated ${selectedConnector.name}!`);
       } catch (err: any) {
         const errorMsg = formatBackendError(err);
         toast.error(errorMsg);
@@ -1213,9 +1219,11 @@ export function IntegrationWizardModal({
         }
       }
 
-      toast.success(`Successfully connected ${selectedConnector.name}!`);
-      reset();
-      onClose();
+      setActivationSuccess(true);
+      if (newIntegrationId) {
+        setActiveIntegrationId(newIntegrationId);
+      }
+      toast.success(`Successfully activated ${selectedConnector.name}!`);
     } catch (err: any) {
       const errorMsg = formatBackendError(err);
       toast.error(errorMsg);
@@ -1301,9 +1309,8 @@ export function IntegrationWizardModal({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm transition-all duration-200 ${
-        isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
-      }`}
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm transition-all duration-200 ${isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
     >
       <div className="relative w-full max-w-4xl max-h-[90vh] bg-surface rounded-2xl border border-border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Header */}
@@ -1330,9 +1337,10 @@ export function IntegrationWizardModal({
                 {step === 1 && "Step 1 of 6: Connector Selection"}
                 {step === 2 && "Step 2 of 6: Protocol & Endpoint Configuration"}
                 {step === 3 && "Step 3 of 6: Authentication & Credentials"}
-                {step === 4 && "Step 4 of 6: Verification & Connection Test"}
-                {step === 5 && "Step 5 of 6: Schema Discovery & Sample Data"}
-                {step === 6 && "Step 6 of 6: Field Mapping & Review"}
+                {step === 4 && "Step 4 of 7: Verification & Connection Test"}
+                {step === 5 && "Step 5 of 7: Schema Discovery & Sample Data"}
+                {step === 6 && "Step 6 of 7: Field Mapping & Transformations"}
+                {step === 7 && "Step 7 of 7: Review & Enable Integration"}
               </p>
             </div>
           </div>
@@ -1390,11 +1398,10 @@ export function IntegrationWizardModal({
                         setActiveIntegrationId(existingId);
                         setStep(2);
                       }}
-                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                        isSelected
+                      className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${isSelected
                           ? "border-primary bg-primary/5 shadow-sm"
                           : "border-border bg-surface hover:border-border-light hover:bg-surface-hover"
-                      }`}
+                        }`}
                     >
                       <div className="w-10 h-10 rounded-lg bg-surface-secondary border border-border flex items-center justify-center font-bold text-sm flex-shrink-0">
                         {c.iconUrl ? (
@@ -1665,11 +1672,10 @@ export function IntegrationWizardModal({
                       key={auth.id}
                       type="button"
                       onClick={() => setValue("authType", auth.id as AuthType)}
-                      className={`p-3 rounded-xl border text-xs font-medium text-left transition-all ${
-                        currentAuthType === auth.id
+                      className={`p-3 rounded-xl border text-xs font-medium text-left transition-all ${currentAuthType === auth.id
                           ? "border-primary bg-primary/10 text-primary font-semibold shadow-sm"
                           : "border-border bg-surface text-text-secondary hover:bg-surface-hover hover:text-text"
-                      }`}
+                        }`}
                     >
                       <Lock className="w-3.5 h-3.5 mb-1 text-text-muted" />
                       <div>{auth.label}</div>
@@ -2084,20 +2090,18 @@ export function IntegrationWizardModal({
 
               {/* Schema Discovery Gating Card */}
               <div
-                className={`p-4 rounded-xl border transition-all ${
-                  isSchemaUnlocked
+                className={`p-4 rounded-xl border transition-all ${isSchemaUnlocked
                     ? "bg-surface border-primary/30 shadow-sm"
                     : "bg-surface-secondary/40 border-border opacity-85"
-                }`}
+                  }`}
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <div
-                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                        isSchemaUnlocked
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${isSchemaUnlocked
                           ? "bg-primary/10 text-primary border border-primary/20"
                           : "bg-surface-secondary text-text-muted border border-border"
-                      }`}
+                        }`}
                     >
                       <Database className="w-4 h-4" />
                     </div>
@@ -2281,11 +2285,10 @@ export function IntegrationWizardModal({
                             key={ent.name || ent.id}
                             type="button"
                             onClick={() => setSelectedEntityName(ent.name || ent.id || "")}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${
-                              (activeEntity?.name === ent.name || activeEntity?.id === ent.id)
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 whitespace-nowrap ${(activeEntity?.name === ent.name || activeEntity?.id === ent.id)
                                 ? "bg-primary text-primary-foreground font-semibold shadow-sm"
                                 : "border border-border bg-surface text-text-secondary hover:bg-surface-hover hover:text-text"
-                            }`}
+                              }`}
                           >
                             <span>{ent.label || ent.name}</span>
                             <span className="text-[10px] opacity-75">
@@ -2459,10 +2462,10 @@ export function IntegrationWizardModal({
                               <td className="py-2.5 px-3">
                                 {renderSampleValue(
                                   field.sampleValue ??
-                                    field.sample ??
-                                    field.example ??
-                                    (field.name ? activeEntity.sampleRecords?.[0]?.[field.name] : undefined) ??
-                                    activeEntity.sampleRecords?.[0]?.[field.fullPath]
+                                  field.sample ??
+                                  field.example ??
+                                  (field.name ? activeEntity.sampleRecords?.[0]?.[field.name] : undefined) ??
+                                  activeEntity.sampleRecords?.[0]?.[field.fullPath]
                                 )}
                               </td>
                             </tr>
@@ -2491,16 +2494,48 @@ export function IntegrationWizardModal({
               disabled={isSubmitting}
             />
           )}
+
+          {/* STEP 7: REVIEW & ENABLE */}
+          {step === 7 && (
+            <ReviewAndEnableStep
+              connector={selectedConnector}
+              displayName={watch("displayName") || `${selectedConnector?.name || "Custom"} Integration`}
+              targetModule={watch("targetModule") || "leads"}
+              targetEntity={watch("targetEntity") || "Lead"}
+              apiUrl={watch("apiUrl") || ""}
+              httpMethod={watch("httpMethod") || "POST"}
+              authType={watch("authType") || "API_KEY"}
+              syncDirection={watch("syncDirection") || "BIDIRECTIONAL"}
+              syncFrequency={watch("syncFrequency") || "HOURLY"}
+              customHeadersCount={(watch("headers") || []).filter((h) => h.key?.trim()).length}
+              discoveredSchema={discoveredSchema}
+              mappedFields={mappedFields}
+              rawMappingEntries={rawMappingEntries}
+              requiredFieldsMissing={missingRequiredFields}
+              isSubmitting={isSubmitting}
+              activationSuccess={activationSuccess}
+              isConfirmed={isActivationConfirmed}
+              setIsConfirmed={setIsActivationConfirmed}
+              onOpenDashboard={() => {
+                if (selectedConnector) {
+                  onOpenDashboard?.(selectedConnector, activeIntegrationId || undefined);
+                }
+                reset();
+                onClose();
+              }}
+            />
+          )}
         </form>
 
         {/* Stable Fixed Footer */}
         <div className="p-4 px-6 border-t border-border bg-surface flex items-center justify-between gap-3 flex-shrink-0 z-30 shadow-xs">
           <div>
-            {step > 1 && (
+            {step > 1 && !activationSuccess && (
               <button
                 type="button"
                 onClick={() => setStep((prev) => (prev - 1) as any)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text text-xs font-semibold transition-colors"
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-border bg-surface hover:bg-surface-hover text-text text-xs font-semibold transition-colors disabled:opacity-50"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>Previous</span>
@@ -2511,10 +2546,14 @@ export function IntegrationWizardModal({
           <div className="flex items-center gap-2.5">
             <button
               type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-semibold transition-colors"
+              onClick={() => {
+                reset();
+                onClose();
+              }}
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-semibold transition-colors disabled:opacity-50"
             >
-              Cancel
+              {activationSuccess ? "Close Wizard" : "Cancel"}
             </button>
 
             {step < 6 ? (
@@ -2528,26 +2567,69 @@ export function IntegrationWizardModal({
                     toast.error("Please pick a connector first");
                     return;
                   }
-                  setStep((prev) => Math.min(6, prev + 1) as any);
+                  setStep((prev) => Math.min(7, prev + 1) as any);
                 }}
                 className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
               >
                 <span>Next Step</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
+            ) : step === 6 ? (
+              <button
+                type="button"
+                key="wizard-goto-review-step-6"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (!isMappingValid && missingRequiredFields.length > 0) {
+                    toast.error(
+                      `Please map all required target fields (${missingRequiredFields.join(
+                        ", "
+                      )}) before proceeding to Review.`
+                    );
+                    return;
+                  }
+                  setStep(7);
+                }}
+                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
+              >
+                <span>Review & Enable</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            ) : activationSuccess ? (
+              <button
+                type="button"
+                key="wizard-view-live-dashboard"
+                onClick={() => {
+                  if (selectedConnector) {
+                    onOpenDashboard?.(selectedConnector, activeIntegrationId || undefined);
+                  }
+                  reset();
+                  onClose();
+                }}
+                className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all"
+              >
+                <Activity className="w-4 h-4" />
+                <span>Go to Live Dashboard</span>
+              </button>
             ) : (
               <button
                 type="button"
-                key="wizard-finish-step-6"
+                key="wizard-finish-step-7"
                 onClick={(e) => {
                   e.preventDefault();
-                  handleSubmit(onFormSubmit)(e);
+                  if (currentAuthType === "OAUTH2") {
+                    handleInitiateOAuth();
+                  } else {
+                    handleSubmit(onFormSubmit)(e);
+                  }
                 }}
-                disabled={isSubmitting || isTesting || !isMappingValid}
+                disabled={isSubmitting || isTesting || !isActivationConfirmed || missingRequiredFields.length > 0}
                 title={
-                  !isMappingValid
+                  missingRequiredFields.length > 0
                     ? `Missing required fields: ${missingRequiredFields.join(", ")}`
-                    : "Finish and connect integration"
+                    : !isActivationConfirmed
+                      ? "Please confirm activation checkbox before enabling"
+                      : "Activate and enable integration"
                 }
                 className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -2557,7 +2639,7 @@ export function IntegrationWizardModal({
                     <span>
                       {currentAuthType === "OAUTH2"
                         ? "Redirecting to Provider..."
-                        : "Saving Integration..."}
+                        : "Activating Integration..."}
                     </span>
                   </>
                 ) : currentAuthType === "OAUTH2" ? (
@@ -2570,7 +2652,7 @@ export function IntegrationWizardModal({
                 ) : (
                   <>
                     <Sparkles className="w-4 h-4" />
-                    <span>Connect Integration</span>
+                    <span>Enable & Activate Integration</span>
                   </>
                 )}
               </button>

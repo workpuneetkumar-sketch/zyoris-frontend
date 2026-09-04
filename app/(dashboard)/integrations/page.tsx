@@ -19,6 +19,7 @@ import { RotateCredentialsModal } from "@/components/integrations/RotateCredenti
 import { ReconnectModal } from "@/components/integrations/ReconnectModal";
 import { IntegrationMonitoringDashboard } from "@/components/integrations/IntegrationMonitoringDashboard";
 import { SyncRunsModal } from "@/components/integrations/SyncRunsModal";
+import { IntegrationDashboardModal } from "@/components/integrations/IntegrationDashboardModal";
 import {
   Layers,
   Plus,
@@ -120,6 +121,12 @@ export default function IntegrationsPage() {
   const [selectedConnectorForSyncRuns, setSelectedConnectorForSyncRuns] =
     useState<Connector | null>(null);
 
+  const [isDashboardOpen, setIsDashboardOpen] = useState(false);
+  const [selectedConnectorForDashboard, setSelectedConnectorForDashboard] =
+    useState<Connector | null>(null);
+  const [selectedIntegrationIdForDashboard, setSelectedIntegrationIdForDashboard] =
+    useState<string | null>(null);
+
   // Actions Handlers
   const handleOpenConnect = (connector: Connector) => {
     setSelectedConnectorForWizard(connector);
@@ -149,6 +156,12 @@ export default function IntegrationsPage() {
   const handleOpenSyncRuns = (connector: Connector) => {
     setSelectedConnectorForSyncRuns(connector);
     setIsSyncRunsOpen(true);
+  };
+
+  const handleOpenDashboard = (connector: Connector, integrationId?: string) => {
+    setSelectedConnectorForDashboard(connector);
+    setSelectedIntegrationIdForDashboard(integrationId || null);
+    setIsDashboardOpen(true);
   };
 
   const handleOpenDisconnect = (connector: Connector) => {
@@ -452,6 +465,7 @@ export default function IntegrationsPage() {
                   onTestConnection={handleTestConnection}
                   onViewSchema={handleViewSchema}
                   onViewSyncRuns={handleOpenSyncRuns}
+                  onViewDashboard={handleOpenDashboard}
                   onTogglePause={handleTogglePause}
                   onReconnect={handleOpenReconnectModal}
                   onDisconnect={handleOpenDisconnect}
@@ -501,6 +515,9 @@ export default function IntegrationsPage() {
         }}
         onViewSchema={(connector: Connector) => {
           handleViewSchema(connector);
+        }}
+        onOpenDashboard={(connector: Connector, integrationId?: string) => {
+          handleOpenDashboard(connector, integrationId);
         }}
       />
 
@@ -589,6 +606,18 @@ export default function IntegrationsPage() {
           setSelectedConnectorForSyncRuns(null);
         }}
         connector={selectedConnectorForSyncRuns}
+      />
+
+      {/* Integration Live Dashboard Modal */}
+      <IntegrationDashboardModal
+        isOpen={isDashboardOpen}
+        onClose={() => {
+          setIsDashboardOpen(false);
+          setSelectedConnectorForDashboard(null);
+          setSelectedIntegrationIdForDashboard(null);
+        }}
+        connector={selectedConnectorForDashboard}
+        integrationId={selectedIntegrationIdForDashboard}
       />
     </div>
   );

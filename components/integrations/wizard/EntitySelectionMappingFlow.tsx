@@ -320,32 +320,32 @@ export function EntitySelectionMappingFlow({
         const matchingDefault = DEFAULT_TARGET_MODULES.find((dm) => dm.id.toLowerCase() === (m.id || "").toLowerCase());
         const entities: TargetEntityDefinition[] = Array.isArray(m.entities)
           ? m.entities.map((e: any) => {
-              if (typeof e === "string") {
-                const defEntity = matchingDefault?.entities.find((de) => de.name.toLowerCase() === e.toLowerCase()) || {
-                  id: e,
-                  name: e,
-                  label: e,
-                  targetFields: [
-                    { key: "id", label: "Identifier", type: "string", required: true },
-                    { key: "name", label: "Name / Title", type: "string", required: true },
-                    { key: "data", label: "Attributes", type: "string", required: false },
-                  ],
-                };
-                return defEntity;
-              }
-              return e;
-            })
-          : matchingDefault?.entities || [
-              {
-                id: m.id || "Entity",
-                name: m.name || m.id || "Entity",
-                label: m.name || m.id || "Entity",
-                targetFields: matchingDefault?.entities[0]?.targetFields || [
-                  { key: "id", label: "Record ID", type: "string", required: true },
-                  { key: "name", label: "Name / Label", type: "string", required: true },
+            if (typeof e === "string") {
+              const defEntity = matchingDefault?.entities.find((de) => de.name.toLowerCase() === e.toLowerCase()) || {
+                id: e,
+                name: e,
+                label: e,
+                targetFields: [
+                  { key: "id", label: "Identifier", type: "string", required: true },
+                  { key: "name", label: "Name / Title", type: "string", required: true },
+                  { key: "data", label: "Attributes", type: "string", required: false },
                 ],
-              },
-            ];
+              };
+              return defEntity;
+            }
+            return e;
+          })
+          : matchingDefault?.entities || [
+            {
+              id: m.id || "Entity",
+              name: m.name || m.id || "Entity",
+              label: m.name || m.id || "Entity",
+              targetFields: matchingDefault?.entities[0]?.targetFields || [
+                { key: "id", label: "Record ID", type: "string", required: true },
+                { key: "name", label: "Name / Label", type: "string", required: true },
+              ],
+            },
+          ];
 
         return {
           id: m.id,
@@ -629,10 +629,10 @@ export function EntitySelectionMappingFlow({
         transformation:
           entry.transformationType && entry.transformationType !== "none"
             ? {
-                type: entry.transformationType,
-                defaultValue: entry.defaultValue,
-                config: entry.transformationConfig,
-              }
+              type: entry.transformationType,
+              defaultValue: entry.defaultValue,
+              config: entry.transformationConfig,
+            }
             : undefined,
       },
       flattenedSourceFields.map((f) => f.path)
@@ -699,10 +699,10 @@ export function EntitySelectionMappingFlow({
               transformation:
                 entry.transformationType && entry.transformationType !== "none"
                   ? {
-                      type: entry.transformationType,
-                      defaultValue: entry.defaultValue,
-                      config: entry.transformationConfig,
-                    }
+                    type: entry.transformationType,
+                    defaultValue: entry.defaultValue,
+                    config: entry.transformationConfig,
+                  }
                   : undefined,
             },
             flattenedSourceFields.map((f) => f.path)
@@ -1052,17 +1052,17 @@ export function EntitySelectionMappingFlow({
         rf,
         mapped
           ? {
-              sourceFieldPath: mapped.sourceField,
-              defaultValue: mapped.defaultValue,
-              transformation:
-                mapped.transformationType && mapped.transformationType !== "none"
-                  ? {
-                      type: mapped.transformationType,
-                      defaultValue: mapped.defaultValue,
-                      config: mapped.transformationConfig,
-                    }
-                  : undefined,
-            }
+            sourceFieldPath: mapped.sourceField,
+            defaultValue: mapped.defaultValue,
+            transformation:
+              mapped.transformationType && mapped.transformationType !== "none"
+                ? {
+                  type: mapped.transformationType,
+                  defaultValue: mapped.defaultValue,
+                  config: mapped.transformationConfig,
+                }
+                : undefined,
+          }
           : null,
         flattenedSourceFields.map((f) => f.path)
       );
@@ -1425,15 +1425,14 @@ export function EntitySelectionMappingFlow({
                 return (
                   <React.Fragment key={tf.key}>
                     <tr
-                      className={`hover:bg-surface-hover transition-colors ${
-                        isMissingRequired
+                      className={`hover:bg-surface-hover transition-colors ${isMissingRequired
                           ? "bg-error/5 border-l-4 border-l-error"
                           : isSuggested
-                          ? "bg-indigo-50/15 dark:bg-indigo-950/20 border-l-4 border-l-indigo-500"
-                          : isConfirmed
-                          ? "bg-emerald-50/10 dark:bg-emerald-950/10 border-l-4 border-l-emerald-500"
-                          : ""
-                      }`}
+                            ? "bg-indigo-50/15 dark:bg-indigo-950/20 border-l-4 border-l-indigo-500"
+                            : isConfirmed
+                              ? "bg-emerald-50/10 dark:bg-emerald-950/10 border-l-4 border-l-emerald-500"
+                              : ""
+                        }`}
                     >
                       {/* 1. Target Field Info */}
                       <td className="py-3 px-3 align-top">
@@ -1478,13 +1477,12 @@ export function EntitySelectionMappingFlow({
                                 Suggested
                               </span>
                               <span
-                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
-                                  confidenceTier === "high"
+                                className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${confidenceTier === "high"
                                     ? "bg-emerald-100/80 text-emerald-800 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300"
                                     : confidenceTier === "medium"
-                                    ? "bg-amber-100/80 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300"
-                                    : "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300"
-                                }`}
+                                      ? "bg-amber-100/80 text-amber-800 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300"
+                                      : "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300"
+                                  }`}
                               >
                                 {confidencePct}% Match • {confidenceTier.toUpperCase()}
                               </span>
@@ -1532,15 +1530,14 @@ export function EntitySelectionMappingFlow({
                             value={entry?.sourceField || ""}
                             disabled={disabled || isSaving || flattenedSourceFields.length === 0}
                             onChange={(e) => handleSourceFieldSelect(tf.key, e.target.value)}
-                            className={`w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border focus:outline-none font-mono transition-colors ${
-                              isMissingRequired
+                            className={`w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border focus:outline-none font-mono transition-colors ${isMissingRequired
                                 ? "border-error focus:border-error"
                                 : isSuggested
-                                ? "border-indigo-400 focus:border-indigo-500 bg-indigo-50/10"
-                                : isMapped
-                                ? "border-primary/50 focus:border-primary"
-                                : "border-border focus:border-primary"
-                            }`}
+                                  ? "border-indigo-400 focus:border-indigo-500 bg-indigo-50/10"
+                                  : isMapped
+                                    ? "border-primary/50 focus:border-primary"
+                                    : "border-border focus:border-primary"
+                              }`}
                           >
                             <option value="">
                               {flattenedSourceFields.length === 0
@@ -1562,17 +1559,17 @@ export function EntitySelectionMappingFlow({
                                 title={
                                   entry?.sourceField
                                     ? String(
-                                        flattenedSourceFields.find((f) => f.path === entry.sourceField)
-                                          ?.sampleValue ?? "null"
-                                      )
+                                      flattenedSourceFields.find((f) => f.path === entry.sourceField)
+                                        ?.sampleValue ?? "null"
+                                    )
                                     : `Default: ${entry?.defaultValue}`
                                 }
                               >
                                 {entry?.sourceField
                                   ? `Sample: ${String(
-                                      flattenedSourceFields.find((f) => f.path === entry.sourceField)
-                                        ?.sampleValue ?? "null"
-                                    )}`
+                                    flattenedSourceFields.find((f) => f.path === entry.sourceField)
+                                      ?.sampleValue ?? "null"
+                                  )}`
                                   : `Default: ${entry?.defaultValue}`}
                               </span>
 
@@ -1648,11 +1645,10 @@ export function EntitySelectionMappingFlow({
                                       ? "Saved to backend"
                                       : "Save mapping to backend"
                                   }
-                                  className={`p-1.5 rounded-lg border transition-colors ${
-                                    entry?.isPersisted && !entry.isDirty
+                                  className={`p-1.5 rounded-lg border transition-colors ${entry?.isPersisted && !entry.isDirty
                                       ? "bg-success/10 text-success border-success/30"
                                       : "bg-surface hover:bg-surface-hover text-text border-border"
-                                  }`}
+                                    }`}
                                 >
                                   {isSaving ? (
                                     <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />

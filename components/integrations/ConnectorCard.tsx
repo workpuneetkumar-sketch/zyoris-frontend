@@ -26,6 +26,7 @@ import {
   Play,
   Pause,
   Activity,
+  BarChart3,
 } from "lucide-react";
 
 interface ConnectorCardProps {
@@ -37,6 +38,7 @@ interface ConnectorCardProps {
   onTestConnection?: (connector: Connector) => Promise<NormalizedConnectionTestResult>;
   onViewSchema?: (connector: Connector) => void;
   onViewSyncRuns?: (connector: Connector) => void;
+  onViewDashboard?: (connector: Connector) => void;
   onTogglePause?: (connector: Connector) => Promise<void>;
   onReconnect?: (connector: Connector) => void | Promise<void>;
   onDisconnect?: (connector: Connector) => void;
@@ -52,6 +54,7 @@ export function ConnectorCard({
   onTestConnection,
   onViewSchema,
   onViewSyncRuns,
+  onViewDashboard,
   onTogglePause,
   onReconnect,
   onDisconnect,
@@ -399,6 +402,19 @@ export function ConnectorCard({
                     >
                       <Database className="w-3.5 h-3.5 text-info" />
                       <span>View Schema</span>
+                    </button>
+                  )}
+
+                  {onViewDashboard && (
+                    <button
+                      onClick={() => {
+                        setIsMenuOpen(false);
+                        onViewDashboard(connector);
+                      }}
+                      className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                    >
+                      <BarChart3 className="w-3.5 h-3.5 text-primary" />
+                      <span>Live Dashboard</span>
                     </button>
                   )}
 

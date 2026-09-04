@@ -11,6 +11,7 @@ import {
   cancelSyncRunApi,
   getSyncRunErrorsApi,
   getIntegrationSyncErrorsApi,
+  retrySyncErrorApi,
 } from "@/lib/api/integrationsApi";
 import {
   X,
@@ -70,8 +71,9 @@ export function SyncRunsModal({
   const [isLoadingErrors, setIsLoadingErrors] = useState<boolean>(false);
   const [errorsError, setErrorsError] = useState<string | null>(null);
 
-  // Cancelling run state
+  // Cancelling run and retrying error state
   const [cancellingRunId, setCancellingRunId] = useState<string | null>(null);
+  const [retryingErrorId, setRetryingErrorId] = useState<string | null>(null);
 
   const integrationId =
     connector?.connectionId || connector?.connectionState?.id || connector?.id;
@@ -122,6 +124,16 @@ export function SyncRunsModal({
     }
   }, [integrationId, errorsPage, errorsLimit, retryableFilter]);
 
+  const fetchRunErrors = async (runId: string) => {
+    if (!integrationId) return;
+    try {
+      const res = await getSyncRunErrorsApi(integrationId, runId, { page: 1, limit: 20 });
+      setSelectedRunErrors(res.data || []);
+    } catch (err) {
+      console.error("Failed to fetch run errors", err);
+    }
+  };
+
   useEffect(() => {
     if (isOpen && integrationId) {
       if (activeTab === "runs") {
@@ -132,25 +144,14 @@ export function SyncRunsModal({
     }
   }, [isOpen, integrationId, activeTab, fetchRuns, fetchAllErrors]);
 
-  // 3. Select & inspect run details + run errors
+  // 3. Select a specific run to view details
   const handleSelectRun = async (run: SyncRun) => {
     setSelectedRun(run);
-    if (!integrationId) return;
     setIsLoadingRunDetail(true);
     try {
-      const [fullRun, runErrorsRes] = await Promise.allSettled([
-        getSyncRunByIdApi(integrationId, run.id),
-        getSyncRunErrorsApi(integrationId, run.id, { page: 1, limit: 20 }),
-      ]);
-
-      if (fullRun.status === "fulfilled") {
-        setSelectedRun(fullRun.value);
-      }
-      if (runErrorsRes.status === "fulfilled") {
-        setSelectedRunErrors(runErrorsRes.value.data || []);
-      }
-    } catch {
-      // Keep selected run from list as fallback
+      await fetchRunErrors(run.id);
+    } catch (err) {
+      console.error("Failed to fetch run errors", err);
     } finally {
       setIsLoadingRunDetail(false);
     }
@@ -173,6 +174,26 @@ export function SyncRunsModal({
       );
     } finally {
       setCancellingRunId(null);
+    }
+  };
+
+  // 5. Retry Sync Error
+  const handleRetryError = async (errorId: string) => {
+    if (!integrationId) return;
+    setRetryingErrorId(errorId);
+    try {
+      const res = await retrySyncErrorApi(integrationId, errorId);
+      toast.success(res?.message || "Sync error retry initiated successfully");
+      await fetchAllErrors();
+      if (selectedRun) {
+        await fetchRunErrors(selectedRun.id);
+      }
+    } catch (err: any) {
+      toast.error(
+        err?.response?.data?.message || err?.message || "Failed to retry sync error. Error may be non-retryable."
+      );
+    } finally {
+      setRetryingErrorId(null);
     }
   };
 
@@ -653,7 +674,24 @@ export function SyncRunsModal({
                       <p className="text-text font-medium">{err.errorMessage}</p>
                       <div className="flex items-center justify-between text-[11px] text-text-muted font-mono pt-1 border-t border-border">
                         <span>Field: {err.fieldPath || "—"}</span>
-                        <span>{new Date(err.createdAt).toLocaleString()}</span>
+                        <div className="flex items-center gap-2">
+                          <span>{new Date(err.createdAt).toLocaleString()}</span>
+                          {err.retryable && (
+                            <button
+                              type="button"
+                              onClick={() => handleRetryError(err.id)}
+                              disabled={retryingErrorId === err.id}
+                              className="px-2.5 py-1 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-xs transition-all flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {retryingErrorId === err.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RotateCcw className="w-3 h-3" />
+                              )}
+                              <span>{retryingErrorId === err.id ? "Retrying..." : "Retry"}</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))}
