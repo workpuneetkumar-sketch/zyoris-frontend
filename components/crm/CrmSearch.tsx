@@ -163,17 +163,17 @@ export function CrmSearch() {
   );
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative w-full max-w-[180px] xs:max-w-[230px] sm:max-w-xs md:w-80" ref={dropdownRef}>
       <div className="relative">
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search leads, deals, contacts, companies, customers..."
+          placeholder="Search CRM..."
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onKeyDown={handleKeyDown}
           onFocus={() => query.length >= 2 && setIsOpen(true)}
-          className="w-full md:w-80 pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+          className="w-full pl-9 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs sm:text-sm text-gray-700 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all truncate"
         />
         <Search
           size={16}
@@ -200,7 +200,7 @@ export function CrmSearch() {
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 md:w-80 mt-2 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-[400px] overflow-y-auto">
+        <div className="absolute top-full left-0 mt-2 w-72 sm:w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-[400px] overflow-y-auto">
           {loading ? (
             <div className="flex items-center justify-center py-8 text-gray-500">
               <Loader2 size={20} className="animate-spin mr-2" />

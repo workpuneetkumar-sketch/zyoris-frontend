@@ -32,16 +32,16 @@ export default function LandingScreen({ onSelectEmployee, onSelectAdmin }: Landi
       {!showLoginOptions && (
         <div className="flex flex-col items-center w-full max-w-md">
           {/* Register Card */}
-          <div className="w-full bg-gradient-to-br from-[#002B7F] to-[#1E40AF] rounded-3xl shadow-2xl shadow-blue-900/20 p-8 flex flex-col items-center text-center border border-blue-500/20 transition-transform hover:-translate-y-1">
-            <div className="w-20 h-20 bg-white/15 rounded-full flex items-center justify-center mb-6 backdrop-blur-sm">
-              <UserPlus className="w-10 h-10 text-white" />
+          <div className="w-full bg-gradient-to-br from-[#002B7F] to-[#1E40AF] rounded-3xl shadow-2xl shadow-blue-900/20 p-6 sm:p-8 flex flex-col items-center text-center border border-blue-500/20 transition-transform hover:-translate-y-1">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/15 rounded-full flex items-center justify-center mb-5 sm:mb-6 backdrop-blur-sm">
+              <UserPlus className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
             </div>
-            <h3 className="text-2xl font-bold text-white mb-3">Register</h3>
-            <p className="text-blue-100 text-sm mb-8 leading-relaxed">
+            <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 sm:mb-3">Register</h3>
+            <p className="text-blue-100 text-xs sm:text-sm mb-6 sm:mb-8 leading-relaxed">
               Create a new account to get started with Zyoris and unlock the full platform experience
             </p>
             <Link href="/register" className="w-full max-w-xs">
-              <button className="w-full inline-flex items-center justify-center gap-2 bg-white text-[#002B7F] font-bold px-8 py-3.5 rounded-2xl hover:bg-blue-50 transition-colors shadow-xl text-base">
+              <button className="w-full inline-flex items-center justify-center gap-2 bg-white text-[#002B7F] font-bold px-6 sm:px-8 py-3.5 rounded-2xl hover:bg-blue-50 transition-colors shadow-xl text-sm sm:text-base">
                 Create Account
                 <ArrowRight className="w-5 h-5" />
               </button>
@@ -50,7 +50,7 @@ export default function LandingScreen({ onSelectEmployee, onSelectAdmin }: Landi
 
           {/* Already have account link below */}
           <div className="mt-6 text-center">
-            <p className="text-gray-500 text-base">
+            <p className="text-gray-500 text-sm sm:text-base">
               Already have an account?{" "}
               <button
                 onClick={() => setShowLoginOptions(true)}
@@ -67,14 +67,14 @@ export default function LandingScreen({ onSelectEmployee, onSelectAdmin }: Landi
       {showLoginOptions && (
         <div className="flex flex-col items-center w-full">
           {/* Employee + Admin Cards */}
-          <div className="flex flex-col md:flex-row gap-6 w-full max-w-2xl">
+          <div className="flex flex-col md:flex-row gap-5 sm:gap-6 w-full max-w-2xl">
             {/* Employee Card */}
-            <div className="flex-1 bg-white rounded-2xl shadow-xl shadow-blue-900/5 p-7 flex flex-col items-center text-center border border-gray-100 transition-transform hover:-translate-y-1">
-              <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center mb-5">
-                <User className="w-7 h-7 text-[#002B7F]" />
+            <div className="flex-1 bg-white rounded-2xl shadow-xl shadow-blue-900/5 p-5 sm:p-7 flex flex-col items-center text-center border border-gray-100 transition-transform hover:-translate-y-1">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 rounded-full flex items-center justify-center mb-4 sm:mb-5">
+                <User className="w-6 h-6 sm:w-7 sm:h-7 text-[#002B7F]" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Employee</h3>
-              <p className="text-gray-500 text-sm mb-6 flex-1">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Employee</h3>
+              <p className="text-gray-500 text-xs sm:text-sm mb-5 sm:mb-6 flex-1">
                 Sign in with your work email to continue
               </p>
               <PrimaryButton onClick={onSelectEmployee} icon={<ArrowRight className="w-4 h-4" />}>
@@ -83,12 +83,12 @@ export default function LandingScreen({ onSelectEmployee, onSelectAdmin }: Landi
             </div>
 
             {/* Admin Card */}
-            <div className="flex-1 bg-white rounded-2xl shadow-xl shadow-blue-900/5 p-7 flex flex-col items-center text-center border border-gray-100 transition-transform hover:-translate-y-1">
-              <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center mb-5">
-                <Shield className="w-7 h-7 text-[#002B7F]" />
+            <div className="flex-1 bg-white rounded-2xl shadow-xl shadow-blue-900/5 p-5 sm:p-7 flex flex-col items-center text-center border border-gray-100 transition-transform hover:-translate-y-1">
+              <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 rounded-full flex items-center justify-center mb-4 sm:mb-5">
+                <Shield className="w-6 h-6 sm:w-7 sm:h-7 text-[#002B7F]" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Admin</h3>
-              <p className="text-gray-500 text-sm mb-6 flex-1">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-2">Admin</h3>
+              <p className="text-gray-500 text-xs sm:text-sm mb-5 sm:mb-6 flex-1">
                 Access the admin panel and manage your team
               </p>
               <SecondaryButton onClick={onSelectAdmin} icon={<ArrowRight className="w-4 h-4" />}>

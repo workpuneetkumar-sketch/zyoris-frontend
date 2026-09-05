@@ -71,7 +71,7 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
   };
 
   return (
-    <div className={classNames("flex justify-between gap-2 sm:gap-4", className)}>
+    <div className={classNames("flex justify-between gap-1.5 xs:gap-2 sm:gap-4", className)}>
       {otp.map((digit, index) => (
         <input
           key={index}
@@ -85,7 +85,7 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
           onChange={(e) => handleChange(index, e.target.value)}
           onKeyDown={(e) => handleKeyDown(index, e)}
           onPaste={handlePaste}
-          className="w-10 h-12 sm:w-12 sm:h-14 text-center text-xl font-semibold bg-white border border-gray-200 rounded-xl outline-none transition-all focus:border-[#002B7F] focus:ring-1 focus:ring-[#002B7F]"
+          className="w-9 h-11 xs:w-10 xs:h-12 sm:w-12 sm:h-14 text-center text-lg sm:text-xl font-semibold bg-white border border-gray-200 rounded-xl outline-none transition-all focus:border-[#002B7F] focus:ring-1 focus:ring-[#002B7F]"
         />
       ))}
     </div>

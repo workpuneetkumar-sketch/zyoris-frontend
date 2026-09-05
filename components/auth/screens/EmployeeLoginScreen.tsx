@@ -22,15 +22,22 @@ export default function EmployeeLoginScreen({ onBack, onLogin, isLoading }: Empl
   };
 
   return (
-    <div className="flex w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl shadow-blue-900/10 min-h-[560px] border border-gray-100">
+    <div className="flex flex-col md:flex-row w-full max-w-4xl mx-auto bg-white rounded-2xl shadow-2xl shadow-blue-900/10 min-h-0 md:min-h-[560px] border border-gray-100 overflow-hidden">
       <BrandPanel />
       
-      <div className="flex-1 flex flex-col p-8 sm:p-12">
-        <BackButton onClick={onBack} className="mb-6" />
+      <div className="flex-1 flex flex-col p-5 sm:p-8 md:p-12">
+        <div className="flex items-center justify-between mb-6">
+          <BackButton onClick={onBack} />
+          {/* Mobile-only logo mark */}
+          <div className="md:hidden flex items-center gap-2">
+            <img src="/logo.jpeg" alt="Zyoris Logo" className="w-6 h-6 object-contain rounded" />
+            <span className="text-sm font-bold uppercase text-[#002B7F]" style={{ fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif' }}>zyoris</span>
+          </div>
+        </div>
         
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Employee Sign In</h2>
-          <p className="text-gray-500 text-sm">Welcome back! Please sign in to continue</p>
+        <div className="mb-6 sm:mb-8">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">Employee Sign In</h2>
+          <p className="text-gray-500 text-xs sm:text-sm">Welcome back! Please sign in to continue</p>
         </div>
 
         <form className="flex flex-col gap-6" onSubmit={handleSubmit}>

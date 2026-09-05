@@ -33,7 +33,7 @@ export default function AdminLoginStep3({ onBack, onNext }: AdminLoginStep3Props
   };
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto bg-white rounded-2xl shadow-2xl shadow-blue-900/10 p-8 sm:p-10 border border-gray-100">
+    <div className="flex flex-col w-full max-w-md mx-auto bg-white rounded-2xl shadow-2xl shadow-blue-900/10 p-5 sm:p-8 md:p-10 border border-gray-100">
       <BackButton onClick={onBack} className="mb-8" />
       
       <div className="mb-8">

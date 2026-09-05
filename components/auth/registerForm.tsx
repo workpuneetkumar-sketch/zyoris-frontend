@@ -194,24 +194,24 @@ export default function RegisterForm() {
             </div>
 
             {/* Center Card */}
-            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-10">
-                <div className="w-full max-w-[700px] bg-white rounded-2xl shadow-2xl shadow-blue-900/10 border border-gray-100 px-6 sm:px-10 py-7 sm:py-9 flex flex-col">
+            <div className="relative z-10 flex-1 flex flex-col items-center justify-center px-3 sm:px-4 py-6 sm:py-10">
+                <div className="w-full max-w-[700px] bg-white rounded-2xl shadow-2xl shadow-blue-900/10 border border-gray-100 px-4 sm:px-8 md:px-10 py-6 sm:py-9 flex flex-col">
 
                     {/* Header row: Back — Logo */}
-                    <div className="grid grid-cols-3 items-center mb-6">
+                    <div className="flex items-center justify-between gap-2 mb-6">
                         <button
                             type="button"
                             onClick={() => router.back()}
-                            className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors text-sm font-medium justify-self-start"
+                            className="flex items-center gap-1.5 text-slate-400 hover:text-slate-600 transition-colors text-sm font-medium shrink-0"
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
                             </svg>
                             Back
                         </button>
-                        <div className="col-start-2 justify-self-center flex items-center gap-2">
-                            <img src="/logo.jpeg" alt="Zyoris Logo" className="w-8 h-8 object-contain rounded" />
-                            <span className="text-2xl uppercase text-[#002B7F]" style={{ fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif' }}>zyoris</span>
+                        <div className="flex items-center gap-2">
+                            <img src="/logo.jpeg" alt="Zyoris Logo" className="w-7 h-7 sm:w-8 sm:h-8 object-contain rounded" />
+                            <span className="text-xl sm:text-2xl uppercase text-[#002B7F]" style={{ fontFamily: '"Neuropol X", "Neuropol X Free", sans-serif' }}>zyoris</span>
                         </div>
                     </div>
 
@@ -220,10 +220,10 @@ export default function RegisterForm() {
                         <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1.5">
                             {step === 1 ? "Step 1 of 2" : "Step 2 of 2"}
                         </p>
-                        <h1 className="text-[26px] font-bold text-[#1a2f6e] mb-1">
+                        <h1 className="text-xl sm:text-[26px] font-bold text-[#1a2f6e] mb-1">
                             {step === 1 ? "Create your account" : "Company details"}
                         </h1>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-xs sm:text-sm text-slate-400">
                             {step === 1
                                 ? "Set up your personal credentials"
                                 : "Tell us about your organization"}
@@ -249,7 +249,7 @@ export default function RegisterForm() {
                                 <span className={`text-[13px] font-medium ${step === s ? "text-blue-700" : "text-slate-400"}`}>
                                     {s === 1 ? "Account" : "Company"}
                                 </span>
-                                {s < 2 && <div className="w-10 h-px bg-slate-200 ml-1" />}
+                                {s < 2 && <div className="w-8 sm:w-10 h-px bg-slate-200 ml-1" />}
                             </div>
                         ))}
                     </div>
@@ -273,7 +273,7 @@ export default function RegisterForm() {
                     {/* ── STEP 1 ── */}
                     {step === 1 && (
                         <form onSubmit={handleStep1} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <div>
                                     <label className={labelClass}>Full name</label>
                                     <div className="relative">
@@ -303,13 +303,13 @@ export default function RegisterForm() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <div>
                                     <label className={labelClass}>Role</label>
                                     <div className="relative">
                                         <select
                                             value={role} onChange={(e) => setRole(e.target.value)}
-                                            className={inputClass + " appearance-none cursor-pointer pr-9"}
+                                            className={inputClass + " appearance-none cursor-pointer pr-9 truncate"}
                                         >
                                             {ROLES.map((r) => (
                                                 <option key={r.value} value={r.value}>{r.label}</option>
@@ -337,7 +337,7 @@ export default function RegisterForm() {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                                 <div>
                                     <label className={labelClass}>Password</label>
                                     <div className="relative">

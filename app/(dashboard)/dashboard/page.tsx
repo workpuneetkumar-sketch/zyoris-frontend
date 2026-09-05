@@ -58,7 +58,7 @@ function KpiCard({ icon: Icon, label, value, accent = "blue" }: {
           <Icon size={14} className={s.txt} />
         </div>
       </div>
-      <p className="text-2xl font-extrabold text-gray-900 tracking-tight">{value}</p>
+      <p className="text-xl sm:text-2xl font-extrabold text-gray-900 tracking-tight truncate" title={value}>{value}</p>
     </div>
   );
 }
