@@ -585,6 +585,7 @@ export function EntitySelectionMappingFlow({
 
   // Seed initial mappings once if passed from parent form state
   const isInitializedRef = useRef(false);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!isInitializedRef.current && initialMappings && Object.keys(initialMappings).length > 0) {
       isInitializedRef.current = true;

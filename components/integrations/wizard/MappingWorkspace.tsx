@@ -252,6 +252,7 @@ export const MappingWorkspace: React.FC<MappingWorkspaceProps> = ({
   }, [allTargetFields, flatSourceFields, localMappings]);
 
   // Generate suggestions for unmapped target fields from discovered source fields
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (flatSourceFields.length === 0 || allTargetFields.length === 0) return;
 
