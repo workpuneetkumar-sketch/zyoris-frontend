@@ -1,10 +1,10 @@
-import api from "./api.ts";
+import api from "./api";
 import type {
   WebhookIngressPayload,
   WebhookIngressResponse,
   WebhookProvider,
   WebhookConfig,
-} from "../../types/integrations.ts";
+} from "../../types/integrations";
 
 /**
  * Computes an HMAC-SHA256 hex digest for a webhook payload string.

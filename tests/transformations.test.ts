@@ -13,7 +13,7 @@ import {
   executeTransformation,
   executeTransformationPipeline,
   safeString,
-} from "../lib/transformations/engine.ts";
+} from "../lib/transformations/engine";
 
 test("safeString utility", async (t) => {
   await t.test("converts null and undefined to empty string", () => {

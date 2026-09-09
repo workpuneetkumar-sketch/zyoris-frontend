@@ -6,8 +6,8 @@ import {
   validateFieldAcceptance,
   mergeBackendMappingsWithSuggestions,
   normalizeIdentifier,
-} from "../lib/transformations/suggestions.ts";
-import type { TargetFieldDefinition } from "../types/integrations.ts";
+} from "../lib/transformations/suggestions";
+import type { TargetFieldDefinition } from "../types/integrations";
 
 test("normalizeIdentifier", async (t) => {
   await t.test("cleans symbols, spaces and converts to lowercase", () => {

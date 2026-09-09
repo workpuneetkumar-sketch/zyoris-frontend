@@ -9,7 +9,7 @@ import type {
   MappingTransformation,
   TransformationRuleItem,
   TransformationStepTrace,
-} from "../../types/integrations.ts";
+} from "../../types/integrations";
 
 /**
  * Sanitizes regex flags to prevent unexpected behavior.

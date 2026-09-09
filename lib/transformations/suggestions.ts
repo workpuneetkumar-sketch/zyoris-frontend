@@ -10,7 +10,7 @@ import type {
   MappingTransformation,
   IntegrationMapping,
   FieldMapping,
-} from "../../types/integrations.ts";
+} from "../../types/integrations";
 
 export interface FlatSourceFieldCandidate {
   path?: string;
