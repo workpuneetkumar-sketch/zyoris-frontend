@@ -68,6 +68,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM",
     items: [
       {
+        href: "/workspace",
+        label: "Workspace / Notion",
+        icon: FileText,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
+      },
+      {
         href: "/leads",
         label: "Leads",
         icon: Users,
@@ -556,6 +562,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         "user-roles": UserCog, "user-cog": UserCog,
         audit: FileSearch,
         crm: Layers,
+        workspace: FileText,
         notifications: Bell,
       };
 
@@ -576,6 +583,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       // ── Key → expanded items ──────────────────────────────────────────
       const KEY_EXPANSION: Record<string, { href: string; label: string; iconKey: string }[]> = {
         crm: [
+          { href: "/workspace",   label: "Workspace",   iconKey: "workspace"   },
           { href: "/leads",       label: "Leads",       iconKey: "leads"       },
           { href: "/deals",       label: "Deals",       iconKey: "deals"       },
           { href: "/customers",   label: "Customers",   iconKey: "customers"   },
@@ -736,6 +744,13 @@ export function AppShell({ children }: { children: ReactNode }) {
       itemsByGroup["Integration"] = [
         { href: "/integrations", label: "Integration", icon: Layers },
       ];
+
+      // ── Always ensure Workspace is present in CRM group ──
+      if (!itemsByGroup["CRM"]) {
+        itemsByGroup["CRM"] = [{ href: "/workspace", label: "Workspace", icon: FileText }];
+      } else if (!itemsByGroup["CRM"].some((x) => x.href === "/workspace")) {
+        itemsByGroup["CRM"].unshift({ href: "/workspace", label: "Workspace", icon: FileText });
+      }
 
       // ── Build groups in display order ─────────────────────────────────
       const groups = GROUP_ORDER
@@ -1105,7 +1120,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NotificationBell />
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        <main
+          className={classNames(
+            "flex-1",
+            pathname?.startsWith("/workspace")
+              ? "overflow-hidden p-0"
+              : "overflow-y-auto p-4 md:p-6"
+          )}
+        >
+          {children}
+        </main>
       </div>
 
       <ConfirmationModal
