@@ -67,6 +67,7 @@ export const isPathAllowed = (
     "/tasks",
     "/projects",
     "/integrations",
+    "/workspace",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",
