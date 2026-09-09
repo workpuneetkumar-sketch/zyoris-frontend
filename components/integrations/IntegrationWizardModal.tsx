@@ -102,10 +102,19 @@ const integrationFormSchema = z.object({
     .min(2, "Integration name must be at least 2 characters")
     .max(80, "Integration name is too long"),
   targetModule: z.string().min(1, "Please select a target module / entity"),
-  targetEntity: z.string().optional(),
+  targetEntity: z
+    .string()
+    .min(1, "Entity / Resource Type is required")
+    .refine(
+      (val) => {
+        const validDefaults = AVAILABLE_MODULES.map((m) => m.entity);
+        return validDefaults.includes(val);
+      },
+      { message: "Please select a supported entity / resource type" }
+    ),
   apiUrl: z
     .string()
-    .min(1, "API URL is required")
+    .min(1, "API Endpoint URL is required")
     .refine(
       (val) => {
         try {
@@ -115,7 +124,7 @@ const integrationFormSchema = z.object({
           return false;
         }
       },
-      { message: "Please enter a valid HTTP/HTTPS URL" }
+      { message: "Please enter a valid HTTP/HTTPS URL (e.g. https://api.example.com/v1)" }
     ),
   httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"] as const),
   authType: z.enum([
@@ -161,12 +170,13 @@ const integrationFormSchema = z.object({
     .array(
       z.object({
         key: z.string().min(1, "Parameter name required"),
-        value: z.string().min(1, "Parameter value required"),
+        value: z.string().optional(),
       })
     )
     .optional(),
   requestBody: z.string().refine(
     (value) => {
+      if (!value || !value.trim()) return true;
       try {
         parseRequestBody(value);
         return true;
@@ -485,6 +495,7 @@ export function IntegrationWizardModal({
     watch,
     setValue,
     reset,
+    trigger,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(integrationFormSchema),
@@ -599,6 +610,28 @@ export function IntegrationWizardModal({
     );
   }, [currentTargetModule]);
 
+  const supportedEntities = useMemo(() => {
+    const connectorEntities: string[] = [];
+    if (selectedConnector?.configSchema?.modules) {
+      selectedConnector.configSchema.modules.forEach((mod) => {
+        if (mod.entities && Array.isArray(mod.entities)) {
+          connectorEntities.push(...mod.entities);
+        }
+      });
+    }
+    const moduleEntity = currentModuleConfig?.entity;
+    const availableDefaults = AVAILABLE_MODULES.map((m) => m.entity);
+    return Array.from(
+      new Set(
+        [
+          ...(moduleEntity ? [moduleEntity] : []),
+          ...connectorEntities,
+          ...availableDefaults,
+        ].filter(Boolean)
+      )
+    );
+  }, [selectedConnector, currentModuleConfig]);
+
   const getVerifiedExistingIntegrationId = (
     connector: Connector | null,
     payload?: CreateIntegrationPayload
@@ -671,8 +704,11 @@ export function IntegrationWizardModal({
         ...(data.dynamicFields || {}),
         contentType: data.contentType,
         queryParams: data.queryParams?.filter(
-          (param) => param.key.trim() && param.value.trim()
-        ),
+          (param) => Boolean(param.key?.trim())
+        ).map((param) => ({
+          key: param.key.trim(),
+          value: param.value ? param.value.trim() : "",
+        })),
         requestBody: parseRequestBody(data.requestBody),
       },
     };
@@ -1334,9 +1370,9 @@ export function IntegrationWizardModal({
                   : "Setup New Integration"}
               </h3>
               <p className="text-xs text-text-secondary mt-0.5">
-                {step === 1 && "Step 1 of 6: Connector Selection"}
-                {step === 2 && "Step 2 of 6: Protocol & Endpoint Configuration"}
-                {step === 3 && "Step 3 of 6: Authentication & Credentials"}
+                {step === 1 && "Step 1 of 7: Connector Selection"}
+                {step === 2 && "Step 2 of 7: Protocol & Endpoint Configuration"}
+                {step === 3 && "Step 3 of 7: Authentication & Credentials"}
                 {step === 4 && "Step 4 of 7: Verification & Connection Test"}
                 {step === 5 && "Step 5 of 7: Schema Discovery & Sample Data"}
                 {step === 6 && "Step 6 of 7: Field Mapping & Transformations"}
@@ -1482,14 +1518,24 @@ export function IntegrationWizardModal({
 
                 <div>
                   <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
-                    Entity / Resource Type
+                    Entity / Resource Type *
                   </label>
-                  <input
-                    type="text"
+                  <select
                     {...register("targetEntity")}
-                    placeholder="e.g. Lead, Contact, Invoice"
                     className="w-full px-3.5 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none transition-colors"
-                  />
+                  >
+                    <option value="">Select Resource Type</option>
+                    {supportedEntities.map((ent) => (
+                      <option key={ent} value={ent}>
+                        {ent}
+                      </option>
+                    ))}
+                  </select>
+                  {errors.targetEntity && (
+                    <p className="text-xs text-error mt-1">
+                      {errors.targetEntity.message}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -1589,27 +1635,34 @@ export function IntegrationWizardModal({
                     </button>
                   </div>
                   {queryParamFields.map((field, idx) => (
-                    <div key={field.id} className="flex items-center gap-2">
-                      <input
-                        type="text"
-                        {...register(`queryParams.${idx}.key` as const)}
-                        placeholder="Parameter name"
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                      />
-                      <input
-                        type="text"
-                        {...register(`queryParams.${idx}.value` as const)}
-                        placeholder="Parameter value"
-                        className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => removeQueryParam(idx)}
-                        className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
-                        aria-label="Remove query parameter"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div key={field.id} className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          {...register(`queryParams.${idx}.key` as const)}
+                          placeholder="Parameter name"
+                          className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                        />
+                        <input
+                          type="text"
+                          {...register(`queryParams.${idx}.value` as const)}
+                          placeholder="Parameter value"
+                          className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeQueryParam(idx)}
+                          className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
+                          aria-label="Remove query parameter"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {errors.queryParams?.[idx]?.key && (
+                        <p className="text-[10px] text-error pl-1">
+                          {errors.queryParams[idx]?.key?.message}
+                        </p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -2576,19 +2629,71 @@ export function IntegrationWizardModal({
               <button
                 type="button"
                 key={`wizard-next-step-${step}`}
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.preventDefault();
                   e.stopPropagation();
-                  if (!selectedConnector) {
-                    toast.error("Please pick a connector first");
+
+                  if (step === 1) {
+                    if (!selectedConnector) {
+                      toast.error("Please pick a connector first");
+                      return;
+                    }
+                    setStep(2);
                     return;
                   }
+
+                  if (step === 2) {
+                    const isValid = await trigger([
+                      "displayName",
+                      "targetModule",
+                      "targetEntity",
+                      "apiUrl",
+                      "httpMethod",
+                      "contentType",
+                      "requestBody",
+                      "queryParams",
+                      "syncDirection",
+                      "syncFrequency",
+                    ]);
+                    if (!isValid) {
+                      toast.error(
+                        "Please resolve configuration validation errors before proceeding."
+                      );
+                      return;
+                    }
+                    setStep(3);
+                    return;
+                  }
+
+                  if (step === 3) {
+                    const fieldsToValidate: (keyof FormValues)[] = ["authType"];
+                    if (currentAuthType === "API_KEY") {
+                      fieldsToValidate.push("apiKeyName", "apiKeyValue");
+                    } else if (currentAuthType === "BEARER_TOKEN") {
+                      fieldsToValidate.push("bearerToken");
+                    } else if (currentAuthType === "BASIC_AUTH") {
+                      fieldsToValidate.push("basicUsername", "basicPassword");
+                    } else if (currentAuthType === "WEBHOOK_SECRET") {
+                      fieldsToValidate.push("webhookSecret");
+                    }
+                    const isValid = await trigger(fieldsToValidate);
+                    if (!isValid) {
+                      toast.error(
+                        "Please provide valid authentication credentials before proceeding."
+                      );
+                      return;
+                    }
+                    setStep(4);
+                    return;
+                  }
+
                   if (step === 4 && !isSchemaUnlocked) {
                     toast.error(
                       "Please test and verify the connection successfully before proceeding to Schema Discovery."
                     );
                     return;
                   }
+
                   setStep((prev) => Math.min(7, prev + 1) as any);
                 }}
                 disabled={step === 4 && !isSchemaUnlocked}

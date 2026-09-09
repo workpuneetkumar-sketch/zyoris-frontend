@@ -15,7 +15,7 @@ interface WizardFooterProps {
 
 export function WizardFooter({
   currentStep,
-  totalSteps = 6,
+  totalSteps = 7,
   isSubmitting = false,
   submitLabel = "Finish",
   onPrevious,
