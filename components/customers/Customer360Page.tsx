@@ -31,6 +31,7 @@ import { ProductsSection } from "./sections/ProductsSection";
 import { FinancialsSection } from "./sections/FinancialsSection";
 import { ServiceSection } from "./sections/ServiceSection";
 import { AiInsightsSection } from "./sections/AiInsightsSection";
+import { EnrichmentSection } from "./sections/EnrichmentSection";
 import { MeetingPrepDrawer } from "./MeetingPrepDrawer";
 
 const SECTION_NAV = [
@@ -38,6 +39,7 @@ const SECTION_NAV = [
   { id: "timeline", label: "Timeline" },
   { id: "graph", label: "Graph" },
   { id: "health", label: "Health" },
+  { id: "enrichment", label: "Enrichment" },
   { id: "stakeholders", label: "Stakeholders" },
   { id: "products", label: "Products" },
   { id: "financials", label: "Financials" },
@@ -204,10 +206,12 @@ export function Customer360Page({
         <div className="flex flex-col gap-6">
           <ContextSummarySection customer={customer} />
           <HealthSection
+            customerId={customer.id}
             health={health}
             engagement={engagement}
             fallbackHealth={customer.health}
           />
+          <EnrichmentSection customerId={customer.id} />
           <StakeholdersSection stakeholders={customer.stakeholders} />
           <ProductsSection products={customer.products} />
           <FinancialsSection financials={customer.financials} />

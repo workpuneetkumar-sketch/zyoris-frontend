@@ -10,14 +10,23 @@ import {
   HelpCircle,
   Clock,
   Zap,
+  RotateCw,
+  History,
+  ChevronLeft,
+  ChevronRight,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import type { AsyncResource } from "@/hooks/useCustomer360";
+import { useCustomerScoreHistory } from "@/hooks/useCustomerScoreHistory";
 import type {
   CustomerHealth,
   CustomerHealthFactor,
   EngagementContribution,
   EngagementScore,
   Provenance,
+  HealthHistoryItem,
+  EngagementHistoryItem,
 } from "@/types/customer360";
 import { provenanceOf, unwrap } from "@/types/customer360";
 import { SectionCard } from "../SectionCard";
@@ -38,6 +47,7 @@ const TREND_ICON = {
 } as const;
 
 export interface HealthSectionProps {
+  customerId?: string;
   health?: AsyncResource<CustomerHealth> | CustomerHealth | null;
   engagement?: AsyncResource<EngagementScore> | null;
   fallbackHealth?: CustomerHealth | null;
@@ -47,8 +57,15 @@ function isAsyncResource<T>(val: unknown): val is AsyncResource<T> {
   return Boolean(val && typeof val === "object" && "loading" in val && "reload" in val);
 }
 
-export function HealthSection({ health, engagement, fallbackHealth }: HealthSectionProps) {
-  const [activeTab, setActiveTab] = useState<"health" | "engagement">("health");
+export function HealthSection({
+  customerId,
+  health,
+  engagement,
+  fallbackHealth,
+}: HealthSectionProps) {
+  const [activeTab, setActiveTab] = useState<"health" | "engagement" | "history">("health");
+  const [historyType, setHistoryType] = useState<"health" | "engagement">("health");
+  const [recalculateMessage, setRecalculateMessage] = useState<string | null>(null);
 
   const isHealthAsync = isAsyncResource<CustomerHealth>(health);
   const healthData: CustomerHealth | null =
@@ -61,6 +78,19 @@ export function HealthSection({ health, engagement, fallbackHealth }: HealthSect
   const engagementLoading = isEngagementAsync ? engagement.loading : false;
   const engagementError = isEngagementAsync ? engagement.error : null;
 
+  const {
+    healthHistory,
+    healthLoading: historyHealthLoading,
+    healthError: historyHealthError,
+    engagementHistory,
+    engagementLoading: historyEngagementLoading,
+    engagementError: historyEngagementError,
+    recalculating,
+    triggerRecalculate,
+    setHealthPage,
+    setEngagementPage,
+  } = useCustomerScoreHistory(customerId);
+
   const onReload = () => {
     if (activeTab === "health" && isHealthAsync) {
       health.reload();
@@ -69,14 +99,29 @@ export function HealthSection({ health, engagement, fallbackHealth }: HealthSect
     }
   };
 
+  const handleRecalculate = async () => {
+    setRecalculateMessage(null);
+    try {
+      const res = await triggerRecalculate();
+      if (isHealthAsync) health.reload();
+      const snapshotMsg = res?.snapshotId
+        ? `Recalculation complete! Persisted snapshot ID: ${res.snapshotId}`
+        : "Health score recalculated and snapshot persisted successfully.";
+      setRecalculateMessage(snapshotMsg);
+      setTimeout(() => setRecalculateMessage(null), 5000);
+    } catch (err: any) {
+      setRecalculateMessage(`Recalculation failed: ${err?.message || "Unknown error"}`);
+    }
+  };
+
   return (
     <SectionCard
       id="health"
       title="Health & Engagement"
       icon={HeartPulse}
-      description="Explainable customer health scoring, signals, and engagement decay"
+      description="Explainable customer health scoring, recency decay, and historical snapshots"
       action={
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5">
           <div className="flex rounded-lg border border-border bg-background-secondary p-0.5 text-xs">
             <button
               type="button"
@@ -102,8 +147,32 @@ export function HealthSection({ health, engagement, fallbackHealth }: HealthSect
               <Activity size={13} />
               Engagement
             </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("history")}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 font-semibold transition-colors ${
+                activeTab === "history"
+                  ? "bg-surface text-text shadow-sm"
+                  : "text-text-secondary hover:text-text"
+              }`}
+            >
+              <History size={13} />
+              History
+            </button>
           </div>
-          {(isHealthAsync || isEngagementAsync) && (
+
+          <button
+            type="button"
+            onClick={handleRecalculate}
+            disabled={recalculating || !customerId}
+            title="Force recalculation of health score and persist snapshot (POST /api/customers/:id/health/calculate)"
+            className="inline-flex items-center gap-1 rounded-lg border border-border bg-surface px-2.5 py-1 text-xs font-semibold text-text hover:bg-surface-hover disabled:opacity-50 transition-colors"
+          >
+            <RotateCw size={12} className={recalculating ? "animate-spin" : ""} />
+            {recalculating ? "Recalculating…" : "Force Recalculate"}
+          </button>
+
+          {(isHealthAsync || isEngagementAsync) && activeTab !== "history" && (
             <button
               type="button"
               onClick={onReload}
@@ -115,6 +184,23 @@ export function HealthSection({ health, engagement, fallbackHealth }: HealthSect
         </div>
       }
     >
+      {recalculateMessage && (
+        <div
+          className={`mb-3 flex items-center gap-2 rounded-lg p-2.5 text-xs font-medium ${
+            recalculateMessage.includes("failed")
+              ? "bg-error-light text-error-foreground border border-error/30"
+              : "bg-success-light text-success-foreground border border-success/30"
+          }`}
+        >
+          {recalculateMessage.includes("failed") ? (
+            <AlertCircle size={15} />
+          ) : (
+            <CheckCircle2 size={15} />
+          )}
+          <span>{recalculateMessage}</span>
+        </div>
+      )}
+
       {activeTab === "health" ? (
         <HealthScoreView
           data={healthData}
@@ -122,12 +208,25 @@ export function HealthSection({ health, engagement, fallbackHealth }: HealthSect
           error={healthError}
           onRetry={() => isHealthAsync && health.reload()}
         />
-      ) : (
+      ) : activeTab === "engagement" ? (
         <EngagementScoreView
           data={engagementData}
           loading={engagementLoading}
           error={engagementError}
           onRetry={() => isEngagementAsync && engagement.reload()}
+        />
+      ) : (
+        <ScoreHistoryView
+          historyType={historyType}
+          setHistoryType={setHistoryType}
+          healthHistory={healthHistory}
+          healthLoading={historyHealthLoading}
+          healthError={historyHealthError}
+          engagementHistory={engagementHistory}
+          engagementLoading={historyEngagementLoading}
+          engagementError={historyEngagementError}
+          onSetHealthPage={setHealthPage}
+          onSetEngagementPage={setEngagementPage}
         />
       )}
     </SectionCard>
@@ -452,3 +551,292 @@ function EngagementScoreView({
   );
 }
 
+// ── Score History View (Health & Engagement Snapshots) ─────────────────────────
+
+function ScoreHistoryView({
+  historyType,
+  setHistoryType,
+  healthHistory,
+  healthLoading,
+  healthError,
+  engagementHistory,
+  engagementLoading,
+  engagementError,
+  onSetHealthPage,
+  onSetEngagementPage,
+}: {
+  historyType: "health" | "engagement";
+  setHistoryType: (t: "health" | "engagement") => void;
+  healthHistory: any;
+  healthLoading: boolean;
+  healthError: Error | null;
+  engagementHistory: any;
+  engagementLoading: boolean;
+  engagementError: Error | null;
+  onSetHealthPage: (offset: number, limit?: number) => void;
+  onSetEngagementPage: (offset: number, limit?: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Sub tab selector for Health vs Engagement History */}
+      <div className="flex items-center justify-between border-b border-border pb-2">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => setHistoryType("health")}
+            className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+              historyType === "health"
+                ? "bg-primary text-white"
+                : "bg-surface border border-border text-text-secondary hover:text-text"
+            }`}
+          >
+            Health Score Snapshots
+          </button>
+          <button
+            type="button"
+            onClick={() => setHistoryType("engagement")}
+            className={`rounded-lg px-3 py-1 text-xs font-semibold transition-colors ${
+              historyType === "engagement"
+                ? "bg-primary text-white"
+                : "bg-surface border border-border text-text-secondary hover:text-text"
+            }`}
+          >
+            Engagement Snapshots
+          </button>
+        </div>
+      </div>
+
+      {historyType === "health" ? (
+        <HealthHistoryList
+          data={healthHistory}
+          loading={healthLoading}
+          error={healthError}
+          onSetPage={onSetHealthPage}
+        />
+      ) : (
+        <EngagementHistoryList
+          data={engagementHistory}
+          loading={engagementLoading}
+          error={engagementError}
+          onSetPage={onSetEngagementPage}
+        />
+      )}
+    </div>
+  );
+}
+
+function HealthHistoryList({
+  data,
+  loading,
+  error,
+  onSetPage,
+}: {
+  data: any;
+  loading: boolean;
+  error: Error | null;
+  onSetPage: (offset: number) => void;
+}) {
+  if (loading) return <SectionLoading label="Loading historical health snapshots…" />;
+  if (error) return <SectionError message={error.message} />;
+
+  const items: HealthHistoryItem[] = data?.items ?? data?.snapshots ?? [];
+  const total = data?.total ?? items.length;
+  const limit = data?.limit ?? 10;
+  const offset = data?.offset ?? 0;
+
+  if (items.length === 0) {
+    return (
+      <SectionEmpty
+        title="No historical health snapshots"
+        description="Historical health snapshots are created automatically when health recalculations occur."
+      />
+    );
+  }
+
+  const currentPage = Math.floor(offset / limit) + 1;
+  const totalPages = Math.ceil(total / limit) || 1;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-2">
+        {items.map((item, idx) => {
+          const score = item.score ?? null;
+          const band = item.band ?? null;
+          const trendConfig = item.trend ? TREND_ICON[item.trend] : null;
+          const dateStr = item.calculatedAt ?? item.createdAt;
+
+          return (
+            <li
+              key={item.snapshotId ?? item.id ?? idx}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border-light bg-surface p-3 text-sm hover:border-border transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl font-bold text-text">
+                  {score != null ? Math.round(score) : "—"}
+                </span>
+                {band && (
+                  <span
+                    className={`rounded-full border px-2 py-0.5 text-[11px] font-bold capitalize ${
+                      BAND_STYLES[band] ?? BAND_STYLES.neutral
+                    }`}
+                  >
+                    {band.replace(/_/g, " ")}
+                  </span>
+                )}
+                {trendConfig && (
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs font-medium ${trendConfig.color}`}
+                  >
+                    <trendConfig.icon size={14} />
+                    {trendConfig.label}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-text-muted">
+                {item.snapshotId && (
+                  <span className="font-mono text-[10px] text-text-secondary bg-background-secondary px-1.5 py-0.5 rounded">
+                    ID: {item.snapshotId.slice(0, 8)}
+                  </span>
+                )}
+                {dateStr && (
+                  <span>{new Date(dateStr).toLocaleString()}</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-text-secondary">
+        <span>
+          Showing {offset + 1}–{Math.min(offset + limit, total)} of {total} snapshots
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={offset === 0}
+            onClick={() => onSetPage(Math.max(0, offset - limit))}
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 disabled:opacity-40 hover:bg-surface-hover"
+          >
+            <ChevronLeft size={14} /> Prev
+          </button>
+          <span>
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={offset + limit >= total}
+            onClick={() => onSetPage(offset + limit)}
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 disabled:opacity-40 hover:bg-surface-hover"
+          >
+            Next <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EngagementHistoryList({
+  data,
+  loading,
+  error,
+  onSetPage,
+}: {
+  data: any;
+  loading: boolean;
+  error: Error | null;
+  onSetPage: (offset: number) => void;
+}) {
+  if (loading) return <SectionLoading label="Loading historical engagement snapshots…" />;
+  if (error) return <SectionError message={error.message} />;
+
+  const items: EngagementHistoryItem[] = data?.items ?? data?.snapshots ?? [];
+  const total = data?.total ?? items.length;
+  const limit = data?.limit ?? 10;
+  const offset = data?.offset ?? 0;
+
+  if (items.length === 0) {
+    return (
+      <SectionEmpty
+        title="No historical engagement snapshots"
+        description="Historical engagement score snapshots are recorded periodically."
+      />
+    );
+  }
+
+  const currentPage = Math.floor(offset / limit) + 1;
+  const totalPages = Math.ceil(total / limit) || 1;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-2">
+        {items.map((item, idx) => {
+          const score = item.score;
+          const lambda = item.lambda;
+          const dateStr = item.calculatedAt ?? item.createdAt;
+
+          return (
+            <li
+              key={item.snapshotId ?? item.id ?? idx}
+              className="flex items-center justify-between gap-3 rounded-lg border border-border-light bg-surface p-3 text-sm hover:border-border transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-xl font-bold text-text">
+                  {score != null ? score.toFixed(1) : "—"}
+                </span>
+                <span className="text-xs text-text-muted uppercase">Engagement Score</span>
+                {lambda != null && (
+                  <span className="text-xs font-semibold text-text-secondary bg-background-secondary px-2 py-0.5 rounded">
+                    λ = {lambda}
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-text-muted">
+                {item.snapshotId && (
+                  <span className="font-mono text-[10px] text-text-secondary bg-background-secondary px-1.5 py-0.5 rounded">
+                    ID: {item.snapshotId.slice(0, 8)}
+                  </span>
+                )}
+                {dateStr && (
+                  <span>{new Date(dateStr).toLocaleString()}</span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between pt-2 border-t border-border text-xs text-text-secondary">
+        <span>
+          Showing {offset + 1}–{Math.min(offset + limit, total)} of {total} snapshots
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={offset === 0}
+            onClick={() => onSetPage(Math.max(0, offset - limit))}
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 disabled:opacity-40 hover:bg-surface-hover"
+          >
+            <ChevronLeft size={14} /> Prev
+          </button>
+          <span>
+            Page {currentPage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            disabled={offset + limit >= total}
+            onClick={() => onSetPage(offset + limit)}
+            className="flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 disabled:opacity-40 hover:bg-surface-hover"
+          >
+            Next <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

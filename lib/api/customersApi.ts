@@ -27,6 +27,16 @@ import type {
   CustomerTimelinePage,
   CustomerTimelineQuery,
   EngagementScore,
+  FetchCustomerHealthOptions,
+  HealthCalculateResult,
+  FetchCustomerEngagementOptions,
+  HealthHistoryParams,
+  CustomerHealthHistoryResponse,
+  EngagementHistoryParams,
+  CustomerEngagementHistoryResponse,
+  RefreshEnrichmentPayload,
+  RefreshEnrichmentResult,
+  CustomerEnrichmentStatusResponse,
 } from "@/types/customer360";
 import type {
   CanonicalCustomer,
@@ -399,10 +409,18 @@ export async function fetchCustomerGraph(
 
 // ── GET /api/customers/:id/health ───────────────────────────────────────────
 
-export async function fetchCustomerHealth(id: string): Promise<CustomerHealth> {
+export async function fetchCustomerHealth(
+  id: string,
+  options?: FetchCustomerHealthOptions
+): Promise<CustomerHealth> {
   if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
   try {
-    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/health`);
+    const params: Record<string, string> = {};
+    if (options?.asOf) params.asOf = options.asOf;
+    if (options?.persist !== undefined) params.persist = String(options.persist);
+    if (options?.modelVersion) params.modelVersion = options.modelVersion;
+
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/health`, { params });
     const raw = unwrapEnvelope<any>(res.data);
     return raw as CustomerHealth;
   } catch (err) {
@@ -410,12 +428,34 @@ export async function fetchCustomerHealth(id: string): Promise<CustomerHealth> {
   }
 }
 
-// ── GET /api/customers/:id/engagement ───────────────────────────────────────
+// ── POST /api/customers/:id/health/calculate ───────────────────────────────
 
-export async function fetchCustomerEngagement(id: string): Promise<EngagementScore> {
+export async function recalculateCustomerHealth(
+  id: string
+): Promise<HealthCalculateResult> {
   if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
   try {
-    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/engagement`);
+    const res = await api.post(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/health/calculate`);
+    const raw = unwrapEnvelope<any>(res.data);
+    return raw as HealthCalculateResult;
+  } catch (err) {
+    throw toCustomerApiError(err, "recalculating the customer health score");
+  }
+}
+
+// ── GET /api/customers/:id/engagement ───────────────────────────────────────
+
+export async function fetchCustomerEngagement(
+  id: string,
+  options?: FetchCustomerEngagementOptions
+): Promise<EngagementScore> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const params: Record<string, string> = {};
+    if (options?.asOf) params.asOf = options.asOf;
+    if (options?.modelVersion) params.modelVersion = options.modelVersion;
+
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/engagement`, { params });
     const raw = unwrapEnvelope<any>(res.data);
 
     const rawScore = raw?.score;
@@ -471,6 +511,117 @@ export async function fetchCustomerEngagement(id: string): Promise<EngagementSco
     };
   } catch (err) {
     throw toCustomerApiError(err, "the customer engagement score");
+  }
+}
+
+// ── GET /api/customers/:id/health/history ───────────────────────────────────
+
+export async function fetchCustomerHealthHistory(
+  id: string,
+  params?: HealthHistoryParams
+): Promise<CustomerHealthHistoryResponse> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  const limit = params?.limit ?? 20;
+  const offset = params?.offset ?? 0;
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/health/history`, {
+      params: { limit, offset },
+    });
+    const raw = unwrapEnvelope<any>(res.data);
+    const rawItems = Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.snapshots)
+      ? raw.snapshots
+      : Array.isArray(raw)
+      ? raw
+      : [];
+
+    return {
+      items: rawItems,
+      snapshots: rawItems,
+      total: typeof raw?.total === "number" ? raw.total : rawItems.length,
+      limit: typeof raw?.limit === "number" ? raw.limit : limit,
+      offset: typeof raw?.offset === "number" ? raw.offset : offset,
+    };
+  } catch (err) {
+    throw toCustomerApiError(err, "the health score history");
+  }
+}
+
+// ── GET /api/customers/:id/engagement/history ───────────────────────────────
+
+export async function fetchCustomerEngagementHistory(
+  id: string,
+  params?: EngagementHistoryParams
+): Promise<CustomerEngagementHistoryResponse> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  const limit = params?.limit ?? 20;
+  const offset = params?.offset ?? 0;
+  try {
+    const res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/engagement/history`, {
+      params: { limit, offset },
+    });
+    const raw = unwrapEnvelope<any>(res.data);
+    const rawItems = Array.isArray(raw?.items)
+      ? raw.items
+      : Array.isArray(raw?.snapshots)
+      ? raw.snapshots
+      : Array.isArray(raw)
+      ? raw
+      : [];
+
+    return {
+      items: rawItems,
+      snapshots: rawItems,
+      total: typeof raw?.total === "number" ? raw.total : rawItems.length,
+      limit: typeof raw?.limit === "number" ? raw.limit : limit,
+      offset: typeof raw?.offset === "number" ? raw.offset : offset,
+    };
+  } catch (err) {
+    throw toCustomerApiError(err, "the engagement score history");
+  }
+}
+
+// ── POST /api/customers/:id/enrichment/refresh ──────────────────────────────
+
+export async function refreshCustomerEnrichment(
+  id: string,
+  payload?: RefreshEnrichmentPayload
+): Promise<RefreshEnrichmentResult> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    const res = await api.post(
+      `${CUSTOMERS_BASE}/${encodeURIComponent(id)}/enrichment/refresh`,
+      payload || {}
+    );
+    const raw = unwrapEnvelope<any>(res.data);
+    return raw as RefreshEnrichmentResult;
+  } catch (err) {
+    throw toCustomerApiError(err, "refreshing customer enrichment");
+  }
+}
+
+// ── GET /api/customers/:id/enrichment-status ────────────────────────────────
+
+export async function fetchCustomerEnrichmentStatus(
+  id: string
+): Promise<CustomerEnrichmentStatusResponse> {
+  if (!id) throw new CustomerApiError("not_found", "No customer id was provided.", 404);
+  try {
+    let res;
+    try {
+      res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/enrichment-status`);
+    } catch (firstErr: any) {
+      if (firstErr?.response?.status === 404) {
+        res = await api.get(`${CUSTOMERS_BASE}/${encodeURIComponent(id)}/enrichment/status`);
+      } else {
+        throw firstErr;
+      }
+    }
+    const raw = unwrapEnvelope<any>(res.data);
+    return raw as CustomerEnrichmentStatusResponse;
+  } catch (err) {
+    throw toCustomerApiError(err, "the customer enrichment status");
   }
 }
 

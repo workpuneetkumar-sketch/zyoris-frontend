@@ -323,6 +323,115 @@ export const EMPTY_TIMELINE_FILTERS: CustomerTimelineFilters = {
   to: null,
 };
 
+// ── Customer Health & Engagement API Parameters & Snapshot Types ────────────
+
+export interface FetchCustomerHealthOptions {
+  asOf?: string;
+  persist?: boolean | string;
+  modelVersion?: string;
+}
+
+export interface HealthCalculateResult {
+  snapshotId?: string;
+  id?: string;
+  customerId?: string;
+  score?: number;
+  band?: HealthBand | null;
+  trend?: "up" | "down" | "flat" | null;
+  factors?: CustomerHealthFactor[];
+  calculatedAt?: string | null;
+  modelVersion?: string | null;
+}
+
+export interface FetchCustomerEngagementOptions {
+  asOf?: string;
+  modelVersion?: string;
+}
+
+export interface HealthHistoryParams {
+  limit?: number;
+  offset?: number;
+}
+
+export interface HealthHistoryItem {
+  id?: string;
+  snapshotId?: string;
+  score?: number;
+  band?: HealthBand | null;
+  trend?: "up" | "down" | "flat" | null;
+  factors?: CustomerHealthFactor[];
+  calculatedAt?: string | null;
+  createdAt?: string | null;
+  modelVersion?: string | null;
+}
+
+export interface CustomerHealthHistoryResponse {
+  items: HealthHistoryItem[];
+  snapshots?: HealthHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface EngagementHistoryParams {
+  limit?: number;
+  offset?: number;
+}
+
+export interface EngagementHistoryItem {
+  id?: string;
+  snapshotId?: string;
+  score: number;
+  lambda?: number;
+  contributions?: EngagementContribution[];
+  calculatedAt?: string | null;
+  createdAt?: string | null;
+  modelVersion?: string | null;
+}
+
+export interface CustomerEngagementHistoryResponse {
+  items: EngagementHistoryItem[];
+  snapshots?: EngagementHistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+// ── Customer Enrichment DTO Types ──────────────────────────────────────────
+
+export interface RefreshEnrichmentPayload {
+  provider?: string;
+  force?: boolean;
+  fields?: string[];
+}
+
+export interface RefreshEnrichmentResult {
+  success?: boolean;
+  updatedFields?: string[];
+  skippedUserOverrides?: string[];
+  refreshedAt?: string | null;
+  provider?: string | null;
+  fieldDetails?: Record<string, unknown> | null;
+}
+
+export interface FieldEnrichmentStatus {
+  fieldName: string;
+  freshness?: "FRESH" | "STALE" | "EXPIRED" | "UNKNOWN" | string;
+  lastObservedAt?: string | null;
+  provenance?: Provenance | null;
+  userOverridden?: boolean;
+  source?: string | null;
+}
+
+export interface CustomerEnrichmentStatusResponse {
+  customerId?: string;
+  overallStatus?: "FRESH" | "STALE" | "EXPIRED" | "UNKNOWN" | string;
+  lastRefreshedAt?: string | null;
+  fields?: FieldEnrichmentStatus[] | Record<string, any>;
+  provider?: string | null;
+  skippedUserOverrides?: string[];
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Narrow a `Sourced<T>` (or plain value) to its underlying value. */
@@ -341,3 +450,4 @@ export function provenanceOf(
   if (!v || typeof v !== "object") return null;
   return ("provenance" in v ? (v as { provenance?: Provenance | null }).provenance : null) ?? null;
 }
+
