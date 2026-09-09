@@ -249,7 +249,7 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
     return () => {
       active = false;
     };
-  }, [lead.id]);
+  }, [lead.id, lead.name, lead.company, lead.source, lead.status]);
 
   const saveConfig = async () => {
     if (!configDraft) return;

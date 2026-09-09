@@ -229,7 +229,7 @@ export default function LeadsPage() {
       .finally(() => setStatsLoading(false));
   }, []);
 
-  useEffect(() => { refreshStats(); }, []);
+  useEffect(() => { refreshStats(); }, [refreshStats]);
 
   // ── Leads hook ────────────────────────────────────────────────────────────
   const {
@@ -279,7 +279,8 @@ export default function LeadsPage() {
     } else if (activeTab === "assignment-rules") {
       void rulesHook.refresh();
     }
-  }, [activeTab, rulesHook.refresh, historyHook.refresh, analyticsHook.refresh]);
+    // eslint-disable-next-deps
+  }, [activeTab, rulesHook, historyHook, analyticsHook]);
 
   const displayLeads = usingAdvanced ? serverLeads : leads;
   const displayTotal = usingAdvanced ? serverTotal : total;
