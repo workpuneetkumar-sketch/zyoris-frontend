@@ -8,25 +8,23 @@ import {
   FileText,
   Plus,
   Sparkles,
-  BookOpen,
-  FolderKanban,
   CheckSquare,
   Clock,
-  ArrowRight,
   Database,
-  Search,
 } from "lucide-react";
 
 export default function WorkspaceHomePage() {
   const { pageTree, isLoading, refetchTree } = useWorkspace();
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Extract recent pages flat list
+  // Extract recent pages flat list with sanitized IDs
   const getRecentPages = () => {
     let pages: { id: string; title: string; icon?: string | null; updatedAt?: string }[] = [];
     const traverse = (nodes: typeof pageTree) => {
       nodes.forEach((n) => {
-        pages.push({ id: n.id, title: n.title, icon: n.icon, updatedAt: n.updatedAt });
+        if (n.id && n.id !== "[id]" && !n.id.includes("[id]")) {
+          pages.push({ id: n.id, title: n.title, icon: n.icon, updatedAt: n.updatedAt });
+        }
         if (n.children && n.children.length > 0) traverse(n.children);
       });
     };

@@ -777,7 +777,7 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
             className={classNames(
               "px-3.5 py-1.5 rounded-xl font-semibold text-xs transition-colors flex items-center gap-1.5",
               activeTab === "ERRORS"
-                ? "bg-error text-error-foreground shadow-xs"
+                ? "bg-error text-white shadow-xs"
                 : "text-text-muted hover:text-text hover:bg-surface-secondary"
             )}
           >

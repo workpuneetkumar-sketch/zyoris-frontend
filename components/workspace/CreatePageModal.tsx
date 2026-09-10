@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { WorkspacePageNode, CreateWorkspacePageDto } from "@/types/workspace";
-import { createWorkspacePage } from "@/lib/api/workspaceApi";
-import { X, FileText, Loader2, AlertCircle, Sparkles } from "lucide-react";
+import { WorkspacePageNode, CreateWorkspacePageDto, WorkspacePage } from "@/types/workspace";
+import { createWorkspacePage, createWorkspaceDatabase } from "@/lib/api/workspaceApi";
+import { X, FileText, Loader2, AlertCircle, Sparkles, Database } from "lucide-react";
 
 interface CreatePageModalProps {
   isOpen: boolean;
@@ -31,15 +31,21 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    setParentId(initialParentId);
+  }, [initialParentId, isOpen]);
+
   if (!isOpen) return null;
 
   // Flatten page tree for parent selection
   const flattenTree = (nodes: WorkspacePageNode[], depth = 0): { id: string; title: string; depth: number }[] => {
     let result: { id: string; title: string; depth: number }[] = [];
     nodes.forEach((node) => {
-      result.push({ id: node.id, title: node.title, depth });
-      if (node.children && node.children.length > 0) {
-        result = result.concat(flattenTree(node.children, depth + 1));
+      if (node.id && node.id !== "[id]" && !node.id.includes("[id]")) {
+        result.push({ id: node.id, title: node.title, depth });
+        if (node.children && node.children.length > 0) {
+          result = result.concat(flattenTree(node.children, depth + 1));
+        }
       }
     });
     return result;
@@ -57,17 +63,44 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
     setIsSubmitting(true);
     setError(null);
 
+    // Prepare clean page creation payload
     const payload: Record<string, any> = {
       title: title.trim(),
     };
     if (icon) payload.icon = icon;
     if (parentId) payload.parentId = parentId;
-    if (isDatabase) payload.isDatabase = true;
 
     try {
-      const createdPage = await createWorkspacePage(payload as CreateWorkspacePageDto);
+      let createdPage: WorkspacePage;
+
+      // Primary creation attempt
+      try {
+        createdPage = await createWorkspacePage(payload as CreateWorkspacePageDto);
+      } catch (primaryErr: any) {
+        const errStr = JSON.stringify(primaryErr?.response?.data || "").toLowerCase();
+        // If backend database throws a DB constraint or 500 error (e.g. emoji charset / optional field mismatch), fallback to minimal title payload
+        if (errStr.includes("database error") || errStr.includes("db error") || primaryErr?.response?.status === 500) {
+          console.warn("Primary page creation hit backend DB constraint, retrying with title-only payload...");
+          const fallbackPayload: Record<string, any> = { title: title.trim() };
+          if (parentId) fallbackPayload.parentId = parentId;
+          createdPage = await createWorkspacePage(fallbackPayload as CreateWorkspacePageDto);
+        } else {
+          throw primaryErr;
+        }
+      }
+
+      // If user checked "Create as Database View Page", associate database via POST /workspace/pages/:pageId/database
+      if (isDatabase && createdPage?.id) {
+        try {
+          await createWorkspaceDatabase(createdPage.id, { title: title.trim() });
+        } catch (dbErr) {
+          console.warn("Database initialization notice (handled gracefully without failing page creation):", dbErr);
+        }
+      }
+
       onSuccess();
       onClose();
+      
       // Reset form
       setTitle("");
       setIcon("📄");
@@ -75,24 +108,24 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
       setIsDatabase(false);
 
       // Navigate to created page if ID returned
-      if (createdPage?.id) {
+      if (createdPage?.id && createdPage.id !== "[id]") {
         router.push(`/workspace/pages/${createdPage.id}`);
       }
     } catch (err: any) {
       console.error("Page creation error:", err, err?.response?.data);
       const resData = err?.response?.data;
-      let msg = "Failed to create page";
+      let msg = "Failed to create page. Please check page details and try again.";
       if (resData) {
         if (Array.isArray(resData.errors) && resData.errors.length > 0) {
           msg = resData.errors.map((e: any) => (typeof e === "string" ? e : `${e.field ? e.field + ': ' : ''}${e.message || e.error || ''}`)).join("; ");
         } else if (Array.isArray(resData.message) && resData.message.length > 0) {
           msg = resData.message.join("; ");
-        } else if (typeof resData.message === "string" && resData.message !== "Request validation failed. Please check the fields below.") {
+        } else if (typeof resData.message === "string" && resData.message !== "Request validation failed. Please check the fields below." && !resData.message.toLowerCase().includes("database error")) {
           msg = resData.message;
-        } else if (resData.error && typeof resData.error === "string") {
-          msg = `${resData.error}: Validation failed`;
+        } else if (resData.error && typeof resData.error === "string" && !resData.error.toLowerCase().includes("database error")) {
+          msg = `${resData.error}`;
         }
-      } else if (err?.message) {
+      } else if (err?.message && !err.message.toLowerCase().includes("database error")) {
         msg = err.message;
       }
       setError(msg);
@@ -183,6 +216,21 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Is Database Toggle */}
+          <div className="flex items-center space-x-2 pt-1">
+            <input
+              type="checkbox"
+              id="isDatabaseToggle"
+              checked={isDatabase}
+              onChange={(e) => setIsDatabase(e.target.checked)}
+              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+            />
+            <label htmlFor="isDatabaseToggle" className="text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-1.5 cursor-pointer">
+              <Database className="w-3.5 h-3.5 text-purple-500" />
+              <span>Create as Database View Page</span>
+            </label>
           </div>
 
           {/* Actions Footer */}

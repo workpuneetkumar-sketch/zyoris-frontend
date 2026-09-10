@@ -1134,3 +1134,22 @@ a {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Notion Workspace Block Editor utilities */
+.workspace-block-editor {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.workspace-block-editor input::placeholder,
+.workspace-block-editor textarea::placeholder {
+  opacity: 0.5;
+}
+
+.workspace-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.workspace-drag-handle:active {
+  cursor: grabbing;
+}

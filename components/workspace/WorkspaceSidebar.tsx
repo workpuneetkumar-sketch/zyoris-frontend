@@ -15,8 +15,6 @@ import {
   Folder,
   Trash2,
   Plus,
-  Layers,
-  Sparkles,
   Loader2,
   RefreshCw,
   X,
@@ -150,6 +148,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
             <PageTree
               nodes={pageTree}
               onAddSubpage={(parentId) => onOpenCreatePageModal(parentId)}
+              onRefreshTree={onRefetchTree}
             />
           )}
         </div>
