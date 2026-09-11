@@ -46,6 +46,7 @@ import {
   Bell,
   Inbox,
   ChevronDown,
+  BotMessageSquare,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -336,6 +337,12 @@ const NAV_GROUPS: NavGroup[] = [
         icon: FileSearch,
         roles: ["ADMIN"],
       },
+      {
+        href: "/agents",
+        label: "Agent Registry",
+        icon: BotMessageSquare,
+        roles: ["ADMIN"],
+      },
     ],
   },
 ];
@@ -508,6 +515,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     { href: "/admin/permission-matrix", label: "Permission Matrix", icon: Grid3X3 },
     { href: "/admin/user-roles", label: "User Roles", icon: UserCog },
     { href: "/admin/audit", label: "Audit Logs", icon: FileSearch },
+    { href: "/agents", label: "Agent Registry", icon: BotMessageSquare },
   ];
 
   const ROLE_DASHBOARD_LABELS: Record<string, string> = {
@@ -564,6 +572,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         crm: Layers,
         workspace: FileText,
         notifications: Bell,
+        agents: BotMessageSquare, "agent-registry": BotMessageSquare, "bot-message-square": BotMessageSquare,
       };
 
       // ── Route normalization: API route → real Next.js page route ──────
@@ -637,6 +646,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         sales: "Role Dashboards", operations: "Role Dashboards", admin: "Role Dashboards",
         roles: "Admin Tools", "permission-matrix": "Admin Tools",
         "user-roles": "Admin Tools", audit: "Admin Tools",
+        agents: "Admin Tools", "agent-registry": "Admin Tools",
       };
 
       const ROUTE_TO_GROUP: Record<string, string> = {
@@ -659,6 +669,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/sales": "Role Dashboards", "/operations": "Role Dashboards", "/admin": "Role Dashboards",
         "/admin/roles": "Admin Tools", "/admin/permission-matrix": "Admin Tools",
         "/admin/user-roles": "Admin Tools", "/admin/audit": "Admin Tools",
+        "/agents": "Admin Tools",
       };
 
       const GROUP_ORDER = [
