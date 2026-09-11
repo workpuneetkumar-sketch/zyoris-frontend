@@ -17,10 +17,19 @@ export function useWorkspace() {
       setPageTree(tree);
     } catch (err: any) {
       console.error("Failed to load workspace page tree:", err);
-      const msg =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Failed to load workspace page tree";
+      const status = err?.response?.status;
+      // Map backend/network errors to user-friendly messages
+      let msg = "Unable to load pages. Please try again.";
+      if (status === 401 || status === 403) {
+        msg = "Session expired. Please refresh the page.";
+      } else if (status === 404) {
+        msg = "Workspace not found.";
+      } else if (status && status >= 500) {
+        msg = "Server is temporarily unavailable. Please try again shortly.";
+      } else if (!err?.response) {
+        // Network error / no response
+        msg = "Network error. Check your connection and try again.";
+      }
       setError(msg);
     } finally {
       setIsLoading(false);

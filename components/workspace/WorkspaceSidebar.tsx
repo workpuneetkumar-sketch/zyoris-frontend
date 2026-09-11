@@ -134,11 +134,14 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <div className="h-4 w-2/3 bg-slate-200 dark:bg-slate-800 rounded"></div>
             </div>
           ) : treeError ? (
-            <div className="px-3 py-3 bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 rounded-lg text-xs text-red-600 dark:text-red-400 space-y-2">
-              <p className="line-clamp-2">{treeError}</p>
+            <div className="px-3 py-3 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-800/30 rounded-lg text-xs text-amber-700 dark:text-amber-400 space-y-2">
+              <div className="flex items-start space-x-2">
+                <span className="mt-0.5 flex-shrink-0 text-amber-500">⚠</span>
+                <p className="leading-snug">{treeError}</p>
+              </div>
               <button
                 onClick={onRefetchTree}
-                className="inline-flex items-center space-x-1 font-semibold text-[11px] underline"
+                className="inline-flex items-center space-x-1.5 px-2 py-1 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-800/40 rounded text-[11px] font-semibold text-amber-700 dark:text-amber-300 transition"
               >
                 <RefreshCw className="w-3 h-3" />
                 <span>Retry</span>

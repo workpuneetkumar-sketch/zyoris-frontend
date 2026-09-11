@@ -35,8 +35,15 @@ export async function getWorkspacePageTree(): Promise<WorkspacePageNode[]> {
       return data.tree;
     }
     return [];
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching workspace page tree:", error);
+    // For 5xx server errors, surface a typed error so callers can distinguish
+    // backend unavailability from auth/network issues
+    if (error?.response?.status && error.response.status >= 500) {
+      const serverError = new Error("Server error") as any;
+      serverError.response = error.response;
+      throw serverError;
+    }
     throw error;
   }
 }
