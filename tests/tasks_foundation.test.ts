@@ -264,4 +264,30 @@ test("Task selection state helper logic", async (t) => {
     selected = toggle("task-1");
     assert.deepStrictEqual(selected, ["task-2"]);
   });
+
+  await t.test("selectAll safely handles React event objects and toggles all tasks", () => {
+    let selected: string[] = [];
+    const selectAllFn = (taskIds?: unknown) => {
+      const idsToUse = Array.isArray(taskIds) ? (taskIds as string[]) : sampleTasks.map((t) => t.id);
+      const allSelected = idsToUse.length > 0 && idsToUse.every((id) => selected.includes(id));
+      if (allSelected) {
+        selected = selected.filter((id) => !idsToUse.includes(id));
+      } else {
+        selected = Array.from(new Set([...selected, ...idsToUse]));
+      }
+    };
+
+    // 1. Calling with a mock SyntheticEvent object (the exact bug case)
+    const mockChangeEvent = { target: { checked: true }, type: "change", _reactName: "onChange" };
+    assert.doesNotThrow(() => selectAllFn(mockChangeEvent));
+    assert.deepStrictEqual(selected, ["1", "2", "3"]);
+
+    // 2. Calling again toggles (deselects all)
+    assert.doesNotThrow(() => selectAllFn(mockChangeEvent));
+    assert.deepStrictEqual(selected, []);
+
+    // 3. Calling with undefined (no arguments)
+    assert.doesNotThrow(() => selectAllFn());
+    assert.deepStrictEqual(selected, ["1", "2", "3"]);
+  });
 });

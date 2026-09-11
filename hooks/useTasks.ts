@@ -129,9 +129,9 @@ export function useTasks(currentUserId?: string) {
     }, []);
 
     const selectAll = useCallback((taskIds?: string[]) => {
-        const idsToUse = taskIds ?? filteredTasks.map((t) => t.id);
+        const idsToUse = Array.isArray(taskIds) ? taskIds : filteredTasks.map((t) => t.id);
         setSelectedTaskIds((prev) => {
-            const allSelected = idsToUse.every((id) => prev.includes(id));
+            const allSelected = idsToUse.length > 0 && idsToUse.every((id) => prev.includes(id));
             if (allSelected) {
                 // Deselect only the currently visible/filtered ones
                 return prev.filter((id) => !idsToUse.includes(id));

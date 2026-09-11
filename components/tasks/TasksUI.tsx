@@ -727,7 +727,7 @@ export function TasksUI({
                                                         type="checkbox"
                                                         ref={selectAllCheckboxRef}
                                                         checked={isAllSelected}
-                                                        onChange={onSelectAll}
+                                                        onChange={() => onSelectAll()}
                                                         className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-600 cursor-pointer"
                                                         title={isAllSelected ? "Deselect All" : "Select All Visible"}
                                                     />
