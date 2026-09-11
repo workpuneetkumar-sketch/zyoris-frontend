@@ -49,6 +49,148 @@ export async function getWorkspacePageTree(): Promise<WorkspacePageNode[]> {
 }
 
 /**
+ * Map frontend block types to backend upper-case enum values.
+ * Expected backend enums: 'TEXT' | 'HEADING' | 'BULLET_LIST' | 'NUMBERED_LIST' | 'TODO' | 'IMAGE' | 'CODE' | 'QUOTE' | 'DIVIDER' | 'TABLE' | 'EMBED' | 'DATABASE'
+ */
+export function mapFrontendTypeToBackend(type: string): string {
+  if (!type) return "TEXT";
+  const lower = type.toLowerCase();
+  switch (lower) {
+    case "paragraph":
+    case "p":
+    case "text":
+      return "TEXT";
+    case "h1":
+    case "h2":
+    case "h3":
+    case "heading":
+      return "HEADING";
+    case "bulleted":
+    case "bulleted_list":
+    case "bullet":
+      return "BULLET_LIST";
+    case "numbered":
+    case "numbered_list":
+    case "number":
+      return "NUMBERED_LIST";
+    case "checklist":
+    case "todo":
+    case "to_do":
+      return "TODO";
+    case "quote":
+      return "QUOTE";
+    case "divider":
+      return "DIVIDER";
+    case "code":
+      return "CODE";
+    case "link":
+    case "image":
+    case "embed":
+      return "TEXT";
+    default:
+      if (type === type.toUpperCase() && type.length > 1) return type;
+      return "TEXT";
+  }
+}
+
+/**
+ * Map backend upper-case enum values to frontend block types.
+ */
+export function mapBackendTypeToFrontend(type: string, content?: any): string {
+  const upper = (type || "").toUpperCase();
+  switch (upper) {
+    case "TEXT":
+      return "paragraph";
+    case "HEADING": {
+      const level = content?.level || content?.properties?.level;
+      if (level === 2) return "h2";
+      if (level === 3) return "h3";
+      return "h1";
+    }
+    case "BULLET_LIST":
+      return "bulleted";
+    case "NUMBERED_LIST":
+      return "numbered";
+    case "TODO":
+      return "checklist";
+    case "QUOTE":
+      return "quote";
+    case "DIVIDER":
+      return "divider";
+    case "CODE":
+      return "code";
+    default:
+      return type?.toLowerCase() || "paragraph";
+  }
+}
+
+/**
+ * Normalize backend block payload into a clean WorkspaceBlock with .text and frontend .type.
+ */
+export function normalizeBackendBlock(block: any): WorkspaceBlock {
+  if (!block) return block;
+
+  const contentObj = block.content && typeof block.content === "object" ? block.content : {};
+  const contentText = contentObj.text ?? (typeof block.content === "string" ? block.content : "");
+  const text = block.text !== undefined && block.text !== null && block.text !== "" ? block.text : contentText;
+
+  const frontendType = mapBackendTypeToFrontend(block.type, block.content);
+
+  const properties = {
+    ...(block.properties || {}),
+    ...(contentObj.properties || {}),
+    checked: contentObj.checked ?? block.properties?.checked ?? false,
+    url: contentObj.url ?? block.properties?.url ?? null,
+  };
+
+  return {
+    ...block,
+    id: block.id,
+    pageId: block.pageId,
+    type: frontendType,
+    text: text || "",
+    content: contentObj,
+    properties,
+    position: block.position ?? 0,
+    parentBlockId: block.parentBlockId ?? block.parentId ?? null,
+  };
+}
+
+/**
+ * Build a valid backend block request body with enum type and content object.
+ */
+export function buildBackendBlockPayload(
+  payload: CreateBlockDto | UpdateBlockDto
+): any {
+  const backendType = mapFrontendTypeToBackend(payload.type || "paragraph");
+
+  const contentObj: any = {
+    ...(typeof payload.content === "object" && payload.content ? payload.content : {}),
+    text: payload.text !== undefined ? payload.text : payload.content?.text || "",
+  };
+
+  if (payload.type === "h1") contentObj.level = 1;
+  if (payload.type === "h2") contentObj.level = 2;
+  if (payload.type === "h3") contentObj.level = 3;
+
+  if (payload.properties) {
+    contentObj.properties = payload.properties;
+    if (payload.properties.checked !== undefined) contentObj.checked = payload.properties.checked;
+    if (payload.properties.url !== undefined) contentObj.url = payload.properties.url;
+  }
+
+  const result: any = {
+    type: backendType,
+    content: contentObj,
+  };
+
+  if (payload.position !== undefined) result.position = payload.position;
+  if (payload.parentBlockId !== undefined) result.parentBlockId = payload.parentBlockId;
+
+  return result;
+}
+
+/**
  * Fetch specific page metadata + blocks by page ID.
  * GET /workspace/pages/:id
  */
@@ -56,6 +198,9 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
   try {
     const res = await api.get(`/workspace/pages/${id}`);
     const data = res.data?.data ?? res.data;
+    if (data && Array.isArray(data.blocks)) {
+      data.blocks = data.blocks.map(normalizeBackendBlock);
+    }
     return data;
   } catch (error) {
     console.error(`Error fetching workspace page ${id}:`, error);
@@ -124,9 +269,10 @@ export async function createWorkspaceBlock(
   payload: CreateBlockDto
 ): Promise<WorkspaceBlock> {
   try {
-    const res = await api.post(`/workspace/pages/${pageId}/blocks`, payload);
+    const backendPayload = buildBackendBlockPayload(payload);
+    const res = await api.post(`/workspace/pages/${pageId}/blocks`, backendPayload);
     const data = res.data?.data ?? res.data;
-    return data;
+    return normalizeBackendBlock(data);
   } catch (error) {
     console.error(`Error creating block on page ${pageId}:`, error);
     throw error;
@@ -143,12 +289,13 @@ export async function updateWorkspaceBlock(
   payload: UpdateBlockDto
 ): Promise<WorkspaceBlock> {
   try {
+    const backendPayload = buildBackendBlockPayload(payload);
     const res = await api.patch(
       `/workspace/pages/${pageId}/blocks/${blockId}`,
-      payload
+      backendPayload
     );
     const data = res.data?.data ?? res.data;
-    return data;
+    return normalizeBackendBlock(data);
   } catch (error) {
     console.error(
       `Error updating block ${blockId} on page ${pageId}:`,
@@ -197,6 +344,23 @@ export async function reorderWorkspaceBlocks(
 /* ============================================================================
  * DATABASE APIs
  * ============================================================================ */
+
+/**
+ * Fetch database associated with a page.
+ * GET /workspace/pages/:pageId/database
+ */
+export async function getWorkspacePageDatabase(
+  pageId: string
+): Promise<WorkspaceDatabase> {
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}/database`);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error) {
+    console.error(`Error fetching database for page ${pageId}:`, error);
+    throw error;
+  }
+}
 
 /**
  * Create a database associated with a page.
@@ -276,6 +440,25 @@ export async function updateDatabaseRow(
   } catch (error) {
     console.error(
       `Error updating row ${rowId} in database ${databaseId}:`,
+      error
+    );
+    throw error;
+  }
+}
+
+/**
+ * Delete database row.
+ * DELETE /workspace/databases/:databaseId/rows/:rowId
+ */
+export async function deleteDatabaseRow(
+  databaseId: string,
+  rowId: string
+): Promise<void> {
+  try {
+    await api.delete(`/workspace/databases/${databaseId}/rows/${rowId}`);
+  } catch (error) {
+    console.error(
+      `Error deleting row ${rowId} in database ${databaseId}:`,
       error
     );
     throw error;

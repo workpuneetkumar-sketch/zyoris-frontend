@@ -3,6 +3,7 @@ export interface WorkspacePageNode {
   title: string;
   icon?: string | null;
   parentId?: string | null;
+  isFolder?: boolean;
   isDatabase?: boolean;
   position?: number | null;
   children?: WorkspacePageNode[];
@@ -41,6 +42,7 @@ export interface WorkspacePage {
   icon?: string | null;
   coverImage?: string | null;
   parentId?: string | null;
+  isFolder?: boolean;
   isDatabase?: boolean;
   position?: number | null;
   blocks?: WorkspaceBlock[];
@@ -61,6 +63,7 @@ export interface CreateWorkspacePageDto {
   icon?: string;
   coverImage?: string;
   parentId?: string | null;
+  isFolder?: boolean;
   isDatabase?: boolean;
   content?: any;
 }
@@ -70,6 +73,7 @@ export interface UpdateWorkspacePageDto {
   icon?: string | null;
   coverImage?: string | null;
   parentId?: string | null;
+  isFolder?: boolean;
   isDatabase?: boolean;
   content?: any;
 }

@@ -1,8 +1,10 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { WorkspacePage, WorkspaceBlock } from "@/types/workspace";
+import Link from "next/link";
+import { WorkspacePage, WorkspaceBlock, WorkspacePageNode } from "@/types/workspace";
 import { getWorkspacePage, updateWorkspacePage } from "@/lib/api/workspaceApi";
+import { saveStoredLocalPage, useWorkspace } from "@/hooks/useWorkspace";
 import { BlockEditor } from "./BlockEditor";
 import { DatabaseView } from "./DatabaseView";
 import {
@@ -16,6 +18,8 @@ import {
   Sparkles,
   CheckCircle2,
   Loader2,
+  Folder,
+  ChevronRight,
 } from "lucide-react";
 
 interface WorkspacePageViewProps {
@@ -30,6 +34,7 @@ const COVER_PRESETS = [
 ];
 
 export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) => {
+  const { pageTree } = useWorkspace();
   const [page, setPage] = useState<WorkspacePage | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +47,27 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
 
   const [titleSaveStatus, setTitleSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const titleTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Find child pages/folders of current pageId
+  const findChildItems = (): WorkspacePageNode[] => {
+    if (!pageId || !pageTree || pageTree.length === 0) return [];
+    
+    const findNodeRecursively = (nodes: WorkspacePageNode[]): WorkspacePageNode | null => {
+      for (const node of nodes) {
+        if (node.id === pageId) return node;
+        if (node.children && node.children.length > 0) {
+          const found = findNodeRecursively(node.children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    const targetNode = findNodeRecursively(pageTree);
+    return targetNode?.children || [];
+  };
+
+  const childItems = findChildItems();
 
   const fetchPageData = useCallback(async () => {
     if (!pageId) return;
@@ -79,6 +105,7 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
     titleTimerRef.current = setTimeout(async () => {
       try {
         await updateWorkspacePage(pageId, { title: newTitle.trim() });
+        saveStoredLocalPage({ id: pageId, title: newTitle.trim(), icon });
         setTitleSaveStatus("saved");
       } catch (err) {
         console.error("Failed to update page title:", err);
@@ -244,6 +271,40 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
           )}
         </div>
       </div>
+
+      {/* Folder Contents / Sub-items Grid */}
+      {childItems.length > 0 && (
+        <div className="mb-8 p-4 bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center space-x-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <Folder className="w-4 h-4 text-amber-500" />
+              <span>Folder Contents ({childItems.length})</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {childItems.map((child) => (
+              <Link
+                key={child.id}
+                href={`/workspace/pages/${child.id}`}
+                className="group flex items-center space-x-3 p-3 bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 rounded-xl hover:border-blue-500 hover:shadow-xs transition"
+              >
+                <span className="text-xl">
+                  {child.isFolder || child.icon === "📁" ? "📁" : child.icon || "📄"}
+                </span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400 transition">
+                    {child.title || "Untitled"}
+                  </span>
+                  <span className="text-[10px] text-slate-400">
+                    {child.isFolder || child.icon === "📁" ? "Folder" : child.isDatabase ? "Database" : "Document"}
+                  </span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-0.5 transition" />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Database Mode vs Block Editor Mode */}
       {page.isDatabase || page.database ? (
