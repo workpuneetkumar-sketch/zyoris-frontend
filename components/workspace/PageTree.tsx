@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { WorkspacePageNode } from "@/types/workspace";
 import { deleteWorkspacePage } from "@/lib/api/workspaceApi";
+import { removeStoredLocalPage } from "@/hooks/useWorkspace";
 import { MovePageModal } from "./MovePageModal";
 import {
   ChevronRight,
@@ -61,6 +62,7 @@ const PageTreeNodeItem: React.FC<{
     }
     try {
       await deleteWorkspacePage(safeId);
+      removeStoredLocalPage(safeId);
       if (onRefreshTree) onRefreshTree();
       if (isActive) {
         router.push("/workspace");
@@ -105,7 +107,9 @@ const PageTreeNodeItem: React.FC<{
             className="flex items-center space-x-2 flex-1 min-w-0 truncate"
           >
             <span className="flex-shrink-0 text-sm">
-              {node.icon ? (
+              {node.isFolder || node.icon === "📁" ? (
+                "📁"
+              ) : node.icon ? (
                 node.icon
               ) : node.isDatabase ? (
                 <Database className="w-3.5 h-3.5 text-purple-500" />
@@ -126,7 +130,7 @@ const PageTreeNodeItem: React.FC<{
                 e.stopPropagation();
                 if (safeId) onAddSubpage(safeId);
               }}
-              title="Add subpage"
+              title="Add sub-item"
               className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -147,7 +151,7 @@ const PageTreeNodeItem: React.FC<{
 
           {/* Context Dropdown Menu */}
           {isMenuOpen && (
-            <div className="absolute right-2 top-7 w-44 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 py-1 text-left animate-in fade-in duration-100">
+            <div className="absolute right-2 top-7 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 py-1 text-left animate-in fade-in duration-100">
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
@@ -156,7 +160,7 @@ const PageTreeNodeItem: React.FC<{
                 className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
               >
                 <Plus className="w-3.5 h-3.5 text-blue-500" />
-                <span>Add Subpage</span>
+                <span>Add Sub-item</span>
               </button>
 
               <button
