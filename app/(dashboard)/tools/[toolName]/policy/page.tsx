@@ -290,7 +290,7 @@ function PolicyRow({ toolName, policy, onSaved }: PolicyRowProps) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ToolPermissionMatrixPage() {
-  const { user, token } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
   const params = useParams();
   const toolName = typeof params?.toolName === "string"
@@ -304,11 +304,12 @@ export default function ToolPermissionMatrixPage() {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
 
-  // Auth guard
+  // Auth guard — wait for initialisation before checking role
   useEffect(() => {
+    if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
     if (user.role !== "ADMIN") router.replace("/dashboard");
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   const fetchMatrix = useCallback(async () => {
     if (!token || !toolName) return;

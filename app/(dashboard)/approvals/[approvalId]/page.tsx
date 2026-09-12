@@ -365,7 +365,7 @@ function DecidePanel({ approval, onDecided }: DecidePanelProps) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ApprovalDetailPage() {
-  const { user, token } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
   const params = useParams();
   const approvalId = typeof params?.approvalId === "string"
@@ -382,11 +382,12 @@ export default function ApprovalDetailPage() {
     approval?.status === "PENDING" ? approval.expiresAt : undefined
   );
 
-  // Auth guard
+  // Auth guard — wait for initialisation before checking role
   useEffect(() => {
+    if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
     if (user.role !== "ADMIN") router.replace("/dashboard");
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   const fetchDetail = useCallback(async () => {
     if (!token || !approvalId) return;

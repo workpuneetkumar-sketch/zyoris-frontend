@@ -175,7 +175,7 @@ function SelectPill<T extends string>({ label, value, options, onChange }: Selec
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AgentsPage() {
-  const { user, token } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathnameRaw = usePathname();
@@ -205,9 +205,10 @@ export default function AgentsPage() {
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
     if (user.role !== "ADMIN") { router.replace("/dashboard"); }
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   // ── Sync filters → URL params ──────────────────────────────────────────────
   const syncUrl = useCallback(

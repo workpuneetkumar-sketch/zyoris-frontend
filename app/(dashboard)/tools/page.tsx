@@ -206,7 +206,7 @@ function ToolRow({ tool, onClick }: { tool: Tool; onClick: () => void }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ToolRegistryPage() {
-  const { user, token } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathnameRaw = usePathname();
@@ -224,11 +224,12 @@ export default function ToolRegistryPage() {
   const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFirstMount = useRef(true);
 
-  // Auth guard
+  // Auth guard — wait for initialisation before checking role
   useEffect(() => {
+    if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
     if (user.role !== "ADMIN") router.replace("/dashboard");
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   // Sync filters → URL
   const syncUrl = useCallback((overrides?: Partial<Record<string, string>>) => {

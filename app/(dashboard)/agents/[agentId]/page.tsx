@@ -244,7 +244,7 @@ function EditForm({ agent, onSave, onCancel, saving }: EditFormProps) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AgentDetailPage() {
-  const { user, token } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
   const params = useParams();
   const agentId = typeof params?.agentId === "string" ? params.agentId : Array.isArray(params?.agentId) ? params.agentId[0] : undefined;
@@ -257,9 +257,10 @@ export default function AgentDetailPage() {
 
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
+    if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
     if (user.role !== "ADMIN") { router.replace("/dashboard"); }
-  }, [user, router]);
+  }, [user, isInitializing, router]);
 
   // ── Fetch detail ───────────────────────────────────────────────────────────
   const fetchDetail = useCallback(async () => {
