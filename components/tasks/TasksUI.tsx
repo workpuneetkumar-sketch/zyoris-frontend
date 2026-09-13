@@ -296,7 +296,7 @@ interface BulkResultProps {
 }
 
 function BulkResultModal({ result, onClose }: BulkResultProps) {
-    const data = result.data;
+    const data = result.data ?? result;
     const hasFailures = data.totalFailed > 0;
 
     return (
