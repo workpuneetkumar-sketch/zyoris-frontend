@@ -114,14 +114,20 @@ export interface BulkUpdateTaskResult {
     error?: string | null;
 }
 
+export interface BulkUpdateData {
+    totalRequested: number;
+    totalUpdated: number;
+    totalFailed: number;
+    results: BulkUpdateTaskResult[];
+}
+
 export interface BulkUpdateResponse {
     success: boolean;
-    data: {
-        totalRequested: number;
-        totalUpdated: number;
-        totalFailed: number;
-        results: BulkUpdateTaskResult[];
-    };
+    totalRequested: number;
+    totalUpdated: number;
+    totalFailed: number;
+    results: BulkUpdateTaskResult[];
+    data: BulkUpdateData;
     message?: string;
 }
 
@@ -361,6 +367,67 @@ export async function deleteTask(id: string): Promise<{ success: boolean; messag
     return res.data;
 }
 
+export function normaliseBulkUpdateResponse(raw: unknown): BulkUpdateResponse {
+    if (!raw || typeof raw !== "object") {
+        const emptyData: BulkUpdateData = {
+            totalRequested: 0,
+            totalUpdated: 0,
+            totalFailed: 0,
+            results: [],
+        };
+        return {
+            success: false,
+            ...emptyData,
+            data: emptyData,
+        };
+    }
+
+    const r = raw as Record<string, any>;
+    const src = (r.data && typeof r.data === "object" && !Array.isArray(r.data)) ? r.data : r;
+    const rawResults = Array.isArray(src.results) ? src.results : (Array.isArray(r.results) ? r.results : []);
+
+    const results: BulkUpdateTaskResult[] = rawResults.map((item: any) => ({
+        taskId: String(item.taskId ?? item.id ?? ""),
+        success: Boolean(item.success ?? true),
+        error: item.error ? String(item.error) : null,
+    }));
+
+    const totalRequested = typeof src.totalRequested === "number"
+        ? src.totalRequested
+        : typeof r.totalRequested === "number"
+        ? r.totalRequested
+        : results.length;
+
+    const totalUpdated = typeof src.totalUpdated === "number"
+        ? src.totalUpdated
+        : typeof r.totalUpdated === "number"
+        ? r.totalUpdated
+        : results.filter((x) => x.success).length;
+
+    const totalFailed = typeof src.totalFailed === "number"
+        ? src.totalFailed
+        : typeof r.totalFailed === "number"
+        ? r.totalFailed
+        : results.filter((x) => !x.success).length;
+
+    const data: BulkUpdateData = {
+        totalRequested,
+        totalUpdated,
+        totalFailed,
+        results,
+    };
+
+    return {
+        success: r.success !== false,
+        totalRequested,
+        totalUpdated,
+        totalFailed,
+        results,
+        data,
+        message: r.message,
+    };
+}
+
 // ── POST /workspace/tasks/bulk-update ─────────────────────────────────────────
 // Bulk update 1–100 tasks in one single request with per-task reporting
 export async function bulkUpdateTasks(payload: BulkUpdatePayload): Promise<BulkUpdateResponse> {
@@ -382,8 +449,8 @@ export async function bulkUpdateTasks(payload: BulkUpdatePayload): Promise<BulkU
         requestData.workspaceId = payload.workspaceId;
     }
 
-    const res = await api.post<BulkUpdateResponse>("/workspace/tasks/bulk-update", requestData);
-    return res.data;
+    const res = await api.post("/workspace/tasks/bulk-update", requestData);
+    return normaliseBulkUpdateResponse(res.data);
 }
 
 // ── Sub-resources: Comments ───────────────────────────────────────────────────
@@ -393,8 +460,12 @@ export async function fetchTaskComments(taskId: string, page = 1, limit = 20): P
         const res = await api.get<any>(`/tasks/${taskId}/comments`, {
             params: { page, limit },
         });
-        const comments = res.data?.data || res.data?.comments || (Array.isArray(res.data) ? res.data : []);
-        return comments as TaskComment[];
+        const raw = res.data;
+        if (Array.isArray(raw)) return raw as TaskComment[];
+        if (Array.isArray(raw?.data)) return raw.data as TaskComment[];
+        if (Array.isArray(raw?.data?.comments)) return raw.data.comments as TaskComment[];
+        if (Array.isArray(raw?.comments)) return raw.comments as TaskComment[];
+        return [];
     } catch {
         return [];
     }
@@ -410,8 +481,12 @@ export async function createTaskComment(taskId: string, content: string): Promis
 export async function fetchTaskSubtasks(taskId: string): Promise<TaskSubtask[]> {
     try {
         const res = await api.get<any>(`/tasks/${taskId}/subtasks`);
-        const subtasks = res.data?.data || res.data?.subtasks || (Array.isArray(res.data) ? res.data : []);
-        return subtasks as TaskSubtask[];
+        const raw = res.data;
+        if (Array.isArray(raw)) return raw as TaskSubtask[];
+        if (Array.isArray(raw?.data)) return raw.data as TaskSubtask[];
+        if (Array.isArray(raw?.data?.subtasks)) return raw.data.subtasks as TaskSubtask[];
+        if (Array.isArray(raw?.subtasks)) return raw.subtasks as TaskSubtask[];
+        return [];
     } catch {
         return [];
     }
@@ -434,19 +509,108 @@ export async function createTaskSubtask(taskId: string, payload: CreateSubtaskPa
 
 // ── Sub-resources: Dependencies ───────────────────────────────────────────────
 
+export function normaliseTaskDependenciesResponse(raw: unknown, fallbackTaskId?: string): TaskDependency[] {
+    if (!raw) return [];
+
+    let list: unknown[] = [];
+    if (Array.isArray(raw)) {
+        list = raw;
+    } else if (typeof raw === "object") {
+        const r = raw as Record<string, any>;
+        if (Array.isArray(r.data)) {
+            list = r.data;
+        } else if (r.data && typeof r.data === "object" && Array.isArray(r.data.dependencies)) {
+            list = r.data.dependencies;
+        } else if (r.data && typeof r.data === "object" && Array.isArray(r.data.blockers)) {
+            list = r.data.blockers;
+        } else if (r.data && typeof r.data === "object" && Array.isArray(r.data.items)) {
+            list = r.data.items;
+        } else if (Array.isArray(r.dependencies)) {
+            list = r.dependencies;
+        } else if (Array.isArray(r.items)) {
+            list = r.items;
+        }
+    }
+
+    if (!Array.isArray(list)) return [];
+
+    return list.map((item: any, idx: number) => {
+        if (!item || typeof item !== "object") {
+            return {
+                id: `dep-${fallbackTaskId || "task"}-${idx}`,
+                dependentId: fallbackTaskId || "",
+                dependencyId: String(item ?? ""),
+                createdAt: new Date().toISOString(),
+            };
+        }
+        const id = String(item.id ?? item._id ?? `dep-${fallbackTaskId || "task"}-${idx}`);
+        const dependencyId = String(
+            item.dependencyId ??
+            item.dependsOnTaskId ??
+            item.dependsOnId ??
+            item.blockerTaskId ??
+            item.blockedByTaskId ??
+            item.targetTaskId ??
+            item.taskId ??
+            ""
+        );
+        const dependentId = String(
+            item.dependentId ??
+            item.sourceTaskId ??
+            item.parentTaskId ??
+            fallbackTaskId ??
+            ""
+        );
+        const createdAt = item.createdAt ? String(item.createdAt) : new Date().toISOString();
+
+        return {
+            id,
+            dependentId,
+            dependencyId,
+            createdAt,
+            task: item.task,
+        };
+    });
+}
+
+export function normaliseTaskDependency(raw: unknown, fallbackTaskId?: string, fallbackDepId?: string): TaskDependency {
+    if (!raw || typeof raw !== "object") {
+        return {
+            id: `dep-${Date.now()}`,
+            dependentId: fallbackTaskId || "",
+            dependencyId: fallbackDepId || "",
+            createdAt: new Date().toISOString(),
+        };
+    }
+    const r = raw as Record<string, any>;
+    const item = (r.data && typeof r.data === "object" && !Array.isArray(r.data))
+        ? (r.data.dependency || r.data)
+        : (r.dependency || r);
+
+    return {
+        id: String(item.id ?? item._id ?? `dep-${Date.now()}`),
+        dependentId: String(item.dependentId ?? item.sourceTaskId ?? fallbackTaskId ?? ""),
+        dependencyId: String(item.dependencyId ?? item.dependsOnTaskId ?? fallbackDepId ?? ""),
+        createdAt: item.createdAt ? String(item.createdAt) : new Date().toISOString(),
+        task: item.task,
+    };
+}
+
 export async function fetchTaskDependencies(taskId: string): Promise<TaskDependency[]> {
     try {
         const res = await api.get<any>(`/tasks/${taskId}/dependencies`);
-        const deps = res.data?.data || res.data?.dependencies || (Array.isArray(res.data) ? res.data : []);
-        return deps as TaskDependency[];
-    } catch {
-        return [];
+        return normaliseTaskDependenciesResponse(res.data, taskId);
+    } catch (err) {
+        if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
+            return [];
+        }
+        throw err;
     }
 }
 
 export async function createTaskDependency(taskId: string, dependencyId: string): Promise<TaskDependency> {
     const res = await api.post<any>(`/tasks/${taskId}/dependencies`, { dependencyId });
-    return (res.data?.data || res.data?.dependency || res.data) as TaskDependency;
+    return normaliseTaskDependency(res.data, taskId, dependencyId);
 }
 
 // ── Sub-resources: Activity Timeline ──────────────────────────────────────────
@@ -456,8 +620,12 @@ export async function fetchTaskActivity(taskId: string, page = 1, limit = 20): P
         const res = await api.get<any>(`/tasks/${taskId}/activity`, {
             params: { page, limit },
         });
-        const activities = res.data?.data || res.data?.activities || (Array.isArray(res.data) ? res.data : []);
-        return activities as TaskActivity[];
+        const raw = res.data;
+        if (Array.isArray(raw)) return raw as TaskActivity[];
+        if (Array.isArray(raw?.data)) return raw.data as TaskActivity[];
+        if (Array.isArray(raw?.data?.activities)) return raw.data.activities as TaskActivity[];
+        if (Array.isArray(raw?.activities)) return raw.activities as TaskActivity[];
+        return [];
     } catch {
         return [];
     }

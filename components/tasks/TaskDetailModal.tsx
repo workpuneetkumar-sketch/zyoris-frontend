@@ -125,6 +125,7 @@ export function TaskDetailModal({
     const [submittingSubtask, setSubmittingSubtask] = useState(false);
 
     const [dependencies, setDependencies] = useState<TaskDependency[]>([]);
+    const [dependenciesError, setDependenciesError] = useState<string | null>(null);
     const [newDepId, setNewDepId] = useState("");
     const [submittingDep, setSubmittingDep] = useState(false);
 
@@ -155,8 +156,16 @@ export function TaskDetailModal({
                 .finally(() => setSubLoading(false));
         } else if (activeTab === "dependencies") {
             setSubLoading(true);
+            setDependenciesError(null);
             fetchTaskDependencies(task.id)
-                .then(setDependencies)
+                .then((data) => {
+                    setDependencies(Array.isArray(data) ? data : []);
+                })
+                .catch((err) => {
+                    const msg = err instanceof Error ? err.message : "Failed to load dependencies.";
+                    setDependenciesError(msg);
+                    setDependencies([]);
+                })
                 .finally(() => setSubLoading(false));
         } else if (activeTab === "activity") {
             setSubLoading(true);
@@ -254,10 +263,14 @@ export function TaskDetailModal({
         e.preventDefault();
         if (!newDepId.trim()) return;
         setSubmittingDep(true);
+        setDependenciesError(null);
         try {
             const dep = await createTaskDependency(task.id, newDepId.trim());
-            setDependencies((prev) => [...prev, dep]);
+            setDependencies((prev) => [...(Array.isArray(prev) ? prev : []), dep]);
             setNewDepId("");
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : "Failed to add dependency.";
+            setDependenciesError(msg);
         } finally {
             setSubmittingDep(false);
         }
@@ -344,7 +357,7 @@ export function TaskDetailModal({
                     {[
                         { key: "details", label: "Overview", icon: FileText },
                         { key: "subtasks", label: `Subtasks (${subtasks.length})`, icon: ListTree },
-                        { key: "dependencies", label: `Dependencies (${dependencies.length})`, icon: Network },
+                        { key: "dependencies", label: `Dependencies (${Array.isArray(dependencies) ? dependencies.length : 0})`, icon: Network },
                         { key: "comments", label: `Comments (${comments.length})`, icon: MessageSquare },
                         { key: "activity", label: "Activity", icon: History },
                     ].map((tab) => {
@@ -607,28 +620,67 @@ export function TaskDetailModal({
                                 Manage blocker and blocked-by dependencies for this task.
                             </p>
 
-                            <div className="space-y-2">
-                                {dependencies.map((dep) => (
-                                    <div
-                                        key={dep.id}
-                                        className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs flex justify-between items-center"
+                            {/* Error state */}
+                            {dependenciesError && (
+                                <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
+                                    <div className="flex items-center space-x-2">
+                                        <AlertCircle size={14} className="shrink-0" />
+                                        <span>{dependenciesError}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setSubLoading(true);
+                                            setDependenciesError(null);
+                                            fetchTaskDependencies(task.id)
+                                                .then((data) => setDependencies(Array.isArray(data) ? data : []))
+                                                .catch((err) => {
+                                                    setDependenciesError(
+                                                        err instanceof Error ? err.message : "Failed to load dependencies."
+                                                    );
+                                                })
+                                                .finally(() => setSubLoading(false));
+                                        }}
+                                        className="text-[11px] font-bold underline hover:no-underline ml-2"
                                     >
-                                        <div className="flex items-center space-x-2">
-                                            <Network size={14} className="text-blue-500" />
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                Depends on: {dep.dependencyId}
+                                        Retry
+                                    </button>
+                                </div>
+                            )}
+
+                            {/* Loading state */}
+                            {subLoading && (
+                                <div className="flex items-center justify-center py-8 text-slate-400 space-x-2">
+                                    <Loader2 size={16} className="animate-spin text-blue-500" />
+                                    <span className="text-xs">Loading dependencies...</span>
+                                </div>
+                            )}
+
+                            {/* Dependencies list */}
+                            {!subLoading && (
+                                <div className="space-y-2">
+                                    {(Array.isArray(dependencies) ? dependencies : []).map((dep) => (
+                                        <div
+                                            key={dep.id}
+                                            className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs flex justify-between items-center"
+                                        >
+                                            <div className="flex items-center space-x-2">
+                                                <Network size={14} className="text-blue-500" />
+                                                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                    Depends on: {dep.dependencyId}
+                                                </span>
+                                            </div>
+                                            <span className="text-[10px] text-slate-400">
+                                                {new Date(dep.createdAt).toLocaleDateString()}
                                             </span>
                                         </div>
-                                        <span className="text-[10px] text-slate-400">
-                                            {new Date(dep.createdAt).toLocaleDateString()}
-                                        </span>
-                                    </div>
-                                ))}
+                                    ))}
 
-                                {dependencies.length === 0 && !subLoading && (
-                                    <p className="text-xs text-slate-400 text-center py-6">No dependencies defined.</p>
-                                )}
-                            </div>
+                                    {(Array.isArray(dependencies) ? dependencies.length : 0) === 0 && !dependenciesError && (
+                                        <p className="text-xs text-slate-400 text-center py-6">No dependencies defined.</p>
+                                    )}
+                                </div>
+                            )}
 
                             <form onSubmit={handleAddDependency} className="flex gap-2 pt-2">
                                 <input
@@ -641,9 +693,10 @@ export function TaskDetailModal({
                                 <button
                                     type="submit"
                                     disabled={submittingDep || !newDepId.trim()}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition"
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
                                 >
-                                    Link
+                                    {submittingDep && <Loader2 size={13} className="animate-spin" />}
+                                    <span>Link</span>
                                 </button>
                             </form>
                         </div>

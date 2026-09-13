@@ -241,9 +241,10 @@ export function useTasks(currentUserId?: string) {
             });
 
             // If tasks were updated, reflect in local state
-            if (response.data?.results) {
+            const results = response.results ?? response.data?.results;
+            if (results && results.length > 0) {
                 const successfulIds = new Set(
-                    response.data.results
+                    results
                         .filter((r) => r.success)
                         .map((r) => r.taskId)
                 );
