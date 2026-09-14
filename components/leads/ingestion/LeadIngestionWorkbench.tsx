@@ -226,7 +226,7 @@ print(response.json())`;
         {/* Action badges */}
         <div className="flex items-center gap-2">
           <a
-            href="/docs"
+            href={`${process.env.NEXT_PUBLIC_BACKEND_URL || "https://zyoris.onrender.com"}/docs`}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
