@@ -11,7 +11,7 @@ import { AdvancedFiltersDrawer } from "@/components/leads/AdvancedFiltersDrawer"
 import { BulkActionsToolbar } from "@/components/leads/BulkActionsToolbar";
 import { AdvancedLeadsFilters, DEFAULT_ADVANCED_FILTERS } from "@/types/savedViews";
 import { fetchLeads } from "@/lib/api/leadsApi";
-import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target, UserPlus, Search as SearchIcon, Building2, ArrowRightLeft, UsersRound } from "lucide-react";
+import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target, UserPlus, Search as SearchIcon, Building2, ArrowRightLeft, UsersRound, Zap } from "lucide-react";
 import Link from "next/link";
 import { ConvertLeadModal } from "@/components/customers/ConvertLeadModal";
 import { IdentityResolveModal } from "@/components/customers/IdentityResolveModal";
