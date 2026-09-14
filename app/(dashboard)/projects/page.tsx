@@ -31,6 +31,8 @@ import { Skeleton } from "@/components/projects/SharedComponents";
 import ProjectFormModal from "@/components/projects/ProjectFormModal";
 import MilestonesModal from "@/components/projects/MilestonesModal";
 import TeamModal from "@/components/projects/TeamMembersModal";
+import { ProjectAttachmentsModal } from "@/components/projects/ProjectAttachmentsModal";
+import { ExportModal } from "@/components/workspace/ExportModal";
 
 import KanbanView from "@/components/projects/KanbanView";
 import ListView from "@/components/projects/ListView";
@@ -61,8 +63,20 @@ export default function ProjectsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showMilestonesModal, setShowMilestonesModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showAttachmentsModal, setShowAttachmentsModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
 
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+
+  const openAttachments = (project: Project) => {
+    setSelectedProject(project);
+    setShowAttachmentsModal(true);
+  };
+
+  const openExport = (project: Project) => {
+    setSelectedProject(project);
+    setShowExportModal(true);
+  };
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -383,6 +397,8 @@ export default function ProjectsPage() {
               onDelete={openDelete}
               onTeam={openTeam}
               onMilestones={openMilestones}
+              onAttachments={openAttachments}
+              onExport={openExport}
               onUpdateStatus={handleUpdateStatus}
             />
           )}
@@ -484,6 +500,34 @@ export default function ProjectsPage() {
           onMemberAdded={() => {
             // optional refresh
           }}
+        />
+      )}
+
+      {showAttachmentsModal && selectedProject && (
+        <ProjectAttachmentsModal
+          projectId={selectedProject.id}
+          projectName={selectedProject.name}
+          onClose={() => {
+            setShowAttachmentsModal(false);
+            setSelectedProject(null);
+          }}
+          onOpenExport={() => {
+            setShowAttachmentsModal(false);
+            setShowExportModal(true);
+          }}
+        />
+      )}
+
+      {showExportModal && selectedProject && (
+        <ExportModal
+          isOpen={showExportModal}
+          onClose={() => {
+            setShowExportModal(false);
+            setSelectedProject(null);
+          }}
+          entityType="PROJECT"
+          entityId={selectedProject.id}
+          entityName={selectedProject.name}
         />
       )}
     </div>

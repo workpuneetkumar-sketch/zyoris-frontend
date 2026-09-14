@@ -14,6 +14,8 @@ import {
   Code,
   Link as LinkIcon,
   Search,
+  Paperclip,
+  Image as ImageIcon,
 } from "lucide-react";
 
 export interface BlockOption {
@@ -101,6 +103,20 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
     description: "Insert a URL link reference.",
     icon: LinkIcon,
     keywords: ["link", "url", "href", "website"],
+  },
+  {
+    type: "file",
+    label: "File Attachment",
+    description: "Upload and attach a document or file.",
+    icon: Paperclip,
+    keywords: ["file", "attachment", "document", "upload", "pdf"],
+  },
+  {
+    type: "image",
+    label: "Image",
+    description: "Embed an image attachment into the page.",
+    icon: ImageIcon,
+    keywords: ["image", "picture", "photo", "img", "png", "jpg"],
   },
 ];
 

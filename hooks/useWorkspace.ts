@@ -5,6 +5,28 @@ import { WorkspacePageNode, WorkspacePage } from "@/types/workspace";
 import { getWorkspacePageTree } from "@/lib/api/workspaceApi";
 
 const LOCAL_PAGES_KEY = "zyoris_workspace_local_pages";
+const DELETED_PAGES_KEY = "zyoris_workspace_deleted_pages";
+
+export function getDeletedPageIds(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(DELETED_PAGES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+export function addDeletedPageId(pageId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getDeletedPageIds();
+    if (!existing.includes(pageId)) {
+      const updated = [...existing, pageId];
+      localStorage.setItem(DELETED_PAGES_KEY, JSON.stringify(updated));
+    }
+  } catch (e) {}
+}
 
 export function getStoredLocalPages(): WorkspacePageNode[] {
   if (typeof window === "undefined") return [];
@@ -41,6 +63,7 @@ export function saveStoredLocalPage(page: Partial<WorkspacePage> & { id: string;
 export function removeStoredLocalPage(pageId: string) {
   if (typeof window === "undefined") return;
   try {
+    addDeletedPageId(pageId);
     const existing = getStoredLocalPages();
     const updated = existing.filter((p) => p.id !== pageId);
     localStorage.setItem(LOCAL_PAGES_KEY, JSON.stringify(updated));
@@ -86,14 +109,15 @@ export function useWorkspace() {
     try {
       const remoteTree = await getWorkspacePageTree();
       const localPages = getStoredLocalPages();
+      const deletedIds = new Set(getDeletedPageIds());
 
-      // Merge remote tree & local pages
+      // Merge remote tree & local pages while excluding deleted page IDs
       const allFlatNodes: WorkspacePageNode[] = [];
       const seenIds = new Set<string>();
 
       const addRecursively = (nodes: WorkspacePageNode[]) => {
         nodes.forEach((n) => {
-          if (n.id && !seenIds.has(n.id)) {
+          if (n.id && !seenIds.has(n.id) && !deletedIds.has(n.id)) {
             seenIds.add(n.id);
             allFlatNodes.push(n);
             if (n.children && n.children.length > 0) {
@@ -106,7 +130,7 @@ export function useWorkspace() {
       addRecursively(remoteTree);
 
       localPages.forEach((lp) => {
-        if (lp.id && !seenIds.has(lp.id)) {
+        if (lp.id && !seenIds.has(lp.id) && !deletedIds.has(lp.id)) {
           seenIds.add(lp.id);
           allFlatNodes.push(lp);
         }
@@ -117,8 +141,10 @@ export function useWorkspace() {
     } catch (err: any) {
       console.error("Failed to load workspace page tree:", err);
       const localPages = getStoredLocalPages();
-      if (localPages.length > 0) {
-        setPageTree(buildTreeFromFlatNodes(localPages));
+      const deletedIds = new Set(getDeletedPageIds());
+      const filteredLocal = localPages.filter((p) => !deletedIds.has(p.id));
+      if (filteredLocal.length > 0) {
+        setPageTree(buildTreeFromFlatNodes(filteredLocal));
       } else {
         const status = err?.response?.status;
         let msg = "Unable to load pages. Please try again.";

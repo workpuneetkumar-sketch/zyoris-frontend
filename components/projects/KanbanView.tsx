@@ -11,6 +11,8 @@ import {
   Trash2,
   ListChecks,
   ChevronDown,
+  Paperclip,
+  Download,
 } from "lucide-react";
 import { Project, UpdateProjectPayload } from "@/lib/api/projectsApi";
 
@@ -20,6 +22,8 @@ interface KanbanViewProps {
   onDelete: (project: Project) => void;
   onTeam: (project: Project) => void;
   onMilestones: (project: Project) => void;
+  onAttachments?: (project: Project) => void;
+  onExport?: (project: Project) => void;
   onUpdateStatus: (id: string, payload: UpdateProjectPayload) => void;
 }
 
@@ -77,6 +81,8 @@ function ProjectCard({
   onDelete,
   onTeam,
   onMilestones,
+  onAttachments,
+  onExport,
   onMoveStatus,
 }: {
   project: Project;
@@ -88,6 +94,8 @@ function ProjectCard({
   onDelete: () => void;
   onTeam: () => void;
   onMilestones: () => void;
+  onAttachments?: () => void;
+  onExport?: () => void;
   onMoveStatus: (status: StatusColumn) => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
@@ -177,6 +185,30 @@ function ProjectCard({
                   >
                     <ListChecks size={14} /> Milestones
                   </button>
+                  {onAttachments && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(false);
+                        onAttachments();
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 text-indigo-600"
+                    >
+                      <Paperclip size={14} /> Attachments
+                    </button>
+                  )}
+                  {onExport && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowMenu(false);
+                        onExport();
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2 text-indigo-600"
+                    >
+                      <Download size={14} /> Export
+                    </button>
+                  )}
                   <div className="border-t border-gray-100 my-1" />
                   <button
                     onClick={(e) => {
@@ -266,14 +298,18 @@ export default function KanbanView({
   onDelete,
   onTeam,
   onMilestones,
+  onAttachments,
+  onExport,
   onUpdateStatus,
 }: KanbanViewProps) {
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<StatusColumn | null>(null);
-  const [justDroppedProjectId, setJustDroppedProjectId] = useState<string | null>(null);
+  const [justDroppedProjectId, setJustDroppedProjectId] = useState<string | null>(
+    null
+  );
 
   return (
-    <div className="flex gap-4 overflow-x-auto pb-4 -mx-2 px-2">
+    <div className="flex gap-4 overflow-x-auto pb-6">
       {COLUMNS.map((col) => {
         const colProjects = projects.filter((p) => p.status === col.key);
         const isColOver = dragOverCol === col.key;
@@ -284,21 +320,16 @@ export default function KanbanView({
             onDragOver={(e) => {
               e.preventDefault();
               e.dataTransfer.dropEffect = "move";
-            }}
-            onDragEnter={(e) => {
-              e.preventDefault();
-              setDragOverCol(col.key);
+              if (dragOverCol !== col.key) setDragOverCol(col.key);
             }}
             onDragLeave={(e) => {
-              e.preventDefault();
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setDragOverCol(null);
-              }
+              if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+              setDragOverCol(null);
             }}
             onDrop={(e) => {
               e.preventDefault();
               setDragOverCol(null);
-              const projId = e.dataTransfer.getData("text/plain") || draggedProjectId;
+              const projId = e.dataTransfer.getData("text/plain");
               if (projId) {
                 onUpdateStatus(projId, { status: col.key });
                 setJustDroppedProjectId(projId);
@@ -354,6 +385,8 @@ export default function KanbanView({
                   onDelete={() => onDelete(project)}
                   onTeam={() => onTeam(project)}
                   onMilestones={() => onMilestones(project)}
+                  onAttachments={() => onAttachments && onAttachments(project)}
+                  onExport={() => onExport && onExport(project)}
                   onMoveStatus={(status) =>
                     onUpdateStatus(project.id, { status })
                   }

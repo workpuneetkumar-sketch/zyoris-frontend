@@ -10,6 +10,7 @@ import {
 } from "@/lib/api/workspaceApi";
 import { SlashMenu } from "./SlashMenu";
 import { FormattingToolbar } from "./FormattingToolbar";
+import { AttachmentBlock } from "./AttachmentBlock";
 import {
   GripVertical,
   Plus,
@@ -120,7 +121,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
   /* -------------------------------------------------------------------------- */
   const triggerAutosave = useCallback(
     (blockId: string, updatedFields: Partial<WorkspaceBlock>) => {
-      if (blockId.startsWith("temp-")) return;
+      if (!blockId) return;
 
       const newVer = (currentVersionRef.current[blockId] || 0) + 1;
       currentVersionRef.current[blockId] = newVer;
@@ -222,6 +223,36 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
     triggerAutosave(targetBlock.id, {
       ...targetBlock,
       properties: { ...targetBlock.properties, formatting: newFormatting },
+    });
+  };
+
+  const handleUpdateBlockFields = (
+    index: number,
+    fields: { text?: string; formatting?: Record<string, any> }
+  ) => {
+    const targetBlock = blocks[index];
+    if (!targetBlock) return;
+
+    const newText = fields.text !== undefined ? fields.text : targetBlock.text;
+    const newFormatting = fields.formatting
+      ? { ...targetBlock.formatting, ...fields.formatting }
+      : targetBlock.formatting;
+
+    const updatedBlock: WorkspaceBlock = {
+      ...targetBlock,
+      text: newText,
+      formatting: newFormatting,
+    };
+
+    setBlocks((prev) => {
+      const nextArr = [...prev];
+      nextArr[index] = updatedBlock;
+      return nextArr;
+    });
+
+    triggerAutosave(targetBlock.id, {
+      ...updatedBlock,
+      properties: { ...updatedBlock.properties, formatting: newFormatting },
     });
   };
 
@@ -477,7 +508,10 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
                   {renderBlockInput(
                     block,
                     index,
+                    pageId,
                     handleUpdateBlockText,
+                    handleUpdateBlockFields,
+                    handleDeleteBlock,
                     handleToggleCheckbox,
                     handleKeyDown,
                     canEdit
@@ -532,7 +566,10 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
 function renderBlockInput(
   block: WorkspaceBlock,
   index: number,
+  pageId: string,
   onChangeText: (index: number, val: string) => void,
+  onUpdateBlockFields: (index: number, fields: { text?: string; formatting?: Record<string, any> }) => void,
+  onDeleteBlock: (index: number) => void,
   onToggleCheck: (index: number) => void,
   onKeyDown: (e: React.KeyboardEvent, index: number) => void,
   canEdit: boolean
@@ -747,6 +784,22 @@ function renderBlockInput(
             </a>
           )}
         </div>
+      );
+
+    case "file":
+    case "image":
+    case "attachment":
+      return (
+        <AttachmentBlock
+          blockId={block.id}
+          pageId={pageId}
+          blockType={type}
+          content={text}
+          formatting={fmt}
+          canEdit={canEdit}
+          onUpdateBlock={(fields) => onUpdateBlockFields(index, fields)}
+          onDeleteBlock={() => onDeleteBlock(index)}
+        />
       );
 
     default:
