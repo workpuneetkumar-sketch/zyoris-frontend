@@ -222,29 +222,6 @@ print(response.json())`;
             </div>
           </div>
         </div>
-
-        {/* Action badges */}
-        <div className="flex items-center gap-2">
-          <a
-            href={`${process.env.NEXT_PUBLIC_BACKEND_URL || "https://zyoris.onrender.com"}/docs`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-          >
-            <BookOpen size={14} className="text-blue-600" />
-            Swagger /docs
-            <ExternalLink size={12} className="text-gray-400" />
-          </a>
-          <a
-            href="/docs.json"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-          >
-            <Code2 size={14} className="text-emerald-600" />
-            OpenAPI Spec
-          </a>
-        </div>
       </div>
 
       {/* Main Workbench Navigation Tabs */}
