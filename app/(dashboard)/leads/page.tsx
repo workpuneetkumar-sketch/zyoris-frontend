@@ -468,7 +468,7 @@ export default function LeadsPage() {
             </Link>
             <div className="w-px h-6 bg-gray-200 mx-1" />
             <Link
-              href="/ingestion"
+              href="/leads/ingest"
               className="flex items-center gap-2 h-9 px-4 rounded-lg border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors shadow-sm"
               title="Open Lead Ingestion & Normalized Contract Workbench"
             >

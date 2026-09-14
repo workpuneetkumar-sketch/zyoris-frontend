@@ -674,20 +674,7 @@ export async function fetchCustomerTimeline(
       !ax?.isAxiosError;
 
     if (isNotFoundOrUnroutable) {
-      let all = buildMockTimeline(id, `Customer ${id}`).events;
-      if (query.types) {
-        const include = new Set(query.types.split(",").map((t) => t.trim()).filter(Boolean));
-        all = all.filter((e) => include.has(e.eventType));
-      }
-      if (query.from) {
-        const fromTs = new Date(query.from).getTime();
-        if (!Number.isNaN(fromTs)) all = all.filter((e) => new Date(e.timestamp).getTime() >= fromTs);
-      }
-      if (query.to) {
-        const toTs = new Date(query.to).getTime();
-        if (!Number.isNaN(toTs)) all = all.filter((e) => new Date(e.timestamp).getTime() <= toTs);
-      }
-      return { events: all, nextCursor: null };
+      return { events: [], nextCursor: null };
     }
     throw toCustomerApiError(err, "the customer timeline");
   }

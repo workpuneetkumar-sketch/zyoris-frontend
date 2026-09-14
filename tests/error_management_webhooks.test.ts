@@ -6,7 +6,7 @@ import {
   getWebhookIngressUrl,
   STANDARD_WEBHOOK_EVENTS,
   SUPPORTED_WEBHOOK_PROVIDERS,
-} from "../lib/api/webhooksApi";
+} from "../lib/api/webhooksApi.ts";
 import type { SyncErrorItem } from "../types/integrations";
 
 describe("Day 11: Error Management & Resolution Triage", () => {
