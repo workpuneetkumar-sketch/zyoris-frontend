@@ -385,7 +385,6 @@ export default function ApprovalDetailPage() {
   // Auth guard
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") router.replace("/dashboard");
   }, [user, router]);
 
   const fetchDetail = useCallback(async () => {
