@@ -467,6 +467,14 @@ export default function LeadsPage() {
               New Customer
             </Link>
             <div className="w-px h-6 bg-gray-200 mx-1" />
+            <Link
+              href="/ingestion"
+              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors shadow-sm"
+              title="Open Lead Ingestion & Normalized Contract Workbench"
+            >
+              <Zap size={15} />
+              Ingestion Workbench
+            </Link>
             <button
               onClick={() => setIsUploadOpen(true)}
               className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
