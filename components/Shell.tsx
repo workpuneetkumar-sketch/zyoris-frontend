@@ -49,6 +49,7 @@ import {
   BotMessageSquare,
   Wrench,
   ClipboardList,
+  ScrollText,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -357,6 +358,18 @@ const NAV_GROUPS: NavGroup[] = [
         icon: ClipboardList,
         roles: ["ADMIN"],
       },
+      {
+        href: "/executions",
+        label: "Execution Ledger",
+        icon: ScrollText,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/memory",
+        label: "Memory Settings",
+        icon: Brain,
+        roles: ["ADMIN"],
+      },
     ],
   },
 ];
@@ -532,6 +545,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     { href: "/agents",               label: "Agent Registry",    icon: BotMessageSquare },
     { href: "/tools",                label: "Tool Registry",     icon: Wrench         },
     { href: "/approvals",            label: "Approval Queue",    icon: ClipboardList  },
+    { href: "/executions",           label: "Execution Ledger",  icon: ScrollText     },
+    { href: "/memory",               label: "Memory Settings",   icon: Brain          },
   ];
 
   const ROLE_DASHBOARD_LABELS: Record<string, string> = {
@@ -591,6 +606,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         agents: BotMessageSquare, "agent-registry": BotMessageSquare, "bot-message-square": BotMessageSquare,
         tools: Wrench, "tool-registry": Wrench, wrench: Wrench,
         approvals: ClipboardList, "approval-queue": ClipboardList, "clipboard-list": ClipboardList,
+        executions: ScrollText, "execution-ledger": ScrollText, "scroll-text": ScrollText,
+        memory: Brain, "memory-settings": Brain, "agent-memory": Brain,
       };
 
       // ── Route normalization: API route → real Next.js page route ──────
@@ -667,6 +684,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         agents: "Admin Tools", "agent-registry": "Admin Tools",
         tools: "Admin Tools", "tool-registry": "Admin Tools",
         approvals: "Admin Tools", "approval-queue": "Admin Tools",
+        executions: "Admin Tools", "execution-ledger": "Admin Tools",
+        memory: "Admin Tools", "memory-settings": "Admin Tools", "agent-memory": "Admin Tools",
       };
 
       const ROUTE_TO_GROUP: Record<string, string> = {
@@ -692,6 +711,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/agents": "Admin Tools",
         "/tools": "Admin Tools",
         "/approvals": "Admin Tools",
+        "/executions": "Admin Tools",
+        "/memory": "Admin Tools",
       };
 
       const GROUP_ORDER = [
