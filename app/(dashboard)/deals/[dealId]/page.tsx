@@ -5,7 +5,8 @@ import { useEffect, useState, useCallback } from "react";
 import { fetchDealById } from "@/lib/api/dealsApi";
 import { Deal } from "@/types/deals";
 import { DealDetail } from "@/components/deals/DealDetail";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CalendarCheck } from "lucide-react";
+import { AgentTriggerButton } from "@/components/agents/AgentResultModal";
 
 export default function DealDetailPage() {
   const params = useParams();
@@ -72,7 +73,7 @@ export default function DealDetailPage() {
 
   return (
     <div className="flex flex-col gap-6 animate-in fade-in duration-500">
-      {/* Header with back button */}
+      {/* Header with back button + agent action */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <button
@@ -87,6 +88,24 @@ export default function DealDetailPage() {
             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{deal.dealId}</p>
           </div>
         </div>
+
+        {/* Sales Preparation Agent */}
+        <AgentTriggerButton
+          agentType="prepare_meeting"
+          payload={{
+            agentId: "sales-prep-agent",
+            action: "prepare_meeting",
+            parameters: {
+              dealId: dealId,
+              meetingMetadata: {
+                title: "Discovery Call",
+                purpose: "Product Demo & Architecture Review",
+              },
+            },
+          }}
+          label="Prepare Meeting"
+          icon={<CalendarCheck size={14} className="shrink-0" />}
+        />
       </div>
 
       {/* Deal detail component */}
