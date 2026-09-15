@@ -59,7 +59,7 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
     case "paragraph":
     case "text":
       return (
-        <p className="text-slate-700 dark:text-slate-300 leading-relaxed min-h-[1.5rem] my-1">
+        <p className="text-slate-700 dark:text-slate-300 leading-relaxed min-h-[1.5rem] my-1 whitespace-pre-wrap">
           {text}
         </p>
       );
@@ -123,10 +123,88 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
       );
 
     case "callout":
+      const calloutIcon = block.properties?.icon || "💡";
       return (
-        <div className="my-3 p-4 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-100 dark:border-blue-900/50 rounded-lg flex items-start space-x-3 text-slate-800 dark:text-blue-100">
-          <Info className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 text-sm leading-relaxed">{text}</div>
+        <div className="my-3 p-4 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 rounded-xl flex items-start space-x-3 text-slate-800 dark:text-amber-100 shadow-2xs">
+          <span className="text-xl flex-shrink-0 select-none">{calloutIcon}</span>
+          <div className="flex-1 text-sm leading-relaxed font-medium">{text}</div>
+        </div>
+      );
+
+    case "toggle":
+      return (
+        <details className="my-2 group rounded-xl border border-slate-200/80 dark:border-slate-800 p-3 bg-slate-50/50 dark:bg-slate-900/40">
+          <summary className="cursor-pointer font-semibold text-sm text-slate-800 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 select-none outline-none">
+            {text || "Toggle item"}
+          </summary>
+          <div className="pt-2 pl-4 text-xs text-slate-600 dark:text-slate-400 border-l-2 border-slate-200 dark:border-slate-700 mt-2">
+            {block.properties?.childrenText || "Toggle content details..."}
+          </div>
+        </details>
+      );
+
+    case "bookmark":
+      const url = block.properties?.url || text;
+      return (
+        <a
+          href={url.startsWith("http") ? url : `https://${url}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="my-3 flex items-center justify-between p-3.5 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/80 dark:bg-slate-900/60 hover:border-blue-400 dark:hover:border-blue-600 transition group"
+        >
+          <div className="min-w-0 flex-1 mr-3">
+            <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+              {block.properties?.title || text || "Web Bookmark"}
+            </p>
+            <p className="text-[11px] text-slate-400 truncate mt-0.5">{url}</p>
+          </div>
+          <span className="text-xs font-semibold text-blue-600 dark:text-blue-400 group-hover:underline flex-shrink-0">
+            Visit ↗
+          </span>
+        </a>
+      );
+
+    case "table":
+      const grid = (block.properties?.grid as string[][]) || [
+        ["Header 1", "Header 2"],
+        ["Cell 1", "Cell 2"],
+      ];
+      return (
+        <div className="my-3 overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+          <table className="w-full text-xs text-left text-slate-700 dark:text-slate-300">
+            <tbody>
+              {grid.map((row, rIdx) => (
+                <tr key={rIdx} className={rIdx === 0 ? "bg-slate-100 dark:bg-slate-800 font-bold" : "border-t border-slate-200 dark:border-slate-800"}>
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className="p-2.5 border-r border-slate-200 dark:border-slate-800 last:border-r-0">
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+
+    case "database":
+      return (
+        <div className="my-3 p-4 border border-purple-200 dark:border-purple-900/60 rounded-xl bg-purple-50/40 dark:bg-purple-950/20 text-xs font-semibold text-purple-700 dark:text-purple-300 flex items-center justify-between">
+          <span>📊 Database View: {text || "Untitled Database"}</span>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900">Database</span>
+        </div>
+      );
+
+    case "task":
+      return (
+        <div className="my-2 p-3 border border-blue-200 dark:border-blue-900/60 rounded-xl bg-blue-50/40 dark:bg-blue-950/20 flex items-center justify-between text-xs">
+          <div className="flex items-center space-x-2">
+            <CheckSquare className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <span className="font-semibold text-slate-900 dark:text-white">{text || "Task Item"}</span>
+          </div>
+          <span className="text-[10px] uppercase font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded">
+            {block.properties?.status || "TODO"}
+          </span>
         </div>
       );
 

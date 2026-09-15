@@ -1,7 +1,69 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { WorkspaceBlock, ReorderBlockItem, BlockFormatting } from "@/types/workspace";
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+interface AutoResizingTextareaProps
+  extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  value: string;
+  onValueChange?: (val: string) => void;
+  inputRef?: (el: HTMLTextAreaElement | null) => void;
+}
+
+const AutoResizingTextarea: React.FC<AutoResizingTextareaProps> = ({
+  value,
+  onValueChange,
+  onChange,
+  inputRef,
+  className,
+  style,
+  rows = 1,
+  ...props
+}) => {
+  const internalRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const adjustHeight = useCallback(() => {
+    const el = internalRef.current;
+    if (el) {
+      el.style.height = "auto";
+      el.style.height = `${Math.max(el.scrollHeight, 24)}px`;
+    }
+  }, []);
+
+  useIsomorphicLayoutEffect(() => {
+    adjustHeight();
+  }, [value, adjustHeight]);
+
+  return (
+    <textarea
+      {...props}
+      ref={(el) => {
+        internalRef.current = el;
+        if (inputRef) inputRef(el);
+      }}
+      value={value}
+      rows={rows}
+      onChange={(e) => {
+        if (onValueChange) {
+          onValueChange(e.target.value);
+        }
+        if (onChange) {
+          onChange(e);
+        }
+        adjustHeight();
+      }}
+      className={className}
+      style={{
+        ...style,
+        overflow: "hidden",
+        resize: "none",
+      }}
+    />
+  );
+};
 import {
   createWorkspaceBlock,
   updateWorkspaceBlock,
@@ -11,6 +73,8 @@ import {
 import { SlashMenu } from "./SlashMenu";
 import { FormattingToolbar } from "./FormattingToolbar";
 import { AttachmentBlock } from "./AttachmentBlock";
+import { DatabaseView } from "./DatabaseView";
+import { createTask } from "@/lib/api/tasksApi";
 import {
   GripVertical,
   Plus,
@@ -25,6 +89,10 @@ import {
   Link as LinkIcon,
   ExternalLink,
   RefreshCw,
+  Sparkles,
+  Send,
+  Database as DatabaseIcon,
+  Table as TableIcon,
 } from "lucide-react";
 
 interface BlockEditorProps {
@@ -50,6 +118,20 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const editorRef = useRef<HTMLDivElement>(null);
+  const blockRefs = useRef<Record<number, HTMLInputElement | HTMLTextAreaElement | null>>({});
+
+  const registerRef = useCallback(
+    (index: number, el: HTMLInputElement | HTMLTextAreaElement | null) => {
+      blockRefs.current[index] = el;
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (focusedIndex !== null && blockRefs.current[focusedIndex]) {
+      blockRefs.current[focusedIndex]?.focus();
+    }
+  }, [focusedIndex, blocks.length]);
 
   // Debounce timers & version map for autosave
   const saveTimersRef = useRef<Record<string, NodeJS.Timeout>>({});
@@ -191,6 +273,39 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
     const targetBlock = blocks[index];
     if (!targetBlock) return;
 
+    // ── Enhanced Markdown & Slash Shortcuts Detection ──────────────────────
+    let matchedType: string | null = null;
+    let cleanText = newText;
+
+    // Exact or prefix space triggers
+    if (newText === "# " || /^#\s+/.test(newText)) { matchedType = "heading_1"; cleanText = newText.replace(/^#\s*/, ""); }
+    else if (newText === "## " || /^##\s+/.test(newText)) { matchedType = "heading_2"; cleanText = newText.replace(/^##\s*/, ""); }
+    else if (newText === "### " || /^###\s+/.test(newText)) { matchedType = "heading_3"; cleanText = newText.replace(/^###\s*/, ""); }
+    else if (newText === "> " || /^>\s+/.test(newText)) { matchedType = "quote"; cleanText = newText.replace(/^>\s*/, ""); }
+    else if (newText === "::callout " || newText === "! " || /^!\s+/.test(newText) || /^::callout\s+/.test(newText)) { matchedType = "callout"; cleanText = newText.replace(/^!|^::callout/, "").trim(); }
+    else if (newText === ">! " || /^>!\s+/.test(newText)) { matchedType = "toggle"; cleanText = newText.replace(/^>!\s*/, ""); }
+    else if (newText === "- " || newText === "* " || /^[-*]\s+/.test(newText)) { matchedType = "bulleted_list_item"; cleanText = newText.replace(/^[-*]\s*/, ""); }
+    else if (newText === "1. " || /^\d+\.\s+/.test(newText)) { matchedType = "numbered_list_item"; cleanText = newText.replace(/^\d+\.\s*/, ""); }
+    else if (newText === "[] " || newText === "[ ] " || /^\[\s*\]\s+/.test(newText)) { matchedType = "to_do"; cleanText = newText.replace(/^\[\s*\]\s*/, ""); }
+    else if (newText === "---") { matchedType = "divider"; cleanText = ""; }
+    else if (newText.startsWith("```")) { matchedType = "code"; cleanText = newText.replace(/^```/, "").trim(); }
+    else if (newText.startsWith("http://") || newText.startsWith("https://")) { matchedType = "bookmark"; cleanText = newText; }
+
+    if (matchedType) {
+      setBlocks((prev) => {
+        const nextArr = [...prev];
+        nextArr[index] = {
+          ...nextArr[index],
+          type: matchedType!,
+          text: cleanText,
+          properties: matchedType === "bookmark" ? { url: cleanText, title: cleanText } : nextArr[index].properties,
+        };
+        return nextArr;
+      });
+      triggerAutosave(targetBlock.id, { ...targetBlock, type: matchedType, text: cleanText });
+      return;
+    }
+
     if (newText.startsWith("/")) {
       setActiveSlashIndex(index);
       setSlashQuery(newText.slice(1));
@@ -206,6 +321,33 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
     });
 
     triggerAutosave(targetBlock.id, { ...targetBlock, text: newText });
+  };
+
+  /* -------------------------------------------------------------------------- */
+  /* PASTE HANDLING (Sanitized multi-line & URL to bookmark)                    */
+  /* -------------------------------------------------------------------------- */
+  const handlePaste = async (e: React.ClipboardEvent, index: number) => {
+    const pastedText = e.clipboardData.getData("text/plain");
+    if (!pastedText) return;
+
+    const trimmed = pastedText.trim();
+
+    // Case A: URL paste -> Convert block to bookmark/link block
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      e.preventDefault();
+      const targetBlock = blocks[index];
+      const updatedProperties = { ...targetBlock?.properties, url: trimmed, title: trimmed };
+      setBlocks((prev) => {
+        const nextArr = [...prev];
+        nextArr[index] = { ...nextArr[index], type: "bookmark", text: trimmed, properties: updatedProperties };
+        return nextArr;
+      });
+      if (targetBlock) {
+        triggerAutosave(targetBlock.id, { ...targetBlock, type: "bookmark", text: trimmed, properties: updatedProperties });
+      }
+      return;
+    }
+    // Case B: Multi-line text -> Native paste into multi-line AutoResizingTextarea
   };
 
   const handleApplyFormatting = (index: number, updates: Partial<BlockFormatting>) => {
@@ -369,7 +511,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
   };
 
   /* -------------------------------------------------------------------------- */
-  /* KEYBOARD NAVIGATION (Enter, Backspace, Tab)                                */
+  /* KEYBOARD NAVIGATION (Enter, Backspace, Tab, Arrows)                        */
   /* -------------------------------------------------------------------------- */
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -380,7 +522,12 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
       if (blocks.length > 1) {
         e.preventDefault();
         handleDeleteBlock(index);
+        setFocusedIndex(Math.max(0, index - 1));
       }
+    } else if (e.key === "ArrowUp" && index > 0) {
+      setFocusedIndex(index - 1);
+    } else if (e.key === "ArrowDown" && index < blocks.length - 1) {
+      setFocusedIndex(index + 1);
     } else if (e.key === "Tab") {
       e.preventDefault();
       const targetBlock = blocks[index];
@@ -514,6 +661,8 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
                     handleDeleteBlock,
                     handleToggleCheckbox,
                     handleKeyDown,
+                    handlePaste,
+                    registerRef,
                     canEdit
                   )}
 
@@ -572,6 +721,8 @@ function renderBlockInput(
   onDeleteBlock: (index: number) => void,
   onToggleCheck: (index: number) => void,
   onKeyDown: (e: React.KeyboardEvent, index: number) => void,
+  onPaste: (e: React.ClipboardEvent, index: number) => void,
+  registerRef: (index: number, el: HTMLInputElement | HTMLTextAreaElement | null) => void,
   canEdit: boolean
 ) {
   const type = block.type ? block.type.toLowerCase() : "paragraph";
@@ -607,12 +758,13 @@ function renderBlockInput(
     case "heading_1":
     case "h1":
       return (
-        <input
-          type="text"
+        <AutoResizingTextarea
           value={text}
           disabled={!canEdit}
           onChange={(e) => onChangeText(index, e.target.value)}
           onKeyDown={(e) => onKeyDown(e, index)}
+          onPaste={(e) => onPaste(e, index)}
+          inputRef={(el) => registerRef(index, el)}
           placeholder="Heading 1..."
           className={`w-full bg-transparent text-2xl font-extrabold text-slate-900 dark:text-white placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none py-1 ${getFormatClasses()}`}
         />
@@ -621,12 +773,13 @@ function renderBlockInput(
     case "heading_2":
     case "h2":
       return (
-        <input
-          type="text"
+        <AutoResizingTextarea
           value={text}
           disabled={!canEdit}
           onChange={(e) => onChangeText(index, e.target.value)}
           onKeyDown={(e) => onKeyDown(e, index)}
+          onPaste={(e) => onPaste(e, index)}
+          inputRef={(el) => registerRef(index, el)}
           placeholder="Heading 2..."
           className={`w-full bg-transparent text-xl font-bold text-slate-800 dark:text-slate-100 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none py-1 ${getFormatClasses()}`}
         />
@@ -635,12 +788,13 @@ function renderBlockInput(
     case "heading_3":
     case "h3":
       return (
-        <input
-          type="text"
+        <AutoResizingTextarea
           value={text}
           disabled={!canEdit}
           onChange={(e) => onChangeText(index, e.target.value)}
           onKeyDown={(e) => onKeyDown(e, index)}
+          onPaste={(e) => onPaste(e, index)}
+          inputRef={(el) => registerRef(index, el)}
           placeholder="Heading 3..."
           className={`w-full bg-transparent text-lg font-semibold text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none py-0.5 ${getFormatClasses()}`}
         />
@@ -649,14 +803,15 @@ function renderBlockInput(
     case "bulleted_list_item":
     case "bullet_list":
       return (
-        <div className="flex items-center space-x-2">
-          <span className="text-slate-400 font-bold select-none text-base">•</span>
-          <input
-            type="text"
+        <div className="flex items-start space-x-2">
+          <span className="text-slate-400 font-bold select-none text-base mt-1">•</span>
+          <AutoResizingTextarea
             value={text}
             disabled={!canEdit}
             onChange={(e) => onChangeText(index, e.target.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
             placeholder="List item..."
             className={`w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 focus:outline-none py-1 ${getFormatClasses()}`}
           />
@@ -666,14 +821,15 @@ function renderBlockInput(
     case "numbered_list_item":
     case "numbered_list":
       return (
-        <div className="flex items-center space-x-2">
-          <span className="text-slate-400 font-semibold select-none text-xs w-4">{index + 1}.</span>
-          <input
-            type="text"
+        <div className="flex items-start space-x-2">
+          <span className="text-slate-400 font-semibold select-none text-xs w-4 mt-1.5">{index + 1}.</span>
+          <AutoResizingTextarea
             value={text}
             disabled={!canEdit}
             onChange={(e) => onChangeText(index, e.target.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
             placeholder="Numbered list item..."
             className={`w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 focus:outline-none py-1 ${getFormatClasses()}`}
           />
@@ -685,11 +841,11 @@ function renderBlockInput(
     case "checkbox":
       const isChecked = !!block.properties?.checked;
       return (
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-start space-x-2.5">
           <button
             type="button"
             onClick={() => onToggleCheck(index)}
-            className="p-0.5 rounded text-slate-400 hover:text-blue-600"
+            className="p-0.5 mt-1 rounded text-slate-400 hover:text-blue-600 shrink-0"
           >
             {isChecked ? (
               <CheckSquare className="w-4 h-4 text-blue-600" />
@@ -697,12 +853,13 @@ function renderBlockInput(
               <Square className="w-4 h-4 text-slate-400" />
             )}
           </button>
-          <input
-            type="text"
+          <AutoResizingTextarea
             value={text}
             disabled={!canEdit}
             onChange={(e) => onChangeText(index, e.target.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
             placeholder="To-do task..."
             className={`w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 focus:outline-none py-1 ${
               isChecked ? "line-through text-slate-400" : ""
@@ -711,18 +868,292 @@ function renderBlockInput(
         </div>
       );
 
-    case "quote":
+    case "callout":
+      const calloutIcon = block.properties?.icon || "💡";
       return (
-        <div className="flex items-center space-x-2 pl-3 border-l-4 border-slate-300 dark:border-slate-600 py-1 bg-slate-50/60 dark:bg-slate-800/40 rounded-r-lg">
-          <Quote className="w-4 h-4 text-slate-400 flex-shrink-0" />
-          <input
-            type="text"
+        <div className="p-3 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 rounded-xl flex items-start space-x-3">
+          <button
+            type="button"
+            onClick={() => {
+              const icons = ["💡", "⚠️", "ℹ️", "🔥", "📌", "🚀", "✅"];
+              const nextIcon = icons[(icons.indexOf(calloutIcon) + 1) % icons.length];
+              onUpdateBlockFields(index, { formatting: { ...fmt, icon: nextIcon } });
+            }}
+            title="Click to change icon"
+            className="text-lg p-1 hover:bg-amber-100 dark:hover:bg-amber-900/50 rounded shrink-0"
+          >
+            {calloutIcon}
+          </button>
+          <AutoResizingTextarea
             value={text}
             disabled={!canEdit}
             onChange={(e) => onChangeText(index, e.target.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
+            placeholder="Callout text..."
+            className="w-full bg-transparent text-sm font-medium text-slate-800 dark:text-amber-100 focus:outline-none py-0.5"
+          />
+        </div>
+      );
+
+    case "toggle":
+      return (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-800 p-2.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+          <div className="flex items-center space-x-2">
+            <span className="text-slate-400 text-xs font-bold font-mono">▶</span>
+            <input
+              type="text"
+              value={text}
+              disabled={!canEdit}
+              onChange={(e) => onChangeText(index, e.target.value)}
+              onKeyDown={(e) => onKeyDown(e, index)}
+              onPaste={(e) => onPaste(e, index)}
+              placeholder="Toggle header..."
+              className="w-full bg-transparent text-sm font-semibold text-slate-800 dark:text-slate-100 focus:outline-none"
+            />
+          </div>
+          <div className="pl-5 border-l-2 border-slate-200 dark:border-slate-700">
+            <input
+              type="text"
+              value={block.properties?.childrenText || ""}
+              disabled={!canEdit}
+              onChange={(e) =>
+                onUpdateBlockFields(index, {
+                  formatting: { ...fmt, childrenText: e.target.value },
+                })
+              }
+              placeholder="Toggle body details..."
+              className="w-full bg-transparent text-xs text-slate-600 dark:text-slate-400 focus:outline-none"
+            />
+          </div>
+        </div>
+      );
+
+    case "bookmark":
+      const bookmarkUrl = block.properties?.url || text;
+      return (
+        <div className="p-3 border border-blue-200 dark:border-blue-900/60 rounded-xl bg-blue-50/30 dark:bg-blue-950/20 space-y-2">
+          <div className="flex items-center space-x-2">
+            <LinkIcon className="w-4 h-4 text-blue-500 flex-shrink-0" />
+            <input
+              type="text"
+              value={text}
+              disabled={!canEdit}
+              onChange={(e) => onChangeText(index, e.target.value)}
+              onKeyDown={(e) => onKeyDown(e, index)}
+              onPaste={(e) => onPaste(e, index)}
+              placeholder="Paste web URL (https://...)"
+              className="w-full bg-transparent text-xs text-blue-600 dark:text-blue-400 font-semibold focus:outline-none"
+            />
+            {bookmarkUrl && (
+              <a
+                href={bookmarkUrl.startsWith("http") ? bookmarkUrl : `https://${bookmarkUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-1 bg-blue-600 text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 shrink-0"
+              >
+                Visit ↗
+              </a>
+            )}
+          </div>
+        </div>
+      );
+
+    case "table":
+      const grid = (block.properties?.grid as string[][]) || [
+        ["Header 1", "Header 2"],
+        ["Cell 1", "Cell 2"],
+      ];
+      return (
+        <div className="my-2 space-y-2">
+          <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+            <table className="w-full text-xs text-left text-slate-700 dark:text-slate-300">
+              <tbody>
+                {grid.map((row, rIdx) => (
+                  <tr key={rIdx} className={rIdx === 0 ? "bg-slate-100 dark:bg-slate-800 font-bold" : "border-t border-slate-200 dark:border-slate-800"}>
+                    {row.map((cell, cIdx) => (
+                      <td key={cIdx} className="p-1.5 border-r border-slate-200 dark:border-slate-800 last:border-r-0">
+                        <input
+                          type="text"
+                          value={cell}
+                          disabled={!canEdit}
+                          onChange={(e) => {
+                            const newGrid = grid.map((r, i) =>
+                              i === rIdx ? r.map((c, j) => (j === cIdx ? e.target.value : c)) : r
+                            );
+                            onUpdateBlockFields(index, { formatting: { ...fmt, grid: newGrid } });
+                          }}
+                          className="w-full bg-transparent focus:outline-none"
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {canEdit && (
+            <div className="flex items-center space-x-2 text-[10px] text-slate-400">
+              <button
+                type="button"
+                onClick={() => {
+                  const newRow = new Array(grid[0]?.length || 2).fill("New Cell");
+                  const newGrid = [...grid, newRow];
+                  onUpdateBlockFields(index, { formatting: { ...fmt, grid: newGrid } });
+                }}
+                className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded font-semibold text-slate-700 dark:text-slate-300"
+              >
+                + Add Row
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const newGrid = grid.map((row) => [...row, "New Cell"]);
+                  onUpdateBlockFields(index, { formatting: { ...fmt, grid: newGrid } });
+                }}
+                className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded font-semibold text-slate-700 dark:text-slate-300"
+              >
+                + Add Column
+              </button>
+            </div>
+          )}
+        </div>
+      );
+
+    case "database":
+      return (
+        <div className="my-3 border border-purple-200 dark:border-purple-900/60 rounded-2xl p-4 bg-purple-50/30 dark:bg-purple-950/20 space-y-4 shadow-sm">
+          <div className="flex items-center justify-between pb-2 border-b border-purple-100 dark:border-purple-900/40">
+            <div className="flex items-center space-x-2 flex-1 min-w-0">
+              <DatabaseIcon className="w-5 h-5 text-purple-600 dark:text-purple-400 shrink-0" />
+              <input
+                type="text"
+                value={text}
+                disabled={!canEdit}
+                onChange={(e) => onChangeText(index, e.target.value)}
+                onKeyDown={(e) => onKeyDown(e, index)}
+                onPaste={(e) => onPaste(e, index)}
+                placeholder="Database Title (e.g. Project Specs, CRM Leads)..."
+                className="w-full bg-transparent font-bold text-sm text-purple-900 dark:text-purple-100 focus:outline-none"
+              />
+            </div>
+            <span className="text-[10px] uppercase font-bold text-purple-600 bg-purple-100 dark:bg-purple-950 px-2 py-0.5 rounded shrink-0 font-mono">
+              Embedded Database
+            </span>
+          </div>
+          <DatabaseView pageId={pageId} />
+        </div>
+      );
+
+    case "task":
+      const taskStatus = block.properties?.status || "TODO";
+      const taskPriority = block.properties?.priority || "MEDIUM";
+      const createdTaskId = block.properties?.createdTaskId;
+      const isSyncing = !!block.properties?.isSyncing;
+
+      return (
+        <div className="my-3 border border-blue-200 dark:border-blue-900/60 rounded-2xl p-4 bg-blue-50/40 dark:bg-blue-950/20 space-y-3 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2 flex-1 min-w-0">
+              <CheckSquare className="w-5 h-5 text-blue-600 dark:text-blue-400 shrink-0" />
+              <input
+                type="text"
+                value={text}
+                disabled={!canEdit}
+                onChange={(e) => onChangeText(index, e.target.value)}
+                onKeyDown={(e) => onKeyDown(e, index)}
+                onPaste={(e) => onPaste(e, index)}
+                placeholder="Task title (e.g. Complete API alignment, Review design)..."
+                className="w-full bg-transparent font-semibold text-sm text-slate-900 dark:text-white focus:outline-none"
+              />
+            </div>
+            <span className="text-[10px] uppercase font-bold text-blue-600 bg-blue-100 dark:bg-blue-950 px-2 py-0.5 rounded shrink-0">
+              Inline Task Block
+            </span>
+          </div>
+
+          <div className="flex items-center justify-between text-xs pt-1 border-t border-blue-100 dark:border-blue-900/40">
+            <div className="flex items-center space-x-3">
+              <select
+                value={taskStatus}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  onUpdateBlockFields(index, {
+                    formatting: { ...fmt, status: e.target.value },
+                  })
+                }
+                className="px-2 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-blue-600 focus:outline-none"
+              >
+                <option value="TODO">TODO</option>
+                <option value="IN_PROGRESS">IN_PROGRESS</option>
+                <option value="DONE">DONE</option>
+              </select>
+
+              <select
+                value={taskPriority}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  onUpdateBlockFields(index, {
+                    formatting: { ...fmt, priority: e.target.value },
+                  })
+                }
+                className="px-2 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-slate-700 dark:text-slate-300 focus:outline-none"
+              >
+                <option value="LOW">LOW</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="HIGH">HIGH</option>
+              </select>
+            </div>
+
+            {createdTaskId ? (
+              <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
+                Synced Task #{String(createdTaskId).slice(0, 8)}
+              </span>
+            ) : (
+              <button
+                type="button"
+                disabled={!text.trim() || isSyncing}
+                onClick={async () => {
+                  if (!text.trim()) return;
+                  onUpdateBlockFields(index, { formatting: { ...fmt, isSyncing: true } });
+                  try {
+                    const created = await createTask({
+                      title: text.trim(),
+                      status: taskStatus as any,
+                      priority: taskPriority as any,
+                    });
+                    onUpdateBlockFields(index, {
+                      formatting: { ...fmt, createdTaskId: created.id, isSyncing: false },
+                    });
+                  } catch (err) {
+                    console.error("Failed to sync task to backend:", err);
+                    onUpdateBlockFields(index, { formatting: { ...fmt, isSyncing: false } });
+                  }
+                }}
+                className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-semibold text-xs transition disabled:opacity-50"
+              >
+                <Send className="w-3 h-3" />
+                <span>{isSyncing ? "Syncing..." : "Sync to Organization Tasks"}</span>
+              </button>
+            )}
+          </div>
+        </div>
+      );
+
+    case "quote":
+      return (
+        <div className="flex items-start space-x-2 pl-3 border-l-4 border-slate-300 dark:border-slate-600 py-1 bg-slate-50/60 dark:bg-slate-800/40 rounded-r-lg">
+          <Quote className="w-4 h-4 text-slate-400 flex-shrink-0 mt-1" />
+          <AutoResizingTextarea
+            value={text}
+            disabled={!canEdit}
+            onChange={(e) => onChangeText(index, e.target.value)}
+            onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
             placeholder="Empty quote..."
-            className={`w-full bg-transparent text-sm italic text-slate-700 dark:text-slate-300 focus:outline-none ${getFormatClasses()}`}
+            className={`w-full bg-transparent text-sm italic text-slate-700 dark:text-slate-300 focus:outline-none py-0.5 ${getFormatClasses()}`}
           />
         </div>
       );
@@ -736,14 +1167,15 @@ function renderBlockInput(
               <span>Code Block</span>
             </span>
           </div>
-          <textarea
+          <AutoResizingTextarea
             value={text}
             disabled={!canEdit}
             onChange={(e) => onChangeText(index, e.target.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
             placeholder="// Type code here..."
-            rows={3}
-            className="w-full bg-transparent text-slate-100 focus:outline-none resize-y font-mono text-xs leading-relaxed"
+            className="w-full bg-transparent text-slate-100 focus:outline-none font-mono text-xs leading-relaxed"
           />
         </div>
       );
@@ -766,6 +1198,7 @@ function renderBlockInput(
               disabled={!canEdit}
               onChange={(e) => onChangeText(index, e.target.value)}
               onKeyDown={(e) => onKeyDown(e, index)}
+              onPaste={(e) => onPaste(e, index)}
               placeholder="Link text or https://..."
               className="w-full bg-transparent text-xs text-blue-600 dark:text-blue-400 font-semibold focus:outline-none underline decoration-blue-300"
             />
@@ -804,15 +1237,16 @@ function renderBlockInput(
 
     default:
       return (
-        <div className="flex items-center space-x-2 w-full">
-          <input
-            type="text"
+        <div className="flex items-start space-x-2 w-full">
+          <AutoResizingTextarea
             value={text}
             disabled={!canEdit}
             onChange={(e) => onChangeText(index, e.target.value)}
             onKeyDown={(e) => onKeyDown(e, index)}
+            onPaste={(e) => onPaste(e, index)}
+            inputRef={(el) => registerRef(index, el)}
             placeholder="Type '/' for commands..."
-            className={`w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none py-1 ${getFormatClasses()}`}
+            className={`w-full bg-transparent text-sm text-slate-800 dark:text-slate-200 placeholder-slate-300 dark:placeholder-slate-600 focus:outline-none py-1 leading-relaxed ${getFormatClasses()}`}
           />
           {detectedUrl && (
             <a
@@ -820,7 +1254,7 @@ function renderBlockInput(
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center space-x-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 hover:underline rounded text-xs font-medium flex-shrink-0"
+              className="inline-flex items-center space-x-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-600 dark:text-blue-300 hover:underline rounded text-xs font-medium flex-shrink-0 mt-1"
               title={`Open ${detectedUrl}`}
             >
               <span>Link ↗</span>

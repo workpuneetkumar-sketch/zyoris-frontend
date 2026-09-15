@@ -25,6 +25,7 @@ export interface ProjectMember {
   id: string;           // membership id
   projectId: string;
   userId: string;       // user id
+  role?: "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
 }
 
 export interface Project {
@@ -143,7 +144,34 @@ export async function addProjectMember(projectId: string, data: AddMemberPayload
     const res = await api.post(`/projects/${projectId}/members`, data);
     return res.data?.data || res.data;
   } catch (error: any) {
+    if (error.response?.status === 403) {
+      throw new Error("Permission Denied: You do not have permission to add project members.");
+    }
     throw new Error(error.response?.data?.message || "Failed to add member");
+  }
+}
+
+export async function updateProjectMember(projectId: string, memberId: string, role: string): Promise<any> {
+  try {
+    const res = await api.patch(`/projects/${projectId}/members/${memberId}`, { role });
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    if (error.response?.status === 403) {
+      throw new Error("Permission Denied: You do not have permission to update project member roles.");
+    }
+    throw new Error(error.response?.data?.message || "Failed to update project member role");
+  }
+}
+
+export async function removeProjectMember(projectId: string, memberId: string): Promise<any> {
+  try {
+    const res = await api.delete(`/projects/${projectId}/members/${memberId}`);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    if (error.response?.status === 403) {
+      throw new Error("Permission Denied: You do not have permission to remove project members.");
+    }
+    throw new Error(error.response?.data?.message || "Failed to remove member from project");
   }
 }
 

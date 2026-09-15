@@ -94,11 +94,10 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
               <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 flex-shrink-0" />
               <Link
                 href={crumb.href}
-                className={`truncate max-w-[140px] md:max-w-[200px] transition ${
-                  idx === breadcrumbs.length - 1
+                className={`truncate max-w-[140px] md:max-w-[200px] transition ${idx === breadcrumbs.length - 1
                     ? "text-slate-900 dark:text-white font-semibold"
                     : "hover:text-slate-900 dark:hover:text-white"
-                }`}
+                  }`}
               >
                 {crumb.title}
               </Link>
