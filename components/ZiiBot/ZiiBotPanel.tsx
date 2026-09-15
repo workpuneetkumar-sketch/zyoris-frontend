@@ -8,6 +8,8 @@ import { ContextualSuggestions } from "./ContextualSuggestions";
 import { Send, Bot, Paperclip, Smile, Minimize2, Maximize2, X, Volume2, VolumeX, ThumbsUp, ThumbsDown, MoreVertical, ChevronDown } from "lucide-react";
 import { getVoiceService } from "./voiceService";
 import { toast } from "react-toastify";
+import { ActionProposalCard } from "@/components/ai/ActionProposalCard";
+import type { AgentApprovalRequest } from "@/types/ai-proposals";
 
 interface ZiiBotPanelProps {
   isOpen: boolean;
@@ -22,6 +24,8 @@ interface ZiiBotPanelProps {
   showGreeting: boolean;
   darkMode: boolean;
   userName?: string;
+  /** Called when an ActionProposalCard updates its status */
+  onUpdateProposal?: (approvalId: string, patch: Partial<AgentApprovalRequest>) => void;
 }
 
 // ─── Helper: Format message with HTML ─────────────────────────
@@ -107,6 +111,7 @@ export function ZiiBotPanel({
   showGreeting,
   darkMode,
   userName,
+  onUpdateProposal,
 }: ZiiBotPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -267,7 +272,23 @@ export function ZiiBotPanel({
 
             {/* Messages */}
             {messages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} isUser={msg.role === "user"} darkMode={false} />
+              msg.type === "proposal" && msg.proposalData ? (
+                <motion.div
+                  key={msg.id}
+                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.28, ease: "easeOut" }}
+                >
+                  <ActionProposalCard
+                    proposal={msg.proposalData}
+                    onStatusChange={(id, _status, patch) =>
+                      onUpdateProposal?.(id, patch)
+                    }
+                  />
+                </motion.div>
+              ) : (
+                <MessageBubble key={msg.id} message={msg} isUser={msg.role === "user"} darkMode={false} />
+              )
             ))}
 
             {/* Typing Indicator */}

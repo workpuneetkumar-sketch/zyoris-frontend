@@ -90,6 +90,7 @@ export function ZiiBot() {
             showGreeting={chat.showGreeting}
             darkMode={darkMode}
             userName={chat.userName}
+            onUpdateProposal={chat.updateProposalStatus}
           />
         ) : showPanel ? (
           <ZiiBotPanel
@@ -106,6 +107,7 @@ export function ZiiBot() {
             showGreeting={chat.showGreeting}
             darkMode={darkMode}
             userName={chat.userName}
+            onUpdateProposal={chat.updateProposalStatus}
           />
         ) : null}
       </AnimatePresence>

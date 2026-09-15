@@ -168,3 +168,120 @@ export type {
   ApprovalListResponse,
   DecideApprovalPayload,
 } from "@/types/approvals";
+
+// ─── Action Agent Execute (Day 5) ─────────────────────────────────────────────
+
+import type {
+  AgentApprovalRequest,
+  ApprovalExecuteResult,
+  AgentApprovalStatus,
+} from "@/types/ai-proposals";
+
+const AI_APPROVALS_BASE = "/api/ai/approvals";
+
+/**
+ * POST /api/ai/approvals/:id/execute
+ *
+ * Executes an approved agent action request on the backend.
+ * Called when the user clicks "Execute / Approve & Send" on an
+ * ActionProposalCard. The button is disabled while this is in-flight
+ * and the component re-renders based on the returned status.
+ *
+ * Never assume optimistic success — always use the returned status
+ * to update UI state.
+ *
+ * @throws Error with a user-friendly message on 400, 403, 409, or 5xx.
+ */
+export async function executeApproval(id: string): Promise<ApprovalExecuteResult> {
+  try {
+    const res = await api.post(`${AI_APPROVALS_BASE}/${id}/execute`);
+
+    // Normalise envelope
+    const raw: unknown = res.data;
+    if (raw && typeof raw === "object") {
+      const r = raw as Record<string, unknown>;
+      const src = (r.data && typeof r.data === "object") ? r.data as Record<string, unknown> : r;
+      return {
+        success:     src.success   !== false,
+        approvalId:  (src.approvalId ?? src.id ?? id) as string,
+        status:      (src.status ?? "EXECUTED") as AgentApprovalStatus,
+        message:     src.message   as string | undefined,
+        executedAt:  src.executedAt as string | undefined,
+      };
+    }
+    return { success: true, approvalId: id, status: "EXECUTED" };
+  } catch (err: any) {
+    // 403 — caller is not authorised to execute this approval
+    if (err.response?.status === 403) {
+      throw new Error(
+        "You are not authorised to execute this action. " +
+          (err.response?.data?.message ?? "")
+      );
+    }
+    // 409 — already executed, rejected, or expired
+    if (err.response?.status === 409) {
+      throw new Error(
+        err.response?.data?.message ??
+          "This action has already been executed, rejected, or has expired."
+      );
+    }
+    // 400 — invalid state or validation failure
+    if (err.response?.status === 400) {
+      throw new Error(
+        err.response?.data?.message ??
+          "Invalid request. The action may need to be approved before it can be executed."
+      );
+    }
+    const serverMsg =
+      err.response?.data?.message ||
+      err.response?.data?.error ||
+      (Array.isArray(err.response?.data?.errors)
+        ? (err.response.data.errors as { message: string }[])
+            .map((e) => e.message)
+            .join("; ")
+        : null);
+    throw new Error(serverMsg || err.message || "Failed to execute action.");
+  }
+}
+
+/**
+ * POST /api/ai/approvals/:id/decide
+ *
+ * Shortcut decide endpoint scoped to the AI approvals namespace.
+ * Wraps the existing decideApproval() pattern for the new
+ * /api/ai/approvals route — same payload shape, different base URL.
+ */
+export async function decideAgentApproval(
+  id: string,
+  decision: "APPROVED" | "REJECTED",
+  rejectionReason?: string
+): Promise<AgentApprovalRequest> {
+  if (decision === "REJECTED" && (!rejectionReason?.trim())) {
+    throw new Error("A rejection reason is required when rejecting an action.");
+  }
+  try {
+    const res = await api.post(`${AI_APPROVALS_BASE}/${id}/decide`, {
+      decision,
+      ...(rejectionReason?.trim() && { rejectionReason: rejectionReason.trim() }),
+    });
+    return unwrap<AgentApprovalRequest>(res.data);
+  } catch (err: any) {
+    if (err.response?.status === 403) {
+      throw new Error(
+        "You are not authorised to decide on this action. " +
+          (err.response?.data?.message ?? "")
+      );
+    }
+    if (err.response?.status === 409) {
+      throw new Error(
+        err.response?.data?.message ??
+          "This action has already been decided or has expired."
+      );
+    }
+    throw new Error(
+      err.response?.data?.message || err.message || "Failed to submit decision."
+    );
+  }
+}
+
+export type { AgentApprovalRequest, ApprovalExecuteResult, AgentApprovalStatus } from "@/types/ai-proposals";
