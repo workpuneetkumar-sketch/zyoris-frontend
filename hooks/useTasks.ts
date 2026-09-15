@@ -16,6 +16,7 @@ import {
     UpdateTaskPayload,
     BulkUpdateFields,
     BulkUpdateResponse,
+    getTaskLabelsMap,
 } from "@/lib/api/tasksApi";
 
 export type TaskFilter = "all" | "my" | "overdue";
@@ -28,6 +29,8 @@ export function useTasks(currentUserId?: string) {
     const [statusFilter, setStatusFilter] = useState("all");
     const [priorityFilter, setPriorityFilter] = useState("all");
     const [assigneeFilter, setAssigneeFilter] = useState("all");
+    const [projectFilter, setProjectFilter] = useState("all");
+    const [labelFilter, setLabelFilter] = useState("all");
     const [search, setSearch] = useState("");
     const [selectedTaskIds, setSelectedTaskIds] = useState<string[]>([]);
     const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -97,17 +100,30 @@ export function useTasks(currentUserId?: string) {
                 }
             }
 
+            // Project Filter
+            if (projectFilter !== "all") {
+                if (task.projectId !== projectFilter) return false;
+            }
+
+            // Label Filter
+            if (labelFilter !== "all") {
+                if (!task.labels || !Array.isArray(task.labels) || !task.labels.includes(labelFilter)) {
+                    return false;
+                }
+            }
+
             // Search
             if (search.trim()) {
                 const q = search.toLowerCase();
                 const inTitle = task.title.toLowerCase().includes(q);
                 const inDesc = task.description?.toLowerCase().includes(q) ?? false;
-                if (!inTitle && !inDesc) return false;
+                const inLabels = task.labels?.some((l) => l.toLowerCase().includes(q)) ?? false;
+                if (!inTitle && !inDesc && !inLabels) return false;
             }
 
             return true;
         });
-    }, [tasks, filter, currentUserId, statusFilter, priorityFilter, assigneeFilter, search]);
+    }, [tasks, filter, currentUserId, statusFilter, priorityFilter, assigneeFilter, projectFilter, labelFilter, search]);
 
     // ── Selection State Logic ─────────────────────────────────────────────────
     const isAllSelected = useMemo(() => {
@@ -172,14 +188,40 @@ export function useTasks(currentUserId?: string) {
     async function handleUpdate(id: string, data: UpdateTaskPayload): Promise<boolean> {
         setSaving(true);
         setSaveError(null);
-        // Optimistic update
+        // Optimistic update for both tasks list and active selectedTask
         setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
+        setSelectedTask((prev) => (prev && prev.id === id ? { ...prev, ...data } : prev));
         try {
             const updated = await updateTask(id, data);
-            setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...updated } : t)));
-            if (selectedTask?.id === id) {
-                setSelectedTask((prev) => (prev ? { ...prev, ...updated } : null));
-            }
+            setTasks((prev) =>
+                prev.map((t) => {
+                    if (t.id !== id) return t;
+                    const merged = { ...t, ...updated };
+                    // If update payload did not modify status, explicitly preserve current status
+                    if (data.status === undefined) {
+                        merged.status = t.status;
+                    }
+                    if (data.labels !== undefined) {
+                        merged.labels = data.labels;
+                    } else if (!merged.labels || merged.labels.length === 0) {
+                        merged.labels = t.labels;
+                    }
+                    return merged;
+                })
+            );
+            setSelectedTask((prev) => {
+                if (!prev || prev.id !== id) return prev;
+                const merged = { ...prev, ...updated };
+                if (data.status === undefined) {
+                    merged.status = prev.status;
+                }
+                if (data.labels !== undefined) {
+                    merged.labels = data.labels;
+                } else if (!merged.labels || merged.labels.length === 0) {
+                    merged.labels = prev.labels;
+                }
+                return merged;
+            });
             return true;
         } catch (err) {
             loadTasks(); // rollback on failure
@@ -275,7 +317,9 @@ export function useTasks(currentUserId?: string) {
     // ── Status cycle ──────────────────────────────────────────────────────────
     const STATUS_NEXT: Record<TaskStatus, TaskStatus> = {
         TODO: "IN_PROGRESS",
-        IN_PROGRESS: "DONE",
+        IN_PROGRESS: "REVIEW",
+        REVIEW: "DONE",
+        BLOCKED: "TODO",
         DONE: "TODO",
     };
 
@@ -283,8 +327,16 @@ export function useTasks(currentUserId?: string) {
         await handleUpdate(task.id, { status: STATUS_NEXT[task.status] });
     }
 
+    async function handleStatusChange(taskId: string, newStatus: TaskStatus): Promise<boolean> {
+        return handleUpdate(taskId, { status: newStatus });
+    }
+
     function openDetail(task: Task) {
-        setSelectedTask(task);
+        const labelsMap = getTaskLabelsMap();
+        const fullTask = labelsMap[task.id] && (!task.labels || task.labels.length === 0)
+            ? { ...task, labels: labelsMap[task.id] }
+            : task;
+        setSelectedTask(fullTask);
         setIsDetailOpen(true);
     }
 
@@ -303,6 +355,8 @@ export function useTasks(currentUserId?: string) {
         statusFilter,
         priorityFilter,
         assigneeFilter,
+        projectFilter,
+        labelFilter,
         search,
         selectedTaskIds,
         isAllSelected,
@@ -317,6 +371,8 @@ export function useTasks(currentUserId?: string) {
         setStatusFilter,
         setPriorityFilter,
         setAssigneeFilter,
+        setProjectFilter,
+        setLabelFilter,
         setSearch,
         setSelectedTaskIds,
         toggleSelect,
@@ -327,6 +383,7 @@ export function useTasks(currentUserId?: string) {
         closeDetail,
         handleCreate,
         handleUpdate,
+        handleStatusChange,
         handleDelete,
         handleBulkUpdate,
         cycleStatus,

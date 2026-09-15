@@ -22,6 +22,11 @@ import {
     FileText,
     ExternalLink,
     Check,
+    Edit2,
+    Sparkles,
+    AlertTriangle,
+    Tag,
+    FolderKanban,
 } from "lucide-react";
 import {
     Task,
@@ -34,12 +39,19 @@ import {
     TaskActivity,
     fetchTaskComments,
     createTaskComment,
+    updateTaskComment,
+    deleteTaskComment,
     fetchTaskSubtasks,
     createTaskSubtask,
+    updateTaskSubtask,
+    deleteTaskSubtask,
     fetchTaskDependencies,
     createTaskDependency,
+    deleteTaskDependency,
+    normaliseTaskDependenciesResponse,
     fetchTaskActivity,
-    updateTask,
+    getTaskLabelsMap,
+    saveTaskLabels,
 } from "@/lib/api/tasksApi";
 import { fetchTeamMembers } from "@/lib/api/leadsApi";
 
@@ -52,14 +64,18 @@ const PRIORITY_STYLES: Record<TaskPriority, string> = {
 };
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
-    TODO:        "bg-gray-100 text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-700",
+    TODO:        "bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
     IN_PROGRESS: "bg-blue-50 text-blue-600 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-900",
+    REVIEW:      "bg-purple-50 text-purple-600 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-900",
+    BLOCKED:     "bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-900",
     DONE:        "bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-900",
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
     TODO:        "To Do",
     IN_PROGRESS: "In Progress",
+    REVIEW:      "Review",
+    BLOCKED:     "Blocked",
     DONE:        "Done",
 };
 
@@ -70,12 +86,13 @@ interface TeamMember {
     email?: string;
 }
 
-type TabType = "details" | "subtasks" | "dependencies" | "activity" | "comments";
+type TabType = "details" | "subtasks" | "dependencies" | "comments" | "activity";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
-interface TaskDetailModalProps {
+export interface TaskDetailModalProps {
     task: Task;
+    allTasks?: Task[];
     saving: boolean;
     saveError: string | null;
     onClose: () => void;
@@ -87,6 +104,7 @@ interface TaskDetailModalProps {
 
 export function TaskDetailModal({
     task,
+    allTasks = [],
     saving,
     saveError,
     onClose,
@@ -99,46 +117,92 @@ export function TaskDetailModal({
     const [deleting, setDeleting] = useState(false);
 
     // Form state
-    const [form, setForm] = useState<UpdateTaskPayload>({
-        title: task.title,
-        description: task.description ?? "",
-        priority: task.priority,
-        dueDate: task.dueDate?.split("T")[0] ?? "",
-        assignedToId: task.assignedToId ?? "",
-        status: task.status,
-        leadId: (task.leadId as string) ?? "",
-        dealId: (task.dealId as string) ?? "",
-        projectId: (task.projectId as string) ?? "",
+    const [form, setForm] = useState<UpdateTaskPayload>(() => {
+        const stored = getTaskLabelsMap()[task.id];
+        const initialLabels = task.labels && task.labels.length > 0 ? task.labels : (stored ?? []);
+        return {
+            title: task.title,
+            description: task.description ?? "",
+            priority: task.priority,
+            dueDate: task.dueDate?.split("T")[0] ?? "",
+            assignedToId: task.assignedToId ?? "",
+            status: task.status,
+            leadId: (task.leadId as string) ?? "",
+            dealId: (task.dealId as string) ?? "",
+            projectId: (task.projectId as string) ?? "",
+            labels: initialLabels,
+        };
     });
 
     const [members, setMembers] = useState<TeamMember[]>([]);
-    const [membersLoading, setMembersLoading] = useState(false);
     const [localSaveError, setLocalSaveError] = useState<string | null>(null);
+    const [newTagInput, setNewTagInput] = useState("");
+
+    // Keep form in sync with task updates (e.g. status/priority changes) when not actively editing
+    useEffect(() => {
+        if (!isEditing) {
+            const stored = getTaskLabelsMap()[task.id];
+            const currentLabels = task.labels && task.labels.length > 0 ? task.labels : (stored ?? []);
+            setForm({
+                title: task.title,
+                description: task.description ?? "",
+                priority: task.priority,
+                dueDate: task.dueDate?.split("T")[0] ?? "",
+                assignedToId: task.assignedToId ?? "",
+                status: task.status,
+                leadId: (task.leadId as string) ?? "",
+                dealId: (task.dealId as string) ?? "",
+                projectId: (task.projectId as string) ?? "",
+                labels: currentLabels,
+            });
+        }
+    }, [task, isEditing]);
 
     // Sub-resources states
     const [comments, setComments] = useState<TaskComment[]>([]);
     const [newComment, setNewComment] = useState("");
+    const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+    const [editingCommentText, setEditingCommentText] = useState("");
     const [submittingComment, setSubmittingComment] = useState(false);
 
     const [subtasks, setSubtasks] = useState<TaskSubtask[]>([]);
     const [newSubtaskTitle, setNewSubtaskTitle] = useState("");
+    const [editingSubtaskId, setEditingSubtaskId] = useState<string | null>(null);
+    const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
     const [submittingSubtask, setSubmittingSubtask] = useState(false);
 
-    const [dependencies, setDependencies] = useState<TaskDependency[]>([]);
+    const [dependencies, setDependencies] = useState<TaskDependency[]>(() => {
+        if (Array.isArray(task.dependencies) && task.dependencies.length > 0) {
+            return task.dependencies;
+        }
+        if (Array.isArray((task as any).dependsOn) && (task as any).dependsOn.length > 0) {
+            return normaliseTaskDependenciesResponse((task as any).dependsOn, task.id);
+        }
+        return [];
+    });
     const [dependenciesError, setDependenciesError] = useState<string | null>(null);
     const [newDepId, setNewDepId] = useState("");
     const [submittingDep, setSubmittingDep] = useState(false);
 
     const [activities, setActivities] = useState<TaskActivity[]>([]);
+    const [activityFilter, setActivityFilter] = useState<string>("ALL");
     const [subLoading, setSubLoading] = useState(false);
+
+    // Preload dependencies on task change so header badge count is immediately accurate
+    useEffect(() => {
+        if (!task?.id) return;
+        fetchTaskDependencies(task.id)
+            .then((data) => {
+                setDependencies(Array.isArray(data) ? data : []);
+            })
+            .catch(() => {});
+    }, [task.id]);
 
     // Load team members
     useEffect(() => {
-        setMembersLoading(true);
         fetchTeamMembers()
             .then((data) => setMembers(data.members ?? data ?? []))
-            .catch(() => setMembers([]))
-            .finally(() => setMembersLoading(false));
+            .catch(() => setMembers([]));
     }, []);
 
     // Load sub-resources when tabs change
@@ -161,19 +225,21 @@ export function TaskDetailModal({
                 .then((data) => {
                     setDependencies(Array.isArray(data) ? data : []);
                 })
-                .catch((err) => {
-                    const msg = err instanceof Error ? err.message : "Failed to load dependencies.";
+                .catch((err: any) => {
+                    const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
+                    const msg = backendMsg || (err instanceof Error ? err.message : "Failed to load dependencies.");
                     setDependenciesError(msg);
                     setDependencies([]);
                 })
                 .finally(() => setSubLoading(false));
         } else if (activeTab === "activity") {
             setSubLoading(true);
-            fetchTaskActivity(task.id)
+            const typeParam = activityFilter === "ALL" ? undefined : activityFilter;
+            fetchTaskActivity(task.id, 1, 30, typeParam)
                 .then(setActivities)
                 .finally(() => setSubLoading(false));
         }
-    }, [activeTab, task.id]);
+    }, [activeTab, task.id, activityFilter]);
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
@@ -187,7 +253,37 @@ export function TaskDetailModal({
             return;
         }
         setLocalSaveError(null);
-        const ok = await onUpdate(task.id, form);
+
+        // Build a clean payload containing ONLY modified fields
+        // Ensures title/description edits never send unrelated empty foreign keys (preventing DB_FOREIGN_KEY)
+        // and never send or alter status, priority, or other unmodified fields
+        const payload: UpdateTaskPayload = {};
+
+        if (form.title.trim() !== task.title) {
+            payload.title = form.title.trim();
+        }
+        if ((form.description ?? "") !== (task.description ?? "")) {
+            payload.description = form.description ?? "";
+        }
+        if ((form.assignedToId ?? "") !== (task.assignedToId ?? "")) {
+            payload.assignedToId = form.assignedToId ? form.assignedToId : null;
+        }
+        const initialDueDate = task.dueDate ? task.dueDate.split("T")[0] : "";
+        if ((form.dueDate ?? "") !== initialDueDate) {
+            payload.dueDate = form.dueDate ? form.dueDate : null;
+        }
+        const initialProjectId = task.projectId ? String(task.projectId) : "";
+        if ((form.projectId ?? "") !== initialProjectId) {
+            payload.projectId = form.projectId?.trim() ? form.projectId.trim() : null;
+        }
+
+        // If no fields were modified, simply exit editing mode
+        if (Object.keys(payload).length === 0) {
+            setIsEditing(false);
+            return;
+        }
+
+        const ok = await onUpdate(task.id, payload);
         if (ok) {
             setIsEditing(false);
         }
@@ -203,6 +299,24 @@ export function TaskDetailModal({
         await onUpdate(task.id, { priority: newPriority });
     };
 
+    const handleAddLabel = async () => {
+        const trimmed = newTagInput.trim();
+        if (trimmed && !form.labels?.includes(trimmed)) {
+            const updated = [...(form.labels ?? []), trimmed];
+            setForm((prev) => ({ ...prev, labels: updated }));
+            saveTaskLabels(task.id, updated);
+            setNewTagInput("");
+            await onUpdate(task.id, { labels: updated });
+        }
+    };
+
+    const handleRemoveLabel = async (tagToRemove: string) => {
+        const updated = (form.labels ?? []).filter((t) => t !== tagToRemove);
+        setForm((prev) => ({ ...prev, labels: updated }));
+        saveTaskLabels(task.id, updated);
+        await onUpdate(task.id, { labels: updated });
+    };
+
     const handleDelete = async () => {
         if (!onDelete) return;
         setDeleting(true);
@@ -214,6 +328,7 @@ export function TaskDetailModal({
         }
     };
 
+    // ── Comments CRUD ──────────────────────────────────────────────────────────
     const handleAddComment = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newComment.trim()) return;
@@ -227,6 +342,27 @@ export function TaskDetailModal({
         }
     };
 
+    const handleSaveEditedComment = async (commentId: string) => {
+        if (!editingCommentText.trim()) return;
+        try {
+            const updated = await updateTaskComment(task.id, commentId, editingCommentText.trim());
+            setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, ...updated } : c)));
+            setEditingCommentId(null);
+        } catch {
+            // failed
+        }
+    };
+
+    const handleDeleteComment = async (commentId: string) => {
+        try {
+            await deleteTaskComment(task.id, commentId);
+            setComments((prev) => prev.filter((c) => c.id !== commentId));
+        } catch {
+            // failed
+        }
+    };
+
+    // ── Subtasks CRUD ──────────────────────────────────────────────────────────
     const handleAddSubtask = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newSubtaskTitle.trim()) return;
@@ -250,7 +386,7 @@ export function TaskDetailModal({
             prev.map((s) => (s.id === sub.id ? { ...s, status: nextStatus } : s))
         );
         try {
-            await updateTask(sub.id, { status: nextStatus });
+            await updateTaskSubtask(task.id, sub.id, { status: nextStatus });
         } catch {
             // rollback
             setSubtasks((prev) =>
@@ -259,6 +395,29 @@ export function TaskDetailModal({
         }
     };
 
+    const handleSaveEditedSubtask = async (subtaskId: string) => {
+        if (!editingSubtaskTitle.trim()) return;
+        try {
+            const updated = await updateTaskSubtask(task.id, subtaskId, {
+                title: editingSubtaskTitle.trim(),
+            });
+            setSubtasks((prev) => prev.map((s) => (s.id === subtaskId ? { ...s, ...updated } : s)));
+            setEditingSubtaskId(null);
+        } catch {
+            // failed
+        }
+    };
+
+    const handleDeleteSubtask = async (subtaskId: string) => {
+        try {
+            await deleteTaskSubtask(task.id, subtaskId);
+            setSubtasks((prev) => prev.filter((s) => s.id !== subtaskId));
+        } catch {
+            // failed
+        }
+    };
+
+    // ── Dependencies CRUD ──────────────────────────────────────────────────────
     const handleAddDependency = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newDepId.trim()) return;
@@ -268,27 +427,43 @@ export function TaskDetailModal({
             const dep = await createTaskDependency(task.id, newDepId.trim());
             setDependencies((prev) => [...(Array.isArray(prev) ? prev : []), dep]);
             setNewDepId("");
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : "Failed to add dependency.";
+        } catch (err: any) {
+            const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
+            const msg = backendMsg || (err instanceof Error ? err.message : "Failed to add dependency (cycle detected or invalid ID).");
             setDependenciesError(msg);
         } finally {
             setSubmittingDep(false);
         }
     };
 
+    const handleDeleteDependency = async (depOrId: TaskDependency | string) => {
+        try {
+            const depId = typeof depOrId === "string" ? depOrId : (depOrId.dependencyId || depOrId.id);
+            const internalId = typeof depOrId === "string" ? depOrId : depOrId.id;
+            await deleteTaskDependency(task.id, depId);
+            setDependencies((prev) => (Array.isArray(prev) ? prev.filter((d) => d.id !== internalId && d.dependencyId !== depId) : []));
+        } catch (err: any) {
+            const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
+            setDependenciesError(backendMsg || "Failed to remove dependency.");
+        }
+    };
+
     const completedSubtasksCount = subtasks.filter((s) => s.status === "DONE").length;
+
+    // Filter candidate tasks for dependency selector
+    const dependencyCandidates = allTasks.filter((t) => t.id !== task.id);
 
     return (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
-            {/* Drawer container: slides in from right */}
+            {/* Slide-over Drawer */}
             <div
                 className="w-full max-w-2xl bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-slate-800 animate-in slide-in-from-right duration-300 overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* ── Top Header Bar ─────────────────────────────────────────── */}
                 <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/80">
-                    <div className="flex items-center space-x-3">
-                        <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-1 rounded-md border border-blue-200/60 dark:border-blue-800">
+                    <div className="flex items-center space-x-2.5">
+                        <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-md border border-blue-200/60 dark:border-blue-800">
                             TASK-{task.id.slice(-6).toUpperCase()}
                         </span>
 
@@ -296,10 +471,12 @@ export function TaskDetailModal({
                         <select
                             value={task.status}
                             onChange={(e) => handleQuickStatusChange(e.target.value as TaskStatus)}
-                            className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none cursor-pointer ${STATUS_STYLES[task.status]}`}
+                            className={`text-xs font-bold px-3 py-1 rounded-lg outline-none cursor-pointer ${STATUS_STYLES[task.status]}`}
                         >
                             <option value="TODO">To Do</option>
                             <option value="IN_PROGRESS">In Progress</option>
+                            <option value="REVIEW">Review</option>
+                            <option value="BLOCKED">Blocked</option>
                             <option value="DONE">Done</option>
                         </select>
 
@@ -307,7 +484,7 @@ export function TaskDetailModal({
                         <select
                             value={task.priority}
                             onChange={(e) => handleQuickPriorityChange(e.target.value as TaskPriority)}
-                            className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none cursor-pointer ${PRIORITY_STYLES[task.priority]}`}
+                            className={`text-xs font-bold px-2.5 py-1 rounded-lg outline-none cursor-pointer ${PRIORITY_STYLES[task.priority]}`}
                         >
                             <option value="LOW">Low</option>
                             <option value="MEDIUM">Medium</option>
@@ -320,18 +497,20 @@ export function TaskDetailModal({
                             <button
                                 onClick={() => setConfirmDelete(true)}
                                 title="Delete Task"
-                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-lg transition"
+                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"
                             >
                                 <Trash2 size={16} />
                             </button>
                         )}
                         {confirmDelete && (
-                            <div className="flex items-center space-x-2 bg-red-50 dark:bg-red-950/60 p-1 rounded-lg border border-red-200 dark:border-red-900">
-                                <span className="text-[11px] font-semibold text-red-600 dark:text-red-400 px-1">Confirm delete?</span>
+                            <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-950/60 p-1 rounded-lg border border-rose-200 dark:border-rose-900">
+                                <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 px-1">
+                                    Delete?
+                                </span>
                                 <button
                                     onClick={handleDelete}
                                     disabled={deleting}
-                                    className="px-2 py-0.5 bg-red-600 text-white rounded text-[11px] font-bold hover:bg-red-700 transition"
+                                    className="px-2 py-0.5 bg-rose-600 text-white rounded text-[11px] font-bold hover:bg-rose-700 transition"
                                 >
                                     {deleting ? "..." : "Yes"}
                                 </button>
@@ -339,7 +518,7 @@ export function TaskDetailModal({
                                     onClick={() => setConfirmDelete(false)}
                                     className="px-2 py-0.5 bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded text-[11px] font-bold"
                                 >
-                                    Cancel
+                                    No
                                 </button>
                             </div>
                         )}
@@ -355,9 +534,13 @@ export function TaskDetailModal({
                 {/* ── Tabs Navigation ────────────────────────────────────────── */}
                 <div className="flex border-b border-slate-200 dark:border-slate-800 px-6 bg-white dark:bg-slate-900 space-x-6 text-xs font-semibold text-slate-500 overflow-x-auto">
                     {[
-                        { key: "details", label: "Overview", icon: FileText },
+                        { key: "details", label: "Details", icon: FileText },
                         { key: "subtasks", label: `Subtasks (${subtasks.length})`, icon: ListTree },
-                        { key: "dependencies", label: `Dependencies (${Array.isArray(dependencies) ? dependencies.length : 0})`, icon: Network },
+                        {
+                            key: "dependencies",
+                            label: `Dependencies (${Array.isArray(dependencies) ? dependencies.length : 0})`,
+                            icon: Network,
+                        },
                         { key: "comments", label: `Comments (${comments.length})`, icon: MessageSquare },
                         { key: "activity", label: "Activity", icon: History },
                     ].map((tab) => {
@@ -382,7 +565,7 @@ export function TaskDetailModal({
 
                 {/* Error Banner */}
                 {(saveError || localSaveError) && (
-                    <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl flex items-center gap-2 text-red-600 dark:text-red-400 text-xs font-medium">
+                    <div className="mx-6 mt-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-medium">
                         <AlertCircle size={15} className="shrink-0" />
                         <span>{saveError || localSaveError}</span>
                     </div>
@@ -390,10 +573,10 @@ export function TaskDetailModal({
 
                 {/* ── Scrollable Body ────────────────────────────────────────── */}
                 <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* TAB 1: OVERVIEW / DETAILS */}
+                    {/* TAB 1: DETAILS & ATTRIBUTES */}
                     {activeTab === "details" && (
                         <div className="space-y-6">
-                            {/* Title & Edit Toggle */}
+                            {/* Title & Inline Edit */}
                             <div className="flex items-start justify-between gap-4">
                                 {isEditing ? (
                                     <div className="flex-1">
@@ -414,16 +597,51 @@ export function TaskDetailModal({
                                         </h2>
                                     </div>
                                 )}
-                                <button
-                                    onClick={() => {
-                                        if (isEditing) handleSave();
-                                        else setIsEditing(true);
-                                    }}
-                                    disabled={saving}
-                                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
-                                >
-                                    {saving ? "Saving..." : isEditing ? "Save" : "Edit"}
-                                </button>
+                                <div className="flex items-center space-x-2">
+                                    {isEditing && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsEditing(false);
+                                                setLocalSaveError(null);
+                                                setForm({
+                                                    title: task.title,
+                                                    description: task.description ?? "",
+                                                    priority: task.priority,
+                                                    dueDate: task.dueDate?.split("T")[0] ?? "",
+                                                    assignedToId: task.assignedToId ?? "",
+                                                    status: task.status,
+                                                    leadId: (task.leadId as string) ?? "",
+                                                    dealId: (task.dealId as string) ?? "",
+                                                    projectId: (task.projectId as string) ?? "",
+                                                    labels:
+                                                        task.labels && task.labels.length > 0
+                                                            ? task.labels
+                                                            : getTaskLabelsMap()[task.id] ?? [],
+                                                });
+                                            }}
+                                            disabled={saving}
+                                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                        >
+                                            Cancel
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (isEditing) handleSave();
+                                            else setIsEditing(true);
+                                        }}
+                                        disabled={saving}
+                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
+                                            isEditing
+                                                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
+                                                : "border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                                        }`}
+                                    >
+                                        {saving ? "Saving..." : isEditing ? "Save" : "Edit"}
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Description */}
@@ -442,16 +660,71 @@ export function TaskDetailModal({
                                     />
                                 ) : (
                                     <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-xs text-slate-700 dark:text-slate-300 leading-relaxed min-h-[70px]">
-                                        {task.description || <span className="text-slate-400 italic">No description provided.</span>}
+                                        {task.description || (
+                                            <span className="text-slate-400 italic">No description provided.</span>
+                                        )}
                                     </div>
                                 )}
                             </div>
 
-                            {/* Metadata Grid */}
+                            {/* Labels & Tags Manager */}
+                            <div>
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                                        Labels & Tags
+                                    </label>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                                    {form.labels && form.labels.length > 0 ? (
+                                        form.labels.map((lbl) => (
+                                            <span
+                                                key={lbl}
+                                                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60 rounded-lg text-xs font-semibold"
+                                            >
+                                                <span>#{lbl}</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => handleRemoveLabel(lbl)}
+                                                    className="hover:text-rose-500 transition"
+                                                >
+                                                    <X size={11} />
+                                                </button>
+                                            </span>
+                                        ))
+                                    ) : (
+                                        <span className="text-xs text-slate-400 italic">No labels assigned.</span>
+                                    )}
+                                </div>
+                                <div className="flex space-x-1.5 max-w-xs">
+                                    <input
+                                        value={newTagInput}
+                                        onChange={(e) => setNewTagInput(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault();
+                                                handleAddLabel();
+                                            }
+                                        }}
+                                        placeholder="Add a label..."
+                                        className="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleAddLabel}
+                                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Attributes Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
                                 {/* Assignee */}
                                 <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Assignee</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                                        Assignee
+                                    </p>
                                     {isEditing ? (
                                         <select
                                             name="assignedToId"
@@ -469,7 +742,11 @@ export function TaskDetailModal({
                                     ) : (
                                         <div className="flex items-center space-x-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
                                             <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold">
-                                                {task.assignedTo?.name ? task.assignedTo.name.slice(0, 2).toUpperCase() : <User size={12} />}
+                                                {task.assignedTo?.name ? (
+                                                    task.assignedTo.name.slice(0, 2).toUpperCase()
+                                                ) : (
+                                                    <User size={12} />
+                                                )}
                                             </div>
                                             <span>{task.assignedTo?.name ?? "Unassigned"}</span>
                                         </div>
@@ -478,7 +755,9 @@ export function TaskDetailModal({
 
                                 {/* Due Date */}
                                 <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Due Date</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                                        Due Date
+                                    </p>
                                     {isEditing ? (
                                         <input
                                             type="date"
@@ -503,9 +782,31 @@ export function TaskDetailModal({
                                     )}
                                 </div>
 
+                                {/* Project Context */}
+                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                                        Project
+                                    </p>
+                                    {isEditing ? (
+                                        <input
+                                            name="projectId"
+                                            value={form.projectId ?? ""}
+                                            onChange={handleChange}
+                                            placeholder="e.g. CORE-DEV"
+                                            className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                                        />
+                                    ) : (
+                                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                            {task.projectId ? String(task.projectId) : "General Workspace"}
+                                        </span>
+                                    )}
+                                </div>
+
                                 {/* Created At */}
                                 <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Created</p>
+                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                                        Created
+                                    </p>
                                     <div className="flex items-center space-x-2 text-xs text-slate-600 dark:text-slate-400">
                                         <Clock size={14} />
                                         <span>
@@ -517,14 +818,6 @@ export function TaskDetailModal({
                                             })}
                                         </span>
                                     </div>
-                                </div>
-
-                                {/* Project Context */}
-                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">Project Context</p>
-                                    <span className="text-xs text-slate-600 dark:text-slate-400">
-                                        {task.projectId ? String(task.projectId) : "General Workspace"}
-                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -538,15 +831,17 @@ export function TaskDetailModal({
                                 <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
                                     <span>Subtasks Progress</span>
                                     <span>
-                                        {completedSubtasksCount}/{subtasks.length} Done
+                                        {completedSubtasksCount}/{subtasks.length} Completed
                                     </span>
                                 </div>
                                 <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                     <div
-                                        className="h-full bg-emerald-500 transition-all duration-300"
+                                        className="h-full bg-blue-600 transition-all duration-300"
                                         style={{
                                             width: `${
-                                                subtasks.length > 0 ? (completedSubtasksCount / subtasks.length) * 100 : 0
+                                                subtasks.length > 0
+                                                    ? (completedSubtasksCount / subtasks.length) * 100
+                                                    : 0
                                             }%`,
                                         }}
                                     />
@@ -558,12 +853,12 @@ export function TaskDetailModal({
                                 {subtasks.map((s) => (
                                     <div
                                         key={s.id}
-                                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 transition"
+                                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition"
                                     >
-                                        <div className="flex items-center space-x-3">
+                                        <div className="flex items-center space-x-3 flex-1 mr-3">
                                             <button
                                                 onClick={() => handleToggleSubtask(s)}
-                                                className={`w-5 h-5 rounded border flex items-center justify-center transition ${
+                                                className={`w-5 h-5 rounded-md border flex items-center justify-center transition ${
                                                     s.status === "DONE"
                                                         ? "bg-emerald-500 border-emerald-500 text-white"
                                                         : "border-slate-300 dark:border-slate-600 hover:border-emerald-500"
@@ -571,24 +866,71 @@ export function TaskDetailModal({
                                             >
                                                 {s.status === "DONE" && <Check size={13} />}
                                             </button>
-                                            <span
-                                                className={`text-xs font-medium ${
-                                                    s.status === "DONE"
-                                                        ? "line-through text-slate-400"
-                                                        : "text-slate-800 dark:text-slate-200"
-                                                }`}
-                                            >
-                                                {s.title}
-                                            </span>
+
+                                            {editingSubtaskId === s.id ? (
+                                                <div className="flex items-center space-x-2 flex-1">
+                                                    <input
+                                                        value={editingSubtaskTitle}
+                                                        onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                                                        className="flex-1 text-xs px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                                    />
+                                                    <button
+                                                        onClick={() => handleSaveEditedSubtask(s.id)}
+                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setEditingSubtaskId(null)}
+                                                        className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px]"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span
+                                                    className={`text-xs font-medium flex-1 ${
+                                                        s.status === "DONE"
+                                                            ? "line-through text-slate-400 dark:text-slate-500"
+                                                            : "text-slate-800 dark:text-slate-200"
+                                                    }`}
+                                                >
+                                                    {s.title}
+                                                </span>
+                                            )}
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${STATUS_STYLES[s.status]}`}>
-                                            {STATUS_LABELS[s.status]}
-                                        </span>
+
+                                        <div className="flex items-center space-x-2">
+                                            <span
+                                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${STATUS_STYLES[s.status]}`}
+                                            >
+                                                {STATUS_LABELS[s.status]}
+                                            </span>
+                                            <button
+                                                onClick={() => {
+                                                    setEditingSubtaskId(s.id);
+                                                    setEditingSubtaskTitle(s.title);
+                                                }}
+                                                className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
+                                                title="Edit subtask"
+                                            >
+                                                <Edit2 size={13} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteSubtask(s.id)}
+                                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
+                                                title="Delete subtask"
+                                            >
+                                                <Trash2 size={13} />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
 
                                 {subtasks.length === 0 && !subLoading && (
-                                    <p className="text-xs text-slate-400 text-center py-6">No subtasks yet. Create one below.</p>
+                                    <p className="text-xs text-slate-400 text-center py-6">
+                                        No subtasks yet. Add one below.
+                                    </p>
                                 )}
                             </div>
 
@@ -596,18 +938,19 @@ export function TaskDetailModal({
                             <form onSubmit={handleAddSubtask} className="flex gap-2 pt-2">
                                 <input
                                     type="text"
-                                    placeholder="Add subtask title..."
+                                    placeholder="Add new subtask title..."
                                     value={newSubtaskTitle}
                                     onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                                    className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                    className="flex-1 text-xs px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                                 />
                                 <button
                                     type="submit"
                                     disabled={submittingSubtask || !newSubtaskTitle.trim()}
                                     className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
                                 >
+                                    {submittingSubtask && <Loader2 size={13} className="animate-spin" />}
                                     <Plus size={14} />
-                                    <span>Add</span>
+                                    <span>Add Subtask</span>
                                 </button>
                             </form>
                         </div>
@@ -617,12 +960,12 @@ export function TaskDetailModal({
                     {activeTab === "dependencies" && (
                         <div className="space-y-4">
                             <p className="text-xs text-slate-500">
-                                Manage blocker and blocked-by dependencies for this task.
+                                Link blocker and dependent tasks. Cycle detection is enforced by BE-2.
                             </p>
 
                             {/* Error state */}
                             {dependenciesError && (
-                                <div className="p-3 bg-red-50 dark:bg-red-950/40 rounded-xl border border-red-200 dark:border-red-900 text-xs text-red-600 dark:text-red-400 flex items-center justify-between">
+                                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 text-xs text-rose-600 dark:text-rose-400 flex items-center justify-between">
                                     <div className="flex items-center space-x-2">
                                         <AlertCircle size={14} className="shrink-0" />
                                         <span>{dependenciesError}</span>
@@ -636,7 +979,9 @@ export function TaskDetailModal({
                                                 .then((data) => setDependencies(Array.isArray(data) ? data : []))
                                                 .catch((err) => {
                                                     setDependenciesError(
-                                                        err instanceof Error ? err.message : "Failed to load dependencies."
+                                                        err instanceof Error
+                                                            ? err.message
+                                                            : "Failed to load dependencies."
                                                     );
                                                 })
                                                 .finally(() => setSubLoading(false));
@@ -659,45 +1004,89 @@ export function TaskDetailModal({
                             {/* Dependencies list */}
                             {!subLoading && (
                                 <div className="space-y-2">
-                                    {(Array.isArray(dependencies) ? dependencies : []).map((dep) => (
-                                        <div
-                                            key={dep.id}
-                                            className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs flex justify-between items-center"
-                                        >
-                                            <div className="flex items-center space-x-2">
-                                                <Network size={14} className="text-blue-500" />
-                                                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                    Depends on: {dep.dependencyId}
-                                                </span>
+                                    {(Array.isArray(dependencies) ? dependencies : []).map((dep) => {
+                                        const linkedTask = allTasks.find((t) => t.id === dep.dependencyId) || dep.task;
+                                        const isBlocker = dep.direction !== "DEPENDED_ON_BY";
+                                        return (
+                                            <div
+                                                key={dep.id}
+                                                className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs flex justify-between items-center"
+                                            >
+                                                <div className="flex items-center space-x-2.5">
+                                                    <Network size={15} className="text-amber-500" />
+                                                    <div>
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                            {isBlocker ? "Depends on: " : "Depended on by: "}
+                                                            <span className="font-mono text-blue-600 dark:text-blue-400">
+                                                                {linkedTask ? linkedTask.title : dep.dependencyId}
+                                                            </span>
+                                                        </span>
+                                                        {linkedTask?.status && (
+                                                            <span className="ml-2 text-[10px] text-slate-400">
+                                                                ({linkedTask.status})
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center space-x-3">
+                                                    <span className="text-[10px] text-slate-400">
+                                                        {new Date(dep.createdAt).toLocaleDateString()}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => handleDeleteDependency(dep)}
+                                                        className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                                        title="Remove dependency"
+                                                    >
+                                                        <Trash2 size={13} />
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <span className="text-[10px] text-slate-400">
-                                                {new Date(dep.createdAt).toLocaleDateString()}
-                                            </span>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
 
-                                    {(Array.isArray(dependencies) ? dependencies.length : 0) === 0 && !dependenciesError && (
-                                        <p className="text-xs text-slate-400 text-center py-6">No dependencies defined.</p>
-                                    )}
+                                    {(Array.isArray(dependencies) ? dependencies.length : 0) === 0 &&
+                                        !dependenciesError && (
+                                            <p className="text-xs text-slate-400 text-center py-6">
+                                                No dependencies linked to this task.
+                                            </p>
+                                        )}
                                 </div>
                             )}
 
-                            <form onSubmit={handleAddDependency} className="flex gap-2 pt-2">
-                                <input
-                                    type="text"
-                                    placeholder="Task ID to depend on (e.g. task_xyz)..."
-                                    value={newDepId}
-                                    onChange={(e) => setNewDepId(e.target.value)}
-                                    className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={submittingDep || !newDepId.trim()}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
-                                >
-                                    {submittingDep && <Loader2 size={13} className="animate-spin" />}
-                                    <span>Link</span>
-                                </button>
+                            {/* Add Dependency form */}
+                            <form onSubmit={handleAddDependency} className="space-y-2 pt-2">
+                                <div className="flex gap-2">
+                                    {dependencyCandidates.length > 0 ? (
+                                        <select
+                                            value={newDepId}
+                                            onChange={(e) => setNewDepId(e.target.value)}
+                                            className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                        >
+                                            <option value="">Select task to depend on...</option>
+                                            {dependencyCandidates.map((t) => (
+                                                <option key={t.id} value={t.id}>
+                                                    TASK-{t.id.slice(-4).toUpperCase()}: {t.title}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            placeholder="Task ID to depend on (e.g. task_xyz)..."
+                                            value={newDepId}
+                                            onChange={(e) => setNewDepId(e.target.value)}
+                                            className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                        />
+                                    )}
+                                    <button
+                                        type="submit"
+                                        disabled={submittingDep || !newDepId.trim()}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
+                                    >
+                                        {submittingDep && <Loader2 size={13} className="animate-spin" />}
+                                        <span>Link Blocker</span>
+                                    </button>
+                                </div>
                             </form>
                         </div>
                     )}
@@ -710,24 +1099,74 @@ export function TaskDetailModal({
                                 {comments.map((c) => (
                                     <div
                                         key={c.id}
-                                        className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-1.5"
+                                        className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2 group"
                                     >
                                         <div className="flex items-center justify-between text-[11px]">
-                                            <span className="font-bold text-slate-800 dark:text-slate-200">
-                                                {c.author?.name || "Team Member"}
-                                            </span>
-                                            <span className="text-slate-400">
-                                                {new Date(c.createdAt).toLocaleString("en-US", {
-                                                    month: "short",
-                                                    day: "numeric",
-                                                    hour: "numeric",
-                                                    minute: "2-digit",
-                                                })}
-                                            </span>
+                                            <div className="flex items-center space-x-2">
+                                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[9px] font-bold">
+                                                    {(c.author?.name || "U").slice(0, 1).toUpperCase()}
+                                                </div>
+                                                <span className="font-bold text-slate-800 dark:text-slate-200">
+                                                    {c.author?.name || "Team Member"}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <span className="text-slate-400 text-[10px]">
+                                                    {new Date(c.createdAt).toLocaleString("en-US", {
+                                                        month: "short",
+                                                        day: "numeric",
+                                                        hour: "numeric",
+                                                        minute: "2-digit",
+                                                    })}
+                                                </span>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingCommentId(c.id);
+                                                        setEditingCommentText(c.content);
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 rounded transition"
+                                                    title="Edit comment"
+                                                >
+                                                    <Edit2 size={12} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteComment(c.id)}
+                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 rounded transition"
+                                                    title="Delete comment"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                                            {c.content}
-                                        </p>
+
+                                        {editingCommentId === c.id ? (
+                                            <div className="space-y-2 pt-1">
+                                                <textarea
+                                                    rows={2}
+                                                    value={editingCommentText}
+                                                    onChange={(e) => setEditingCommentText(e.target.value)}
+                                                    className="w-full text-xs p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none"
+                                                />
+                                                <div className="flex justify-end space-x-2">
+                                                    <button
+                                                        onClick={() => setEditingCommentId(null)}
+                                                        className="px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
+                                                    >
+                                                        Cancel
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleSaveEditedComment(c.id)}
+                                                        className="px-3 py-1 bg-blue-600 text-white text-[11px] font-bold rounded-lg hover:bg-blue-700"
+                                                    >
+                                                        Save
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                                                {c.content}
+                                            </p>
+                                        )}
                                     </div>
                                 ))}
 
@@ -752,6 +1191,7 @@ export function TaskDetailModal({
                                     disabled={submittingComment || !newComment.trim()}
                                     className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
                                 >
+                                    {submittingComment && <Loader2 size={13} className="animate-spin" />}
                                     <Send size={13} />
                                     <span>Send</span>
                                 </button>
@@ -762,7 +1202,31 @@ export function TaskDetailModal({
                     {/* TAB 5: ACTIVITY TIMELINE */}
                     {activeTab === "activity" && (
                         <div className="space-y-4">
-                            <div className="relative pl-6 border-l-2 border-slate-100 dark:border-slate-800 space-y-4">
+                            {/* Activity Type Filter */}
+                            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px] font-semibold">
+                                {[
+                                    { key: "ALL", label: "All Events" },
+                                    { key: "STATUS_CHANGED", label: "Status" },
+                                    { key: "COMMENT_ADDED", label: "Comments" },
+                                    { key: "SUBTASK_CREATED", label: "Subtasks" },
+                                    { key: "DEPENDENCY_ADDED", label: "Dependencies" },
+                                ].map((item) => (
+                                    <button
+                                        key={item.key}
+                                        onClick={() => setActivityFilter(item.key)}
+                                        className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
+                                            activityFilter === item.key
+                                                ? "bg-blue-600 text-white font-bold"
+                                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                                        }`}
+                                    >
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            {/* Timeline items */}
+                            <div className="relative pl-6 border-l-2 border-slate-100 dark:border-slate-800 space-y-4 pt-1">
                                 {activities.map((act) => (
                                     <div key={act.id} className="relative space-y-1">
                                         <div className="absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-full bg-blue-500 ring-4 ring-white dark:ring-slate-900" />
@@ -770,28 +1234,34 @@ export function TaskDetailModal({
                                             <span className="font-semibold text-slate-800 dark:text-slate-200">
                                                 {act.actor?.name || "System"}
                                             </span>
-                                            <span className="text-slate-400">
-                                                {new Date(act.createdAt).toLocaleTimeString([], {
-                                                    hour: "2-digit",
+                                            <span className="text-slate-400 text-[10px]">
+                                                {new Date(act.createdAt).toLocaleString("en-US", {
+                                                    month: "short",
+                                                    day: "numeric",
+                                                    hour: "numeric",
                                                     minute: "2-digit",
                                                 })}
                                             </span>
                                         </div>
                                         <p className="text-xs text-slate-600 dark:text-slate-400">
-                                            {act.type.replace(/_/g, " ").toLowerCase()}:{" "}
+                                            <strong className="font-semibold text-slate-700 dark:text-slate-300">
+                                                {act.type.replace(/_/g, " ").toLowerCase()}
+                                            </strong>
                                             {act.oldValue && act.newValue ? (
-                                                <span className="font-mono text-[11px]">
+                                                <span className="font-mono text-[11px] ml-1.5">
                                                     {act.oldValue} → {act.newValue}
                                                 </span>
                                             ) : (
-                                                act.newValue || act.type
+                                                act.newValue ? `: ${act.newValue}` : ""
                                             )}
                                         </p>
                                     </div>
                                 ))}
 
                                 {activities.length === 0 && !subLoading && (
-                                    <p className="text-xs text-slate-400 text-center py-6">No recorded activity yet.</p>
+                                    <p className="text-xs text-slate-400 text-center py-6">
+                                        No activity recorded for this task.
+                                    </p>
                                 )}
                             </div>
                         </div>
@@ -801,7 +1271,7 @@ export function TaskDetailModal({
                 {/* ── Footer ─────────────────────────────────────────────────── */}
                 <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 flex justify-between items-center">
                     <span className="text-[11px] text-slate-400 font-mono">
-                        ID: {task.id}
+                        TASK ID: {task.id}
                     </span>
                     <button
                         onClick={onClose}

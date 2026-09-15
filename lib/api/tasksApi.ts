@@ -20,8 +20,102 @@ import axios from "axios";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
+export type BackendTaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
+export type TaskStatus = "TODO" | "IN_PROGRESS" | "REVIEW" | "BLOCKED" | "DONE";
 export type TaskPriority = "LOW" | "MEDIUM" | "HIGH";
+
+export const STATUS_MAPPING: Record<TaskStatus, BackendTaskStatus> = {
+    TODO: "TODO",
+    IN_PROGRESS: "IN_PROGRESS",
+    REVIEW: "IN_PROGRESS",
+    BLOCKED: "IN_PROGRESS",
+    DONE: "DONE",
+};
+
+export function toBackendTaskStatus(status?: TaskStatus): BackendTaskStatus | undefined {
+    if (!status) return undefined;
+    return STATUS_MAPPING[status] ?? "TODO";
+}
+
+const SUBSTATUS_STORAGE_KEY = "zyoris_task_substatuses";
+
+export function getTaskSubstatuses(): Record<string, "REVIEW" | "BLOCKED"> {
+    if (typeof window === "undefined" || !window.localStorage) return {};
+    try {
+        const raw = localStorage.getItem(SUBSTATUS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+}
+
+export function saveTaskSubstatus(taskId: string, status: TaskStatus) {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+        const current = getTaskSubstatuses();
+        if (status === "REVIEW" || status === "BLOCKED") {
+            current[taskId] = status;
+        } else {
+            delete current[taskId];
+        }
+        localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(current));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+export function clearTaskSubstatus(taskId: string) {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+        const current = getTaskSubstatuses();
+        if (current[taskId]) {
+            delete current[taskId];
+            localStorage.setItem(SUBSTATUS_STORAGE_KEY, JSON.stringify(current));
+        }
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+const LABELS_STORAGE_KEY = "zyoris_task_labels";
+
+export function getTaskLabelsMap(): Record<string, string[]> {
+    if (typeof window === "undefined" || !window.localStorage) return {};
+    try {
+        const raw = localStorage.getItem(LABELS_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : {};
+    } catch {
+        return {};
+    }
+}
+
+export function saveTaskLabels(taskId: string, labels: string[]) {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+        const current = getTaskLabelsMap();
+        if (labels && labels.length > 0) {
+            current[taskId] = labels;
+        } else {
+            delete current[taskId];
+        }
+        localStorage.setItem(LABELS_STORAGE_KEY, JSON.stringify(current));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+export function clearTaskLabels(taskId: string) {
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+        const current = getTaskLabelsMap();
+        if (current[taskId]) {
+            delete current[taskId];
+            localStorage.setItem(LABELS_STORAGE_KEY, JSON.stringify(current));
+        }
+    } catch {
+        // Ignore storage errors
+    }
+}
 
 export interface Task {
     id: string;
@@ -43,6 +137,7 @@ export interface Task {
     leadId?: string | null;
     dealId?: string | null;
     projectId?: string | null;
+    labels?: string[];
     createdAt: string;
     updatedAt?: string;
     subtasks?: TaskSubtask[];
@@ -62,6 +157,8 @@ export interface TaskQueryParams {
     dueDate?: string;
     search?: string;
     parentTaskId?: string;
+    projectId?: string;
+    labels?: string[];
     page?: number;
     limit?: number;
 }
@@ -77,6 +174,7 @@ export interface CreateTaskPayload {
     dealId?: string | null;
     projectId?: string | null;
     parentTaskId?: string | null;
+    labels?: string[];
     reminderMinutes?: number;
     reminderType?: "EMAIL" | "SMS" | "PUSH";
     dependsOnIds?: string[];
@@ -93,6 +191,7 @@ export interface UpdateTaskPayload {
     dealId?: string | null;
     projectId?: string | null;
     parentTaskId?: string | null;
+    labels?: string[];
 }
 
 export interface BulkUpdateFields {
@@ -173,7 +272,8 @@ export interface TaskDependency {
     dependentId: string;
     dependencyId: string;
     createdAt: string;
-    task?: Task;
+    direction?: "DEPENDS_ON" | "DEPENDED_ON_BY";
+    task?: any;
 }
 
 export interface TaskActivity {
@@ -216,28 +316,62 @@ export function toISODateTime(date: string | null | undefined): string | null {
 
 // ── Normalise response → TasksResponse ───────────────────────────────────────
 export function normaliseTasksResponse(raw: unknown): TasksResponse {
-    if (!raw) return { tasks: [], total: 0 };
+    let result: TasksResponse = { tasks: [], total: 0 };
+    if (!raw) return result;
     if (Array.isArray(raw)) {
-        return { tasks: raw as Task[], total: (raw as Task[]).length };
+        result = { tasks: raw as Task[], total: (raw as Task[]).length };
+    } else {
+        const r = raw as Record<string, unknown>;
+        if (Array.isArray(r.data)) {
+            const pagination = r.pagination as Record<string, number> | undefined;
+            result = {
+                tasks: r.data as Task[],
+                total: pagination?.total ?? (r.data as unknown[]).length,
+            };
+        } else if (Array.isArray(r.tasks)) {
+            result = {
+                tasks: r.tasks as Task[],
+                total: typeof r.total === "number" ? r.total : (r.tasks as unknown[]).length,
+            };
+        } else if (Array.isArray(r.task)) {
+            result = { tasks: r.task as Task[], total: (r.task as unknown[]).length };
+        }
     }
-    const r = raw as Record<string, unknown>;
-    if (Array.isArray(r.data)) {
-        const pagination = r.pagination as Record<string, number> | undefined;
-        return {
-            tasks: r.data as Task[],
-            total: pagination?.total ?? (r.data as unknown[]).length,
-        };
+
+    // Apply stored substatuses for tasks with backend status IN_PROGRESS
+    const substatuses = getTaskSubstatuses();
+    if (Object.keys(substatuses).length > 0) {
+        result.tasks = result.tasks.map((task) => {
+            if (task && task.status === "IN_PROGRESS" && substatuses[task.id]) {
+                return { ...task, status: substatuses[task.id] as TaskStatus };
+            }
+            return task;
+        });
     }
-    if (Array.isArray(r.tasks)) {
-        return {
-            tasks: r.tasks as Task[],
-            total: typeof r.total === "number" ? r.total : (r.tasks as unknown[]).length,
-        };
+
+    // Apply stored labels for tasks
+    const labelsMap = getTaskLabelsMap();
+    if (Object.keys(labelsMap).length > 0) {
+        result.tasks = result.tasks.map((task) => {
+            if (task && labelsMap[task.id]) {
+                return { ...task, labels: labelsMap[task.id] };
+            }
+            return task;
+        });
     }
-    if (Array.isArray(r.task)) {
-        return { tasks: r.task as Task[], total: (r.task as unknown[]).length };
-    }
-    return { tasks: [], total: 0 };
+
+    // Ensure dependencies array is populated if backend returned dependsOn
+    result.tasks = result.tasks.map((task) => {
+        if (task && !task.dependencies && Array.isArray((task as any).dependsOn)) {
+            return {
+                ...task,
+                dependencies: normaliseTaskDependenciesResponse((task as any).dependsOn, task.id),
+            };
+        }
+        return task;
+    });
+
+    return result;
 }
 
 // ── GET all tasks ─────────────────────────────────────────────────────────────
@@ -245,12 +379,13 @@ export function normaliseTasksResponse(raw: unknown): TasksResponse {
 export async function fetchTasks(params?: TaskQueryParams): Promise<TasksResponse> {
     try {
         const queryParams: Record<string, string | number> = {};
-        if (params?.status) queryParams.status = params.status;
+        if (params?.status) queryParams.status = toBackendTaskStatus(params.status) || params.status;
         if (params?.priority) queryParams.priority = params.priority;
         if (params?.search) queryParams.search = params.search;
         if (params?.assignedToId) queryParams.assignedToId = params.assignedToId;
         if (params?.dueDate) queryParams.dueDate = toISODateTime(params.dueDate) || params.dueDate;
         if (params?.parentTaskId) queryParams.parentTaskId = params.parentTaskId;
+        if (params?.projectId) queryParams.projectId = params.projectId;
         if (params?.page) queryParams.page = params.page;
         if (params?.limit) queryParams.limit = params.limit;
 
@@ -275,13 +410,36 @@ export async function fetchTasks(params?: TaskQueryParams): Promise<TasksRespons
 export async function fetchTaskById(id: string): Promise<Task> {
     try {
         const res = await api.get<any>(`/tasks/${id}`);
-        const data = res.data?.data || res.data?.task || res.data;
-        return data as Task;
+        const data = (res.data?.data || res.data?.task || res.data) as Task;
+        const substatuses = getTaskSubstatuses();
+        if (data && data.status === "IN_PROGRESS" && substatuses[data.id]) {
+            data.status = substatuses[data.id] as TaskStatus;
+        }
+        const labelsMap = getTaskLabelsMap();
+        if (data && labelsMap[data.id]) {
+            data.labels = labelsMap[data.id];
+        }
+        if (data && !data.dependencies && Array.isArray((data as any).dependsOn)) {
+            data.dependencies = normaliseTaskDependenciesResponse((data as any).dependsOn, data.id);
+        }
+        return data;
     } catch (err) {
         if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
             try {
                 const res = await api.get<Task>(`/tasks/get-task/${id}`);
-                return res.data;
+                const data = res.data;
+                const substatuses = getTaskSubstatuses();
+                if (data && data.status === "IN_PROGRESS" && substatuses[data.id]) {
+                    data.status = substatuses[data.id] as TaskStatus;
+                }
+                const labelsMap = getTaskLabelsMap();
+                if (data && labelsMap[data.id]) {
+                    data.labels = labelsMap[data.id];
+                }
+                if (data && !data.dependencies && Array.isArray((data as any).dependsOn)) {
+                    data.dependencies = normaliseTaskDependenciesResponse((data as any).dependsOn, data.id);
+                }
+                return data;
             } catch (fallbackErr) {
                 throw fallbackErr;
             }
@@ -293,9 +451,12 @@ export async function fetchTaskById(id: string): Promise<Task> {
 // ── POST create task ──────────────────────────────────────────────────────────
 // Primary: POST /tasks, Fallback: POST /tasks/create
 export async function createTask(data: CreateTaskPayload): Promise<Task> {
+    const requestedStatus = data.status ?? "TODO";
+    const backendStatus = toBackendTaskStatus(requestedStatus);
+
     const payload: Record<string, unknown> = {
         title: data.title,
-        status: data.status ?? "TODO",
+        status: backendStatus,
         priority: data.priority ?? "MEDIUM",
     };
 
@@ -314,47 +475,127 @@ export async function createTask(data: CreateTaskPayload): Promise<Task> {
 
     try {
         const res = await api.post<any>("/tasks", payload);
-        const taskData = res.data?.data || res.data?.task || res.data;
-        return taskData as Task;
+        const taskData = (res.data?.data || res.data?.task || res.data) as Task;
+        if (requestedStatus === "REVIEW" || requestedStatus === "BLOCKED") {
+            saveTaskSubstatus(taskData.id, requestedStatus);
+            taskData.status = requestedStatus;
+        }
+        if (data.labels && data.labels.length > 0) {
+            saveTaskLabels(taskData.id, data.labels);
+            taskData.labels = data.labels;
+        }
+        return taskData;
     } catch (err) {
         if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
             const res = await api.post<Task>("/tasks/create", payload);
-            return res.data;
+            const taskData = res.data;
+            if (requestedStatus === "REVIEW" || requestedStatus === "BLOCKED") {
+                saveTaskSubstatus(taskData.id, requestedStatus);
+                taskData.status = requestedStatus;
+            }
+            if (data.labels && data.labels.length > 0) {
+                saveTaskLabels(taskData.id, data.labels);
+                taskData.labels = data.labels;
+            }
+            return taskData;
         }
         throw err;
     }
 }
 
+// ── Helper: build backend-safe PATCH payload ────────────────────────────────
+export function sanitizeUpdateTaskPayload(data: UpdateTaskPayload): Record<string, unknown> {
+    const payload: Record<string, unknown> = {};
+
+    if (data.title !== undefined) payload.title = data.title;
+    if (data.description !== undefined) payload.description = data.description;
+    if (data.priority !== undefined) payload.priority = data.priority;
+    if (data.status !== undefined) payload.status = toBackendTaskStatus(data.status);
+
+    // Foreign key and relational ID fields: empty strings must NEVER be sent as foreign keys
+    if (data.leadId !== undefined) payload.leadId = data.leadId ? data.leadId : null;
+    if (data.dealId !== undefined) payload.dealId = data.dealId ? data.dealId : null;
+    if (data.projectId !== undefined) payload.projectId = data.projectId ? data.projectId : null;
+    if (data.parentTaskId !== undefined) payload.parentTaskId = data.parentTaskId ? data.parentTaskId : null;
+    if (data.assignedToId !== undefined) payload.assignedToId = data.assignedToId ? data.assignedToId : null;
+
+    if (data.dueDate !== undefined) {
+        payload.dueDate = data.dueDate ? toISODateTime(data.dueDate) : null;
+    }
+
+    return payload;
+}
+
 // ── PATCH update task ─────────────────────────────────────────────────────────
 // Primary: PATCH /tasks/:id, Fallback: PATCH /tasks/update-task/:id
 export async function updateTask(id: string, data: UpdateTaskPayload): Promise<Task> {
-    const payload: Record<string, unknown> = {};
-
-    if (data.title !== undefined)       payload.title       = data.title;
-    if (data.description !== undefined) payload.description = data.description;
-    if (data.priority !== undefined)    payload.priority    = data.priority;
-    if (data.status !== undefined)      payload.status      = data.status;
-    if (data.leadId !== undefined)      payload.leadId      = data.leadId;
-    if (data.dealId !== undefined)      payload.dealId      = data.dealId;
-    if (data.projectId !== undefined)   payload.projectId   = data.projectId;
-    if (data.parentTaskId !== undefined)payload.parentTaskId= data.parentTaskId;
-
-    if (data.assignedToId !== undefined) {
-        payload.assignedToId = data.assignedToId || null;
+    // 1. Immediately persist labels and substatus client-side
+    if (data.labels !== undefined) {
+        saveTaskLabels(id, data.labels);
+    }
+    if (data.status !== undefined) {
+        saveTaskSubstatus(id, data.status);
     }
 
-    if (data.dueDate !== undefined) {
-        payload.dueDate = toISODateTime(data.dueDate);
+    const payload = sanitizeUpdateTaskPayload(data);
+    const hasBackendFields = Object.keys(payload).length > 0;
+
+    // If only client-side metadata (such as labels) was updated, avoid unnecessary/failing backend PATCH
+    if (!hasBackendFields) {
+        const labelsMap = getTaskLabelsMap();
+        const currentLabels = data.labels !== undefined ? data.labels : (labelsMap[id] ?? []);
+        const result: Partial<Task> = {
+            id,
+            labels: currentLabels,
+        };
+        if (data.status !== undefined) {
+            result.status = data.status;
+        }
+        return result as Task;
     }
 
     try {
         const res = await api.patch<any>(`/tasks/${id}`, payload);
-        const taskData = res.data?.data || res.data?.task || res.data;
-        return taskData as Task;
+        const taskData = (res.data?.data || res.data?.task || res.data) as Task;
+        if (data.status !== undefined) {
+            taskData.status = data.status;
+        } else {
+            // When status was NOT part of update, preserve substatus (REVIEW/BLOCKED) if backend returned IN_PROGRESS
+            const substatuses = getTaskSubstatuses();
+            if (taskData && taskData.status === "IN_PROGRESS" && substatuses[id]) {
+                taskData.status = substatuses[id] as TaskStatus;
+            }
+        }
+        if (data.labels !== undefined) {
+            taskData.labels = data.labels;
+        } else {
+            const labelsMap = getTaskLabelsMap();
+            if (labelsMap[id]) {
+                taskData.labels = labelsMap[id];
+            }
+        }
+        return taskData;
     } catch (err) {
         if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
             const res = await api.patch<Task>(`/tasks/update-task/${id}`, payload);
-            return res.data;
+            const taskData = res.data;
+            if (data.status !== undefined) {
+                taskData.status = data.status;
+            } else {
+                const substatuses = getTaskSubstatuses();
+                if (taskData && taskData.status === "IN_PROGRESS" && substatuses[id]) {
+                    taskData.status = substatuses[id] as TaskStatus;
+                }
+            }
+            if (data.labels !== undefined) {
+                taskData.labels = data.labels;
+            } else {
+                const labelsMap = getTaskLabelsMap();
+                if (labelsMap[id]) {
+                    taskData.labels = labelsMap[id];
+                }
+            }
+            return taskData;
         }
         throw err;
     }
@@ -363,6 +604,8 @@ export async function updateTask(id: string, data: UpdateTaskPayload): Promise<T
 // ── DELETE task ───────────────────────────────────────────────────────────────
 // DELETE /tasks/:id
 export async function deleteTask(id: string): Promise<{ success: boolean; message?: string }> {
+    clearTaskSubstatus(id);
+    clearTaskLabels(id);
     const res = await api.delete<any>(`/tasks/${id}`);
     return res.data;
 }
@@ -432,7 +675,12 @@ export function normaliseBulkUpdateResponse(raw: unknown): BulkUpdateResponse {
 // Bulk update 1–100 tasks in one single request with per-task reporting
 export async function bulkUpdateTasks(payload: BulkUpdatePayload): Promise<BulkUpdateResponse> {
     const updateBody: Record<string, unknown> = {};
-    if (payload.update.status) updateBody.status = payload.update.status;
+    if (payload.update.status) {
+        updateBody.status = toBackendTaskStatus(payload.update.status);
+        payload.taskIds.forEach((id) => {
+            saveTaskSubstatus(id, payload.update.status!);
+        });
+    }
     if (payload.update.priority) updateBody.priority = payload.update.priority;
     if (payload.update.assignedToId !== undefined) {
         updateBody.assignedToId = payload.update.assignedToId || null;
@@ -476,6 +724,21 @@ export async function createTaskComment(taskId: string, content: string): Promis
     return (res.data?.data || res.data?.comment || res.data) as TaskComment;
 }
 
+export async function getTaskComment(taskId: string, commentId: string): Promise<TaskComment> {
+    const res = await api.get<any>(`/tasks/${taskId}/comments/${commentId}`);
+    return (res.data?.data || res.data?.comment || res.data) as TaskComment;
+}
+
+export async function updateTaskComment(taskId: string, commentId: string, content: string): Promise<TaskComment> {
+    const res = await api.patch<any>(`/tasks/${taskId}/comments/${commentId}`, { content });
+    return (res.data?.data || res.data?.comment || res.data) as TaskComment;
+}
+
+export async function deleteTaskComment(taskId: string, commentId: string): Promise<boolean> {
+    const res = await api.delete<any>(`/tasks/${taskId}/comments/${commentId}`);
+    return res.data?.success !== false;
+}
+
 // ── Sub-resources: Subtasks ───────────────────────────────────────────────────
 
 export async function fetchTaskSubtasks(taskId: string): Promise<TaskSubtask[]> {
@@ -507,15 +770,122 @@ export async function createTaskSubtask(taskId: string, payload: CreateSubtaskPa
     return (res.data?.data || res.data?.subtask || res.data) as TaskSubtask;
 }
 
+export async function getTaskSubtask(taskId: string, subtaskId: string): Promise<TaskSubtask> {
+    const res = await api.get<any>(`/tasks/${taskId}/subtasks/${subtaskId}`);
+    return (res.data?.data || res.data?.subtask || res.data) as TaskSubtask;
+}
+
+export async function updateTaskSubtask(
+    taskId: string,
+    subtaskId: string,
+    payload: Partial<CreateSubtaskPayload>
+): Promise<TaskSubtask> {
+    const body: Record<string, unknown> = {};
+    if (payload.title !== undefined) body.title = payload.title;
+    if (payload.status !== undefined) body.status = payload.status;
+    if (payload.priority !== undefined) body.priority = payload.priority;
+    if (payload.description !== undefined) body.description = payload.description;
+    if (payload.assignedToId !== undefined) body.assignedToId = payload.assignedToId;
+    if (payload.dueDate !== undefined) {
+        const isoDate = toISODateTime(payload.dueDate);
+        if (isoDate) body.dueDate = isoDate;
+    }
+
+    const res = await api.patch<any>(`/tasks/${taskId}/subtasks/${subtaskId}`, body);
+    return (res.data?.data || res.data?.subtask || res.data) as TaskSubtask;
+}
+
+export async function deleteTaskSubtask(taskId: string, subtaskId: string): Promise<boolean> {
+    const res = await api.delete<any>(`/tasks/${taskId}/subtasks/${subtaskId}`);
+    return res.data?.success !== false;
+}
+
 // ── Sub-resources: Dependencies ───────────────────────────────────────────────
 
 export function normaliseTaskDependenciesResponse(raw: unknown, fallbackTaskId?: string): TaskDependency[] {
     if (!raw) return [];
 
+    // Check for BE-2 envelope: { success: true, data: { taskId, dependsOn: [...], dependedOnBy: [...] } }
+    // Or { dependsOn: [...], dependedOnBy: [...] }
+    if (typeof raw === "object" && raw !== null) {
+        const r = raw as Record<string, any>;
+        const dataObj = (r.data && typeof r.data === "object" && !Array.isArray(r.data)) ? r.data : r;
+        const rootTaskId = String(dataObj.taskId || fallbackTaskId || "");
+
+        const hasDependsOn = Array.isArray(dataObj.dependsOn);
+        const hasDependedOnBy = Array.isArray(dataObj.dependedOnBy);
+
+        if (hasDependsOn || hasDependedOnBy) {
+            const results: TaskDependency[] = [];
+
+            if (hasDependsOn) {
+                for (let idx = 0; idx < dataObj.dependsOn.length; idx++) {
+                    const item = dataObj.dependsOn[idx];
+                    if (!item || typeof item !== "object") continue;
+                    const id = String(item.id ?? item._id ?? `dep-${rootTaskId || "task"}-on-${idx}`);
+                    const targetTaskId = String(
+                        item.task?.id ??
+                        item.dependency?.id ??
+                        item.dependencyId ??
+                        item.dependsOnTaskId ??
+                        item.dependsOnId ??
+                        item.blockerTaskId ??
+                        item.blockedByTaskId ??
+                        item.targetTaskId ??
+                        item.taskId ??
+                        ""
+                    );
+                    const depId = targetTaskId || String(item.id ?? "");
+                    const currentTaskId = String(
+                        item.dependentId ??
+                        item.sourceTaskId ??
+                        item.parentTaskId ??
+                        rootTaskId
+                    );
+                    results.push({
+                        id,
+                        dependentId: currentTaskId,
+                        dependencyId: depId,
+                        direction: "DEPENDS_ON",
+                        createdAt: item.createdAt ? String(item.createdAt) : new Date().toISOString(),
+                        task: item.task || item.dependency,
+                    });
+                }
+            }
+
+            if (hasDependedOnBy) {
+                for (let idx = 0; idx < dataObj.dependedOnBy.length; idx++) {
+                    const item = dataObj.dependedOnBy[idx];
+                    if (!item || typeof item !== "object") continue;
+                    const id = String(item.id ?? item._id ?? `dep-${rootTaskId || "task"}-by-${idx}`);
+                    const otherTaskId = String(
+                        item.task?.id ??
+                        item.dependency?.id ??
+                        item.dependentId ??
+                        item.sourceTaskId ??
+                        item.taskId ??
+                        ""
+                    );
+                    results.push({
+                        id,
+                        dependentId: otherTaskId,
+                        dependencyId: rootTaskId,
+                        direction: "DEPENDED_ON_BY",
+                        createdAt: item.createdAt ? String(item.createdAt) : new Date().toISOString(),
+                        task: item.task || item.dependency,
+                    });
+                }
+            }
+
+            return results;
+        }
+    }
+
+    // Generic list extraction for legacy / flat formats
     let list: unknown[] = [];
     if (Array.isArray(raw)) {
         list = raw;
-    } else if (typeof raw === "object") {
+    } else if (typeof raw === "object" && raw !== null) {
         const r = raw as Record<string, any>;
         if (Array.isArray(r.data)) {
             list = r.data;
@@ -527,6 +897,8 @@ export function normaliseTaskDependenciesResponse(raw: unknown, fallbackTaskId?:
             list = r.data.items;
         } else if (Array.isArray(r.dependencies)) {
             list = r.dependencies;
+        } else if (Array.isArray(r.blockers)) {
+            list = r.blockers;
         } else if (Array.isArray(r.items)) {
             list = r.items;
         }
@@ -540,6 +912,7 @@ export function normaliseTaskDependenciesResponse(raw: unknown, fallbackTaskId?:
                 id: `dep-${fallbackTaskId || "task"}-${idx}`,
                 dependentId: fallbackTaskId || "",
                 dependencyId: String(item ?? ""),
+                direction: "DEPENDS_ON",
                 createdAt: new Date().toISOString(),
             };
         }
@@ -551,6 +924,8 @@ export function normaliseTaskDependenciesResponse(raw: unknown, fallbackTaskId?:
             item.blockerTaskId ??
             item.blockedByTaskId ??
             item.targetTaskId ??
+            item.task?.id ??
+            item.dependency?.id ??
             item.taskId ??
             ""
         );
@@ -567,8 +942,9 @@ export function normaliseTaskDependenciesResponse(raw: unknown, fallbackTaskId?:
             id,
             dependentId,
             dependencyId,
+            direction: (item.direction === "DEPENDED_ON_BY" ? "DEPENDED_ON_BY" : "DEPENDS_ON") as "DEPENDS_ON" | "DEPENDED_ON_BY",
             createdAt,
-            task: item.task,
+            task: item.task || item.dependency,
         };
     });
 }
@@ -579,20 +955,38 @@ export function normaliseTaskDependency(raw: unknown, fallbackTaskId?: string, f
             id: `dep-${Date.now()}`,
             dependentId: fallbackTaskId || "",
             dependencyId: fallbackDepId || "",
+            direction: "DEPENDS_ON",
             createdAt: new Date().toISOString(),
         };
     }
     const r = raw as Record<string, any>;
-    const item = (r.data && typeof r.data === "object" && !Array.isArray(r.data))
-        ? (r.data.dependency || r.data)
-        : (r.dependency || r);
+    const root = (r.data && typeof r.data === "object" && !Array.isArray(r.data)) ? r.data : r;
+
+    const id = String(root.id ?? root._id ?? `dep-${Date.now()}`);
+    const dependentId = String(
+        root.dependentId ??
+        root.sourceTaskId ??
+        fallbackTaskId ??
+        ""
+    );
+    const dependencyId = String(
+        root.dependencyId ??
+        root.dependsOnTaskId ??
+        root.task?.id ??
+        root.dependency?.id ??
+        fallbackDepId ??
+        ""
+    );
+    const createdAt = root.createdAt ? String(root.createdAt) : new Date().toISOString();
+    const taskObj = root.task || root.dependency || undefined;
 
     return {
-        id: String(item.id ?? item._id ?? `dep-${Date.now()}`),
-        dependentId: String(item.dependentId ?? item.sourceTaskId ?? fallbackTaskId ?? ""),
-        dependencyId: String(item.dependencyId ?? item.dependsOnTaskId ?? fallbackDepId ?? ""),
-        createdAt: item.createdAt ? String(item.createdAt) : new Date().toISOString(),
-        task: item.task,
+        id,
+        dependentId,
+        dependencyId,
+        direction: "DEPENDS_ON",
+        createdAt,
+        task: taskObj,
     };
 }
 
@@ -613,13 +1007,23 @@ export async function createTaskDependency(taskId: string, dependencyId: string)
     return normaliseTaskDependency(res.data, taskId, dependencyId);
 }
 
+export async function deleteTaskDependency(taskId: string, dependencyId: string): Promise<boolean> {
+    const res = await api.delete<any>(`/tasks/${taskId}/dependencies/${dependencyId}`);
+    return res.data?.success !== false;
+}
+
 // ── Sub-resources: Activity Timeline ──────────────────────────────────────────
 
-export async function fetchTaskActivity(taskId: string, page = 1, limit = 20): Promise<TaskActivity[]> {
+export async function fetchTaskActivity(
+    taskId: string,
+    page = 1,
+    limit = 20,
+    type?: string
+): Promise<TaskActivity[]> {
     try {
-        const res = await api.get<any>(`/tasks/${taskId}/activity`, {
-            params: { page, limit },
-        });
+        const params: Record<string, unknown> = { page, limit };
+        if (type) params.type = type;
+        const res = await api.get<any>(`/tasks/${taskId}/activity`, { params });
         const raw = res.data;
         if (Array.isArray(raw)) return raw as TaskActivity[];
         if (Array.isArray(raw?.data)) return raw.data as TaskActivity[];

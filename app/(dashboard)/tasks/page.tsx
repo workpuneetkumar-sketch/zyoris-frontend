@@ -17,6 +17,8 @@ export default function TasksPage() {
         statusFilter,
         priorityFilter,
         assigneeFilter,
+        projectFilter,
+        labelFilter,
         search,
         selectedTaskIds,
         isAllSelected,
@@ -31,6 +33,8 @@ export default function TasksPage() {
         setStatusFilter,
         setPriorityFilter,
         setAssigneeFilter,
+        setProjectFilter,
+        setLabelFilter,
         setSearch,
         toggleSelect,
         selectAll,
@@ -40,6 +44,7 @@ export default function TasksPage() {
         closeDetail,
         handleCreate,
         handleUpdate,
+        handleStatusChange,
         handleDelete,
         handleBulkUpdate,
         cycleStatus,
@@ -57,6 +62,8 @@ export default function TasksPage() {
                 statusFilter={statusFilter}
                 priorityFilter={priorityFilter}
                 assigneeFilter={assigneeFilter}
+                projectFilter={projectFilter}
+                labelFilter={labelFilter}
                 search={search}
                 isCreateOpen={isCreateOpen}
                 saving={saving}
@@ -69,6 +76,8 @@ export default function TasksPage() {
                 onStatusFilterChange={setStatusFilter}
                 onPriorityFilterChange={setPriorityFilter}
                 onAssigneeFilterChange={setAssigneeFilter}
+                onProjectFilterChange={setProjectFilter}
+                onLabelFilterChange={setLabelFilter}
                 onSearchChange={setSearch}
                 onToggleSelect={toggleSelect}
                 onSelectAll={selectAll}
@@ -79,7 +88,7 @@ export default function TasksPage() {
                 onCreateTask={handleCreate}
                 onOpenDetail={openDetail}
                 onCycleStatus={cycleStatus}
-                onUpdateTask={(id, data) => handleUpdate(id, data)}
+                onUpdateTask={(id, data) => handleStatusChange(id, data.status)}
                 onDeleteTask={handleDelete}
                 onRetry={retry}
             />
@@ -87,6 +96,7 @@ export default function TasksPage() {
             {isDetailOpen && selectedTask && (
                 <TaskDetailModal
                     task={selectedTask}
+                    allTasks={tasks}
                     saving={saving}
                     saveError={saveError}
                     onClose={closeDetail}
