@@ -227,7 +227,6 @@ export default function ApprovalQueuePage() {
   // Auth guard
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") router.replace("/dashboard");
   }, [user, router]);
 
   const syncUrl = useCallback((overrides?: Partial<Record<string, string>>) => {

@@ -24,7 +24,10 @@ import {
     Clock,
     Home,
     IndianRupee,
+    Search,
+    BadgeCheck,
 } from "lucide-react";
+import { AgentTriggerButton } from "@/components/agents/AgentResultModal";
 import { Lead, computeLeadScore } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
 import { convertLeadToDeal, fetchLeadById, getLeadScore } from "@/lib/api/leadsApi";
@@ -309,8 +312,42 @@ export default function LeadDetailPage() {
                     </div>
                 </div>
 
-                {/* Convert to Deal — primary CTA */}
-                <div className="flex flex-col items-end gap-1.5">
+                {/* Agent action buttons + Convert to Deal */}
+                <div className="flex flex-col items-end gap-2">
+                    {/* Research Agent button */}
+                    <AgentTriggerButton
+                        agentType="research"
+                        payload={{
+                            agentId: "research-agent",
+                            action: "research",
+                            parameters: {
+                                entityType: "lead",
+                                entityId: leadId,
+                                includeExternalEnrichment: true,
+                            },
+                        }}
+                        label="Research Lead"
+                        icon={<Search size={14} className="shrink-0" />}
+                        className="h-9"
+                    />
+
+                    {/* Lead Qualification Agent button */}
+                    <AgentTriggerButton
+                        agentType="qualify_lead"
+                        payload={{
+                            agentId: "lead-qualification-agent",
+                            action: "qualify_lead",
+                            parameters: {
+                                leadId: leadId,
+                                forceRecalculate: true,
+                            },
+                        }}
+                        label="Qualify Lead"
+                        icon={<BadgeCheck size={14} className="shrink-0" />}
+                        className="h-9"
+                    />
+
+                    {/* Convert to Deal — primary CTA */}
                     <button
                         onClick={handleConvert}
                         disabled={converting || lead.status === "DEAD"}

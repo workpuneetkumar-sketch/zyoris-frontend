@@ -307,7 +307,6 @@ export default function ToolPermissionMatrixPage() {
   // Auth guard
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") router.replace("/dashboard");
   }, [user, router]);
 
   const fetchMatrix = useCallback(async () => {
