@@ -14,12 +14,21 @@ import {
   Code,
   Link as LinkIcon,
   Search,
+  ImageIcon,
+  Paperclip,
+  ChevronRight,
+  MessageSquare,
+  Bookmark,
+  Table,
+  Database,
+  ListTodo,
 } from "lucide-react";
 
 export interface BlockOption {
   type: string;
   label: string;
   description: string;
+  shortcut: string;
   icon: React.ElementType;
   keywords: string[];
 }
@@ -28,6 +37,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "paragraph",
     label: "Text",
+    shortcut: "/text",
     description: "Just start writing with plain text.",
     icon: Type,
     keywords: ["p", "text", "paragraph", "normal"],
@@ -35,6 +45,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "heading_1",
     label: "Heading 1",
+    shortcut: "#",
     description: "Big section heading.",
     icon: Heading1,
     keywords: ["h1", "heading1", "title", "header"],
@@ -42,6 +53,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "heading_2",
     label: "Heading 2",
+    shortcut: "##",
     description: "Medium section heading.",
     icon: Heading2,
     keywords: ["h2", "heading2", "subheading"],
@@ -49,6 +61,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "heading_3",
     label: "Heading 3",
+    shortcut: "###",
     description: "Small section heading.",
     icon: Heading3,
     keywords: ["h3", "heading3", "subsubheading"],
@@ -56,6 +69,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "bulleted_list_item",
     label: "Bulleted List",
+    shortcut: "- or *",
     description: "Create a simple bulleted list.",
     icon: List,
     keywords: ["bullet", "list", "bulleted", "ul"],
@@ -63,6 +77,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "numbered_list_item",
     label: "Numbered List",
+    shortcut: "1.",
     description: "Create a numbered ordered list.",
     icon: ListOrdered,
     keywords: ["number", "numbered", "ordered", "ol"],
@@ -70,13 +85,63 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "to_do",
     label: "Checklist",
+    shortcut: "[]",
     description: "Track tasks with a todo checkbox.",
     icon: CheckSquare,
     keywords: ["todo", "checkbox", "check", "task"],
   },
   {
+    type: "toggle",
+    label: "Toggle List",
+    shortcut: ">!",
+    description: "Toggles can show and hide content inside.",
+    icon: ChevronRight,
+    keywords: ["toggle", "collapse", "dropdown", "accordion"],
+  },
+  {
+    type: "callout",
+    label: "Callout",
+    shortcut: "::callout or !",
+    description: "Make writing stand out with an icon & box.",
+    icon: MessageSquare,
+    keywords: ["callout", "alert", "notice", "box", "warning", "info"],
+  },
+  {
+    type: "bookmark",
+    label: "Web Bookmark",
+    shortcut: "https://",
+    description: "Create a visual link preview card for a website.",
+    icon: Bookmark,
+    keywords: ["bookmark", "url", "preview", "linkcard"],
+  },
+  {
+    type: "table",
+    label: "Table Block",
+    shortcut: "/table",
+    description: "Add simple tabular data grid with rows & columns.",
+    icon: Table,
+    keywords: ["table", "grid", "spreadsheet", "cells"],
+  },
+  {
+    type: "database",
+    label: "Database Block",
+    shortcut: "/database",
+    description: "Embed an inline database table or view.",
+    icon: Database,
+    keywords: ["database", "db", "collection", "view"],
+  },
+  {
+    type: "task",
+    label: "Task Block",
+    shortcut: "/task",
+    description: "Create or link a real task inside this page.",
+    icon: ListTodo,
+    keywords: ["task", "inlinetask", "assignment", "kanban"],
+  },
+  {
     type: "quote",
     label: "Quote",
+    shortcut: ">",
     description: "Capture a block quote or callout quote.",
     icon: Quote,
     keywords: ["quote", "cite", "blockquote"],
@@ -84,6 +149,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "divider",
     label: "Divider",
+    shortcut: "---",
     description: "Visually divide blocks with a line.",
     icon: Minus,
     keywords: ["divider", "hr", "line", "rule"],
@@ -91,6 +157,7 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "code",
     label: "Code",
+    shortcut: "```",
     description: "Display a code snippet with formatting.",
     icon: Code,
     keywords: ["code", "script", "snippet", "pre"],
@@ -98,9 +165,26 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
   {
     type: "link",
     label: "Link",
+    shortcut: "/link",
     description: "Insert a URL link reference.",
     icon: LinkIcon,
     keywords: ["link", "url", "href", "website"],
+  },
+  {
+    type: "file",
+    label: "File Attachment",
+    shortcut: "/file",
+    description: "Upload and attach a document or file.",
+    icon: Paperclip,
+    keywords: ["file", "attachment", "document", "upload", "pdf"],
+  },
+  {
+    type: "image",
+    label: "Image",
+    shortcut: "/image",
+    description: "Embed an image attachment into the page.",
+    icon: ImageIcon,
+    keywords: ["image", "picture", "photo", "img", "png", "jpg"],
   },
 ];
 
@@ -128,6 +212,7 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
     return (
       opt.label.toLowerCase().includes(query) ||
       opt.type.toLowerCase().includes(query) ||
+      opt.shortcut.toLowerCase().includes(query) ||
       opt.keywords.some((k) => k.includes(query))
     );
   });
@@ -186,10 +271,10 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
             }
           : undefined
       }
-      className="z-50 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1.5 animate-in fade-in duration-100 max-h-80 overflow-y-auto"
+      className="z-50 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden py-1.5 animate-in fade-in duration-100 max-h-80 overflow-y-auto"
     >
       <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-        <span>Basic Blocks</span>
+        <span>Block Types & Shortcuts</span>
         {filterText && <span className="lowercase text-blue-500">/{filterText}</span>}
       </div>
 
@@ -211,7 +296,7 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
                 }`}
               >
                 <div
-                  className={`p-2 rounded-lg border ${
+                  className={`p-2 rounded-lg border flex-shrink-0 ${
                     isSelected
                       ? "bg-blue-600 text-white border-blue-600 shadow-sm"
                       : "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700"
@@ -220,10 +305,15 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
                   <Icon className="w-4 h-4" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                    {opt.label}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-900 dark:text-white truncate">
+                      {opt.label}
+                    </span>
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-500 font-bold border border-slate-200 dark:border-slate-700 ml-1.5 flex-shrink-0">
+                      {opt.shortcut}
+                    </span>
                   </div>
-                  <div className="text-[11px] text-slate-400 truncate leading-tight">
+                  <div className="text-[11px] text-slate-400 truncate leading-tight mt-0.5">
                     {opt.description}
                   </div>
                 </div>

@@ -57,18 +57,33 @@ const PageTreeNodeItem: React.FC<{
 
   const handleDelete = async () => {
     if (!safeId) return;
-    if (!window.confirm(`Are you sure you want to delete "${node.title || "this page"}"?`)) {
+    if (!window.confirm(`Are you sure you want to delete "${node.title || "this item"}"?`)) {
       return;
     }
+    
+    // Collect target node ID and all child/descendant node IDs recursively
+    const collectDescendantIds = (n: WorkspacePageNode): string[] => {
+      let ids = [n.id];
+      if (Array.isArray(n.children) && n.children.length > 0) {
+        n.children.forEach((child) => {
+          ids = ids.concat(collectDescendantIds(child));
+        });
+      }
+      return ids;
+    };
+
+    const idsToRemove = collectDescendantIds(node);
+
     try {
       await deleteWorkspacePage(safeId);
-      removeStoredLocalPage(safeId);
+    } catch (err) {
+      console.warn("Backend delete request notice:", err);
+    } finally {
+      idsToRemove.forEach((id) => removeStoredLocalPage(id));
       if (onRefreshTree) onRefreshTree();
       if (isActive) {
         router.push("/workspace");
       }
-    } catch (err) {
-      console.error("Failed to delete page:", err);
     }
   };
 
