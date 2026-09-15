@@ -7,12 +7,12 @@ import { useRouter } from "next/navigation";
 import SettingsUI, { Profile } from "@/components/settings/SettingsUI";
 
 export default function SettingsPage() {
-    const { user, isLoading } = useAuth();
+    const { user, isInitializing } = useAuth();
     const router = useRouter();
     const [profile, setProfile] = useState<Profile | null>(null);
 
     useEffect(() => {
-        if (isLoading) return;
+        if (isInitializing) return;
         if (!user) {
             router.replace("/login");
             return;
@@ -26,9 +26,9 @@ export default function SettingsPage() {
             }
         }
         load();
-    }, [user, isLoading, router]);
+    }, [user, isInitializing, router]);
 
-    if (isLoading) return null;
+    if (isInitializing) return null;
     if (!user) return null;
 
     return (

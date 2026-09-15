@@ -1,32 +1,34 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, Bell } from "lucide-react";
 import { CFOOverviewSection } from "@/components/dashboard/compoents/CFOOverviewSection";
 
 export default function CfoDashboardPage() {
-  const { user, token, isLoading } = useAuth();
+  const { user, token, isInitializing } = useAuth();
   const router = useRouter();
+  const [dataChecked, setDataChecked] = useState(false);
 
   useEffect(() => {
-    if (!isLoading && user && user.role !== "CFO" && user.role !== "ADMIN") {
+    if (!isInitializing && user && user.role !== "CFO" && user.role !== "ADMIN") {
       router.replace("/dashboard");
     }
-  }, [user, isLoading, router]);
+  }, [user, isInitializing, router]);
 
-  if (isLoading || !user) return <div className="min-h-screen bg-[#f5f7fb]" />;
+  useEffect(() => {
+    if (token) setDataChecked(true);
+  }, [token]);
+
+  if (isInitializing || !user) return <div className="min-h-screen bg-[#f5f7fb]" />;
 
   return (
     <div>
-      {/* ── Topbar ── */}
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-xl font-bold text-gray-900 tracking-tight">Financial Overview</h1>
-          <p className="text-sm text-gray-400 mt-0.5">
-            Portfolio margin health and spend efficiency.
-          </p>
+          <p className="text-sm text-gray-400 mt-0.5">Portfolio margin health and spend efficiency.</p>
         </div>
 
         <div className="flex items-center gap-4">
@@ -49,7 +51,17 @@ export default function CfoDashboardPage() {
       </div>
 
       <div className="space-y-8">
-        <CFOOverviewSection token={token!} />
+        {dataChecked ? (
+          <CFOOverviewSection token={token!} />
+        ) : (
+          <div className="space-y-6 animate-pulse">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="h-32 bg-gray-200 rounded-2xl" />
+              <div className="h-32 bg-gray-200 rounded-2xl" />
+              <div className="h-32 bg-gray-200 rounded-2xl" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

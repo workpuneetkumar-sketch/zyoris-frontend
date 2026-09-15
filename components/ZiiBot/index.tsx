@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { ZiiBotAvatar } from "./ZiiBotAvatar";
 import { ZiiBotPanel } from "./ZiiBotPanel";
@@ -20,6 +21,7 @@ function useDarkMode(): boolean {
 }
 
 export function ZiiBot() {
+  const pathname = usePathname();
   const [panelOpen, setPanelOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [closing, setClosing] = useState(false);
@@ -58,6 +60,16 @@ export function ZiiBot() {
 
   const toggleFullscreen = useCallback(() => setFullscreen((f) => !f), []);
 
+  // Hide chatbot on login and register routes for privacy
+  if (
+    pathname === "/login" ||
+    pathname?.startsWith("/login") ||
+    pathname === "/register" ||
+    pathname?.startsWith("/register")
+  ) {
+    return null;
+  }
+
   const showPanel = panelOpen || fullscreen || closing;
 
   return (
@@ -77,6 +89,7 @@ export function ZiiBot() {
             onToggleSound={chat.toggleSound}
             showGreeting={chat.showGreeting}
             darkMode={darkMode}
+            userName={chat.userName}
           />
         ) : showPanel ? (
           <ZiiBotPanel
@@ -92,30 +105,32 @@ export function ZiiBot() {
             onToggleSound={chat.toggleSound}
             showGreeting={chat.showGreeting}
             darkMode={darkMode}
+            userName={chat.userName}
           />
         ) : null}
       </AnimatePresence>
 
+      {/* ── UPDATED FAB BUTTON ── */}
       {!fullscreen && (
         <motion.button
           type="button"
-          className="zii-fab"
+          className={`zii-fab${pathname === "/whatsapp" || pathname?.startsWith("/whatsapp") ? " zii-fab--whatsapp" : ""}`}
           onClick={panelOpen || closing ? closePanel : openPanel}
-          aria-label={panelOpen || closing ? "Close chat" : "Open ZII BOT"}
+          aria-label={panelOpen || closing ? "Close chat" : "Open ZY BOT"}
           initial={false}
           animate={{
             scale: 1,
             boxShadow: [
-              "0 4px 24px rgba(99, 102, 241, 0.35), 0 0 0 0 rgba(99, 102, 241, 0.4)",
-              "0 4px 28px rgba(99, 102, 241, 0.45), 0 0 0 8px rgba(99, 102, 241, 0)",
-              "0 4px 24px rgba(99, 102, 241, 0.35), 0 0 0 0 rgba(99, 102, 241, 0.4)",
+              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
+              "0 8px 40px rgba(99, 102, 241, 0.5), 0 0 0 12px rgba(99, 102, 241, 0)",
+              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
             ],
           }}
           transition={{
-            boxShadow: { repeat: Infinity, duration: 2.2, ease: "easeInOut" },
+            boxShadow: { repeat: Infinity, duration: 2.5, ease: "easeInOut" },
           }}
-          whileHover={{ scale: 1.06 }}
-          whileTap={{ scale: 0.96 }}
+          whileHover={{ scale: 1.08 }}
+          whileTap={{ scale: 0.92 }}
         >
           <ZiiBotAvatar isIdle={!chat.isTyping} isTyping={chat.isTyping} size="button" />
         </motion.button>

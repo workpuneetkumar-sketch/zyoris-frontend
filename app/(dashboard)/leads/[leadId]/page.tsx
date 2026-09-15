@@ -1,7 +1,634 @@
-export default function LeadDetailPage({ params }: { params: { leadId: string } }) {
-  return (
-    <div>
-      <h1>Lead Detail — {params.leadId}</h1>
-    </div>
-  );
+"use client";
+
+import { useParams, useRouter, notFound } from "next/navigation";
+import { useEffect, useState } from "react";
+import {
+    ArrowLeft,
+    Mail,
+    Phone,
+    MapPin,
+    Building2,
+    Tag,
+    FileText,
+    Briefcase,
+    Loader2,
+    AlertCircle,
+    BarChart2,
+    TrendingUp,
+    TrendingDown,
+    Minus,
+    User,
+    Calendar,
+    Globe,
+    Bot,
+    Clock,
+    Home,
+    IndianRupee,
+    Search,
+    BadgeCheck,
+} from "lucide-react";
+import { AgentTriggerButton } from "@/components/agents/AgentResultModal";
+import { Lead, computeLeadScore } from "@/types/leads";
+import { getLeadStatusInfo } from "@/utils/leadStatus";
+import { convertLeadToDeal, fetchLeadById, getLeadScore } from "@/lib/api/leadsApi";
+import { updateDeal } from "@/lib/api/dealsApi";
+import { mapLeadStatusToDealStage } from "@/lib/dealStageMapper";
+import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
+import { toast } from "react-toastify";
+import { AiExtractionCard } from "@/components/ai/AiExtractionCard";
+import { AiBadge } from "@/components/ai/AiBadge";
+import { CommunicationIntelligenceWidget } from "@/components/ai/CommunicationIntelligenceWidget";
+import { LeadIntelligencePanel } from "@/components/leads/LeadIntelligencePanel";
+
+// Helper to format date safely
+function formatDate(dateString: string | undefined) {
+    if (!dateString) return "—";
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) return "Invalid Date";
+        return date.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+        });
+    } catch {
+        return dateString;
+    }
+}
+
+function safeString(value: any): string {
+    if (value === null || value === undefined || value === "") return "—";
+    return String(value);
+}
+
+function getInitials(name: string): string {
+    if (!name) return "NA";
+    return name
+        .split(" ")
+        .map((n) => n[0]?.toUpperCase() || "")
+        .join("")
+        .slice(0, 2);
+}
+
+// Extract JSON payload from lead notes/metadata
+function parseExtractionData(lead: any) {
+    if (lead.metadata?.extractedData) return { data: lead.metadata.extractedData, cleanNote: lead.note };
+    
+    if (lead.note) {
+        try {
+            // Find JSON block in the note
+            const jsonMatch = lead.note.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const data = JSON.parse(jsonMatch[0]);
+                if (data.project || data.budget || data.timeline || data.city || data.interest) {
+                    const cleanNote = lead.note.replace(jsonMatch[0], '').replace(/```json/g, '').replace(/```/g, '').trim();
+                    return { data, cleanNote: cleanNote || "No additional notes." };
+                }
+            }
+        } catch (e) {
+            // Ignore parse errors
+        }
+    }
+    return { data: null, cleanNote: lead.note };
+}
+
+export default function LeadDetailPage() {
+    const params = useParams();
+    const router = useRouter();
+    const leadId = params?.leadId as string;
+
+    const [lead, setLead] = useState<Lead | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    // Convert-to-deal state
+    const [converting, setConverting] = useState(false);
+    const [convertError, setConvertError] = useState<string | null>(null);
+    const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
+
+    // ── Load lead ─────────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!leadId) return;
+        setLoading(true);
+        setError(null);
+        
+        const loadLeadData = async () => {
+            try {
+                const data = await fetchLeadById(leadId);
+                let leadScore = data.score;
+                
+                // Try to fetch the real score from the API
+                try {
+                    const scoreResponse = await getLeadScore(leadId);
+                    leadScore = scoreResponse.score;
+                } catch (scoreErr) {
+                    console.warn("Failed to fetch lead score, falling back to computed:", scoreErr);
+                }
+                
+                // Ensure all fields exist with fallbacks
+                const enrichedLead: Lead = {
+                    ...data,
+                    id: data.id || leadId,
+                    name: data.name || "Unnamed Lead",
+                    company: data.company || "",
+                    source: data.source || "Unknown",
+                    status: data.status || "NEW",
+                    email: data.email || "",
+                    phone: data.phone || "",
+                    city: data.city || "",
+                    score: leadScore ?? computeLeadScore(data),
+                    tags: data.tags || [],
+                    note: data.note || "",
+                    owner: data.owner || "Unassigned",
+                    ownerAvatar: data.ownerAvatar || "",
+                    assignedTo: data.assignedTo || null,
+                    assignedToId: data.assignedToId || null,
+                    estimatedValue: data.estimatedValue || 0,
+                    createdAt: data.createdAt || new Date().toISOString(),
+                    deleted: data.deleted || false,
+                };
+                setLead(enrichedLead);
+            } catch (err) {
+                setError(err instanceof Error ? err.message : "Failed to load lead.");
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        loadLeadData();
+    }, [leadId]);
+
+    // ── Convert to deal ───────────────────────────────────────────────────────
+    const handleConvert = () => {
+        if (!leadId || converting || lead?.status === "DEAD") return;
+        setIsConfirmModalOpen(true);
+    };
+
+    const executeConvert = async () => {
+        setIsConfirmModalOpen(false);
+        setConverting(true);
+        setConvertError(null);
+
+        try {
+            if (!lead) {
+                throw new Error("Lead data missing");
+            }
+
+            // STEP 1 → Create deal from lead
+            const createdDeal = await convertLeadToDeal(leadId);
+
+            console.log("[Lead Convert] Response:", createdDeal);
+
+            // Backend returns flat deal object
+            const dealId =
+                createdDeal?.id ||
+                createdDeal?.deal?.id ||
+                createdDeal?.dealId;
+
+            if (!dealId) {
+                console.error("Deal creation response:", createdDeal);
+                throw new Error("Deal ID not returned");
+            }
+
+            // STEP 2 → Sync lead data into created deal
+            try {
+                const payload = {
+                    name: lead.name,
+                    amount: Number(lead.estimatedValue || 0),
+                    stage: "NEW",
+                    assignedToId: lead.assignedToId?.trim() || null,
+                    companyId: (lead as any).companyId || null,
+                    contactId: (lead as any).contactId || null,
+                };
+
+                console.log("[Lead Convert] Updating deal", {
+                    dealId,
+                    payload,
+                });
+
+                const updated = await updateDeal(dealId, payload);
+                console.log("[Lead Convert] Updated response", updated);
+
+            } catch (err: any) {
+                console.error(
+                    "[Lead Convert] updateDeal FULL ERROR",
+                    err?.response?.data || err
+                );
+
+                throw new Error(
+                    err?.response?.data?.message ||
+                    "Deal created but sync failed"
+                );
+            }
+
+            toast.success("Lead converted successfully");
+
+            // STEP 3 → Navigate immediately
+            router.replace(`/deals/${dealId}`);
+
+        } catch (err: any) {
+            console.error("[Lead Convert Error]", err);
+
+            const msg =
+                err?.response?.data?.error ||
+                err?.response?.data?.message ||
+                err?.message ||
+                "Conversion failed";
+
+            setConvertError(msg);
+            toast.error(msg);
+
+        } finally {
+            setConverting(false);
+        }
+    };
+
+    // ── Loading ────────────────────────────────────────────────────────────────
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh] gap-3">
+                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-gray-500 font-medium">Loading lead...</p>
+            </div>
+        );
+    }
+
+    // ── Error ─────────────────────────────────────────────────────────────────
+    if (error) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+                <AlertCircle size={36} className="text-red-400" />
+                <p className="text-red-500 text-sm">{error}</p>
+                <button
+                    onClick={() => router.back()}
+                    className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                    Go Back
+                </button>
+            </div>
+        );
+    }
+
+    if (!lead && !loading && !error) {
+        notFound();
+        return null;
+    }
+
+    if (!lead) return null;
+
+    const statusInfo = getLeadStatusInfo(lead.status);
+
+    // Check if lead has any contact info
+    const hasContactInfo = lead.email || lead.phone || lead.city || lead.company;
+    const hasTags = lead.tags && lead.tags.length > 0;
+    const { data: extractionData, cleanNote } = parseExtractionData(lead);
+    const hasNote = cleanNote && cleanNote.trim().length > 0;
+    const isWhatsAppAI = lead.source === "whatsapp_ai_detection";
+
+    // ── Detail view ───────────────────────────────────────────────────────────
+    return (
+        <div className="space-y-5">
+
+            {/* Page header */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => router.back()}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition-colors shrink-0"
+                        title="Go back"
+                    >
+                        <ArrowLeft size={16} className="text-gray-600" />
+                    </button>
+                    <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">{lead.name || "Unnamed Lead"}</h1>
+                            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                                {statusInfo.emoji} {statusInfo.label}
+                            </span>
+                        </div>
+                        <p className="text-sm text-gray-400">{safeString(lead.company)}</p>
+                    </div>
+                </div>
+
+                {/* Agent action buttons + Convert to Deal */}
+                <div className="flex flex-col items-end gap-2">
+                    {/* Research Agent button */}
+                    <AgentTriggerButton
+                        agentType="research"
+                        payload={{
+                            agentId: "research-agent",
+                            action: "research",
+                            parameters: {
+                                entityType: "lead",
+                                entityId: leadId,
+                                includeExternalEnrichment: true,
+                            },
+                        }}
+                        label="Research Lead"
+                        icon={<Search size={14} className="shrink-0" />}
+                        className="h-9"
+                    />
+
+                    {/* Lead Qualification Agent button */}
+                    <AgentTriggerButton
+                        agentType="qualify_lead"
+                        payload={{
+                            agentId: "lead-qualification-agent",
+                            action: "qualify_lead",
+                            parameters: {
+                                leadId: leadId,
+                                forceRecalculate: true,
+                            },
+                        }}
+                        label="Qualify Lead"
+                        icon={<BadgeCheck size={14} className="shrink-0" />}
+                        className="h-9"
+                    />
+
+                    {/* Convert to Deal — primary CTA */}
+                    <button
+                        onClick={handleConvert}
+                        disabled={converting || lead.status === "DEAD"}
+                        className={`flex items-center gap-2 h-9 px-5 rounded-lg text-white text-[13px] font-semibold transition-colors shadow-sm ${lead.status === "DEAD"
+                                ? "bg-gray-400 cursor-not-allowed"
+                                : "bg-blue-600 hover:bg-blue-700 shadow-blue-200 disabled:opacity-70"
+                            }`}
+                    >
+                        {converting ? (
+                            <Loader2 size={14} className="animate-spin" />
+                        ) : (
+                            <Briefcase size={14} />
+                        )}
+                        {converting
+                            ? "Converting..."
+                            : lead.status === "DEAD"
+                                ? "Cannot Convert Dead Lead"
+                                : "Convert to Deal"}
+                    </button>
+                    {convertError && (
+                        <p className="text-xs text-red-500 text-right max-w-[260px]">
+                            {convertError}
+                        </p>
+                    )}
+                </div>
+            </div>
+
+            {/* Status / Source / Created row - Fixed Source display */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Globe size={14} className="text-blue-400" /> Status
+                    </p>
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}>
+                        {statusInfo.emoji} {statusInfo.label}
+                    </span>
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <User size={14} className="text-green-400" /> Source
+                    </p>
+                    {isWhatsAppAI ? (
+                        <AiBadge label="🤖 Auto-Detected via WhatsApp AI" />
+                    ) : (
+                        <span className="text-sm font-medium text-gray-700">{safeString(lead.source)}</span>
+                    )}
+                </div>
+                <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                        <Calendar size={14} className="text-purple-400" /> Created At
+                    </p>
+                    <span className="text-sm font-medium text-gray-700">{formatDate(lead.createdAt)}</span>
+                </div>
+            </div>
+
+            {/* Contact Information - Only show if there's data */}
+            {hasContactInfo && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                        <h3 className="text-sm font-semibold text-gray-700">Contact Information</h3>
+                    </div>
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
+                        <div className="flex items-start gap-3">
+                            <Mail className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Email</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.email)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <Phone className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Phone</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.phone)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <MapPin className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Location</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.city)}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <Building2 className="w-4 h-4 text-gray-400 mt-0.5 shrink-0" />
+                            <div>
+                                <p className="text-xs text-gray-400 mb-0.5">Company</p>
+                                <p className="text-sm text-gray-800">{safeString(lead.company)}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Extraction Card */}
+            {extractionData && (
+                <AiExtractionCard data={extractionData} />
+            )}
+
+            {/* AI Communication Intelligence Widget */}
+            <CommunicationIntelligenceWidget leadId={leadId} />
+
+            {/* Lead Intelligence Panel */}
+            <LeadIntelligencePanel lead={lead} />
+
+            {/* Ownership & Assignment */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                    <h3 className="text-sm font-semibold text-gray-700">Assignment</h3>
+                </div>
+                <div className="p-5 flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
+                        {lead.assignedTo?.name
+                            ? getInitials(lead.assignedTo.name)
+                            : "NA"}
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">
+                            {lead.assignedTo?.name || lead.owner || "Unassigned"}
+                        </p>
+                        {lead.assignedTo?.email && (
+                            <p className="text-xs text-gray-500">{lead.assignedTo.email}</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Lead Score Card */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                        <BarChart2 size={14} className="text-blue-500" />
+                        Lead Score
+                    </h3>
+                </div>
+                <div className="p-5">
+                    {(() => {
+                        // Compute the real component breakdown
+                        const STATUS_SCORE: Record<string, number> = {
+                            CLOSED: 25, NEGOTIATION: 23, PROPOSAL: 20, QUALIFIED: 17,
+                            HOT: 15, WARM: 12, CONTACTED: 10, NEW: 8, DEAD: 2,
+                        };
+                        const SOURCE_SCORE: Record<string, number> = {
+                            Referral: 12, LinkedIn: 10, Website: 8, "Cold Call": 6,
+                        };
+                        const statusPts = STATUS_SCORE[lead.status ?? ""] ?? 8;
+                        const val = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
+                        const valuePts = val > 0 ? Math.min(20, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 20)) : 0;
+                        const sourcePts = SOURCE_SCORE[lead.source ?? ""] ?? 8;
+                        const completePts = Math.min(8,
+                            (lead.name ? 2 : 0) + (lead.email ? 2 : 0) +
+                            (lead.phone ? 1 : 0) + (lead.company ? 1 : 0) +
+                            ((lead as any).city ? 1 : 0) + (lead.status ? 1 : 0)
+                        );
+                        const totalScore = lead.score ?? computeLeadScore(lead);
+
+                        const dims = [
+                            { label: "Status", pts: statusPts, max: 25, color: "#3b82f6", desc: `${lead.status ?? "—"} = ${statusPts}/25 pts` },
+                            { label: "Est. Value", pts: valuePts, max: 20, color: "#8b5cf6", desc: val > 0 ? `₹${val.toLocaleString()} → ${valuePts}/20 pts` : "No value set" },
+                            { label: "Lead Source", pts: sourcePts, max: 12, color: "#10b981", desc: `${safeString(lead.source)} = ${sourcePts}/12 pts` },
+                            { label: "Completeness", pts: completePts, max: 8, color: "#f59e0b", desc: `${completePts}/8 pts (name, email, phone, company, city, status)` },
+                        ];
+
+                        return (
+                            <div className="flex items-start gap-5">
+                                {/* Circular gauge */}
+                                <div
+                                    className="relative w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-2xl"
+                                    style={{
+                                        borderColor: totalScore >= 70 ? "#10b981" : totalScore >= 40 ? "#f59e0b" : "#ef4444",
+                                        color: totalScore >= 70 ? "#059669" : totalScore >= 40 ? "#d97706" : "#dc2626",
+                                    }}
+                                >
+                                    {totalScore}
+                                </div>
+
+                                <div className="flex-1 space-y-2.5 min-w-0">
+                                    {/* Quality label + overall bar */}
+                                    <div className="flex items-center gap-2">
+                                        {totalScore >= 70
+                                            ? <TrendingUp size={14} className="text-emerald-500" />
+                                            : totalScore >= 40
+                                                ? <Minus size={14} className="text-amber-500" />
+                                                : <TrendingDown size={14} className="text-red-500" />}
+                                        <span className={`text-sm font-bold ${totalScore >= 70 ? "text-emerald-600" : totalScore >= 40 ? "text-amber-600" : "text-red-600"}`}>
+                                            {totalScore >= 70 ? "High Quality Lead" : totalScore >= 40 ? "Moderate Potential" : "Low Priority Lead"}
+                                        </span>
+                                        <span className="ml-auto text-xs text-gray-400 font-semibold tabular-nums">{totalScore}/100</span>
+                                    </div>
+
+                                    {/* Overall bar */}
+                                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full transition-all duration-500"
+                                            style={{
+                                                width: `${totalScore}%`,
+                                                background: totalScore >= 70 ? "#10b981" : totalScore >= 40 ? "#f59e0b" : "#ef4444",
+                                            }}
+                                        />
+                                    </div>
+
+                                    {/* Component breakdown */}
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                        {dims.map((d) => (
+                                            <div key={d.label} className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
+                                                <div className="flex items-center justify-between mb-1.5">
+                                                    <p className="text-[10px] text-gray-400 font-semibold">{d.label}</p>
+                                                    <span className="text-[10px] font-extrabold tabular-nums" style={{ color: d.color }}>{d.pts}/{d.max}</span>
+                                                </div>
+                                                <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                                    <div className="h-full rounded-full" style={{ width: `${Math.round((d.pts / d.max) * 100)}%`, background: d.color }} />
+                                                </div>
+                                                <p className="text-[9px] text-gray-400 mt-1 truncate">{d.desc}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+
+                    <p className="text-xs text-gray-400 mt-4 leading-relaxed">
+                        Score out of 100: Base (35) + Status (25 pts) + Estimated Value (20 pts) + Lead Source (12 pts) + Profile Completeness (8 pts).
+                    </p>
+                </div>
+            </div>
+
+            {/* Tags & Notes - Only show if they exist */}
+            {(hasTags || hasNote) && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                        <h3 className="text-sm font-semibold text-gray-700">Additional Details</h3>
+                    </div>
+                    <div className="p-5 space-y-4">
+                        {hasTags && (
+                            <div>
+                                <p className="text-xs text-gray-400 mb-2 flex items-center gap-1.5">
+                                    <Tag className="w-3.5 h-3.5" /> Tags
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {Array.isArray(lead.tags) && lead.tags.map((tag: any, idx: number) => (
+                                        <span
+                                            key={tag.id || idx}
+                                            className="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-md text-xs font-medium border border-blue-100"
+                                        >
+                                            {typeof tag === "string" ? tag : tag.label || tag.name || tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                        {hasNote && (
+                            <div>
+                                <p className="text-xs text-gray-400 mb-2 flex items-center gap-1.5">
+                                    <FileText className="w-3.5 h-3.5" /> Note
+                                </p>
+                                <div className="p-3 bg-gray-50 rounded-lg text-sm text-gray-700 border border-gray-100 whitespace-pre-wrap">
+                                    {cleanNote}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {/* Empty State - If no data at all */}
+            {!hasContactInfo && !hasTags && !hasNote && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
+                    <p className="text-gray-400 text-sm">No additional information available for this lead.</p>
+                    <p className="text-gray-300 text-xs mt-1">Contact details, tags, and notes will appear here once added.</p>
+                </div>
+            )}
+
+            <ConfirmationModal
+                isOpen={isConfirmModalOpen}
+                title="Convert Lead"
+                message={`Convert lead "${lead.name}" to a deal?`}
+                confirmText="Convert"
+                onConfirm={executeConvert}
+                onCancel={() => setIsConfirmModalOpen(false)}
+            />
+        </div>
+    );
 }

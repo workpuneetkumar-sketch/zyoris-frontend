@@ -1,11 +1,5 @@
 node_modules/
 .next/
-dist/
-*.log
-.env
+tsconfig.tsbuildinfo
 .env.local
-.env.*.local
-.DS_Store
-Thumbs.db
-desktop.ini
-.vscode/
+.env

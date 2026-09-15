@@ -1,31 +1,84 @@
 "use client";
 
 import { AppShell } from "@/components/Shell";
+import { isPathAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { attachAudioUnlock } from "@/lib/notificationSound";
+
+function hasStoredToken(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const raw = localStorage.getItem("zyoris-auth");
+    if (!raw) return false;
+    const parsed = JSON.parse(raw);
+    return !!parsed?.token;
+  } catch {
+    return false;
+  }
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-    const { user, isLoading, token } = useAuth();
-    const router = useRouter();
+  const {
+    user,
+    isAuthenticated,
+    isInitializing,
+    permissionsLoaded,
+    sidebarItems,
+    visibleDashboards,
+  } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
 
-    // Redirect to login if not authenticated
-    useEffect(() => {
-        if (!isLoading && (!user || !token)) {
-            router.replace("/login");
-        }
-    }, [user, isLoading, token, router]);
+  useEffect(() => {
+    attachAudioUnlock();
+  }, []);
 
-    if (isLoading) {
-        return (
-            <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-            </div>
-        );
+  // Redirect to login only when definitively unauthenticated
+  useEffect(() => {
+    if (isInitializing) return;
+    if (isAuthenticated) return;
+    if (hasStoredToken()) return; // still restoring — wait
+    router.replace("/login");
+  }, [isAuthenticated, isInitializing, router]);
+
+  // Route access guard — runs only after permissions are fully loaded
+  // Uses the RBAC sidebar from the API as single source of truth
+  useEffect(() => {
+    // Wait until everything is ready
+    if (isInitializing || !permissionsLoaded || !isAuthenticated || !user) return;
+
+    // If sidebar is empty the API hasn't returned yet — don't block
+    if (!sidebarItems || sidebarItems.length === 0) return;
+
+    const allowed = isPathAllowed(pathname ?? window.location.pathname, sidebarItems, visibleDashboards);
+
+    if (!allowed) {
+      // Redirect to /dashboard (universally allowed) instead of trying to
+      // infer a fallback from visibleDashboards which may also be empty
+      router.replace("/dashboard");
     }
+  }, [
+    isInitializing,
+    permissionsLoaded,
+    isAuthenticated,
+    user,
+    sidebarItems,
+    visibleDashboards,
+    pathname,
+    router,
+  ]);
 
-    // Only render the shell if we have a user
-    if (!user) return null;
+  if (isInitializing) {
+    return (
+      <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
+        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
-    return <AppShell>{children}</AppShell>;
+  if (!isAuthenticated) return null;
+
+  return <AppShell>{children}</AppShell>;
 }

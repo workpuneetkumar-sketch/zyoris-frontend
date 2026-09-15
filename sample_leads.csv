@@ -1,0 +1,11 @@
+name,email,phone,company,owner,status,source,estimatedValue,score
+John Smith,john.smith@techcorp.com,+1-555-0192,TechCorp Inc.,Sarah Johnson,HOT,Website,15000,85
+Emily Davis,emily.davis@innovate.io,+1-555-0144,Innovate Solutions,Mike Chen,WARM,LinkedIn,22000,92
+Michael Brown,michael.brown@globaldynamics.com,+1-555-0188,Global Dynamics,Emma Wilson,NEW,Referral,8500,78
+Jessica Taylor,jessica.taylor@apexsystems.com,+1-555-0177,Apex Systems,Raj Patel,DEAD,Cold Call,5000,63
+David Miller,david.miller@summitpartners.com,+1-555-0122,Summit Partners,Sarah Johnson,HOT,Website,45000,95
+Robert Wilson,robert.w@nextgen.com,+1-555-0133,NextGen Tech,Mike Chen,QUALIFIED,LinkedIn,30000,88
+Amanda White,amanda@cloudscale.io,+1-555-0166,CloudScale Systems,Emma Wilson,PROPOSAL,Referral,60000,91
+James Taylor,j.taylor@vortex.com,+1-555-0111,Vortex Labs,Raj Patel,NEGOTIATION,Website,75000,94
+Sophia Martinez,sophia@pinnacle.com,+1-555-0155,Pinnacle Corp,Sarah Johnson,CLOSED,Referral,120000,99
+Daniel Anderson,daniel@synergy.io,+1-555-0199,Synergy Solutions,Mike Chen,CONTACTED,Cold Call,18000,72

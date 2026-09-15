@@ -2,6 +2,75 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── react-grid-layout overrides for dashboard canvas ────────────────────── */
+.react-grid-layout {
+  position: relative;
+}
+.react-grid-item {
+  transition: none;
+}
+.react-grid-item.cssTransforms {
+  transition-property: transform;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+.react-grid-item.resizing {
+  z-index: 1;
+  will-change: width, height;
+}
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 3;
+  will-change: transform;
+  opacity: 0.9;
+  box-shadow: 0 20px 60px rgba(99, 102, 241, 0.15);
+}
+.react-grid-item.react-grid-placeholder {
+  background: #6366f1;
+  opacity: 0.08;
+  transition-duration: 100ms;
+  z-index: 2;
+  border-radius: 16px;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  -o-user-select: none;
+  user-select: none;
+}
+.react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  right: 0;
+  padding: 0 3px 3px 0;
+  cursor: se-resize;
+}
+.react-resizable-handle::after {
+  content: "";
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid #cbd5e1;
+  border-bottom: 2px solid #cbd5e1;
+  border-radius: 1px;
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.react-grid-item:hover .react-resizable-handle::after {
+  opacity: 1;
+}
+
+
+@font-face {
+    font-family: 'Neuropol X Free';
+    font-style: normal;
+    font-weight: 400;
+    src: url('/fonts/neuropol-x.woff') format('woff');
+}
+
 *,
 *::before,
 *::after {
@@ -13,18 +82,121 @@ body {
   padding: 0;
   margin: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background-color: #050816;
-  color: #e5e7eb;
 }
 
 body {
   min-height: 100vh;
+  background-color: var(--color-background);
+  color: var(--color-text);
 }
+
+
 
 a {
   color: inherit;
   text-decoration: none;
 }
+
+/* Dashboard header wave animation */
+@keyframes waveScroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* Light theme variables (unchanged) */
+:root, .light {
+  --color-background: #f8fafc;
+  --color-background-secondary: #f1f5f9;
+  --color-background-tertiary: #e2e8f0;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f8fafc;
+  --color-surface-active: #f1f5f9;
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #94a3b8;
+  --color-border: #e2e8f0;
+  --color-border-light: #f1f5f9;
+  --color-primary: #2563eb;
+  --color-primary-light: #3b82f6;
+  --color-primary-dark: #1d4ed8;
+  --color-primary-foreground: #ffffff;
+  --color-success: #16a34a;
+  --color-success-light: #dcfce7;
+  --color-success-foreground: #16a34a;
+  --color-warning: #d97706;
+  --color-warning-light: #fef3c7;
+  --color-warning-foreground: #d97706;
+  --color-error: #dc2626;
+  --color-error-light: #fee2e2;
+  --color-error-foreground: #dc2626;
+  --color-info: #2563eb;
+  --color-info-light: #dbeafe;
+  --color-info-foreground: #2563eb;
+
+  /* Category tokens (Light) */
+  --color-cat-crm: #0284c7;
+  --color-cat-crm-bg: #e0f2fe;
+  --color-cat-finance: #059669;
+  --color-cat-finance-bg: #d1fae5;
+  --color-cat-marketing: #d97706;
+  --color-cat-marketing-bg: #fef3c7;
+  --color-cat-comm: #7c3aed;
+  --color-cat-comm-bg: #ede9fe;
+  --color-cat-hr: #db2777;
+  --color-cat-hr-bg: #fce7f3;
+  --color-cat-projects: #2563eb;
+  --color-cat-projects-bg: #dbeafe;
+  --color-cat-custom: #4b5563;
+  --color-cat-custom-bg: #f3f4f6;
+}
+
+/* Dark theme variables - Production quality, user requested */
+.dark {
+  --color-background: #050816;
+  --color-background-secondary: #0b1120;
+  --color-background-tertiary: #111827;
+  --color-surface: #111827;
+  --color-surface-hover: #1e293b;
+  --color-surface-active: #1e3a8a;
+  --color-text: #f8fafc;
+  --color-text-secondary: #cbd5e1;
+  --color-text-muted: #94a3b8;
+  --color-border: #334155;
+  --color-border-light: #1e293b;
+  --color-primary: #3b82f6;
+  --color-primary-light: #60a5fa;
+  --color-primary-dark: #2563eb;
+  --color-primary-foreground: #ffffff;
+  --color-success: #22c55e;
+  --color-success-light: #14532d;
+  --color-success-foreground: #22c55e;
+  --color-warning: #f59e0b;
+  --color-warning-light: #713f12;
+  --color-warning-foreground: #f59e0b;
+  --color-error: #ef4444;
+  --color-error-light: #7f1d1d;
+  --color-error-foreground: #ef4444;
+  --color-info: #3b82f6;
+  --color-info-light: #1e3a8a;
+  --color-info-foreground: #3b82f6;
+
+  /* Category tokens (Dark) */
+  --color-cat-crm: #38bdf8;
+  --color-cat-crm-bg: rgba(14, 165, 233, 0.15);
+  --color-cat-finance: #34d399;
+  --color-cat-finance-bg: rgba(16, 185, 129, 0.15);
+  --color-cat-marketing: #fbbf24;
+  --color-cat-marketing-bg: rgba(245, 158, 11, 0.15);
+  --color-cat-comm: #a78bfa;
+  --color-cat-comm-bg: rgba(139, 92, 246, 0.15);
+  --color-cat-hr: #f472b6;
+  --color-cat-hr-bg: rgba(236, 72, 153, 0.15);
+  --color-cat-projects: #60a5fa;
+  --color-cat-projects-bg: rgba(59, 130, 246, 0.15);
+  --color-cat-custom: #9ca3af;
+  --color-cat-custom-bg: rgba(107, 114, 128, 0.15);
+}
+
 
 .app-shell {
   display: grid;
@@ -858,3 +1030,126 @@ a {
   }
 }
 
+/* ZiiBot FAB Button */
+.zii-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.4);
+  transition: all 0.3s ease;
+  z-index: 40;
+}
+
+.zii-fab:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px rgba(99, 102, 241, 0.5);
+}
+
+.zii-fab:active {
+  transform: scale(0.95);
+}
+
+.zii-fab--whatsapp {
+  bottom: 8rem;
+}
+
+/* Scrollbar styling */
+.zii-chat-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.zii-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.zii-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(99, 102, 241, 0.3);
+  border-radius: 10px;
+}
+
+.zii-chat-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(99, 102, 241, 0.5);
+}
+
+/* Message animations */
+@keyframes messageIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.message-enter {
+  animation: messageIn 0.25s ease-out forwards;
+}
+
+/* Pulse animation for online status */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.8); }
+}
+
+.status-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ZiiBot Fullscreen Mode */
+.fullscreen-mode {
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+  border-radius: 0 !important;
+  z-index: 9999 !important;
+}
+
+.fullscreen-mode .zii-panel-inner-fullscreen {
+  width: 100vw !important;
+  height: 100vh !important;
+}
+
+/* Hide scrollbar (used as a safety net for the single-line auth footer) */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Notion Workspace Block Editor utilities */
+.workspace-block-editor {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.workspace-block-editor input::placeholder,
+.workspace-block-editor textarea::placeholder {
+  opacity: 0.5;
+}
+
+.workspace-drag-handle {
+  cursor: grab;
+  touch-action: none;
+}
+
+.workspace-drag-handle:active {
+  cursor: grabbing;
+}

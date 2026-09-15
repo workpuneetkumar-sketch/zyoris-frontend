@@ -39,6 +39,55 @@ export const getMeApi = async () => {
     return res.data;
 };
 
+export interface UpdateProfilePayload {
+    name?: string;
+    email?: string;
+    avatarUrl?: string;
+    designation?: string;
+    // If provided, avatar file is uploaded as multipart/form-data
+    avatarFile?: File | null;
+}
+
+export const updateProfileApi = async ({ avatarFile, ...data }: UpdateProfilePayload) => {
+    // If a file is attached, send as multipart/form-data so the backend
+    // receives the binary via the "avatar" field.
+    if (avatarFile) {
+        const formData = new FormData();
+        formData.append("avatar", avatarFile);
+        if (data.name) formData.append("name", data.name);
+        if (data.email) formData.append("email", data.email);
+        if (data.designation !== undefined) formData.append("designation", data.designation ?? "");
+        const res = await api.patch("/auth/me", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+        });
+        return res.data;
+    }
+    // No file – plain JSON patch
+    const res = await api.patch("/auth/me", data);
+    return res.data;
+};
+
+export interface UpdatePasswordPayload {
+    currentPassword?: string;
+    newPassword?: string;
+    confirmNewPassword?: string;
+}
+
+export const updatePasswordApi = async (data: UpdatePasswordPayload) => {
+    const res = await api.patch("/auth/me/password", data);
+    return res.data;
+};
+
+export interface DeleteAccountPayload {
+    currentPassword?: string;
+    confirmation: "DELETE";
+}
+
+export const deleteAccountApi = async (data: DeleteAccountPayload) => {
+    const res = await api.delete("/auth/me", { data });
+    return res.data;
+};
+
 export const logoutApi = async (refreshToken: string): Promise<void> => {
     await api.post("/auth/logout", { refreshToken });
 };

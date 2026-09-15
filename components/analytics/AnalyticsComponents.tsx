@@ -98,16 +98,27 @@ export function Card({ children, className = "" }: CardProps) {
 // CARD HEADER
 // ══════════════════════════════════════════════════════════
 
-export function CardHeader({ title, sub, badge }: CardHeaderProps) {
+interface CardHeaderWithDemoProps extends CardHeaderProps {
+    isDemo?: boolean;
+}
+
+export function CardHeader({ title, sub, badge, isDemo }: CardHeaderWithDemoProps) {
     return (
         <div className="flex items-start justify-between mb-4">
-            <div>
+            <div className="flex items-center gap-2">
                 <p className="text-[13.5px] font-bold text-gray-900">{title}</p>
+                {isDemo && (
+                    <span className="text-[10px] px-2 py-0.5 bg-yellow-50 text-yellow-700 rounded-full border border-yellow-100">
+                        Demo Data
+                    </span>
+                )}
+            </div>
+            <div className="flex items-center gap-2">
                 {sub && (
                     <p className="text-[11px] text-gray-500 mt-0.5">{sub}</p>
                 )}
+                {badge && <EndpointBadge label={badge} />}
             </div>
-            {badge && <EndpointBadge label={badge} />}
         </div>
     );
 }
@@ -119,49 +130,51 @@ export function CardHeader({ title, sub, badge }: CardHeaderProps) {
 //      can cause type errors and silent render failures.
 // ══════════════════════════════════════════════════════════
 
+
+
 const KPI_CONFIGS: {
     key: keyof KPI;
     label: string;
-    fmt: (v: number) => string;
+    fmt: (v: number | "—") => string;
     iconCls: string;
     icon: string;
 }[] = [
         {
-            key: "totalRevenue",
-            label: "Total Revenue",
-            fmt: fmt$,
-            iconCls: "bg-blue-50 text-blue-600",
-            icon: "fa-dollar-sign",
-        },
-        {
-            key: "activeDeals",
-            label: "Active Deals",
-            fmt: (v) => String(v),           // ← was (v) => v (number, not string)
-            iconCls: "bg-green-50 text-green-600",
-            icon: "fa-handshake",
-        },
-        {
             key: "highProbDeals",
             label: "High-prob Deals",
-            fmt: (v) => String(v),           // ← same fix
+            fmt: (v) => v === "—" ? "—" : String(v),
             iconCls: "bg-amber-50 text-amber-500",
             icon: "fa-trophy",
         },
         {
             key: "avgScore",
             label: "Avg Conv. Score",
-            fmt: (v) => `${v}%`,
+            fmt: (v) => v === "—" ? "—" : `${v}%`,
             iconCls: "bg-purple-50 text-purple-600",
             icon: "fa-bullseye",
         },
-        {
-            key: "forecastPeak",
-            label: "90-day Peak Rev.",
-            fmt: fmtK,
-            iconCls: "bg-sky-50 text-sky-500",
-            icon: "fa-chart-line",
-        },
     ];
+
+export function KpiRow({ kpi }: { kpi: KPI | null }) {
+    if (!kpi) return <Spinner text="Loading KPIs…" />;
+    return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-2 gap-3 mb-4">
+            {KPI_CONFIGS.map((cfg) => (
+                <Card key={cfg.key}>
+                    <div className="flex items-start gap-2.5">
+                        <div className={`w-7 h-7 rounded flex items-center justify-center ${cfg.iconCls}`}>
+                            <i className={`fa-solid ${cfg.icon} text-xs`} />
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-[10.5px] text-gray-400 uppercase tracking-wide">{cfg.label}</p>
+                            <p className="text-lg font-bold text-gray-900 mt-0.5 truncate">{cfg.fmt(kpi[cfg.key])}</p>
+                        </div>
+                    </div>
+                </Card>
+            ))}
+        </div>
+    );
+}
 
 // ══════════════════════════════════════════════════════════
 // FORECAST CHART
@@ -485,7 +498,7 @@ export function SourceDonut({ data }: SourceDonutProps) {
                 labels,
                 datasets: [
                     {
-                        label: "Revenue by source",        // ← FIX: was missing
+                        label: "Revenue by source",
                         data: impacts,
                         backgroundColor: SOURCE_COLORS,
                         borderWidth: 1.5,
@@ -495,16 +508,26 @@ export function SourceDonut({ data }: SourceDonutProps) {
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false,
+                maintainAspectRatio: true,
+                aspectRatio: 1.5,
+                layout: {
+                    padding: {
+                        top: 10,
+                        right: 20,
+                        bottom: 10,
+                        left: 20,
+                    },
+                },
                 plugins: {
                     legend: {
-                        position: "right" as const,
+                        position: "bottom" as const,
+                        align: "center" as const,
                         labels: {
                             font: { size: 11 },
                             color: "#6b7280",
                             boxWidth: 10,
                             boxHeight: 10,
-                            padding: 12,
+                            padding: 16,
                         },
                     },
                     tooltip: {
@@ -514,7 +537,7 @@ export function SourceDonut({ data }: SourceDonutProps) {
                         },
                     },
                 },
-                cutout: "70%",
+                cutout: "65%",
             },
         });
 
@@ -526,8 +549,8 @@ export function SourceDonut({ data }: SourceDonutProps) {
     }
 
     return (
-        <div className="relative h-44 flex items-center justify-center">
-            <canvas ref={canvasRef} />
+        <div className="relative w-full min-h-[280px] flex items-center justify-center">
+            <canvas ref={canvasRef} className="max-w-full" />
         </div>
     );
 }

@@ -6,20 +6,34 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "node --experimental-strip-types --test tests/transformations.test.ts tests/suggestions.test.ts tests/monitoring.test.ts tests/error_management_webhooks.test.ts tests/tasks_foundation.test.ts tests/executions_memory.test.ts"
   },
   "dependencies": {
+    "@hookform/resolvers": "^5.4.0",
     "axios": "^1.16.0",
     "classnames": "^2.5.1",
     "framer-motion": "^11.0.0",
+    "html2canvas": "^1.4.1",
+    "html2pdf.js": "^0.14.0",
     "js-cookie": "^3.0.5",
+    "jspdf": "^4.2.1",
     "lucide-react": "^1.14.0",
     "next": "14.1.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "recharts": "^2.12.0"
+    "react-grid-layout": "2.2.3",
+    "react-hook-form": "^7.81.0",
+    "react-toastify": "^11.1.0",
+    "recharts": "^2.12.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
+    "sonner": "^2.0.7",
+    "xlsx": "^0.18.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.66",
