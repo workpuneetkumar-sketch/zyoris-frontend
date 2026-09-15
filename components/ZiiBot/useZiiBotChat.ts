@@ -6,6 +6,7 @@ import { getOrgSummary, getRoleContext, OrgSummary } from "@/lib/api/organizatio
 import { useAuth } from "@/context/AuthContext";
 import { getVoiceService } from "./voiceService";
 import api from "@/lib/api/api";
+import type { AgentApprovalRequest } from "@/types/ai-proposals";
 
 const SESSION_KEY = "zii-bot-session";
 const HISTORY_KEY = "zii-bot-history";
@@ -16,6 +17,52 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
+  /**
+   * "text"     — standard assistant reply, rendered as HTML via formatMessageContent()
+   * "proposal" — an AgentApprovalRequest; rendered as ActionProposalCard instead of text
+   */
+  type?: "text" | "proposal";
+  /** Present only when type === "proposal" */
+  proposalData?: AgentApprovalRequest;
+}
+
+// ─── Helper: detect and extract an AgentApprovalRequest from the API response ──
+//
+// The backend may embed the approval request in several shapes:
+//   { reply: "...", proposal: { id, agentId, actionPreview, ... } }
+//   { proposal: { ... } }
+//   { data: { proposal: { ... } } }
+//   { agentApprovalRequest: { ... } }
+//
+// Returns null if no proposal is found (treat as a normal text message).
+function extractProposal(data: Record<string, unknown>): AgentApprovalRequest | null {
+  try {
+    // Direct top-level
+    const candidates = [
+      data.proposal,
+      data.agentApprovalRequest,
+      data.approvalRequest,
+      (data.data as Record<string, unknown> | undefined)?.proposal,
+      (data.data as Record<string, unknown> | undefined)?.agentApprovalRequest,
+    ];
+
+    for (const candidate of candidates) {
+      if (
+        candidate &&
+        typeof candidate === "object" &&
+        !Array.isArray(candidate)
+      ) {
+        const c = candidate as Record<string, unknown>;
+        // Validate it looks like an AgentApprovalRequest
+        if (c.id && c.actionPreview && typeof c.actionPreview === "object") {
+          return c as unknown as AgentApprovalRequest;
+        }
+      }
+    }
+  } catch {
+    // Never crash the chat over a parse error
+  }
+  return null;
 }
 
 function getSessionId(): string {
@@ -162,26 +209,60 @@ export function useZiiBotChat() {
 
       const data = res.data;
       const assistantText = data.reply ?? data.message?.content ?? "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.";
-      
+
+      // ── Check for an embedded AgentApprovalRequest ──────────────────────────
+      // If the backend included a proposal, render a ProposalCard instead of text.
+      const proposal = extractProposal(data as Record<string, unknown>);
+
       // Play notification sound
       playNotificationSound();
-      
-      // 🎤 Speak the response aloud (if sound is on)
-      if (soundOn) {
+
+      // 🎤 Speak the response aloud (if sound is on and it's a text reply)
+      if (soundOn && !proposal) {
         try {
           voiceService.speak(assistantText);
         } catch (e) {
           console.warn("Voice output error:", e);
         }
       }
-      
-      const assistantMsg: ChatMessage = {
-        id: `assistant-${Date.now()}`,
-        role: "assistant",
-        content: assistantText,
-        timestamp: Date.now(),
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+
+      if (proposal) {
+        // Proposal path — render ActionProposalCard; also add a brief text preamble if present
+        const messages: ChatMessage[] = [];
+
+        // Optional preamble text (e.g. "I've drafted an email for you:")
+        if (assistantText && assistantText !== "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.") {
+          messages.push({
+            id: `assistant-${Date.now()}-text`,
+            role: "assistant",
+            content: assistantText,
+            type: "text",
+            timestamp: Date.now(),
+          });
+        }
+
+        // The proposal card message
+        messages.push({
+          id: `assistant-${Date.now()}-proposal`,
+          role: "assistant",
+          content: "",
+          type: "proposal",
+          proposalData: proposal,
+          timestamp: Date.now() + 1,
+        });
+
+        setMessages((prev) => [...prev, ...messages]);
+      } else {
+        // Normal text path
+        const assistantMsg: ChatMessage = {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          content: assistantText,
+          type: "text",
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+      }
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
       const errMsg = (e as Error).message || "Could not get a response. Please try again.";
@@ -211,11 +292,30 @@ export function useZiiBotChat() {
     }
   }, [voiceService]);
 
+  /**
+   * Called by ActionProposalCard after a status change (approve/reject/execute).
+   * Updates the proposalData in the corresponding message so the card
+   * re-renders with the new status without a full refetch.
+   */
+  const updateProposalStatus = useCallback((
+    approvalId: string,
+    patch: Partial<import("@/types/ai-proposals").AgentApprovalRequest>
+  ) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.type === "proposal" && msg.proposalData?.id === approvalId
+          ? { ...msg, proposalData: { ...msg.proposalData!, ...patch } }
+          : msg
+      )
+    );
+  }, []);
+
   const showGreeting = messages.length === 0;
   
   return {
     messages,
     sendMessage,
+    updateProposalStatus,
     isTyping,
     soundOn,
     toggleSound,
