@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   WorkspaceDatabase,
   WorkspaceDatabaseProperty,
@@ -8,9 +8,11 @@ import {
   WorkspaceDatabaseView,
 } from "@/types/workspace";
 import {
+  getWorkspacePageDatabase,
   addDatabaseProperty,
   createDatabaseRow,
   updateDatabaseRow,
+  deleteDatabaseRow,
   createDatabaseView,
 } from "@/lib/api/workspaceApi";
 import {
@@ -25,29 +27,36 @@ import {
   Hash,
   Calendar,
   CheckSquare,
+  Trash2,
   ChevronDown,
 } from "lucide-react";
 
 interface DatabaseViewProps {
-  database: WorkspaceDatabase;
+  database?: WorkspaceDatabase | null;
   pageId: string;
   onRefresh?: () => void;
 }
 
 export const DatabaseView: React.FC<DatabaseViewProps> = ({
-  database,
+  database: initialDatabase,
   pageId,
   onRefresh,
 }) => {
+  const [database, setDatabase] = useState<WorkspaceDatabase | null>(
+    initialDatabase || null
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(!initialDatabase);
   const [properties, setProperties] = useState<WorkspaceDatabaseProperty[]>(
-    database?.properties || [
+    initialDatabase?.properties || [
       { id: "prop-1", name: "Name", type: "text" },
       { id: "prop-2", name: "Status", type: "select", options: ["To Do", "In Progress", "Done"] },
     ]
   );
-  const [rows, setRows] = useState<WorkspaceDatabaseRow[]>(database?.rows || []);
+  const [rows, setRows] = useState<WorkspaceDatabaseRow[]>(
+    initialDatabase?.rows || []
+  );
   const [views, setViews] = useState<WorkspaceDatabaseView[]>(
-    database?.views || [{ id: "view-1", name: "Default Table", type: "table" }]
+    initialDatabase?.views || [{ id: "view-1", name: "Default Table", type: "table" }]
   );
   const [activeViewId, setActiveViewId] = useState<string>("view-1");
 
@@ -56,6 +65,29 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   const [newPropType, setNewPropType] = useState<string>("text");
   const [isSubmittingProp, setIsSubmittingProp] = useState<boolean>(false);
   const [propError, setPropError] = useState<string | null>(null);
+
+  /* Load inline database using GET /workspace/pages/:pageId/database if not passed */
+  useEffect(() => {
+    if (!initialDatabase && pageId) {
+      const fetchDatabase = async () => {
+        setIsLoading(true);
+        try {
+          const fetchedDb = await getWorkspacePageDatabase(pageId);
+          if (fetchedDb) {
+            setDatabase(fetchedDb);
+            if (fetchedDb.properties?.length) setProperties(fetchedDb.properties);
+            if (fetchedDb.rows?.length) setRows(fetchedDb.rows);
+            if (fetchedDb.views?.length) setViews(fetchedDb.views);
+          }
+        } catch (err) {
+          console.warn(`Could not load inline database for page ${pageId}:`, err);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchDatabase();
+    }
+  }, [initialDatabase, pageId]);
 
   /* -------------------------------------------------------------------------- */
   /* ADD COLUMN / PROPERTY                                                      */
@@ -143,6 +175,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
     }
   };
 
+  /* -------------------------------------------------------------------------- */
+  /* DELETE ROW                                                                 */
+  /* -------------------------------------------------------------------------- */
+  const handleDeleteRow = async (rowId: string) => {
+    setRows((prev) => prev.filter((r) => r.id !== rowId));
+
+    if (!database?.id || rowId.startsWith("row-")) return;
+
+    try {
+      await deleteDatabaseRow(database.id, rowId);
+    } catch (err) {
+      console.error(`Failed to delete row ${rowId}:`, err);
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center animate-pulse space-y-3 border border-slate-200 dark:border-slate-800 rounded-2xl">
+        <Loader2 className="w-6 h-6 text-blue-500 animate-spin mx-auto" />
+        <p className="text-xs text-slate-400">Loading workspace database...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Views Bar & Actions */}
@@ -201,7 +257,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {rows.length > 0 ? (
                 rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition">
+                  <tr key={row.id} className="group hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition">
                     {properties.map((prop) => (
                       <td key={prop.id} className="p-2.5 border-r border-slate-100 dark:border-slate-800">
                         <input
@@ -212,7 +268,15 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                         />
                       </td>
                     ))}
-                    <td className="p-2.5 text-center text-slate-300">#</td>
+                    <td className="p-2.5 text-center">
+                      <button
+                        onClick={() => handleDeleteRow(row.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-red-600 transition"
+                        title="Delete Row"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 ))
               ) : (
@@ -274,8 +338,10 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
                   <option value="text">Text</option>
                   <option value="number">Number</option>
                   <option value="select">Select</option>
-                  <option value="checkbox">Checkbox</option>
+                  <option value="multi_select">Multi-Select</option>
                   <option value="date">Date</option>
+                  <option value="checkbox">Checkbox</option>
+                  <option value="url">URL</option>
                 </select>
               </div>
 

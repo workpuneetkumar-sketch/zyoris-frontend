@@ -27,7 +27,11 @@ import {
     AlertTriangle,
     Tag,
     FolderKanban,
+    Paperclip,
+    Download,
 } from "lucide-react";
+import { AttachmentSection } from "@/components/workspace/AttachmentSection";
+import { ExportModal } from "@/components/workspace/ExportModal";
 import {
     Task,
     TaskStatus,
@@ -86,7 +90,7 @@ interface TeamMember {
     email?: string;
 }
 
-type TabType = "details" | "subtasks" | "dependencies" | "comments" | "activity";
+type TabType = "details" | "subtasks" | "dependencies" | "comments" | "activity" | "attachments";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -115,6 +119,7 @@ export function TaskDetailModal({
     const [isEditing, setIsEditing] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
+    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
     // Form state
     const [form, setForm] = useState<UpdateTaskPayload>(() => {
@@ -493,6 +498,14 @@ export function TaskDetailModal({
                     </div>
 
                     <div className="flex items-center space-x-2">
+                        <button
+                            onClick={() => setIsExportModalOpen(true)}
+                            title="Export Task"
+                            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg transition"
+                        >
+                            <Download size={14} />
+                            <span>Export</span>
+                        </button>
                         {onDelete && !confirmDelete && (
                             <button
                                 onClick={() => setConfirmDelete(true)}
@@ -535,6 +548,7 @@ export function TaskDetailModal({
                 <div className="flex border-b border-slate-200 dark:border-slate-800 px-6 bg-white dark:bg-slate-900 space-x-6 text-xs font-semibold text-slate-500 overflow-x-auto">
                     {[
                         { key: "details", label: "Details", icon: FileText },
+                        { key: "attachments", label: "Attachments", icon: Paperclip },
                         { key: "subtasks", label: `Subtasks (${subtasks.length})`, icon: ListTree },
                         {
                             key: "dependencies",
@@ -1266,6 +1280,17 @@ export function TaskDetailModal({
                             </div>
                         </div>
                     )}
+
+                    {/* ── Tab 6: Attachments ────────────────────────────────────── */}
+                    {activeTab === "attachments" && (
+                        <div className="p-6">
+                            <AttachmentSection
+                                entityType="TASK"
+                                entityId={task.id}
+                                canManage={true}
+                            />
+                        </div>
+                    )}
                 </div>
 
                 {/* ── Footer ─────────────────────────────────────────────────── */}
@@ -1281,6 +1306,15 @@ export function TaskDetailModal({
                     </button>
                 </div>
             </div>
+
+            {/* Export Modal Dialog */}
+            <ExportModal
+                isOpen={isExportModalOpen}
+                onClose={() => setIsExportModalOpen(false)}
+                entityType="TASK"
+                entityId={task.id}
+                entityName={task.title}
+            />
         </div>
     );
 }

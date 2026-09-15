@@ -63,11 +63,18 @@ export const isPathAllowed = (
     "/admin/roles",
     "/admin/user-roles",
     "/admin/audit",
+    "/admin/permission-matrix",
     "/calendar",
     "/tasks",
     "/projects",
     "/integrations",
     "/workspace",
+    // Agentic CRM — Day 1-3
+    "/agents",
+    "/tools",
+    "/approvals",
+    "/executions",
+    "/memory",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",

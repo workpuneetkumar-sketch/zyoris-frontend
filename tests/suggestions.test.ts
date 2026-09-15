@@ -6,7 +6,7 @@ import {
   validateFieldAcceptance,
   mergeBackendMappingsWithSuggestions,
   normalizeIdentifier,
-} from "../lib/transformations/suggestions";
+} from "../lib/transformations/suggestions.ts";
 import type { TargetFieldDefinition } from "../types/integrations";
 
 test("normalizeIdentifier", async (t) => {

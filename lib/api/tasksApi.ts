@@ -150,6 +150,16 @@ export interface TasksResponse {
     total: number;
 }
 
+export interface TaskAssignmentEvent {
+    id: string;
+    taskId: string;
+    assignedToId?: string | null;
+    assignedById?: string | null;
+    eventType?: string;
+    createdAt: string;
+    task?: Task | null;
+}
+
 export interface TaskQueryParams {
     assignedToId?: string;
     status?: TaskStatus;
@@ -402,6 +412,66 @@ export async function fetchTasks(params?: TaskQueryParams): Promise<TasksRespons
             }
         }
         throw err;
+    }
+}
+
+// ── GET My Tasks (assigned to current user) ──────────────────────────────────
+// Primary: GET /workspace/my-tasks, Alias: GET /tasks/my-tasks
+export async function fetchMyTasks(params?: TaskQueryParams): Promise<TasksResponse> {
+    try {
+        const queryParams: Record<string, string | number> = {};
+        if (params?.status) queryParams.status = params.status;
+        if (params?.priority) queryParams.priority = params.priority;
+        if (params?.search) queryParams.search = params.search;
+        if (params?.page) queryParams.page = params.page;
+        if (params?.limit) queryParams.limit = params.limit;
+
+        const res = await api.get("/workspace/my-tasks", { params: queryParams });
+        return normaliseTasksResponse(res.data);
+    } catch (err) {
+        if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
+            try {
+                const queryParams: Record<string, string | number> = {};
+                if (params?.status) queryParams.status = params.status;
+                if (params?.priority) queryParams.priority = params.priority;
+                if (params?.search) queryParams.search = params.search;
+                if (params?.page) queryParams.page = params.page;
+                if (params?.limit) queryParams.limit = params.limit;
+
+                const res = await api.get("/tasks/my-tasks", { params: queryParams });
+                return normaliseTasksResponse(res.data);
+            } catch (fallbackErr) {
+                throw fallbackErr;
+            }
+        }
+        throw err;
+    }
+}
+
+// ── GET Assignment Events (recent assignment/reassignment events) ─────────────
+// Primary: GET /workspace/tasks/assignment-events, Alias: GET /tasks/assignment-events
+export async function fetchAssignmentEvents(since?: string, limit = 50): Promise<TaskAssignmentEvent[]> {
+    try {
+        const params: Record<string, string | number> = { limit };
+        if (since) params.since = since;
+
+        const res = await api.get("/workspace/tasks/assignment-events", { params });
+        const data = res.data?.data || res.data?.events || res.data;
+        return Array.isArray(data) ? data : [];
+    } catch (err) {
+        if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
+            try {
+                const params: Record<string, string | number> = { limit };
+                if (since) params.since = since;
+
+                const res = await api.get("/tasks/assignment-events", { params });
+                const data = res.data?.data || res.data?.events || res.data;
+                return Array.isArray(data) ? data : [];
+            } catch {
+                return [];
+            }
+        }
+        return [];
     }
 }
 

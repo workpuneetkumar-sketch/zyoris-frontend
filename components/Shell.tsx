@@ -46,6 +46,10 @@ import {
   Bell,
   Inbox,
   ChevronDown,
+  BotMessageSquare,
+  Wrench,
+  ClipboardList,
+  ScrollText,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -336,6 +340,36 @@ const NAV_GROUPS: NavGroup[] = [
         icon: FileSearch,
         roles: ["ADMIN"],
       },
+      {
+        href: "/agents",
+        label: "Agent Registry",
+        icon: BotMessageSquare,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/tools",
+        label: "Tool Registry",
+        icon: Wrench,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/approvals",
+        label: "Approval Queue",
+        icon: ClipboardList,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/executions",
+        label: "Execution Ledger",
+        icon: ScrollText,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/memory",
+        label: "Memory Settings",
+        icon: Brain,
+        roles: ["ADMIN"],
+      },
     ],
   },
 ];
@@ -503,11 +537,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const ADMIN_TOOL_ITEMS = [
-    { href: "/admin", label: "Admin", icon: Shield },
-    { href: "/admin/roles", label: "Roles", icon: KeyRound },
-    { href: "/admin/permission-matrix", label: "Permission Matrix", icon: Grid3X3 },
-    { href: "/admin/user-roles", label: "User Roles", icon: UserCog },
-    { href: "/admin/audit", label: "Audit Logs", icon: FileSearch },
+    { href: "/admin",                label: "Admin",             icon: Shield         },
+    { href: "/admin/roles",          label: "Roles",             icon: KeyRound       },
+    { href: "/admin/permission-matrix", label: "Permission Matrix", icon: Grid3X3     },
+    { href: "/admin/user-roles",     label: "User Roles",        icon: UserCog        },
+    { href: "/admin/audit",          label: "Audit Logs",        icon: FileSearch     },
+    { href: "/agents",               label: "Agent Registry",    icon: BotMessageSquare },
+    { href: "/tools",                label: "Tool Registry",     icon: Wrench         },
+    { href: "/approvals",            label: "Approval Queue",    icon: ClipboardList  },
+    { href: "/executions",           label: "Execution Ledger",  icon: ScrollText     },
+    { href: "/memory",               label: "Memory Settings",   icon: Brain          },
   ];
 
   const ROLE_DASHBOARD_LABELS: Record<string, string> = {
@@ -564,6 +603,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         crm: Layers,
         workspace: FileText,
         notifications: Bell,
+        agents: BotMessageSquare, "agent-registry": BotMessageSquare, "bot-message-square": BotMessageSquare,
+        tools: Wrench, "tool-registry": Wrench, wrench: Wrench,
+        approvals: ClipboardList, "approval-queue": ClipboardList, "clipboard-list": ClipboardList,
+        executions: ScrollText, "execution-ledger": ScrollText, "scroll-text": ScrollText,
+        memory: Brain, "memory-settings": Brain, "agent-memory": Brain,
       };
 
       // ── Route normalization: API route → real Next.js page route ──────
@@ -637,6 +681,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         sales: "Role Dashboards", operations: "Role Dashboards", admin: "Role Dashboards",
         roles: "Admin Tools", "permission-matrix": "Admin Tools",
         "user-roles": "Admin Tools", audit: "Admin Tools",
+        agents: "Admin Tools", "agent-registry": "Admin Tools",
+        tools: "Admin Tools", "tool-registry": "Admin Tools",
+        approvals: "Admin Tools", "approval-queue": "Admin Tools",
+        executions: "Admin Tools", "execution-ledger": "Admin Tools",
+        memory: "Admin Tools", "memory-settings": "Admin Tools", "agent-memory": "Admin Tools",
       };
 
       const ROUTE_TO_GROUP: Record<string, string> = {
@@ -659,6 +708,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/sales": "Role Dashboards", "/operations": "Role Dashboards", "/admin": "Role Dashboards",
         "/admin/roles": "Admin Tools", "/admin/permission-matrix": "Admin Tools",
         "/admin/user-roles": "Admin Tools", "/admin/audit": "Admin Tools",
+        "/agents": "Admin Tools",
+        "/tools": "Admin Tools",
+        "/approvals": "Admin Tools",
+        "/executions": "Admin Tools",
+        "/memory": "Admin Tools",
       };
 
       const GROUP_ORDER = [
