@@ -227,7 +227,6 @@ export default function ToolRegistryPage() {
   // Auth guard
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") router.replace("/dashboard");
   }, [user, router]);
 
   // Sync filters → URL

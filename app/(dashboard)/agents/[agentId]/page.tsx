@@ -258,7 +258,6 @@ export default function AgentDetailPage() {
   // ── Auth guard ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") { router.replace("/dashboard"); }
   }, [user, router]);
 
   // ── Fetch detail ───────────────────────────────────────────────────────────

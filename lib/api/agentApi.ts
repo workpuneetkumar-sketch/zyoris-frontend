@@ -234,6 +234,165 @@ export async function updateAgent(
   }
 }
 
+// ─── Agent Execute (Day 4) ────────────────────────────────────────────────────
+
+/**
+ * Shared payload for POST /api/agents/execute.
+ * Three concrete shapes are sent to the same endpoint — the
+ * `agentId` + `action` discriminate which agent runs.
+ */
+export interface AgentExecutePayload {
+  agentId: "research-agent" | "lead-qualification-agent" | "sales-prep-agent" | string;
+  action: "research" | "qualify_lead" | "prepare_meeting" | string;
+  parameters: Record<string, unknown>;
+}
+
+/**
+ * A single recommendation item inside an agent result.
+ */
+export interface AgentRecommendation {
+  /** The recommendation text */
+  recommendation?: string;
+  /** May also come as "text" or "title" from some agents */
+  text?: string;
+  title?: string;
+  /** Why this is recommended */
+  reason?: string;
+  /** Supporting evidence strings or source refs */
+  evidence?: string[];
+  /**
+   * Optional structured action the agent suggests can be applied.
+   * Presence of this field controls whether "Approve & Apply" is shown.
+   */
+  suggestedAction?: {
+    type: string;
+    label?: string;
+    payload?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Evidence / source item cited in an agent result.
+ */
+export interface AgentEvidenceItem {
+  source?: string;
+  label?: string;
+  url?: string;
+  snippet?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * The `output` object returned under `response.data.output`.
+ * All fields are optional — handle defensively.
+ */
+export interface AgentExecuteOutput {
+  /** 0–100 confidence score */
+  confidenceScore?: number;
+  /** Executive summary paragraph */
+  summary?: string;
+  recommendations?: AgentRecommendation[];
+  evidence?: AgentEvidenceItem[];
+  /** Some agents return sources as a flat string array */
+  sources?: string[];
+  /** Catch-all for any extra fields the agent may return */
+  [key: string]: unknown;
+}
+
+/**
+ * Top-level response from POST /api/agents/execute.
+ * The backend wraps the result in `{ data: { output: {...} } }`.
+ */
+export interface AgentExecuteResult {
+  output: AgentExecuteOutput;
+  /** Execution / approval status if returned */
+  status?: string;
+  executionId?: string;
+  agentId?: string;
+  action?: string;
+}
+
+/**
+ * POST /api/agents/execute
+ *
+ * Single endpoint used by all three Day 4 agents:
+ *   - research-agent       / research
+ *   - lead-qualification-agent / qualify_lead
+ *   - sales-prep-agent     / prepare_meeting
+ *
+ * The response is expected at response.data.output.  We normalise
+ * multiple envelope shapes so callers always get AgentExecuteResult.
+ *
+ * @throws Error with a user-friendly message on failure.
+ */
+export async function executeAgent(
+  payload: AgentExecutePayload
+): Promise<AgentExecuteResult> {
+  try {
+    const response = await api.post(`${BASE}/execute`, payload);
+
+    // Normalise envelope: { data: { output } } | { output } | bare output
+    const raw: unknown = response.data;
+
+    if (raw && typeof raw === "object") {
+      const r = raw as Record<string, unknown>;
+
+      // { data: { output: {...} } }
+      if (r.data && typeof r.data === "object") {
+        const d = r.data as Record<string, unknown>;
+        if (d.output) {
+          return {
+            output: d.output as AgentExecuteOutput,
+            status: d.status as string | undefined,
+            executionId: d.executionId as string | undefined,
+            agentId: d.agentId as string | undefined,
+            action: d.action as string | undefined,
+          };
+        }
+        // data is itself the output
+        return { output: d as AgentExecuteOutput };
+      }
+
+      // { output: {...} }
+      if (r.output) {
+        return {
+          output: r.output as AgentExecuteOutput,
+          status: r.status as string | undefined,
+          executionId: r.executionId as string | undefined,
+        };
+      }
+
+      // bare output object (no wrapper)
+      if (r.summary || r.recommendations || r.confidenceScore !== undefined) {
+        return { output: r as AgentExecuteOutput };
+      }
+    }
+
+    // Last resort — return whatever came back as output
+    console.warn("[agentApi] executeAgent: unexpected response shape", raw);
+    return { output: (raw as AgentExecuteOutput) ?? {} };
+  } catch (error: any) {
+    // 403 — user isn't permitted to execute this agent
+    if (error.response?.status === 403) {
+      throw new Error(
+        "You are not authorised to run this agent. " +
+          (error.response?.data?.message ?? "")
+      );
+    }
+    const serverMessage =
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      (Array.isArray(error.response?.data?.errors)
+        ? (error.response.data.errors as { message: string }[])
+            .map((e) => e.message)
+            .join("; ")
+        : null);
+    throw new Error(
+      serverMessage || error.message || "Agent execution failed. Please try again."
+    );
+  }
+}
+
 // ─── Re-exports for convenience ───────────────────────────────────────────────
 // Consumers can import both the functions and the types from this single module.
 
