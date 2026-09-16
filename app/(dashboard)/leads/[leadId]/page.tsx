@@ -377,7 +377,7 @@ export default function LeadDetailPage() {
             </div>
 
             {/* Live API Actions Toolbar (Score, Route, Enrich, Qualify) */}
-            <LeadApiActionsToolbar leadId={leadId} leadName={lead.name} />
+            <LeadApiActionsToolbar leadId={leadId} leadName={lead.name} lead={lead} />
 
             {/* Status / Source / Created row - Fixed Source display */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

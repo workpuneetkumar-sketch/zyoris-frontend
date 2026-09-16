@@ -170,7 +170,7 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
         {/* Body */}
         <div className="p-7 overflow-y-auto bg-slate-50/30 space-y-6 flex-1">
           {/* Live API Actions Toolbar */}
-          <LeadApiActionsToolbar leadId={lead.id} leadName={lead.name} />
+          <LeadApiActionsToolbar leadId={lead.id} leadName={lead.name} lead={lead} />
 
           {/* Status, Source & Created */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
