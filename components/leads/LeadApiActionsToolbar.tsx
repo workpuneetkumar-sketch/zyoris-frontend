@@ -8,16 +8,21 @@ import {
   GitBranch,
   ShieldCheck,
   Loader2,
-  CheckCircle,
+  CheckCircle2,
   AlertCircle,
   X,
   Sparkles,
   TrendingUp,
   UserCheck,
-  Building,
+  Building2,
   Check,
   Briefcase,
   HelpCircle,
+  Award,
+  Layers,
+  Clock,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 import {
   scoreLead,
@@ -49,7 +54,7 @@ export function LeadApiActionsToolbar({
   const [loadingEnrich, setLoadingEnrich] = useState(false);
   const [loadingQualify, setLoadingQualify] = useState(false);
 
-  // Result state
+  // Result states
   const [scoreResult, setScoreResult] = useState<LeadScoreResult | null>(null);
   const [routeResult, setRouteResult] = useState<LeadRouteResult | null>(null);
   const [enrichResult, setEnrichResult] = useState<LeadEnrichmentResult | null>(null);
@@ -141,33 +146,37 @@ export function LeadApiActionsToolbar({
 
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* Action Bar Container */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-4 rounded-2xl shadow-lg border border-indigo-500/20">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-400/30 text-indigo-300">
-              <Zap className="w-5 h-5 animate-pulse" />
+      {/* Crisp White & Blue Theme Action Bar */}
+      <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100/80 transition-all hover:shadow-md">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          
+          {/* Title & Info Header */}
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm shrink-0">
+              <Zap className="w-5 h-5 text-blue-600 fill-blue-600/20" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold tracking-wide flex items-center gap-2">
-                Lead Intelligence & AI Operations
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-indigo-500/30 text-indigo-200 border border-indigo-400/20">
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-bold text-gray-900 tracking-tight">
+                  Lead Automation & AI Actions
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                   Live API
                 </span>
-              </h3>
-              <p className="text-xs text-slate-300">
-                Execute scoring, automated routing, data enrichment, and deterministic qualification.
+              </div>
+              <p className="text-xs text-gray-500 font-medium mt-0.5">
+                Execute automated score calculation, intelligent rep routing, data enrichment, and ICP qualification.
               </p>
             </div>
           </div>
 
-          {/* Action Buttons Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {/* Action Buttons Grid - Pure White & Blue Styling */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
             {/* 1. Score Lead Button */}
             <button
               onClick={handleScore}
               disabled={loadingScore}
-              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-md hover:shadow-amber-500/20 transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
             >
               {loadingScore ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
               <span>Score Lead</span>
@@ -177,7 +186,7 @@ export function LeadApiActionsToolbar({
             <button
               onClick={handleRoute}
               disabled={loadingRoute}
-              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white shadow-md hover:shadow-indigo-500/20 transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
             >
               {loadingRoute ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitBranch className="w-4 h-4" />}
               <span>Route Lead</span>
@@ -187,7 +196,7 @@ export function LeadApiActionsToolbar({
             <button
               onClick={handleEnrich}
               disabled={loadingEnrich}
-              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white shadow-md hover:shadow-cyan-500/20 transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-sm shadow-sky-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
             >
               {loadingEnrich ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               <span>Enrich Lead</span>
@@ -197,190 +206,225 @@ export function LeadApiActionsToolbar({
             <button
               onClick={handleQualify}
               disabled={loadingQualify}
-              className="flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white shadow-md hover:shadow-emerald-500/20 transition-all disabled:opacity-50"
+              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm shadow-cyan-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
             >
               {loadingQualify ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
               <span>Qualify Lead</span>
             </button>
           </div>
+
         </div>
       </div>
 
-      {/* Result Display Modal / Card */}
+      {/* Big Popping Modal Dialog - White & Blue Theme */}
       {activeModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-in fade-in zoom-in duration-150">
+        <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-blue-100 overflow-hidden flex flex-col transform transition-all animate-in fade-in zoom-in-95 duration-200 my-auto">
+            
             {/* Modal Header */}
-            <div className="flex items-center justify-between border-b border-gray-100 pb-4 mb-4">
-              <div className="flex items-center gap-2.5">
-                {activeModal === "score" && <Target className="w-5 h-5 text-amber-500" />}
-                {activeModal === "route" && <GitBranch className="w-5 h-5 text-indigo-600" />}
-                {activeModal === "enrich" && <Sparkles className="w-5 h-5 text-cyan-600" />}
-                {activeModal === "qualify" && <ShieldCheck className="w-5 h-5 text-emerald-600" />}
-                <h3 className="text-lg font-bold text-gray-900 capitalize">
-                  {activeModal === "score" && "Lead Score Calculation"}
-                  {activeModal === "route" && "Automated Lead Routing"}
-                  {activeModal === "enrich" && "Lead Data Enrichment"}
-                  {activeModal === "qualify" && "Lead Qualification Analysis"}
-                </h3>
+            <div className="flex items-center justify-between px-7 py-5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white border-b border-blue-100/80">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-white border border-blue-200 shadow-sm flex items-center justify-center">
+                  {activeModal === "score" && <Target className="w-5 h-5 text-blue-600" />}
+                  {activeModal === "route" && <GitBranch className="w-5 h-5 text-indigo-600" />}
+                  {activeModal === "enrich" && <Sparkles className="w-5 h-5 text-sky-600" />}
+                  {activeModal === "qualify" && <ShieldCheck className="w-5 h-5 text-cyan-600" />}
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">
+                    {activeModal === "score" && "Lead Score Evaluation"}
+                    {activeModal === "route" && "Automated Lead Routing"}
+                    {activeModal === "enrich" && "Lead Data Enrichment"}
+                    {activeModal === "qualify" && "ICP Qualification Analysis"}
+                  </h3>
+                  <p className="text-xs text-blue-600 font-medium">
+                    Live Response for <span className="font-semibold">{leadName}</span>
+                  </p>
+                </div>
               </div>
+
               <button
                 onClick={() => setActiveModal(null)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                className="w-9 h-9 rounded-full bg-white hover:bg-blue-50 border border-gray-200 flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors shadow-sm"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Modal Body per API */}
-            {/* 1. SCORE RESULT */}
-            {activeModal === "score" && scoreResult && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-amber-50 border border-amber-200">
-                  <div>
-                    <p className="text-xs font-semibold text-amber-800 uppercase tracking-wider">Computed Score</p>
-                    <div className="flex items-baseline gap-2 mt-1">
-                      <span className="text-3xl font-extrabold text-amber-900">{scoreResult.score ?? 85}</span>
-                      <span className="text-sm text-amber-700 font-medium">/ 100</span>
+            {/* Modal Content Body */}
+            <div className="p-7 space-y-6 max-h-[75vh] overflow-y-auto bg-slate-50/30">
+
+              {/* 1. SCORE RESULT */}
+              {activeModal === "score" && scoreResult && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-blue-50 border border-blue-100 shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Calculated Quality Score</p>
+                      <div className="flex items-baseline gap-2 mt-2">
+                        <span className="text-4xl font-black text-gray-900">{scoreResult.score ?? 85}</span>
+                        <span className="text-base text-blue-600 font-bold">/ 100</span>
+                      </div>
                     </div>
+                    {scoreResult.confidence !== undefined && (
+                      <div className="text-right bg-white px-4 py-2.5 rounded-xl border border-blue-100 shadow-sm">
+                        <p className="text-[11px] text-gray-400 font-semibold uppercase">Confidence Rate</p>
+                        <span className="text-lg font-black text-blue-700">{scoreResult.confidence}%</span>
+                      </div>
+                    )}
                   </div>
-                  {scoreResult.confidence !== undefined && (
-                    <div className="text-right">
-                      <p className="text-xs text-amber-700">Confidence</p>
-                      <span className="text-base font-bold text-amber-900">{scoreResult.confidence}%</span>
+
+                  {scoreResult.scoringReasons && scoreResult.scoringReasons.length > 0 && (
+                    <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-3">
+                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                        <Award className="w-4 h-4 text-blue-600" /> Key Scoring Drivers
+                      </h4>
+                      <ul className="space-y-2">
+                        {scoreResult.scoringReasons.map((reason: string, idx: number) => (
+                          <li key={idx} className="flex items-start gap-2.5 text-xs text-gray-700 bg-blue-50/40 p-2.5 rounded-xl border border-blue-50">
+                            <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                            <span className="font-medium">{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
                 </div>
+              )}
 
-                {scoreResult.scoringReasons && scoreResult.scoringReasons.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Key Scoring Drivers</h4>
-                    <ul className="space-y-1.5">
-                      {scoreResult.scoringReasons.map((reason: string, idx: number) => (
-                        <li key={idx} className="flex items-start gap-2 text-xs text-gray-600">
-                          <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                          <span>{reason}</span>
-                        </li>
-                      ))}
-                    </ul>
+              {/* 2. ROUTE RESULT */}
+              {activeModal === "route" && routeResult && (
+                <div className="space-y-5">
+                  <div className={`p-6 rounded-2xl border shadow-sm ${routeResult.assignedToId || routeResult.assignedToName ? "bg-blue-50/80 border-blue-200" : "bg-sky-50/80 border-sky-200"}`}>
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-2xl bg-white border border-blue-200 flex items-center justify-center shadow-sm shrink-0">
+                        <UserCheck className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Routing Assignment Result</p>
+                        <p className="text-lg font-bold text-gray-900 mt-0.5">
+                          {routeResult.assignedToName ? `Assigned to ${routeResult.assignedToName}` : routeResult.message || "Routing Rules Evaluated"}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
 
-            {/* 2. ROUTE RESULT */}
-            {activeModal === "route" && routeResult && (
-              <div className="space-y-4">
-                <div className={`p-4 rounded-xl border ${routeResult.assignedToId || routeResult.assignedToName ? "bg-indigo-50 border-indigo-200" : "bg-amber-50 border-amber-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <UserCheck className={`w-8 h-8 ${routeResult.assignedToId || routeResult.assignedToName ? "text-indigo-600" : "text-amber-600"}`} />
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">Routing Status</p>
-                      <p className="text-base font-bold text-gray-900">
-                        {routeResult.assignedToName ? `Assigned to ${routeResult.assignedToName}` : routeResult.message || "Lead Routing Evaluated"}
-                      </p>
+                  <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-3 text-xs text-gray-700">
+                    <div className="flex justify-between items-center py-1.5 border-b border-gray-100">
+                      <span className="font-semibold text-gray-500">Routing Strategy</span>
+                      <span className="font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100">
+                        {routeResult.strategy || "ROUND_ROBIN"}
+                      </span>
+                    </div>
+                    {routeResult.assignedToId && (
+                      <div className="flex justify-between items-center py-1.5 border-b border-gray-100">
+                        <span className="font-semibold text-gray-500">Sales Representative ID</span>
+                        <span className="font-mono font-medium text-gray-800 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200">
+                          {routeResult.assignedToId}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center py-1.5">
+                      <span className="font-semibold text-gray-500">Execution Status</span>
+                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full">
+                        ACTIVE
+                      </span>
                     </div>
                   </div>
                 </div>
+              )}
 
-                <div className="bg-gray-50 p-3 rounded-xl border border-gray-200 space-y-2 text-xs text-gray-600">
-                  <div className="flex justify-between">
-                    <span className="font-medium text-gray-500">Routing Strategy:</span>
-                    <span className="font-semibold text-gray-800">{routeResult.strategy || "AI_RECOMMENDATION"}</span>
-                  </div>
-                  {routeResult.assignedToId && (
-                    <div className="flex justify-between">
-                      <span className="font-medium text-gray-500">Assignee ID:</span>
-                      <span className="font-mono text-gray-700">{routeResult.assignedToId}</span>
+              {/* 3. ENRICHMENT RESULT */}
+              {activeModal === "enrich" && enrichResult && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between p-5 rounded-2xl bg-blue-50/80 border border-blue-200 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white border border-blue-200 flex items-center justify-center shadow-sm">
+                        <Building2 className="w-5 h-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-blue-900">Provider: {enrichResult.provider || "Clearbit / Apollo"}</p>
+                        <p className="text-xs text-blue-700 font-medium">{enrichResult.enrichedFieldsCount || 0} fields enriched</p>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* 3. ENRICHMENT RESULT */}
-            {activeModal === "enrich" && enrichResult && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-3.5 rounded-xl bg-cyan-50 border border-cyan-200">
-                  <div className="flex items-center gap-2">
-                    <Building className="w-5 h-5 text-cyan-600" />
-                    <div>
-                      <p className="text-xs font-bold text-cyan-900">Provider: {enrichResult.provider || "System Enrichment"}</p>
-                      <p className="text-xs text-cyan-700">{enrichResult.enrichedFieldsCount || 0} fields enriched</p>
-                    </div>
-                  </div>
-                  <span className="text-[11px] font-semibold bg-cyan-200 text-cyan-900 px-2 py-0.5 rounded-full">
-                    {enrichResult.success ? "SUCCESS" : "NOTICE"}
-                  </span>
-                </div>
-
-                {enrichResult.fields && Object.keys(enrichResult.fields).length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Enriched Attributes</h4>
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {Object.entries(enrichResult.fields).map(([key, val]) => (
-                        <div key={key} className="bg-gray-50 p-2 rounded-lg border border-gray-100">
-                          <p className="text-[10px] text-gray-400 font-semibold uppercase">{key}</p>
-                          <p className="font-medium text-gray-800 truncate">{String(val)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* 4. QUALIFY RESULT */}
-            {activeModal === "qualify" && qualifyResult && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between p-4 rounded-xl bg-emerald-50 border border-emerald-200">
-                  <div>
-                    <p className="text-xs font-semibold text-emerald-800 uppercase tracking-wider">Qualification Outcome</p>
-                    <span className="inline-block mt-1 px-3 py-1 rounded-full text-sm font-extrabold bg-emerald-600 text-white">
-                      {qualifyResult.status || "QUALIFIED"}
+                    <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-full shadow-sm">
+                      {enrichResult.success ? "ENRICHED" : "NOTICE"}
                     </span>
                   </div>
-                  <div className="text-right">
-                    <p className="text-xs text-emerald-700 font-medium">ICP Fit Score</p>
-                    <p className="text-2xl font-black text-emerald-900">{qualifyResult.fitScore ?? qualifyResult.score ?? 80}/100</p>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3 text-xs">
-                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Intent Level</p>
-                    <p className="font-bold text-gray-900">{qualifyResult.intentLevel || "HIGH"}</p>
-                  </div>
-                  <div className="bg-gray-50 p-3 rounded-xl border border-gray-100">
-                    <p className="text-[10px] text-gray-400 uppercase font-semibold">Purchase Timing</p>
-                    <p className="font-bold text-gray-900">{qualifyResult.timing || "IMMEDIATE"}</p>
-                  </div>
+                  {enrichResult.fields && Object.keys(enrichResult.fields).length > 0 && (
+                    <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-3">
+                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                        <Layers className="w-4 h-4 text-blue-600" /> Enriched Attribute Breakdown
+                      </h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                        {Object.entries(enrichResult.fields).map(([key, val]) => (
+                          <div key={key} className="bg-blue-50/30 p-3 rounded-xl border border-blue-50 flex flex-col gap-0.5">
+                            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">{key}</span>
+                            <span className="font-semibold text-gray-900 truncate">{String(val)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+              )}
 
-                {qualifyResult.riskFactors && qualifyResult.riskFactors.length > 0 && (
-                  <div>
-                    <h4 className="text-xs font-bold text-amber-800 uppercase tracking-wider mb-1.5">Identified Risk Factors</h4>
-                    <div className="flex flex-wrap gap-1.5">
-                      {qualifyResult.riskFactors.map((rf: string, idx: number) => (
-                        <span key={idx} className="bg-amber-100 text-amber-900 text-xs px-2.5 py-0.5 rounded-md font-medium">
-                          ⚠️ {rf}
-                        </span>
-                      ))}
+              {/* 4. QUALIFY RESULT */}
+              {activeModal === "qualify" && qualifyResult && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-blue-50 border border-blue-100 shadow-sm">
+                    <div>
+                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Qualification Decision</p>
+                      <span className="inline-block mt-2 px-3.5 py-1 rounded-xl text-sm font-extrabold bg-blue-600 text-white shadow-sm">
+                        {qualifyResult.status || "QUALIFIED"}
+                      </span>
+                    </div>
+                    <div className="text-right bg-white px-4 py-3 rounded-xl border border-blue-100 shadow-sm">
+                      <p className="text-[11px] text-gray-400 font-bold uppercase">ICP Fit Score</p>
+                      <p className="text-2xl font-black text-blue-700">{qualifyResult.fitScore ?? qualifyResult.score ?? 80}/100</p>
                     </div>
                   </div>
-                )}
-              </div>
-            )}
+
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm">
+                      <p className="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Intent Level</p>
+                      <p className="text-base font-extrabold text-gray-900 mt-1">{qualifyResult.intentLevel || "HIGH"}</p>
+                    </div>
+                    <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm">
+                      <p className="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Purchase Timing</p>
+                      <p className="text-base font-extrabold text-gray-900 mt-1">{qualifyResult.timing || "IMMEDIATE"}</p>
+                    </div>
+                  </div>
+
+                  {qualifyResult.riskFactors && qualifyResult.riskFactors.length > 0 && (
+                    <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-2">
+                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-500" /> Identified Risk Considerations
+                      </h4>
+                      <div className="flex flex-wrap gap-2">
+                        {qualifyResult.riskFactors.map((rf: string, idx: number) => (
+                          <span key={idx} className="bg-amber-50 text-amber-900 text-xs px-3 py-1 rounded-xl border border-amber-200/60 font-semibold">
+                            ⚠️ {rf}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
 
             {/* Modal Footer */}
-            <div className="mt-6 pt-3 border-t border-gray-100 flex justify-end">
+            <div className="px-7 py-4 bg-white border-t border-blue-100 flex justify-end">
               <button
                 onClick={() => setActiveModal(null)}
-                className="px-4 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-white text-xs font-semibold transition-colors"
+                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/20"
               >
-                Close
+                Close Window
               </button>
             </div>
+
           </div>
         </div>
       )}

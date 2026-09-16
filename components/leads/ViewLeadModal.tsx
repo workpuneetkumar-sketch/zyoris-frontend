@@ -142,33 +142,33 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
   const hasNote = lead.note && lead.note.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 sm:p-6 overflow-y-auto">
+      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-blue-100 my-auto animate-in fade-in zoom-in-95 duration-200">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50/50 to-white">
+        <div className="flex items-center justify-between px-7 py-5 border-b border-blue-100 bg-gradient-to-r from-blue-50/80 via-indigo-50/30 to-white">
           <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold text-gray-900">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">
                 {lead.name || "Unnamed Lead"}
               </h2>
               <span
-                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.style}`}
+                className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-bold ${statusInfo.style}`}
               >
                 {statusInfo.emoji} {statusInfo.label}
               </span>
             </div>
-            <p className="text-sm text-gray-500">{safeString(lead.company)}</p>
+            <p className="text-sm font-medium text-gray-500">{safeString(lead.company)}</p>
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-500 transition-colors"
+            className="w-9 h-9 rounded-full bg-white hover:bg-blue-50 border border-gray-200 flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors shadow-sm"
           >
-            <X size={16} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto bg-gray-50/30 space-y-6 flex-1">
+        <div className="p-7 overflow-y-auto bg-slate-50/30 space-y-6 flex-1">
           {/* Live API Actions Toolbar */}
           <LeadApiActionsToolbar leadId={lead.id} leadName={lead.name} />
 
