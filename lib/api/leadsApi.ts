@@ -141,6 +141,7 @@ async function _fetchLeadsPage(
         Array.isArray(d?.data)        ? d.data :
         Array.isArray(d?.leads)       ? d.leads :
         Array.isArray(d?.data?.leads) ? d.data.leads :
+        Array.isArray(d?.data?.data)  ? d.data.data :
         [];
 
     const total: number =
@@ -153,23 +154,11 @@ async function _fetchLeadsPage(
     // Filter out deleted leads (soft delete)
     leads = leads.filter((lead: Lead) => !isLeadSoftDeleted(lead));
 
-    // Fetch real lead scores from API for each lead
-    const scoredLeads: Lead[] = await Promise.all(
-        leads.map(async (lead: Lead) => {
-            let score: number;
-            try {
-                const scoreResponse = await getLeadScore(lead.id);
-                score = scoreResponse.score;
-            } catch (error) {
-                console.warn(`Failed to fetch score for lead ${lead.id}, falling back to computed`, error);
-                score = computeLeadScore(lead);
-            }
-            return {
-                ...lead,
-                score,
-            };
-        })
-    );
+    // Fast, instant score calculation for table rendering
+    const scoredLeads: Lead[] = leads.map((lead: Lead) => ({
+        ...lead,
+        score: typeof lead.score === "number" && lead.score > 0 ? lead.score : computeLeadScore(lead),
+    }));
 
     return { leads: scoredLeads, total };
 }
