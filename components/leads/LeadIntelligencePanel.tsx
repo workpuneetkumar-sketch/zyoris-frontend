@@ -20,6 +20,7 @@ import {
 
 import { Lead } from "@/types/leads";
 import { AiExtractionPanel } from "@/components/ai/AiExtractionPanel";
+import { LeadApiActionsToolbar } from "@/components/leads/LeadApiActionsToolbar";
 import {
   getLeadIntelligence,
   getLeadScoreConfig,
@@ -400,6 +401,8 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
       </div>
 
       <div className="p-5 space-y-5 bg-gray-50/20">
+        <LeadApiActionsToolbar leadId={lead.id} leadName={lead.name} />
+
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-4">
             <div className="flex items-center justify-between gap-3">

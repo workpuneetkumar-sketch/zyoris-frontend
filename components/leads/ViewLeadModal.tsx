@@ -23,6 +23,7 @@ import {
   Loader2,
   X,
 } from "lucide-react";
+import { LeadApiActionsToolbar } from "@/components/leads/LeadApiActionsToolbar";
 
 interface ViewLeadModalProps {
   lead: Lead;
@@ -168,6 +169,9 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
 
         {/* Body */}
         <div className="p-6 overflow-y-auto bg-gray-50/30 space-y-6 flex-1">
+          {/* Live API Actions Toolbar */}
+          <LeadApiActionsToolbar leadId={lead.id} leadName={lead.name} />
+
           {/* Status, Source & Created */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="bg-white p-4 rounded-xl border border-gray-100 shadow-sm">

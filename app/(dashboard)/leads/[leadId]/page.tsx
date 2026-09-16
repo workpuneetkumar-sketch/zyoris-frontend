@@ -39,6 +39,7 @@ import { AiExtractionCard } from "@/components/ai/AiExtractionCard";
 import { AiBadge } from "@/components/ai/AiBadge";
 import { CommunicationIntelligenceWidget } from "@/components/ai/CommunicationIntelligenceWidget";
 import { LeadIntelligencePanel } from "@/components/leads/LeadIntelligencePanel";
+import { LeadApiActionsToolbar } from "@/components/leads/LeadApiActionsToolbar";
 
 // Helper to format date safely
 function formatDate(dateString: string | undefined) {
@@ -374,6 +375,9 @@ export default function LeadDetailPage() {
                     )}
                 </div>
             </div>
+
+            {/* Live API Actions Toolbar (Score, Route, Enrich, Qualify) */}
+            <LeadApiActionsToolbar leadId={leadId} leadName={lead.name} />
 
             {/* Status / Source / Created row - Fixed Source display */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

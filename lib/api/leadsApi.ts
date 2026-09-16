@@ -741,3 +741,136 @@ export function buildWhatsAppShareUrl(payload: LeadSharePayload, phone?: string)
     ? `https://wa.me/${phoneClean}?text=${text}`
     : `https://wa.me/?text=${text}`;
 }
+
+// ── Lead Scoring (POST /leads/:id/score) ──────────────────────────────────
+export interface LeadScoreResult {
+  score: number;
+  confidence?: number;
+  scoringReasons?: string[];
+  scoringFactors?: Array<{ factor: string; contribution: number; explanation?: string }>;
+  [key: string]: any;
+}
+
+/**
+ * POST /leads/:id/score
+ * Calculates and persists lead score and scoring reasons.
+ */
+export async function scoreLead(leadId: string, payload?: Record<string, any>): Promise<LeadScoreResult> {
+  console.log(`[API] scoreLead - leadId: ${leadId}`);
+  try {
+    const res = await api.post(`/leads/${leadId}/score`, payload || {});
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] scoreLead error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// ── Lead Routing (POST /leads/:id/route) ────────────────────────────────────
+export interface LeadRoutePayload {
+  strategy?: string;
+  reassign?: boolean;
+  targetRoleIds?: string[];
+  [key: string]: any;
+}
+
+export interface LeadRouteResult {
+  success?: boolean;
+  assignedToId?: string;
+  assignedToName?: string;
+  strategy?: string;
+  message?: string;
+  [key: string]: any;
+}
+
+/**
+ * POST /leads/:id/route
+ * Executes automated routing rules and assigns the lead to an eligible team member.
+ */
+export async function routeLead(leadId: string, payload?: LeadRoutePayload): Promise<LeadRouteResult> {
+  console.log(`[API] routeLead - leadId: ${leadId}`);
+  try {
+    const res = await api.post(`/leads/${leadId}/route`, payload || {});
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] routeLead error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// ── Lead Enrichment (POST /leads/:id/enrichment) ───────────────────────────
+export interface LeadEnrichmentPayload {
+  provider?: string;
+  force?: boolean;
+  fields?: string[];
+  [key: string]: any;
+}
+
+export interface LeadEnrichmentResult {
+  success?: boolean;
+  leadId?: string;
+  organizationId?: string;
+  provider?: string;
+  enrichedFieldsCount?: number;
+  fields?: Record<string, any>;
+  skippedUserOverrides?: string[];
+  fetchedAt?: string;
+  [key: string]: any;
+}
+
+/**
+ * POST /leads/:id/enrichment
+ * Triggers external or cached enrichment for a lead.
+ */
+export async function enrichLead(leadId: string, payload?: LeadEnrichmentPayload): Promise<LeadEnrichmentResult> {
+  console.log(`[API] enrichLead - leadId: ${leadId}`);
+  try {
+    const res = await api.post(`/leads/${leadId}/enrichment`, payload || {});
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] enrichLead error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// ── Lead Qualification (POST /leads/:id/qualify) ───────────────────────────
+export interface LeadQualifyPayload {
+  forceRecalculate?: boolean;
+  cadence?: string;
+  [key: string]: any;
+}
+
+export interface LeadQualifyResult {
+  success?: boolean;
+  status?: "QUALIFIED" | "UNQUALIFIED" | "REVIEW_NEEDED" | string;
+  score?: number;
+  fitScore?: number;
+  intentScore?: number;
+  engagementScore?: number;
+  intentLevel?: "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH" | string;
+  timing?: string;
+  riskFactors?: string[];
+  confidence?: number;
+  reasons?: string | string[];
+  evidence?: any[];
+  [key: string]: any;
+}
+
+/**
+ * POST /leads/:id/qualify
+ * Calculates qualification score, fit, intent, and customer affinity.
+ */
+export async function qualifyLead(leadId: string, payload?: LeadQualifyPayload): Promise<LeadQualifyResult> {
+  console.log(`[API] qualifyLead - leadId: ${leadId}`);
+  try {
+    const res = await api.post(`/leads/${leadId}/qualify`, payload || {});
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] qualifyLead error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
