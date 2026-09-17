@@ -522,10 +522,13 @@ export async function getWorkspacePageDatabase(
  */
 export async function createWorkspaceDatabase(
   pageId: string,
-  payload: { title?: string }
+  payload: { name?: string; title?: string }
 ): Promise<WorkspaceDatabase> {
   try {
-    const res = await api.post(`/workspace/pages/${pageId}/database`, payload);
+    const body = {
+      name: payload.name || payload.title || "Inline Database",
+    };
+    const res = await api.post(`/workspace/pages/${pageId}/database`, body);
     const data = res.data?.data ?? res.data;
     return data;
   } catch (error) {
@@ -537,15 +540,25 @@ export async function createWorkspaceDatabase(
 /**
  * Add dynamic database column/property.
  * POST /workspace/databases/:databaseId/properties
+ * BE-1 OpenAPI strictly expects uppercase enum:
+ * 'TEXT' | 'NUMBER' | 'SELECT' | 'MULTI_SELECT' | 'DATE' | 'CHECKBOX' | 'URL' | 'EMAIL' | 'PHONE' | 'RELATION' | 'FORMULA'
  */
 export async function addDatabaseProperty(
   databaseId: string,
-  payload: { name: string; type: string; options?: string[] }
+  payload: { name: string; type: string; options?: any }
 ): Promise<WorkspaceDatabaseProperty> {
   try {
+    const backendPayload: { name: string; type: string; options?: any } = {
+      name: payload.name.trim(),
+      type: (payload.type || "TEXT").toUpperCase(),
+    };
+    if (payload.options !== undefined) {
+      backendPayload.options = payload.options;
+    }
+
     const res = await api.post(
       `/workspace/databases/${databaseId}/properties`,
-      payload
+      backendPayload
     );
     const data = res.data?.data ?? res.data;
     return data;
@@ -577,7 +590,7 @@ export async function createDatabaseRow(
 
 /**
  * Update database row.
- * PATCH /workspace/databases/:databaseId/rows/:rowId
+ * PATCH /workspace/databases/rows/:rowId
  */
 export async function updateDatabaseRow(
   databaseId: string,
@@ -585,12 +598,22 @@ export async function updateDatabaseRow(
   dataPayload: Record<string, any>
 ): Promise<WorkspaceDatabaseRow> {
   try {
-    const res = await api.patch(
-      `/workspace/databases/${databaseId}/rows/${rowId}`,
-      { data: dataPayload }
-    );
-    const data = res.data?.data ?? res.data;
-    return data;
+    try {
+      const res = await api.patch(
+        `/workspace/databases/rows/${rowId}`,
+        { data: dataPayload }
+      );
+      return res.data?.data ?? res.data;
+    } catch (err: any) {
+      if (err?.response?.status === 404 && databaseId) {
+        const fallbackRes = await api.patch(
+          `/workspace/databases/${databaseId}/rows/${rowId}`,
+          { data: dataPayload }
+        );
+        return fallbackRes.data?.data ?? fallbackRes.data;
+      }
+      throw err;
+    }
   } catch (error) {
     console.error(
       `Error updating row ${rowId} in database ${databaseId}:`,
@@ -602,14 +625,22 @@ export async function updateDatabaseRow(
 
 /**
  * Delete database row.
- * DELETE /workspace/databases/:databaseId/rows/:rowId
+ * DELETE /workspace/databases/rows/:rowId
  */
 export async function deleteDatabaseRow(
   databaseId: string,
   rowId: string
 ): Promise<void> {
   try {
-    await api.delete(`/workspace/databases/${databaseId}/rows/${rowId}`);
+    try {
+      await api.delete(`/workspace/databases/rows/${rowId}`);
+    } catch (err: any) {
+      if (err?.response?.status === 404 && databaseId) {
+        await api.delete(`/workspace/databases/${databaseId}/rows/${rowId}`);
+        return;
+      }
+      throw err;
+    }
   } catch (error) {
     console.error(
       `Error deleting row ${rowId} in database ${databaseId}:`,

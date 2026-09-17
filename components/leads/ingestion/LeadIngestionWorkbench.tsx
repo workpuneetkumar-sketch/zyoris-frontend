@@ -469,7 +469,7 @@ export function LeadIngestionWorkbench() {
   const handleSyncLiveLeads = async () => {
     setRefreshingLive(true);
     try {
-      const res = await fetchLeads(1, {});
+      const res = await fetchLeads(1, { status: "All Status", source: "All Sources", owner: "All Owners", search: "" });
       if (res.leads && res.leads.length > 0) {
         const syncedLogs: IngestLeadResponse[] = res.leads.slice(0, 10).map((ld) => {
           const ch: IngestionChannel = 
@@ -502,7 +502,7 @@ export function LeadIngestionWorkbench() {
               status: ld.status || "NEW",
               source: ld.source || "API_SYNC",
               createdAt: ld.createdAt || new Date().toISOString(),
-              updatedAt: ld.updatedAt || new Date().toISOString(),
+              updatedAt: (ld as any).updatedAt ? String((ld as any).updatedAt) : new Date().toISOString(),
             },
             receivedAt: ld.createdAt || new Date().toISOString(),
           };
