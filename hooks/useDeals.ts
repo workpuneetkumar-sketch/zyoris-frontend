@@ -11,7 +11,7 @@ import {
     CreateDealPayload,
 } from "@/lib/api/dealsApi";
 
-export function useDeals() {
+export function useDeals(customStages?: string[]) {
     const [deals, setDeals] = useState<Deal[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -91,23 +91,21 @@ export function useDeals() {
     // ── Deals grouped by stage (Kanban) ───────────────────────────────────
     const dealsByStage = useMemo(() => {
         const map = new Map<string, Deal[]>();
-        // Initialize default stages to empty arrays
-        for (const stage of DEFAULT_DEAL_STAGES) {
-            map.set(stage, []);
+        const initialStages = customStages && customStages.length > 0 ? customStages : DEFAULT_DEAL_STAGES;
+        for (const stage of initialStages) {
+            map.set(stage.toUpperCase(), []);
         }
         // Add all deals to the map, creating stages as needed
         for (const d of filteredDeals) {
-            const stage = d.stage.toUpperCase(); // Normalize to uppercase to match default stages!
-            console.log(`[useDeals] Processing deal:`, { dealId: d.dealId, name: d.name, originalStage: d.stage, normalizedStage: stage });
+            const stage = (d.stage || "NEW").toUpperCase();
             if (!map.has(stage)) {
                 map.set(stage, []);
             }
             const arr = map.get(stage)!;
             arr.push(d);
         }
-        console.log(`[useDeals] Final dealsByStage:`, Array.from(map.entries()));
         return map;
-    }, [filteredDeals]);
+    }, [filteredDeals, customStages]);
 
     // ── Create deal ────────────────────────────────────────────────────────
     const handleOpenCreate = useCallback((stage?: string) => {

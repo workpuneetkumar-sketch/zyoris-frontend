@@ -1,7 +1,7 @@
 // components/deals/DealsUI.tsx
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import Link from "next/link";
 import {
     Search,
@@ -18,10 +18,28 @@ import {
     Sun,
     Circle,
     Skull,
+    ShieldCheck,
+    ShieldAlert,
+    Sliders,
+    Pencil,
+    Loader2,
 } from "lucide-react";
 import { Deal, DealsFilters, DEFAULT_DEAL_STAGES } from "@/types/deals";
 import { getStageConfig } from "@/lib/dealConfig";
 import { CreateDealPayload } from "@/lib/api/dealsApi";
+import {
+    Pipeline,
+    PipelineStage,
+    CreatePipelinePayload,
+    UpdatePipelinePayload,
+    CreateStagePayload,
+    UpdateStagePayload,
+} from "@/types/pipelines";
+import { PipelineSelector } from "./PipelineSelector";
+import { PipelineStageManager, StageHeaderActions } from "./PipelineStageManager";
+import { StageTransitionModal } from "./StageTransitionModal";
+import { OrgRisksModal } from "./OrgRisksModal";
+import { RiskDetectorConfigModal } from "./RiskDetectorConfigModal";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -43,6 +61,22 @@ interface DealsUIProps {
     onOpenCreate: (stage?: string) => void;
     onCloseCreate: () => void;
     onCreateDeal: (data: CreateDealPayload) => Promise<boolean>;
+    // FE-2 Pipeline & Stage integration props
+    pipelines?: Pipeline[];
+    selectedPipeline?: Pipeline | null;
+    pipelinesLoading?: boolean;
+    pipelinesError?: string | null;
+    stages?: PipelineStage[];
+    onSelectPipeline?: (pipeline: Pipeline) => void;
+    onCreatePipeline?: (payload: CreatePipelinePayload) => Promise<boolean>;
+    onUpdatePipeline?: (id: string, payload: UpdatePipelinePayload) => Promise<boolean>;
+    onDeletePipeline?: (id: string) => Promise<boolean>;
+    onCreateStage?: (payload: CreateStagePayload) => Promise<boolean>;
+    onUpdateStage?: (stageId: string, payload: UpdateStagePayload) => Promise<boolean>;
+    onDeleteStage?: (stageId: string) => Promise<boolean>;
+    onReorderStages?: (stageOrders: Array<{ stageId: string; order: number }>) => Promise<boolean>;
+    onRetryPipelines?: () => void;
+    onRefreshWorkspace?: () => void;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -91,15 +125,63 @@ function NameAvatar({ name, stage }: { name: string; stage: string }) {
 
 interface CreateDealModalProps {
     defaultStage: string;
+    stages?: PipelineStage[];
+    pipelineId?: string;
+    pipelineName?: string;
     creating: boolean;
     createError: string | null;
     onClose: () => void;
     onSave: (data: CreateDealPayload) => Promise<boolean>;
 }
 
-function CreateDealModal({ defaultStage, creating, createError, onClose, onSave }: CreateDealModalProps) {
-    const [form, setForm] = useState({ name: "", amount: "", stage: defaultStage });
+function CreateDealModal({
+    defaultStage,
+    stages,
+    pipelineId,
+    pipelineName,
+    creating,
+    createError,
+    onClose,
+    onSave,
+}: CreateDealModalProps) {
+    const stageOptions = useMemo(() => {
+        if (stages && stages.length > 0) {
+            return stages.map((s) => ({
+                id: s.id || s.name,
+                value: s.name,
+                label: s.name,
+                probability: s.probability,
+            }));
+        }
+        return [...DEFAULT_DEAL_STAGES].map((s) => ({
+            id: s,
+            value: s,
+            label: getStageConfig(s).label,
+            probability: undefined,
+        }));
+    }, [stages]);
+
+    const initialStage = useMemo(() => {
+        if (defaultStage) {
+            const found = stageOptions.find(
+                (opt) => opt.value.toUpperCase() === defaultStage.toUpperCase() || opt.id === defaultStage
+            );
+            if (found) return found.value;
+        }
+        return stageOptions[0]?.value || defaultStage || "NEW";
+    }, [defaultStage, stageOptions]);
+
+    const [form, setForm] = useState({ name: "", amount: "", stage: initialStage });
     const [errors, setErrors] = useState<{ name?: string; amount?: string }>({});
+
+    useEffect(() => {
+        setForm((prev) => {
+            if (!prev.stage || !stageOptions.some((opt) => opt.value === prev.stage)) {
+                return { ...prev, stage: initialStage };
+            }
+            return prev;
+        });
+    }, [initialStage, stageOptions]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -114,7 +196,12 @@ function CreateDealModal({ defaultStage, creating, createError, onClose, onSave 
         if (!form.amount || isNaN(Number(form.amount))) newErrors.amount = "Valid amount is required";
         if (Number(form.amount) < 0)                    newErrors.amount = "Amount must be positive";
         if (Object.keys(newErrors).length > 0) { setErrors(newErrors); return; }
-        await onSave({ name: form.name.trim(), amount: Number(form.amount), stage: form.stage });
+        await onSave({
+            name: form.name.trim(),
+            amount: Number(form.amount),
+            stage: form.stage,
+            pipelineId: pipelineId || undefined,
+        });
     };
 
     return (
@@ -124,7 +211,9 @@ function CreateDealModal({ defaultStage, creating, createError, onClose, onSave 
                 <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100">
                     <div>
                         <h2 className="text-[15px] font-bold text-gray-900">New Deal</h2>
-                        <p className="text-[12px] text-gray-400 mt-0.5">Add a deal to your pipeline</p>
+                        <p className="text-[12px] text-gray-400 mt-0.5">
+                            {pipelineName ? `Add a deal to ${pipelineName}` : "Add a deal to your pipeline"}
+                        </p>
                     </div>
                     <button
                         onClick={onClose}
@@ -195,9 +284,9 @@ function CreateDealModal({ defaultStage, creating, createError, onClose, onSave 
                             onChange={handleChange}
                             className="w-full h-10 rounded-lg border border-gray-200 px-3 text-[13px] text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500 transition-all"
                         >
-                            {[...DEFAULT_DEAL_STAGES].map((s) => (
-                                <option key={s} value={s}>
-                                    {getStageConfig(s).label}
+                            {stageOptions.map((s) => (
+                                <option key={s.id} value={s.value}>
+                                    {s.label} {s.probability !== undefined ? `(${s.probability}%)` : ""}
                                 </option>
                             ))}
                         </select>
@@ -249,10 +338,14 @@ function SkeletonCard() {
 
 function DealCard({
     deal,
+    allStages,
     onStageChange,
+    onRequestTransition,
 }: {
     deal: Deal;
+    allStages?: string[];
     onStageChange: (dealId: string, newStage: string) => void;
+    onRequestTransition?: (deal: Deal, targetStage: string) => void;
 }) {
     const cfg = getStageConfig(deal.stage);
     const isWon  = deal.stage.toUpperCase() === "WON";
@@ -270,14 +363,26 @@ function DealCard({
     const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         e.stopPropagation();
         const newStage = e.target.value;
-        if (newStage !== deal.stage) onStageChange(deal.dealId, newStage);
+        if (newStage !== deal.stage) {
+            if (onRequestTransition) {
+                onRequestTransition(deal, newStage);
+            } else {
+                onStageChange(deal.dealId, newStage);
+            }
+        }
     };
+
+    const stagesList = allStages && allStages.length > 0 ? allStages : DEFAULT_DEAL_STAGES;
+
+    const formattedDate = deal.closeDate
+        ? new Date(deal.closeDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+        : null;
 
     return (
         <Link href={`/deals/${deal.dealId}`} className="block group">
             <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md hover:border-gray-200 transition-all">
                 {/* Top row: name + actions */}
-                <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-start justify-between gap-2 mb-1.5">
                     <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
                         {deal.name}
                     </p>
@@ -292,10 +397,53 @@ function DealCard({
                     </div>
                 </div>
 
+                {/* Company & Close Date Metadata */}
+                {(deal.companyName || deal.contactName || formattedDate) && (
+                    <div className="flex items-center justify-between text-[11px] text-gray-500 mb-2 truncate">
+                        <span className="truncate font-medium text-gray-600">
+                            {deal.companyName || deal.contactName || "—"}
+                        </span>
+                        {formattedDate && (
+                            <span className="text-[10px] text-gray-400 shrink-0 ml-1 font-medium">
+                                Closes {formattedDate}
+                            </span>
+                        )}
+                    </div>
+                )}
+
                 {/* Amount */}
-                <p className={`text-[15px] font-bold mb-2.5 ${cfg.color}`}>
+                <p className={`text-[15px] font-bold mb-2 ${cfg.color}`}>
                     {formatAmountFull(deal.amount)}
                 </p>
+
+                {/* Enriched BE-2 Health & Risk Badges */}
+                {(deal.healthScore !== undefined || deal.healthStatus || deal.riskLevel || deal.forecastCategory) && (
+                    <div className="flex items-center gap-1.5 flex-wrap mb-2.5">
+                        {deal.healthScore !== undefined && (
+                            <span
+                                className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                    deal.healthScore >= 70
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : deal.healthScore >= 40
+                                        ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                        : "bg-red-50 text-red-700 border border-red-200"
+                                }`}
+                            >
+                                Health: {deal.healthScore}
+                            </span>
+                        )}
+                        {deal.riskLevel && (
+                            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-50 text-red-700 border border-red-200">
+                                {deal.riskLevel}
+                            </span>
+                        )}
+                        {deal.forecastCategory && (
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                                {deal.forecastCategory}
+                            </span>
+                        )}
+                    </div>
+                )}
 
                 {/* Owner avatar + stage badge */}
                 <div className="flex items-center gap-2 mb-2.5" onClick={(e) => e.preventDefault()}>
@@ -309,9 +457,9 @@ function DealCard({
                         onClick={(e) => e.preventDefault()}
                         className={`appearance-none h-6 pl-2 pr-6 rounded-md text-[11px] font-semibold cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-400 border-0 ${cfg.badgeBg} ${cfg.badgeText}`}
                     >
-                        {[...DEFAULT_DEAL_STAGES].map((stage) => (
-                            <option key={stage} value={stage}>
-                                {getStageConfig(stage).label}
+                        {stagesList.map((stageName) => (
+                            <option key={stageName} value={stageName}>
+                                {getStageConfig(stageName).label || stageName}
                             </option>
                         ))}
                     </select>
@@ -338,16 +486,34 @@ function DealCard({
 
 function KanbanColumn({
     stage,
+    stageObj,
+    stageIndex,
+    totalStages,
     deals,
     loading,
+    allStages,
     onStageChange,
     onAddDeal,
+    onInspectStage,
+    onEditStage,
+    onDeleteStage,
+    onMoveStage,
+    onRequestTransition,
 }: {
     stage: string;
+    stageObj?: PipelineStage;
+    stageIndex: number;
+    totalStages: number;
     deals: Deal[];
     loading: boolean;
+    allStages: string[];
     onStageChange: (dealId: string, newStage: string) => void;
     onAddDeal: (stage: string) => void;
+    onInspectStage?: (stage: PipelineStage) => void;
+    onEditStage?: (stage: PipelineStage) => void;
+    onDeleteStage?: (stageId: string) => void;
+    onMoveStage?: (index: number, direction: "left" | "right") => void;
+    onRequestTransition?: (deal: Deal, targetStage: string) => void;
 }) {
     const cfg = getStageConfig(stage);
 
@@ -358,22 +524,45 @@ function KanbanColumn({
 
     return (
         <div
-            className={`flex-shrink-0 w-[220px] flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-[3px] ${cfg.borderColor}`}
+            className={`flex-shrink-0 w-[240px] flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-[3px] ${cfg.borderColor}`}
         >
             {/* Column header */}
             <div className={`px-4 py-3 ${cfg.headerBg} border-b border-gray-100`}>
                 <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
                         <StageIcon stage={stage} size={14} />
-                        <h3 className={`text-[13px] font-bold ${cfg.color}`}>{cfg.label}</h3>
+                        <h3 className={`text-[13px] font-bold truncate ${cfg.color}`}>{stageObj?.name || cfg.label || stage}</h3>
                     </div>
-                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${cfg.badgeBg} ${cfg.badgeText}`}>
+                    <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${cfg.badgeBg} ${cfg.badgeText}`}>
                         {deals.length}
                     </span>
                 </div>
-                <p className={`text-[13px] font-bold ${cfg.color}`}>
-                    {formatAmountFull(columnTotal)}
-                </p>
+
+                <div className="flex items-center justify-between mt-1">
+                    <p className={`text-[13px] font-bold ${cfg.color}`}>
+                        {formatAmountFull(columnTotal)}
+                    </p>
+
+                    {/* Stage Header Actions (Inspect, Edit, Delete, Reorder) */}
+                    {stageObj && onInspectStage && onEditStage && onDeleteStage && onMoveStage && (
+                        <StageHeaderActions
+                            stage={stageObj}
+                            index={stageIndex}
+                            totalStages={totalStages}
+                            onInspect={onInspectStage}
+                            onEdit={onEditStage}
+                            onDelete={onDeleteStage}
+                            onMove={onMoveStage}
+                        />
+                    )}
+                </div>
+
+                {/* Required Fields Badge if specified by BE-2 */}
+                {stageObj?.requiredFields && stageObj.requiredFields.length > 0 && (
+                    <div className="text-[10px] text-gray-500 mt-1 truncate">
+                        <span className="font-semibold text-gray-700">{stageObj.requiredFields.length}</span> required field(s)
+                    </div>
+                )}
             </div>
 
             {/* Cards */}
@@ -386,7 +575,13 @@ function KanbanColumn({
                     </div>
                 ) : (
                     deals.map((deal) => (
-                        <DealCard key={deal.dealId} deal={deal} onStageChange={onStageChange} />
+                        <DealCard
+                            key={deal.dealId}
+                            deal={deal}
+                            allStages={allStages}
+                            onStageChange={onStageChange}
+                            onRequestTransition={onRequestTransition}
+                        />
                     ))
                 )}
             </div>
@@ -465,15 +660,84 @@ export function DealsUI({
     onOpenCreate,
     onCloseCreate,
     onCreateDeal,
+    // FE-2 Pipeline & Stage integration props
+    pipelines = [],
+    selectedPipeline = null,
+    pipelinesLoading = false,
+    pipelinesError = null,
+    stages = [],
+    onSelectPipeline,
+    onCreatePipeline,
+    onUpdatePipeline,
+    onDeletePipeline,
+    onCreateStage,
+    onUpdateStage,
+    onDeleteStage,
+    onReorderStages,
+    onRetryPipelines,
+    onRefreshWorkspace,
 }: DealsUIProps) {
     const handleStageChange = onStageChange ?? (() => {});
     const [activeView, setActiveView] = useState<"pipeline" | "table">("pipeline");
+    const [transitioningDeal, setTransitioningDeal] = useState<{
+        deal: Deal;
+        targetStage: string;
+        targetStageConfig?: PipelineStage | null;
+    } | null>(null);
+
+    const [isOrgRisksOpen, setIsOrgRisksOpen] = useState(false);
+    const [isDetectorConfigOpen, setIsDetectorConfigOpen] = useState(false);
+
+    const [inspectStageModal, setInspectStageModal] = useState<PipelineStage | null>(null);
+    const [editStageModal, setEditStageModal] = useState<PipelineStage | null>(null);
+    const [editStageName, setEditStageName] = useState("");
+    const [editStageDesc, setEditStageDesc] = useState("");
+    const [editStageReqFields, setEditStageReqFields] = useState("");
+    const [editStageSaving, setEditStageSaving] = useState(false);
+    const [editStageError, setEditStageError] = useState<string | null>(null);
+
+    const handleOpenEditStage = (stg: PipelineStage) => {
+        setEditStageModal(stg);
+        setEditStageName(stg.name || "");
+        setEditStageDesc(stg.description || "");
+        setEditStageReqFields((stg.requiredFields || []).join(", "));
+        setEditStageError(null);
+    };
+
+    const handleSaveEditStage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editStageModal || !onUpdateStage || !editStageName.trim()) return;
+        setEditStageSaving(true);
+        setEditStageError(null);
+        try {
+            const reqFields = editStageReqFields
+                .split(",")
+                .map((s) => s.trim())
+                .filter(Boolean);
+            const ok = await onUpdateStage(editStageModal.id, {
+                name: editStageName.trim(),
+                description: editStageDesc.trim() || undefined,
+                requiredFields: reqFields.length ? reqFields : undefined,
+            });
+            if (ok) {
+                setEditStageModal(null);
+                if (onRefreshWorkspace) onRefreshWorkspace();
+            }
+        } catch (err: any) {
+            setEditStageError(err.response?.data?.message || err.message || "Failed to update stage");
+        } finally {
+            setEditStageSaving(false);
+        }
+    };
 
     const allStages = useMemo(() => {
+        if (stages && stages.length > 0) {
+            return stages.map((s) => s.name);
+        }
         const defaultSet = new Set<string>(DEFAULT_DEAL_STAGES);
         const extra = Array.from(dealsByStage.keys()).filter((s) => !defaultSet.has(s));
         return [...DEFAULT_DEAL_STAGES, ...extra] as string[];
-    }, [dealsByStage]);
+    }, [stages, dealsByStage]);
 
     const stageFilterOptions = useMemo(() => ["All Stages", ...allStages], [allStages]);
 
@@ -482,9 +746,39 @@ export function DealsUI({
 
             {/* ── Page header ── */}
             <div className="flex items-start justify-between flex-wrap gap-4">
-                <div>
+                <div className="space-y-1">
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">Deals / Pipeline</h1>
-                    <p className="text-[13px] text-gray-400 mt-0.5">Track, manage and grow your sales pipeline.</p>
+                    <p className="text-[13px] text-gray-400">Track, manage and grow your sales pipeline.</p>
+                    
+                    {/* Pipeline Selector & Stage Manager Controls */}
+                    {onSelectPipeline && onCreatePipeline && onUpdatePipeline && onDeletePipeline && (
+                        <div className="pt-2 flex items-center gap-2.5 flex-wrap">
+                            <PipelineSelector
+                                pipelines={pipelines}
+                                selectedPipeline={selectedPipeline}
+                                loading={pipelinesLoading}
+                                error={pipelinesError}
+                                onSelectPipeline={onSelectPipeline}
+                                onCreatePipeline={onCreatePipeline}
+                                onUpdatePipeline={onUpdatePipeline}
+                                onDeletePipeline={onDeletePipeline}
+                                onRetry={onRetryPipelines ?? (() => {})}
+                            />
+
+                            {onCreateStage && onUpdateStage && onDeleteStage && onReorderStages && (
+                                <PipelineStageManager
+                                    pipelineId={selectedPipeline?.id}
+                                    stages={stages}
+                                    loading={loading}
+                                    onCreateStage={onCreateStage}
+                                    onUpdateStage={onUpdateStage}
+                                    onDeleteStage={onDeleteStage}
+                                    onReorderStages={onReorderStages}
+                                    onRefresh={onRefreshWorkspace ?? (() => {})}
+                                />
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 <div className="flex items-center gap-2.5 flex-wrap">
@@ -516,9 +810,29 @@ export function DealsUI({
                         </svg>
                     </div>
 
+                    {/* Risk Radar — Org-wide risks (GET /deals/risks/all) */}
+                    <button
+                        onClick={() => setIsOrgRisksOpen(true)}
+                        className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-[13px] font-semibold shadow-sm transition-all hover:bg-gray-50"
+                        title="Organization-wide Risk Radar (GET /deals/risks/all)"
+                    >
+                        <ShieldAlert size={14} className="text-red-500" />
+                        <span>Risk Radar</span>
+                    </button>
+
+                    {/* Detector Configurations (GET /deals/risk-detectors/config) */}
+                    <button
+                        onClick={() => setIsDetectorConfigOpen(true)}
+                        className="flex items-center gap-1.5 h-9 px-3 rounded-xl bg-white border border-gray-200 hover:border-gray-300 text-gray-700 text-[13px] font-semibold shadow-sm transition-all hover:bg-gray-50"
+                        title="Risk Detector Configurations (GET /deals/risk-detectors/config)"
+                    >
+                        <Sliders size={14} className="text-gray-500" />
+                        <span>Detectors</span>
+                    </button>
+
                     {/* New Deal — primary action */}
                     <button
-                        onClick={() => onOpenCreate()}
+                        onClick={() => onOpenCreate(stages?.[0]?.name || allStages[0] || "NEW")}
                         className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
                     >
                         <Plus size={14} />
@@ -576,16 +890,58 @@ export function DealsUI({
             {/* ── Pipeline / Kanban board ── */}
             {activeView === "pipeline" && (
                 <div className="flex gap-3 overflow-x-auto pb-4 flex-1">
-                    {allStages.map((stage) => (
-                        <KanbanColumn
-                            key={stage}
-                            stage={stage}
-                            deals={dealsByStage.get(stage) ?? []}
-                            loading={loading}
-                            onStageChange={handleStageChange}
-                            onAddDeal={onOpenCreate}
-                        />
-                    ))}
+                    {allStages.map((stageName, idx) => {
+                        const stageObj = stages.find(
+                            (s) =>
+                                s.name.toUpperCase() === stageName.toUpperCase() ||
+                                s.id === stageName
+                        );
+                        return (
+                            <KanbanColumn
+                                key={stageName}
+                                stage={stageName}
+                                stageObj={stageObj}
+                                stageIndex={idx}
+                                totalStages={allStages.length}
+                                deals={
+                                    dealsByStage.get(stageName.toUpperCase()) ??
+                                    dealsByStage.get(stageName) ??
+                                    []
+                                }
+                                loading={loading}
+                                allStages={allStages}
+                                onStageChange={handleStageChange}
+                                onAddDeal={onOpenCreate}
+                                onInspectStage={(stg) => setInspectStageModal(stg)}
+                                onEditStage={onUpdateStage ? (stg) => handleOpenEditStage(stg) : undefined}
+                                onDeleteStage={onDeleteStage}
+                                onMoveStage={async (index, direction) => {
+                                    if (!onReorderStages) return;
+                                    const targetIdx = direction === "left" ? index - 1 : index + 1;
+                                    if (targetIdx < 0 || targetIdx >= allStages.length) return;
+                                    const reordered = [...allStages];
+                                    const [moved] = reordered.splice(index, 1);
+                                    reordered.splice(targetIdx, 0, moved);
+                                    const stageOrders = reordered.map((name, i) => {
+                                        const s = stages.find((st) => st.name === name);
+                                        return { stageId: s?.id || name, order: i + 1 };
+                                    });
+                                    await onReorderStages(stageOrders);
+                                }}
+                                onRequestTransition={(deal, target) => {
+                                    const targetObj =
+                                        stages.find(
+                                            (s) => s.name.toUpperCase() === target.toUpperCase()
+                                        ) ?? null;
+                                    setTransitioningDeal({
+                                        deal,
+                                        targetStage: target,
+                                        targetStageConfig: targetObj,
+                                    });
+                                }}
+                            />
+                        );
+                    })}
                 </div>
             )}
 
@@ -594,8 +950,20 @@ export function DealsUI({
                 <DealsTable
                     deals={deals}
                     loading={loading}
+                    allStages={allStages}
                     onStageChange={handleStageChange}
                     onOpenCreate={onOpenCreate}
+                    onRequestTransition={(deal, target) => {
+                        const targetObj =
+                            stages.find(
+                                (s) => s.name.toUpperCase() === target.toUpperCase()
+                            ) ?? null;
+                        setTransitioningDeal({
+                            deal,
+                            targetStage: target,
+                            targetStageConfig: targetObj,
+                        });
+                    }}
                 />
             )}
 
@@ -603,12 +971,200 @@ export function DealsUI({
             {isCreateOpen && (
                 <CreateDealModal
                     defaultStage={defaultStage}
+                    stages={stages}
+                    pipelineId={selectedPipeline?.id}
+                    pipelineName={selectedPipeline?.name}
                     creating={creating}
                     createError={createError}
                     onClose={onCloseCreate}
                     onSave={onCreateDeal}
                 />
             )}
+
+            {/* ── Stage Transition Modal (Backend validated) ── */}
+            {transitioningDeal && (
+                <StageTransitionModal
+                    deal={transitioningDeal.deal}
+                    targetStageName={transitioningDeal.targetStage}
+                    targetStageConfig={transitioningDeal.targetStageConfig}
+                    isOpen={true}
+                    onClose={() => setTransitioningDeal(null)}
+                    onSuccess={(updated) => {
+                        handleStageChange(updated.dealId, updated.stage);
+                        if (onRefreshWorkspace) onRefreshWorkspace();
+                        setTransitioningDeal(null);
+                    }}
+                />
+            )}
+
+            {/* ── Column Header: Inspect Stage Criteria Modal ── */}
+            {inspectStageModal && (
+                <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150 max-h-[85vh] flex flex-col">
+                        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                                    <ShieldCheck size={16} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-900">Stage Rules: {inspectStageModal.name}</h3>
+                                    <p className="text-[11px] text-gray-400">Order #{inspectStageModal.order ?? 1} • {inspectStageModal.probability ?? 0}% Win Probability</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setInspectStageModal(null)}
+                                className="text-gray-400 hover:text-gray-600 text-sm font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                            <div>
+                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Required Fields</h4>
+                                {inspectStageModal.requiredFields && inspectStageModal.requiredFields.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {inspectStageModal.requiredFields.map((f) => (
+                                            <span key={f} className="px-2.5 py-1 rounded-lg bg-gray-100 text-gray-800 text-xs font-mono font-medium">
+                                                {f}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-gray-400">No required fields configured.</p>
+                                )}
+                            </div>
+                            <div>
+                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Entry Criteria</h4>
+                                {inspectStageModal.entryCriteria && inspectStageModal.entryCriteria.length > 0 ? (
+                                    <pre className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-mono text-gray-700 overflow-x-auto">
+                                        {JSON.stringify(inspectStageModal.entryCriteria, null, 2)}
+                                    </pre>
+                                ) : (
+                                    <p className="text-xs text-gray-400">No entry criteria configured.</p>
+                                )}
+                            </div>
+                            <div>
+                                <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2">Validation Rules</h4>
+                                {inspectStageModal.validationRules && inspectStageModal.validationRules.length > 0 ? (
+                                    <pre className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-mono text-gray-700 overflow-x-auto">
+                                        {JSON.stringify(inspectStageModal.validationRules, null, 2)}
+                                    </pre>
+                                ) : (
+                                    <p className="text-xs text-gray-400">No validation rules configured.</p>
+                                )}
+                            </div>
+                        </div>
+                        <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end">
+                            <button
+                                onClick={() => setInspectStageModal(null)}
+                                className="px-4 py-2 rounded-xl bg-gray-900 text-xs font-semibold text-white hover:bg-gray-800 transition-colors"
+                            >
+                                Close
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Column Header: Edit Stage Modal ── */}
+            {editStageModal && (
+                <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150">
+                        <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+                            <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                                    <Pencil size={16} />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-900">Edit Stage: {editStageModal.name}</h3>
+                                    <p className="text-[11px] text-gray-400">Update configuration & required fields</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setEditStageModal(null)}
+                                className="text-gray-400 hover:text-gray-600 text-sm font-bold"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveEditStage} className="p-6 space-y-4">
+                            {editStageError && (
+                                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-xs text-red-600 font-medium">
+                                    {editStageError}
+                                </div>
+                            )}
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                    Stage Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    required
+                                    value={editStageName}
+                                    onChange={(e) => setEditStageName(e.target.value)}
+                                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                    Description
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editStageDesc}
+                                    onChange={(e) => setEditStageDesc(e.target.value)}
+                                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                                    Required Fields (comma-separated)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={editStageReqFields}
+                                    onChange={(e) => setEditStageReqFields(e.target.value)}
+                                    placeholder="amount, contactId, closeDate"
+                                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-[11px]"
+                                />
+                            </div>
+                            <div className="pt-3 border-t border-gray-100 flex items-center justify-end gap-2.5">
+                                <button
+                                    type="button"
+                                    onClick={() => setEditStageModal(null)}
+                                    disabled={editStageSaving}
+                                    className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={editStageSaving || !editStageName.trim()}
+                                    className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-blue-600 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm shadow-blue-200"
+                                >
+                                    {editStageSaving && <Loader2 size={14} className="animate-spin" />}
+                                    Save Changes
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Organization Risks Modal (GET /deals/risks/all, GET /deals/risks/:riskId, PATCH /deals/risks/:riskId/resolve) ── */}
+            <OrgRisksModal
+                isOpen={isOrgRisksOpen}
+                onClose={() => setIsOrgRisksOpen(false)}
+                onRiskResolved={() => {
+                    if (onRefreshWorkspace) onRefreshWorkspace();
+                }}
+            />
+
+            {/* ── Risk Detector Configuration Modal (GET /deals/risk-detectors/config, PUT /deals/risk-detectors/config/:detector) ── */}
+            <RiskDetectorConfigModal
+                isOpen={isDetectorConfigOpen}
+                onClose={() => setIsDetectorConfigOpen(false)}
+            />
         </div>
     );
 }
@@ -618,13 +1174,17 @@ export function DealsUI({
 function DealsTable({
     deals,
     loading,
+    allStages,
     onStageChange,
     onOpenCreate,
+    onRequestTransition,
 }: {
     deals: Deal[];
     loading: boolean;
+    allStages?: string[];
     onStageChange: (dealId: string, newStage: string) => void;
     onOpenCreate: (stage?: string) => void;
+    onRequestTransition?: (deal: Deal, targetStage: string) => void;
 }) {
     // Local sort state
     const [sortCol, setSortCol]     = useState<string | null>(null);

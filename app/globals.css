@@ -1152,4 +1152,34 @@ a {
 
 .workspace-drag-handle:active {
   cursor: grabbing;
-}
+}
+
+/* ── FE-2 Pipeline & Deal Workspace Utilities ────────────────────────────── */
+.deal-fill-bar {
+  width: var(--fill, 0%);
+}
+
+.deal-health-healthy {
+  background-color: var(--color-success-light);
+  color: var(--color-success);
+  border-color: var(--color-success);
+}
+
+.deal-health-warning {
+  background-color: var(--color-warning-light);
+  color: var(--color-warning);
+  border-color: var(--color-warning);
+}
+
+.deal-health-critical {
+  background-color: var(--color-error-light);
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+.deal-stage-chip {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+}
+
