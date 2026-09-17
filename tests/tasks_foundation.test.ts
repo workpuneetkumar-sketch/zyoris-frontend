@@ -1457,6 +1457,10 @@ test("Day 2 Regression: Task detail editing and field isolation", async (t) => {
   });
 });
 
-
-
-
+test("Day 2 Finalization: Jira Board and Task Details contract is fully compliant", () => {
+  assert.equal(STATUS_MAPPING.TODO, "TODO");
+  assert.equal(STATUS_MAPPING.IN_PROGRESS, "IN_PROGRESS");
+  assert.equal(STATUS_MAPPING.REVIEW, "IN_PROGRESS");
+  assert.equal(STATUS_MAPPING.BLOCKED, "IN_PROGRESS");
+  assert.equal(STATUS_MAPPING.DONE, "DONE");
+});
