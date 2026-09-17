@@ -670,3 +670,49 @@ export async function createDatabaseView(
     throw error;
   }
 }
+
+/**
+ * Preview import to automatically infer schema types.
+ * POST /workspace/databases/:databaseId/import/preview
+ * Reads first incoming rows and returns inferred types (e.g. { Name: "TEXT", Budget: "NUMBER", Date: "DATE" })
+ */
+export async function previewDatabaseImport(
+  databaseId: string,
+  sampleRows: Record<string, any>[]
+): Promise<Record<string, string>> {
+  try {
+    const res = await api.post(
+      `/workspace/databases/${databaseId}/import/preview`,
+      { data: sampleRows }
+    );
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error) {
+    console.error(`Error previewing import for database ${databaseId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Commit bulk import of schema and rows to database.
+ * POST /workspace/databases/:databaseId/import/commit
+ * Bulk creates database properties and batch inserts rows.
+ */
+export async function commitDatabaseImport(
+  databaseId: string,
+  schema: Record<string, string>,
+  rows: Record<string, any>[]
+): Promise<{ success: boolean; rowsInserted: number }> {
+  try {
+    const res = await api.post(
+      `/workspace/databases/${databaseId}/import/commit`,
+      { schema, rows }
+    );
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error) {
+    console.error(`Error committing import for database ${databaseId}:`, error);
+    throw error;
+  }
+}
+
