@@ -674,9 +674,9 @@ export async function updateTask(id: string, data: UpdateTaskPayload): Promise<T
 // ── DELETE task ───────────────────────────────────────────────────────────────
 // DELETE /tasks/:id
 export async function deleteTask(id: string): Promise<{ success: boolean; message?: string }> {
+    const res = await api.delete<any>(`/tasks/${id}`);
     clearTaskSubstatus(id);
     clearTaskLabels(id);
-    const res = await api.delete<any>(`/tasks/${id}`);
     return res.data;
 }
 
@@ -742,7 +742,42 @@ export function normaliseBulkUpdateResponse(raw: unknown): BulkUpdateResponse {
 }
 
 // ── POST /workspace/tasks/bulk-update ─────────────────────────────────────────
-// Bulk update 1–100 tasks in one single request with per-task reporting
+// Internal helper to post a single chunk (max 20 items per backend OpenAPI schema)
+async function postBulkUpdateChunk(
+    chunkIds: string[],
+    updateBody: Record<string, unknown>,
+    workspaceId?: string
+): Promise<BulkUpdateResponse> {
+    const requestData: Record<string, unknown> = {
+        taskIds: chunkIds,
+        update: updateBody,
+    };
+    if (workspaceId) {
+        requestData.workspaceId = workspaceId;
+    }
+
+    try {
+        const res = await api.post("/workspace/tasks/bulk-update", requestData);
+        return normaliseBulkUpdateResponse(res.data);
+    } catch (err) {
+        if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 405)) {
+            try {
+                const res = await api.post("/tasks/bulk-update", requestData);
+                return normaliseBulkUpdateResponse(res.data);
+            } catch (fallbackErr) {
+                if (axios.isAxiosError(fallbackErr) && (fallbackErr.response?.status === 404 || fallbackErr.response?.status === 405)) {
+                    const res = await api.post("/api/v1/tasks/bulk-update", requestData);
+                    return normaliseBulkUpdateResponse(res.data);
+                }
+                throw fallbackErr;
+            }
+        }
+        throw err;
+    }
+}
+
+// Bulk update 1–100 tasks in one unified interface with per-task reporting
+// Backend OpenAPI validates taskIds array has maxItems: 20, so large batches are auto-chunked
 export async function bulkUpdateTasks(payload: BulkUpdatePayload): Promise<BulkUpdateResponse> {
     const updateBody: Record<string, unknown> = {};
     if (payload.update.status) {
@@ -759,16 +794,79 @@ export async function bulkUpdateTasks(payload: BulkUpdatePayload): Promise<BulkU
         updateBody.dueDate = toISODateTime(payload.update.dueDate);
     }
 
-    const requestData: Record<string, unknown> = {
-        taskIds: payload.taskIds,
-        update: updateBody,
-    };
-    if (payload.workspaceId) {
-        requestData.workspaceId = payload.workspaceId;
+    // If batch fits within OpenAPI schema limit (<= 20 tasks), send single request
+    if (payload.taskIds.length <= 20) {
+        return postBulkUpdateChunk(payload.taskIds, updateBody, payload.workspaceId);
     }
 
-    const res = await api.post("/workspace/tasks/bulk-update", requestData);
-    return normaliseBulkUpdateResponse(res.data);
+    // Otherwise chunk into batches of 20 and aggregate results
+    const CHUNK_SIZE = 20;
+    const chunks: string[][] = [];
+    for (let i = 0; i < payload.taskIds.length; i += CHUNK_SIZE) {
+        chunks.push(payload.taskIds.slice(i, i + CHUNK_SIZE));
+    }
+
+    const chunkPromises = chunks.map((chunk) =>
+        postBulkUpdateChunk(chunk, updateBody, payload.workspaceId).catch((err) => {
+            const errorMsg = axios.isAxiosError(err)
+                ? (err.response?.data?.message || err.response?.data?.error || err.message)
+                : (err instanceof Error ? err.message : "Bulk update failed");
+            const failedResults: BulkUpdateTaskResult[] = chunk.map((id) => ({
+                taskId: id,
+                success: false,
+                error: errorMsg,
+            }));
+            const chunkData: BulkUpdateData = {
+                totalRequested: chunk.length,
+                totalUpdated: 0,
+                totalFailed: chunk.length,
+                results: failedResults,
+            };
+            return {
+                success: false,
+                totalRequested: chunk.length,
+                totalUpdated: 0,
+                totalFailed: chunk.length,
+                results: failedResults,
+                data: chunkData,
+                message: errorMsg,
+            } as BulkUpdateResponse;
+        })
+    );
+
+    const responses = await Promise.all(chunkPromises);
+
+    const allResults: BulkUpdateTaskResult[] = [];
+    let totalRequested = 0;
+    let totalUpdated = 0;
+    let totalFailed = 0;
+
+    for (const r of responses) {
+        totalRequested += r.totalRequested;
+        totalUpdated += r.totalUpdated;
+        totalFailed += r.totalFailed;
+        allResults.push(...r.results);
+    }
+
+    const combinedData: BulkUpdateData = {
+        totalRequested,
+        totalUpdated,
+        totalFailed,
+        results: allResults,
+    };
+
+    return {
+        success: totalFailed === 0,
+        totalRequested,
+        totalUpdated,
+        totalFailed,
+        results: allResults,
+        data: combinedData,
+        message:
+            totalFailed > 0
+                ? `Updated ${totalUpdated} of ${totalRequested} tasks (${totalFailed} failed)`
+                : `Successfully updated ${totalUpdated} task${totalUpdated === 1 ? "" : "s"}`,
+    };
 }
 
 // ── Sub-resources: Comments ───────────────────────────────────────────────────

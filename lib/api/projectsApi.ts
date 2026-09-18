@@ -1,6 +1,7 @@
 "use client";
 
 import api from "@/lib/api/api";
+import axios from "axios";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -191,9 +192,13 @@ export async function getProjectById(id: string): Promise<Project> {
 
 export async function createProject(data: CreateProjectPayload): Promise<Project> {
   try {
-    const res = await api.post("/projects/create", data);
+    const res = await api.post("/projects", data);
     return res.data?.data || res.data;
   } catch (error: any) {
+    if (axios.isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 405)) {
+      const res = await api.post("/projects/create", data);
+      return res.data?.data || res.data;
+    }
     throw error;
   }
 }
