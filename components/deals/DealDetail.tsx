@@ -34,6 +34,8 @@ import { DEFAULT_DEAL_STAGES } from "@/types/deals";
 import { DealHealthCard } from "./DealHealthCard";
 import { DealRiskSection } from "./DealRiskSection";
 import { StageTransitionModal } from "./StageTransitionModal";
+import { DealWinProbabilityCard } from "./DealWinProbabilityCard";
+import { DealForecastDetailsCard } from "./DealForecastDetailsCard";
 
 interface DealDetailProps {
   deal: Deal;
@@ -328,6 +330,12 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
               if (onUpdate) await onUpdate();
             }}
           />
+
+          {/* Deal Win Probability & Historical Snapshots (FE-2 Day 3) */}
+          <DealWinProbabilityCard dealId={deal.dealId} />
+
+          {/* Deal Forecast Details, Aging, Stage Velocity & Slippage (FE-2 Day 4) */}
+          <DealForecastDetailsCard dealId={deal.dealId} />
 
           {/* Tabs Section: Overview, Commercials, Timeline, Notes */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
