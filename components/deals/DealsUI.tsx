@@ -23,7 +23,9 @@ import {
     Sliders,
     Pencil,
     Loader2,
+    BarChart3,
 } from "lucide-react";
+import { ForecastDashboard } from "./ForecastDashboard";
 import { Deal, DealsFilters, DEFAULT_DEAL_STAGES } from "@/types/deals";
 import { getStageConfig } from "@/lib/dealConfig";
 import { CreateDealPayload } from "@/lib/api/dealsApi";
@@ -678,7 +680,17 @@ export function DealsUI({
     onRefreshWorkspace,
 }: DealsUIProps) {
     const handleStageChange = onStageChange ?? (() => {});
-    const [activeView, setActiveView] = useState<"pipeline" | "table">("pipeline");
+    const [activeView, setActiveView] = useState<"pipeline" | "table" | "forecast">("pipeline");
+
+    useEffect(() => {
+        if (typeof window !== "undefined") {
+            const urlParams = new URLSearchParams(window.location.search);
+            const viewParam = urlParams.get("view") || urlParams.get("tab");
+            if (viewParam === "forecast") setActiveView("forecast");
+            else if (viewParam === "table") setActiveView("table");
+        }
+    }, []);
+
     const [transitioningDeal, setTransitioningDeal] = useState<{
         deal: Deal;
         targetStage: string;
@@ -841,8 +853,10 @@ export function DealsUI({
                 </div>
             </div>
 
-            {/* ── Stage stat cards ── */}
-            <StageStatCards dealsByStage={dealsByStage} allStages={allStages} />
+            {/* ── Stage stat cards (hidden in forecast dashboard view) ── */}
+            {activeView !== "forecast" && (
+                <StageStatCards dealsByStage={dealsByStage} allStages={allStages} />
+            )}
 
             {/* ── View tabs + search bar ── */}
             <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -869,6 +883,17 @@ export function DealsUI({
                     >
                         <Table2 size={14} />
                         Table View
+                    </button>
+                    <button
+                        onClick={() => setActiveView("forecast")}
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${
+                            activeView === "forecast"
+                                ? "bg-white text-gray-900 shadow-sm"
+                                : "text-gray-500 hover:text-gray-700"
+                        }`}
+                    >
+                        <BarChart3 size={14} />
+                        Forecast Dashboard
                     </button>
                 </div>
 
@@ -965,6 +990,11 @@ export function DealsUI({
                         });
                     }}
                 />
+            )}
+
+            {/* ── Forecast Dashboard view (FE-2 Day 4) ── */}
+            {activeView === "forecast" && (
+                <ForecastDashboard initialDeals={deals} />
             )}
 
             {/* ── Create Deal Modal ── */}
