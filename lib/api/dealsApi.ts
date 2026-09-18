@@ -38,10 +38,9 @@ interface BackendDeal {
 // ── Map BackendDeal → frontend Deal ───────────────────────────────────────
 
 function mapDeal(raw: BackendDeal): Deal {
-  console.log(`[mapDeal] Raw backend deal:`, raw);
   const mappedStage = raw.stage ? raw.stage.toUpperCase() : "NEW";
-  console.log(`[mapDeal] Mapped stage:`, mappedStage);
   return {
+    ...raw,
     dealId: raw.id,
     externalId: raw.externalId ?? null,
     name: raw.name,
@@ -56,6 +55,13 @@ function mapDeal(raw: BackendDeal): Deal {
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     leadId: raw.leadId ?? undefined,
+    pipelineId: (raw.pipelineId as string) ?? undefined,
+    healthScore: typeof raw.healthScore === "number" ? raw.healthScore : undefined,
+    healthStatus: (raw.healthStatus as string) ?? undefined,
+    riskLevel: (raw.riskLevel as string) ?? undefined,
+    forecastCategory: (raw.forecastCategory as string) ?? undefined,
+    contactId: (raw.contactId as string) ?? null,
+    companyId: (raw.companyId as string) ?? null,
   };
 }
 
@@ -112,6 +118,7 @@ export interface CreateDealPayload {
     assignedToId?: string | null;
     contactId?: string | null;
     companyId?: string | null;
+    pipelineId?: string | null;
 }
 
 export async function createDeal(data: CreateDealPayload): Promise<Deal> {
@@ -123,6 +130,7 @@ export async function createDeal(data: CreateDealPayload): Promise<Deal> {
     if (data.assignedToId?.trim()) payload.assignedToId = data.assignedToId.trim();
     if (data.contactId?.trim())    payload.contactId    = data.contactId.trim();
     if (data.companyId?.trim())    payload.companyId    = data.companyId.trim();
+    if (data.pipelineId?.trim())   payload.pipelineId   = data.pipelineId.trim();
 
     const res = await api.post<BackendDeal>("/api/deals/create", payload);
     return mapDeal(res.data);
