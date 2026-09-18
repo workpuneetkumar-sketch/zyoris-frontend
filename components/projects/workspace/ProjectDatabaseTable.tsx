@@ -41,12 +41,16 @@ import {
   ChevronDown,
   MoreHorizontal,
   FolderOpen,
+  Download,
 } from "lucide-react";
 import { DatabaseImportWizardModal } from "./DatabaseImportWizardModal";
+import { ExportModal } from "@/components/workspace/ExportModal";
 
 interface ProjectDatabaseTableProps {
   database: WorkspaceDatabase;
   onRefresh?: () => void;
+  projectId?: string;
+  projectName?: string;
 }
 
 export interface AdvancedFilterRule {
@@ -86,6 +90,8 @@ const PROPERTY_TYPE_CONFIG: Record<
 export const ProjectDatabaseTable: React.FC<ProjectDatabaseTableProps> = ({
   database,
   onRefresh,
+  projectId,
+  projectName,
 }) => {
   const [properties, setProperties] = useState<WorkspaceDatabaseProperty[]>(
     database.properties || [
@@ -120,6 +126,9 @@ export const ProjectDatabaseTable: React.FC<ProjectDatabaseTableProps> = ({
 
   // Import Wizard Modal (Day 4 Feature)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+
+  // Day 5: Database Export Modal
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // Synchronize when database prop changes
   React.useEffect(() => {
@@ -619,6 +628,15 @@ export const ProjectDatabaseTable: React.FC<ProjectDatabaseTableProps> = ({
             <span>Import (CSV/XLSX)</span>
           </button>
 
+          {/* Day 5: Export Database Controls */}
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold transition"
+          >
+            <Download className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Export Data</span>
+          </button>
+
           <button
             onClick={() => setIsAddPropModalOpen(true)}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition"
@@ -1111,6 +1129,22 @@ export const ProjectDatabaseTable: React.FC<ProjectDatabaseTableProps> = ({
           if (onRefresh) onRefresh();
         }}
       />
+
+      {/* ── Day 5: Database Export Modal ────────────────────────────────── */}
+      {isExportModalOpen && (
+        <ExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          entityType="PROJECT"
+          entityId={projectId || ""}
+          entityName={database.name || `${projectName || "Project"} Database`}
+          title="Export Database Data"
+          defaultFormat="CSV"
+          databaseId={database.id}
+          databaseRows={rows}
+          databaseProperties={properties}
+        />
+      )}
     </div>
   );
 };

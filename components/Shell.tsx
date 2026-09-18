@@ -155,8 +155,14 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
       {
-        href: "/tasks",
-        label: "Tasks",
+        href: "/tasks?tab=my",
+        label: "My Tasks",
+        icon: CheckSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
+      },
+      {
+        href: "/tasks?tab=all",
+        label: "Tasks & Board",
         icon: ListTodo,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
