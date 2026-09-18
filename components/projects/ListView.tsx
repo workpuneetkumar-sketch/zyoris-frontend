@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import {
   CalendarDays,
   Users,
@@ -8,6 +9,7 @@ import {
   Edit,
   ListChecks,
   FolderKanban,
+  LayoutDashboard,
 } from "lucide-react";
 import { Project } from "@/lib/api/projectsApi";
 import { StatusBadge } from "@/components/projects/SharedComponents";
@@ -62,7 +64,12 @@ export default function ListView({
                 className="hover:bg-gray-50/50 transition-colors"
               >
                 <td className="px-5 py-4">
-                  <p className="font-semibold text-gray-900">{project.name}</p>
+                  <Link
+                    href={`/projects/${project.id}`}
+                    className="font-semibold text-gray-900 hover:text-indigo-600 transition-colors block"
+                  >
+                    {project.name}
+                  </Link>
                   <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">
                     {project.description || "—"}
                   </p>
@@ -83,6 +90,13 @@ export default function ListView({
                 </td>
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-2">
+                    <Link
+                      href={`/projects/${project.id}`}
+                      className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                      title="Open Workspace"
+                    >
+                      <LayoutDashboard size={16} />
+                    </Link>
                     <button
                       onClick={() => onTeam(project)}
                       className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"

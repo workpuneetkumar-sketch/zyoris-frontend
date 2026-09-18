@@ -21,11 +21,99 @@ export interface Milestone {
   updatedAt: string;
 }
 
+export type ProjectMemberRole = "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+
+export interface ProjectMemberUser {
+  id: string;
+  name: string;
+  email?: string;
+  avatarUrl?: string | null;
+}
+
 export interface ProjectMember {
   id: string;           // membership id
   projectId: string;
   userId: string;       // user id
-  role?: "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+  role?: ProjectMemberRole;
+  createdAt?: string;
+  updatedAt?: string;
+  user?: ProjectMemberUser;
+}
+
+export interface ProjectMemberWithUser extends ProjectMember {
+  role?: ProjectMemberRole;
+}
+
+export interface ProjectSummaryCounts {
+  tasks: number;
+  pages: number;
+  files: number;
+  members: number;
+  milestones: number;
+}
+
+export interface ProjectTask {
+  id: string;
+  title: string;
+  description?: string | null;
+  status: "TODO" | "IN_PROGRESS" | "DONE";
+  priority: "LOW" | "MEDIUM" | "HIGH";
+  projectId: string;
+  organizationId?: string;
+  createdById?: string;
+  assignedToId?: string | null;
+  assignedTo?: ProjectMemberUser | null;
+  dueDate?: string | null;
+  startDate?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectTaskPayload {
+  title: string;
+  description?: string;
+  assignedToId?: string;
+  dueDate?: string;
+  priority?: "LOW" | "MEDIUM" | "HIGH";
+  status?: "TODO" | "IN_PROGRESS" | "DONE";
+}
+
+export interface ProjectPage {
+  id: string;
+  title: string;
+  icon?: string | null;
+  coverImage?: string | null;
+  parentId?: string | null;
+  projectId: string;
+  organizationId?: string;
+  createdById?: string;
+  isArchived?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateProjectPagePayload {
+  title: string;
+  icon?: string;
+  coverImage?: string;
+  parentId?: string;
+}
+
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  organizationId?: string;
+  originalName: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  url: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LinkProjectFilePayload {
+  fileUploadId: string;
 }
 
 export interface Project {
@@ -37,8 +125,15 @@ export interface Project {
   status: "PLANNING" | "ACTIVE" | "ON_HOLD" | "COMPLETED";
   startDate: string;
   endDate?: string;
+  targetDate?: string;
+  color?: string | null;
+  key?: string | null;
+  budget?: number | null;
+  currency?: string;
+  ownerId?: string;
   members?: ProjectMember[];   // only in GET /projects/{id}
   milestones?: Milestone[];    // only in GET /projects/{id}
+  counts?: ProjectSummaryCounts; // in GET /projects and GET /projects/{id}
   createdAt: string;
   updatedAt: string;
 }
@@ -139,6 +234,126 @@ export async function createMilestone(projectId: string, data: CreateMilestonePa
   }
 }
 
+// ── BE-2 Project Relations: Tasks ──────────────────────────────────────────
+
+export async function getProjectTasks(
+  projectId: string,
+  params?: {
+    status?: string;
+    priority?: string;
+    page?: number;
+    limit?: number;
+  }
+): Promise<ProjectTask[]> {
+  try {
+    const res = await api.get(`/projects/${projectId}/tasks`, { params });
+    const data = res.data?.data ?? res.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.tasks)) return data.tasks;
+    return [];
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to fetch project tasks");
+  }
+}
+
+export async function createProjectTask(
+  projectId: string,
+  payload: CreateProjectTaskPayload
+): Promise<ProjectTask> {
+  try {
+    const res = await api.post(`/projects/${projectId}/tasks`, payload);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to create project task");
+  }
+}
+
+// ── BE-2 Project Relations: Pages ──────────────────────────────────────────
+
+export async function getProjectPages(
+  projectId: string,
+  params?: {
+    parentId?: string;
+    page?: number;
+    limit?: number;
+  }
+): Promise<ProjectPage[]> {
+  try {
+    const res = await api.get(`/projects/${projectId}/pages`, { params });
+    const data = res.data?.data ?? res.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.pages)) return data.pages;
+    return [];
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to fetch project pages");
+  }
+}
+
+export async function createProjectPage(
+  projectId: string,
+  payload: CreateProjectPagePayload
+): Promise<ProjectPage> {
+  try {
+    const res = await api.post(`/projects/${projectId}/pages`, payload);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to create project page");
+  }
+}
+
+// ── BE-2 Project Relations: Files ──────────────────────────────────────────
+
+export async function getProjectFiles(
+  projectId: string,
+  params?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+  }
+): Promise<ProjectFile[]> {
+  try {
+    const res = await api.get(`/projects/${projectId}/files`, { params });
+    const data = res.data?.data ?? res.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.files)) return data.files;
+    return [];
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to fetch project files");
+  }
+}
+
+export async function linkProjectFile(
+  projectId: string,
+  payload: LinkProjectFilePayload
+): Promise<ProjectFile> {
+  try {
+    const res = await api.post(`/projects/${projectId}/files`, payload);
+    return res.data?.data || res.data;
+  } catch (error: any) {
+    throw new Error(error.response?.data?.message || "Failed to link project file");
+  }
+}
+
+// ── BE-2 Project Relations: Members ────────────────────────────────────────
+
+export async function getProjectMembers(projectId: string): Promise<ProjectMemberWithUser[]> {
+  try {
+    const res = await api.get(`/projects/${projectId}/members`);
+    const data = res.data?.data ?? res.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.members)) return data.members;
+    return [];
+  } catch (error: any) {
+    // Graceful fallback to project.members from GET /projects/:id
+    try {
+      const project = await getProjectById(projectId);
+      return (project.members || []) as any;
+    } catch {
+      return [];
+    }
+  }
+}
+
 export async function addProjectMember(projectId: string, data: AddMemberPayload): Promise<any> {
   try {
     const res = await api.post(`/projects/${projectId}/members`, data);
@@ -185,10 +400,4 @@ export async function getEmployees(): Promise<any[]> {
     console.error("Failed to fetch employees:", error);
     return [];
   }
-}
-
-// Fetches project details (including members) and returns the members array
-export async function getProjectMembers(projectId: string): Promise<ProjectMember[]> {
-  const project = await getProjectById(projectId);
-  return project.members || [];
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import {
   MoreHorizontal,
   CalendarDays,
@@ -13,6 +14,7 @@ import {
   ChevronDown,
   Paperclip,
   Download,
+  LayoutDashboard,
 } from "lucide-react";
 import { Project, UpdateProjectPayload } from "@/lib/api/projectsApi";
 
@@ -125,9 +127,13 @@ function ProjectCard({
               className="text-gray-300 mt-1 shrink-0 group-hover:text-indigo-500 transition-colors"
             />
             <div className="min-w-0">
-              <h4 className="text-sm font-semibold text-gray-900 truncate">
+              <Link
+                href={`/projects/${project.id}`}
+                className="text-sm font-semibold text-gray-900 hover:text-indigo-600 truncate block transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
                 {project.name}
-              </h4>
+              </Link>
               {project.description && (
                 <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">
                   {project.description}
@@ -155,6 +161,13 @@ function ProjectCard({
                   }}
                 />
                 <div className="absolute right-0 top-8 z-20 bg-white border border-gray-200 rounded-xl shadow-lg py-1 w-40">
+                  <Link
+                    href={`/projects/${project.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full px-3 py-2 text-left text-sm text-indigo-600 hover:bg-indigo-50 font-semibold flex items-center gap-2"
+                  >
+                    <LayoutDashboard size={14} /> Open Workspace
+                  </Link>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
