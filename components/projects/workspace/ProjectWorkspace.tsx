@@ -32,6 +32,7 @@ import { ProjectDatabaseTable } from "./ProjectDatabaseTable";
 import { ProjectTaskCreateModal } from "./ProjectTaskCreateModal";
 import TeamMembersModal from "@/components/projects/TeamMembersModal";
 import MilestonesModal from "@/components/projects/MilestonesModal";
+import { ExportModal } from "@/components/workspace/ExportModal";
 import {
   LayoutDashboard,
   CheckSquare,
@@ -119,6 +120,7 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
 
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
   const [isMilestonesModalOpen, setIsMilestonesModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   // ── Reload Project Details ──────────────────────────────────────────────
   const refreshProject = useCallback(async () => {
@@ -366,6 +368,13 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
           >
             <Flag className="w-3.5 h-3.5" />
             <span>Milestones ({project.milestones?.length || 0})</span>
+          </button>
+          <button
+            onClick={() => setIsExportModalOpen(true)}
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/50 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 rounded-xl text-xs font-semibold transition"
+          >
+            <Download className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Export Project</span>
           </button>
         </div>
       </div>
@@ -984,6 +993,8 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
           ) : database ? (
             <ProjectDatabaseTable
               database={database}
+              projectId={project.id}
+              projectName={project.name}
               onRefresh={() => fetchDatabase()}
             />
           ) : (
@@ -1231,6 +1242,17 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
             refreshProject();
           }}
           showToast={() => {}}
+        />
+      )}
+
+      {/* Day 5: Export Project Modal */}
+      {isExportModalOpen && (
+        <ExportModal
+          isOpen={isExportModalOpen}
+          onClose={() => setIsExportModalOpen(false)}
+          entityType="PROJECT"
+          entityId={project.id}
+          entityName={project.name}
         />
       )}
     </div>
