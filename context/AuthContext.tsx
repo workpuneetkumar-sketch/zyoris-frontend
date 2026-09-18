@@ -3,6 +3,7 @@
 import { loginApi, registerApi, AuthResponse, logoutApi, getMeApi } from "@/lib/api/authApi";
 import { getRbacMe } from "@/lib/api/rbacApi";
 import { getFrontendPermissions, SidebarItem, DashboardItem } from "@/lib/api/frontendApi";
+import { setAuthToken, sanitizeBearerToken, getCookie } from "@/lib/api/api";
 import React, {
   createContext,
   useCallback,
@@ -74,6 +75,7 @@ function clearTokenCookie() {
 }
 
 function clearAuthState() {
+  setAuthToken(null);
   localStorage.removeItem(STORAGE_KEY);
   clearTokenCookie();
 }
@@ -101,23 +103,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const restoreSession = async () => {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (!raw) {
-        setPermissionsLoaded(true);
-        setIsInitializing(false);
-        return;
+      let parsed: any = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          if (typeof raw === "string" && raw.trim().length > 10) {
+            parsed = { token: raw.trim() };
+          }
+        }
       }
 
-      let parsed: any;
-      try {
-        parsed = JSON.parse(raw);
-      } catch {
-        clearAuthState();
-        setPermissionsLoaded(true);
-        setIsInitializing(false);
-        return;
-      }
+      // Check multiple candidate sources for token
+      const candidateToken =
+        parsed?.token ||
+        parsed?.accessToken ||
+        parsed?.data?.token ||
+        parsed?.data?.accessToken ||
+        parsed?.user?.token ||
+        (typeof parsed === "string" ? parsed : null) ||
+        getCookie(TOKEN_COOKIE) ||
+        localStorage.getItem("zyoris-token") ||
+        localStorage.getItem("token") ||
+        localStorage.getItem("accessToken");
 
-      if (!parsed?.token) {
+      const effectiveToken = sanitizeBearerToken(candidateToken);
+
+      if (!effectiveToken) {
         clearAuthState();
         setPermissionsLoaded(true);
         setIsInitializing(false);
@@ -129,9 +141,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // This prevents the layout from redirecting to /login while API calls are
       // in-flight on a hard refresh. The session will be invalidated below if the
       // token turns out to be expired.
-      const cachedUser: User | null = parsed.user ?? null;
-      setToken(parsed.token);
-      setTokenCookie(parsed.token);
+      const cachedUser: User | null = parsed?.user ?? null;
+      setToken(effectiveToken);
+      setTokenCookie(effectiveToken);
+      setAuthToken(effectiveToken);
       setPermissionsLoaded(false);
 
       if (cachedUser) {
@@ -205,15 +218,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const res = await loginApi(email, password);
 
+    const effectiveToken = sanitizeBearerToken(res.token) || "";
     // Temp set user and token so interceptors can use them for next requests
-    setToken(res.token);
-    setTokenCookie(res.token);
+    setToken(effectiveToken);
+    setTokenCookie(effectiveToken);
+    setAuthToken(effectiveToken);
 
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         user: res.user,
-        token: res.token,
+        token: effectiveToken,
         refreshToken: res.refreshToken,
       })
     );
@@ -255,15 +270,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const res = await registerApi(data);
 
+    const effectiveToken = sanitizeBearerToken(res.token) || "";
     // Temp set token
-    setToken(res.token);
-    setTokenCookie(res.token);
+    setToken(effectiveToken);
+    setTokenCookie(effectiveToken);
+    setAuthToken(effectiveToken);
 
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         user: res.user,
-        token: res.token,
+        token: effectiveToken,
         refreshToken: res.refreshToken,
       })
     );
@@ -305,6 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       setUser(null);
       setToken(null);
+      setAuthToken(null);
       setUserPermissions({});
       setSidebarItems([]);
       setVisibleDashboards([]);

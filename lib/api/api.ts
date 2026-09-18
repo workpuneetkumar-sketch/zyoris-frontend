@@ -17,13 +17,157 @@ const api = axios.create({
 });
 
 /* ---------------------------------------------------
+   AUTH TOKEN UTILITIES & IN-MEMORY STORE
+--------------------------------------------------- */
+
+let inMemoryToken: string | null = null;
+
+/** Set active in-memory auth token (sanitized) */
+export function setAuthToken(token: string | null) {
+    inMemoryToken = sanitizeBearerToken(token);
+}
+
+/** Get active in-memory auth token */
+export function getAuthToken(): string | null {
+    return inMemoryToken;
+}
+
+/** Cookie helper for client-side environments */
+export function getCookie(name: string): string | null {
+    if (typeof document === "undefined") return null;
+    try {
+        const matches = document.cookie.match(
+            new RegExp("(?:^|; )" + name.replace(/([\.$?*|{}\(\)\[\]\\\/\+^])/g, "\\$1") + "=([^;]*)")
+        );
+        return matches ? decodeURIComponent(matches[1]) : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Clean and sanitize token, stripping quotes, whitespace, and duplicate Bearer prefixes */
+export function sanitizeBearerToken(rawToken: any): string | null {
+    if (!rawToken || typeof rawToken !== "string") return null;
+    let t = rawToken.trim();
+    if (!t) return null;
+
+    // Strip wrapping quotes if string was JSON-stringified directly
+    if (
+        (t.startsWith('"') && t.endsWith('"') && t.length >= 2) ||
+        (t.startsWith("'") && t.endsWith("'") && t.length >= 2)
+    ) {
+        t = t.slice(1, -1).trim();
+    }
+
+    // Strip redundant "Bearer " or "bearer " prefixes
+    while (t.toLowerCase().startsWith("bearer ")) {
+        t = t.slice(7).trim();
+    }
+
+    return t.length > 0 ? t : null;
+}
+
+/**
+ * Multi-tier token extractor:
+ * 1. In-memory token cache
+ * 2. localStorage 'zyoris-auth' (token, accessToken, data.token, raw string)
+ * 3. sessionStorage 'zyoris-auth'
+ * 4. localStorage fallback keys ('zyoris-token', 'token', 'accessToken')
+ * 5. sessionStorage fallback keys
+ * 6. document.cookie ('zyoris-token', 'token', 'accessToken')
+ */
+export function getEffectiveAuthToken(): string | null {
+    if (inMemoryToken) {
+        const cleaned = sanitizeBearerToken(inMemoryToken);
+        if (cleaned) return cleaned;
+    }
+
+    if (typeof window === "undefined") return null;
+
+    // 1. localStorage 'zyoris-auth'
+    try {
+        const raw = localStorage.getItem("zyoris-auth");
+        if (raw) {
+            try {
+                const parsed = JSON.parse(raw);
+                if (typeof parsed === "string") {
+                    const cleaned = sanitizeBearerToken(parsed);
+                    if (cleaned) return cleaned;
+                } else if (parsed && typeof parsed === "object") {
+                    const candidate =
+                        parsed.token ||
+                        parsed.accessToken ||
+                        parsed.data?.token ||
+                        parsed.data?.accessToken ||
+                        parsed.user?.token;
+                    const cleaned = sanitizeBearerToken(candidate);
+                    if (cleaned) return cleaned;
+                }
+            } catch {
+                const cleaned = sanitizeBearerToken(raw);
+                if (cleaned) return cleaned;
+            }
+        }
+    } catch {}
+
+    // 2. sessionStorage 'zyoris-auth'
+    try {
+        const sessionRaw = sessionStorage.getItem("zyoris-auth");
+        if (sessionRaw) {
+            try {
+                const parsed = JSON.parse(sessionRaw);
+                if (typeof parsed === "string") {
+                    const cleaned = sanitizeBearerToken(parsed);
+                    if (cleaned) return cleaned;
+                } else if (parsed && typeof parsed === "object") {
+                    const candidate =
+                        parsed.token ||
+                        parsed.accessToken ||
+                        parsed.data?.token ||
+                        parsed.data?.accessToken;
+                    const cleaned = sanitizeBearerToken(candidate);
+                    if (cleaned) return cleaned;
+                }
+            } catch {
+                const cleaned = sanitizeBearerToken(sessionRaw);
+                if (cleaned) return cleaned;
+            }
+        }
+    } catch {}
+
+    // 3. Fallback storage keys
+    const fallbackKeys = ["zyoris-token", "token", "accessToken"];
+    for (const key of fallbackKeys) {
+        try {
+            const val = localStorage.getItem(key);
+            const cleaned = sanitizeBearerToken(val);
+            if (cleaned) return cleaned;
+        } catch {}
+        try {
+            const val = sessionStorage.getItem(key);
+            const cleaned = sanitizeBearerToken(val);
+            if (cleaned) return cleaned;
+        } catch {}
+    }
+
+    // 4. Fallback to document.cookie (matches middleware 'zyoris-token')
+    for (const key of fallbackKeys) {
+        const cVal = getCookie(key);
+        const cleaned = sanitizeBearerToken(cVal);
+        if (cleaned) return cleaned;
+    }
+
+    return null;
+}
+
+/* ---------------------------------------------------
    REQUEST INTERCEPTOR
-   Automatically attach access token
+   Automatically attach sanitized access token
 --------------------------------------------------- */
 
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
-        // Always attach the token for every request — including /auth/me, /rbac/me etc.
+        // Always attach the token for every request — including /auth/me, /workspace/pages etc.
         // Only skip for login/register/refresh endpoints that don't need a Bearer token.
         const url = config.url || "";
         const isUnauthenticatedEndpoint =
@@ -31,23 +175,16 @@ api.interceptors.request.use(
             url.includes("/auth/register") ||
             url.includes("/auth/refresh");
 
-        if (typeof window !== "undefined" && !isUnauthenticatedEndpoint) {
-            const raw = localStorage.getItem("zyoris-auth");
+        if (!isUnauthenticatedEndpoint) {
+            const token = getEffectiveAuthToken();
 
-            if (raw) {
-                try {
-                    const parsed = JSON.parse(raw);
-
-                    if (parsed?.token) {
-                        if (typeof config.headers.set === 'function') {
-                            config.headers.set('Authorization', `Bearer ${parsed.token}`);
-                        } else {
-                            config.headers.Authorization = `Bearer ${parsed.token}`;
-                        }
-                    }
-                } catch (e) {
-                    console.error("Failed to parse zyoris-auth from localStorage", e);
+            if (token) {
+                const bearerVal = `Bearer ${token}`;
+                if (typeof config.headers.set === 'function') {
+                    config.headers.set('Authorization', bearerVal);
                 }
+                config.headers.Authorization = bearerVal;
+                config.headers['Authorization'] = bearerVal;
             }
         }
 
@@ -183,28 +320,45 @@ api.interceptors.response.use(
                     return Promise.reject(error);
                 }
 
-                const raw = localStorage.getItem("zyoris-auth");
+                // Resolve refresh token flexibly from multiple potential sources
+                let refreshToken: string | null = null;
+                let parsedAuth: any = null;
 
-                if (!raw) {
-                    // Public pages (including /login) can legitimately receive a
-                    // 401 from an optional protected request. Redirecting here
-                    // reloads the current page and can create a reload loop.
-                    // Protected layouts handle navigation to /login themselves.
-                    return Promise.reject(error);
-                }
-
-                const parsed = JSON.parse(raw);
-
-                const refreshToken = parsed?.refreshToken;
+                try {
+                    const raw = localStorage.getItem("zyoris-auth");
+                    if (raw) {
+                        parsedAuth = JSON.parse(raw);
+                        refreshToken = parsedAuth?.refreshToken || parsedAuth?.data?.refreshToken || null;
+                    }
+                } catch {}
 
                 if (!refreshToken) {
-                    // No refresh token, redirect immediately
-                    if (!isRedirecting) {
-                        isRedirecting = true;
-                        localStorage.removeItem("zyoris-auth");
-                        const TOKEN_COOKIE = "zyoris-token";
-                        document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
-                        window.location.href = "/login";
+                    try {
+                        const sessionRaw = sessionStorage.getItem("zyoris-auth");
+                        if (sessionRaw) {
+                            const parsedSession = JSON.parse(sessionRaw);
+                            refreshToken = parsedSession?.refreshToken || parsedSession?.data?.refreshToken || null;
+                        }
+                    } catch {}
+                }
+
+                if (!refreshToken) {
+                    try {
+                        refreshToken = localStorage.getItem("zyoris-refresh-token") || localStorage.getItem("refreshToken") || null;
+                    } catch {}
+                }
+
+                if (!refreshToken) {
+                    const tokenCookie = getCookie("zyoris-token");
+                    if (!tokenCookie && !parsedAuth) {
+                        // Definitely unauthenticated session — redirect to login
+                        if (!isRedirecting) {
+                            isRedirecting = true;
+                            localStorage.removeItem("zyoris-auth");
+                            const TOKEN_COOKIE = "zyoris-token";
+                            document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+                            window.location.href = "/login";
+                        }
                     }
                     return Promise.reject(error);
                 }
@@ -223,62 +377,71 @@ api.interceptors.response.use(
                     }
                 );
 
-                /*
-                  Expected backend response:
-                  {
-                    token: "...",
-                    refreshToken?: "..."
-                  }
-                */
+                const newAccessToken = sanitizeBearerToken(
+                    refreshResponse.data?.token ||
+                    refreshResponse.data?.accessToken ||
+                    refreshResponse.data?.data?.token ||
+                    refreshResponse.data?.data?.accessToken
+                );
 
-                const newAccessToken =
-                    refreshResponse.data.token;
+                if (!newAccessToken) {
+                    return Promise.reject(error);
+                }
 
                 const newRefreshToken =
-                    refreshResponse.data.refreshToken ||
+                    refreshResponse.data?.refreshToken ||
+                    refreshResponse.data?.data?.refreshToken ||
                     refreshToken;
 
                 /* -----------------------------------
-                   UPDATE LOCAL STORAGE
+                   UPDATE IN-MEMORY TOKEN
                 ----------------------------------- */
-
-                const updatedAuth = {
-                    ...parsed,
-                    token: newAccessToken,
-                    refreshToken: newRefreshToken,
-                };
-
-                localStorage.setItem(
-                    "zyoris-auth",
-                    JSON.stringify(updatedAuth)
-                );
+                setAuthToken(newAccessToken);
 
                 /* -----------------------------------
-                   UPDATE COOKIE
+                   UPDATE LOCAL & SESSION STORAGE
+                ----------------------------------- */
+                try {
+                    const raw = localStorage.getItem("zyoris-auth");
+                    const parsed = raw ? JSON.parse(raw) : (parsedAuth || {});
+                    const updatedAuth = {
+                        ...parsed,
+                        token: newAccessToken,
+                        refreshToken: newRefreshToken,
+                    };
+
+                    localStorage.setItem("zyoris-auth", JSON.stringify(updatedAuth));
+                } catch {}
+
+                /* -----------------------------------
+                   UPDATE COOKIE (SameSite=Lax matches AuthContext)
                 ----------------------------------- */
                 const TOKEN_COOKIE = "zyoris-token";
-                document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
+                document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
 
                 /* -----------------------------------
                    RETRY ORIGINAL REQUEST
                 ----------------------------------- */
-
-                originalRequest.headers.Authorization =
-                    `Bearer ${newAccessToken}`;
+                const retryBearer = `Bearer ${newAccessToken}`;
+                if (originalRequest.headers) {
+                    if (typeof originalRequest.headers.set === 'function') {
+                        originalRequest.headers.set('Authorization', retryBearer);
+                    }
+                    originalRequest.headers.Authorization = retryBearer;
+                    originalRequest.headers['Authorization'] = retryBearer;
+                }
 
                 return api(originalRequest);
             } catch (refreshError) {
                 /* -----------------------------------
-                   REFRESH FAILED
-                   LOGOUT USER
+                   REFRESH FAILED -> LOGOUT USER
                 ----------------------------------- */
-
                 if (!isRedirecting) {
                     isRedirecting = true;
+                    setAuthToken(null);
                     localStorage.removeItem("zyoris-auth");
-                    // Clear cookie too
                     const TOKEN_COOKIE = "zyoris-token";
-                    document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Strict`;
+                    document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
                     window.location.href = "/login";
                 }
 
