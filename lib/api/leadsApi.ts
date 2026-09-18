@@ -863,3 +863,197 @@ export async function qualifyLead(leadId: string, payload?: LeadQualifyPayload):
     throw error;
   }
 }
+
+// ── 7 TARGET LEAD LIFECYCLE & WORKFLOW APIS ─────────────────────────────────
+
+// 1. Transition Lead Lifecycle Stage (POST /leads/:id/lifecycle/transition)
+export interface TransitionLifecyclePayload {
+  toStatus: string;
+  reason?: string;
+  [key: string]: any;
+}
+
+export interface TransitionLifecycleResponse {
+  success?: boolean;
+  message?: string;
+  toStatus?: string;
+  leadId?: string;
+  updatedAt?: string;
+  [key: string]: any;
+}
+
+export async function transitionLeadLifecycle(
+  leadId: string,
+  payload: TransitionLifecyclePayload
+): Promise<TransitionLifecycleResponse> {
+  console.log(`[API] transitionLeadLifecycle - leadId: ${leadId}`, payload);
+  try {
+    const res = await api.post(`/leads/${leadId}/lifecycle/transition`, payload);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] transitionLeadLifecycle error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// 2. Start Nurture Automation Workflow (POST /leads/:id/nurture/start)
+export interface StartNurturePayload {
+  reason: string;
+  automationTemplateId?: string;
+  [key: string]: any;
+}
+
+export interface StartNurtureResponse {
+  success?: boolean;
+  message?: string;
+  nurtureId?: string;
+  templateId?: string;
+  status?: string;
+  startedAt?: string;
+  [key: string]: any;
+}
+
+export async function startLeadNurture(
+  leadId: string,
+  payload: StartNurturePayload
+): Promise<StartNurtureResponse> {
+  console.log(`[API] startLeadNurture - leadId: ${leadId}`, payload);
+  try {
+    const res = await api.post(`/leads/${leadId}/nurture/start`, payload);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] startLeadNurture error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// 3. Ingest Intent Signal (POST /leads/:id/signals)
+export interface IngestSignalPayload {
+  sourceText: string;
+  sourceType: string;
+  score: number;
+  [key: string]: any;
+}
+
+export interface IngestSignalResponse {
+  success?: boolean;
+  message?: string;
+  signalId?: string;
+  score?: number;
+  ingestedAt?: string;
+  [key: string]: any;
+}
+
+export async function ingestLeadSignal(
+  leadId: string,
+  payload: IngestSignalPayload
+): Promise<IngestSignalResponse> {
+  console.log(`[API] ingestLeadSignal - leadId: ${leadId}`, payload);
+  try {
+    const res = await api.post(`/leads/${leadId}/signals`, payload);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] ingestLeadSignal error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// 4. Link Anonymous Session (POST /leads/sessions/link)
+export interface LinkSessionPayload {
+  sessionId: string;
+  leadId: string;
+  consentGranted: boolean;
+  [key: string]: any;
+}
+
+export interface LinkSessionResponse {
+  success?: boolean;
+  message?: string;
+  linkedAt?: string;
+  sessionId?: string;
+  leadId?: string;
+  [key: string]: any;
+}
+
+export async function linkLeadSession(
+  payload: LinkSessionPayload
+): Promise<LinkSessionResponse> {
+  console.log(`[API] linkLeadSession:`, payload);
+  try {
+    const res = await api.post(`/leads/sessions/link`, payload);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] linkLeadSession error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// 5. Check SLA State (POST /leads/:id/sla/check)
+export interface CheckSlaPayload {
+  maxResponseTimeMinutes: number;
+  escalationRule: string;
+  escalateToId?: string;
+  [key: string]: any;
+}
+
+export interface CheckSlaResponse {
+  success?: boolean;
+  message?: string;
+  slaBreached?: boolean;
+  responseTimeMinutes?: number;
+  escalationTriggered?: boolean;
+  escalatedTo?: string;
+  checkedAt?: string;
+  [key: string]: any;
+}
+
+export async function checkLeadSla(
+  leadId: string,
+  payload: CheckSlaPayload
+): Promise<CheckSlaResponse> {
+  console.log(`[API] checkLeadSla - leadId: ${leadId}`, payload);
+  try {
+    const res = await api.post(`/leads/${leadId}/sla/check`, payload);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] checkLeadSla error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
+
+// 6. Submit Feedback Loop (POST /leads/:id/feedback)
+export interface SubmitFeedbackPayload {
+  outcome: "WON" | "LOST" | "DEAD" | string;
+  reason?: string;
+  feedbackScore?: number;
+  [key: string]: any;
+}
+
+export interface SubmitFeedbackResponse {
+  success?: boolean;
+  message?: string;
+  outcome?: string;
+  feedbackId?: string;
+  recordedAt?: string;
+  [key: string]: any;
+}
+
+export async function submitLeadFeedback(
+  leadId: string,
+  payload: SubmitFeedbackPayload
+): Promise<SubmitFeedbackResponse> {
+  console.log(`[API] submitLeadFeedback - leadId: ${leadId}`, payload);
+  try {
+    const res = await api.post(`/leads/${leadId}/feedback`, payload);
+    const data = res.data?.data ?? res.data;
+    return data;
+  } catch (error: any) {
+    console.error(`[API] submitLeadFeedback error:`, error.response?.data || error.message);
+    throw error;
+  }
+}
