@@ -10,6 +10,11 @@ import {
   checkLeadSla,
   submitLeadFeedback,
   convertLeadToDeal,
+  enrichLead,
+  qualifyLead,
+  routeLead,
+  saveAssignmentRule,
+  AssignmentRuleConfig,
   TransitionLifecyclePayload,
   TransitionLifecycleResponse,
   StartNurturePayload,
@@ -44,6 +49,10 @@ export function useLeadLifecycleActions({
   const [loadingSla, setLoadingSla] = useState(false);
   const [loadingFeedback, setLoadingFeedback] = useState(false);
   const [loadingConvert, setLoadingConvert] = useState(false);
+  const [loadingEnrich, setLoadingEnrich] = useState(false);
+  const [loadingQualify, setLoadingQualify] = useState(false);
+  const [loadingRoute, setLoadingRoute] = useState(false);
+  const [loadingRule, setLoadingRule] = useState(false);
 
   // Response / result states
   const [transitionResult, setTransitionResult] = useState<TransitionLifecycleResponse | null>(null);
@@ -208,6 +217,85 @@ export function useLeadLifecycleActions({
     }
   };
 
+  // 8. Enrich Lead Data
+  const executeEnrich = async () => {
+    if (!leadId) {
+      toast.error("Lead ID is missing");
+      return null;
+    }
+    setLoadingEnrich(true);
+    try {
+      const res = await enrichLead(leadId, { force: true });
+      toast.success(res?.message || "Lead data enrichment executed!");
+      onLeadUpdated?.();
+      return res;
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Enrichment failed";
+      toast.error(`Enrichment Error: ${msg}`);
+      throw err;
+    } finally {
+      setLoadingEnrich(false);
+    }
+  };
+
+  // 9. Qualify Lead ICP
+  const executeQualify = async () => {
+    if (!leadId) {
+      toast.error("Lead ID is missing");
+      return null;
+    }
+    setLoadingQualify(true);
+    try {
+      const res = await qualifyLead(leadId, { forceRecalculate: true });
+      toast.success(res?.message || `Qualification completed! Status: ${res?.status || "QUALIFIED"}`);
+      onLeadUpdated?.();
+      return res;
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Qualification failed";
+      toast.error(`Qualification Error: ${msg}`);
+      throw err;
+    } finally {
+      setLoadingQualify(false);
+    }
+  };
+
+  // 10. Route Lead
+  const executeRoute = async () => {
+    if (!leadId) {
+      toast.error("Lead ID is missing");
+      return null;
+    }
+    setLoadingRoute(true);
+    try {
+      const res = await routeLead(leadId, { reassign: true });
+      toast.success(res?.message || `Lead successfully routed to rep: ${res?.assignedToName || "Assigned"}`);
+      onLeadUpdated?.();
+      return res;
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Routing failed";
+      toast.error(`Routing Error: ${msg}`);
+      throw err;
+    } finally {
+      setLoadingRoute(false);
+    }
+  };
+
+  // 11. Save Assignment Rule Config
+  const executeSaveRule = async (config: AssignmentRuleConfig) => {
+    setLoadingRule(true);
+    try {
+      const res = await saveAssignmentRule(config);
+      toast.success("Assignment rule configuration saved!");
+      return res;
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to save rule";
+      toast.error(`Rule Error: ${msg}`);
+      throw err;
+    } finally {
+      setLoadingRule(false);
+    }
+  };
+
   return {
     // Action runners
     executeTransition,
@@ -217,6 +305,10 @@ export function useLeadLifecycleActions({
     executeCheckSla,
     executeSubmitFeedback,
     executeConvertToDeal,
+    executeEnrich,
+    executeQualify,
+    executeRoute,
+    executeSaveRule,
 
     // Loaders
     loadingTransition,
@@ -226,6 +318,10 @@ export function useLeadLifecycleActions({
     loadingSla,
     loadingFeedback,
     loadingConvert,
+    loadingEnrich,
+    loadingQualify,
+    loadingRoute,
+    loadingRule,
 
     // Results
     transitionResult,

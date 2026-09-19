@@ -17,6 +17,10 @@ import {
   Check,
   ArrowRight,
   Zap,
+  Database,
+  ShieldCheck,
+  UserCheck,
+  Settings,
 } from "lucide-react";
 import { useLeadLifecycleActions } from "@/hooks/useLeadLifecycleActions";
 
@@ -43,6 +47,10 @@ export function LeadApiActionsToolbar({
     executeCheckSla,
     executeSubmitFeedback,
     executeConvertToDeal,
+    executeEnrich,
+    executeQualify,
+    executeRoute,
+    executeSaveRule,
     loadingTransition,
     loadingNurture,
     loadingSignal,
@@ -50,6 +58,10 @@ export function LeadApiActionsToolbar({
     loadingSla,
     loadingFeedback,
     loadingConvert,
+    loadingEnrich,
+    loadingQualify,
+    loadingRoute,
+    loadingRule,
   } = useLeadLifecycleActions({
     leadId,
     leadName,
@@ -64,12 +76,16 @@ export function LeadApiActionsToolbar({
     | "sla"
     | "feedback"
     | "convert"
+    | "enrich"
+    | "qualify"
+    | "route"
+    | "rule"
     | null;
 
   const [activeModal, setActiveModal] = useState<ModalType>(null);
 
   // 1. Transition Form
-  const [toStatus, setToStatus] = useState<string>("QUALIFIED");
+  const [toStatus, setToStatus] = useState<string>("WARM");
   const [transitionReason, setTransitionReason] = useState<string>("");
 
   // 2. Nurture Form
@@ -94,6 +110,9 @@ export function LeadApiActionsToolbar({
   const [outcome, setOutcome] = useState<"WON" | "LOST" | "DEAD">("WON");
   const [feedbackReason, setFeedbackReason] = useState<string>("Closed annual enterprise license contract");
   const [feedbackScore, setFeedbackScore] = useState<number>(9);
+
+  // 7. Assignment Rule Form
+  const [ruleStrategy, setRuleStrategy] = useState<"ai_recommendation" | "round_robin" | "load_balanced" | "manual">("ai_recommendation");
 
   // Submit Handlers
   const handleTransitionSubmit = async (e: React.FormEvent) => {
@@ -158,6 +177,35 @@ export function LeadApiActionsToolbar({
     } catch {}
   };
 
+  const handleEnrichSubmit = async () => {
+    try {
+      await executeEnrich();
+      setActiveModal(null);
+    } catch {}
+  };
+
+  const handleQualifySubmit = async () => {
+    try {
+      await executeQualify();
+      setActiveModal(null);
+    } catch {}
+  };
+
+  const handleRouteSubmit = async () => {
+    try {
+      await executeRoute();
+      setActiveModal(null);
+    } catch {}
+  };
+
+  const handleRuleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await executeSaveRule({ strategy: ruleStrategy, enabled: true });
+      setActiveModal(null);
+    } catch {}
+  };
+
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Light Theme Action Workbench Banner */}
@@ -171,11 +219,11 @@ export function LeadApiActionsToolbar({
               <h3 className="font-bold text-slate-800 text-sm sm:text-base flex items-center gap-2">
                 Lead Lifecycle & Action Workbench
                 <span className="text-[10px] uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-indigo-100/80 text-indigo-700 border border-indigo-200">
-                  7 APIs Integrated
+                  11 APIs Integrated
                 </span>
               </h3>
               <p className="text-xs text-slate-500 font-medium">
-                Execute stage transitions, automation drips, SLA benchmarks, intent signals & deal conversions
+                Execute stage transitions, automation drips, SLA benchmarks, intent signals, deal conversions, enrichment, qualify & routing rules
               </p>
             </div>
           </div>
@@ -184,76 +232,116 @@ export function LeadApiActionsToolbar({
           </span>
         </div>
 
-        {/* 7 Action Buttons - Clean Light Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+        {/* 11 Action Buttons - Side-by-Side Clean Light Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-2">
           {/* 1. Transition */}
           <button
             onClick={() => setActiveModal("transition")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-purple-50/60 hover:bg-purple-100/80 border border-purple-200/80 text-purple-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-purple-50/60 hover:bg-purple-100/80 border border-purple-200/80 text-purple-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
           >
             <GitBranch className="w-4 h-4 mb-1 text-purple-600 group-hover:scale-110 transition-transform" />
             <span className="text-xs">Transition</span>
-            <span className="text-[10px] text-purple-500 font-normal mt-0.5">Lifecycle Stage</span>
+            <span className="text-[9px] text-purple-500 font-normal mt-0.5">Lifecycle Stage</span>
           </button>
 
           {/* 2. Nurture */}
           <button
             onClick={() => setActiveModal("nurture")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-emerald-50/60 hover:bg-emerald-100/80 border border-emerald-200/80 text-emerald-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-emerald-50/60 hover:bg-emerald-100/80 border border-emerald-200/80 text-emerald-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
           >
             <Sparkles className="w-4 h-4 mb-1 text-emerald-600 group-hover:scale-110 transition-transform" />
             <span className="text-xs">Start Nurture</span>
-            <span className="text-[10px] text-emerald-500 font-normal mt-0.5">Automation Drip</span>
+            <span className="text-[9px] text-emerald-500 font-normal mt-0.5">Automation Drip</span>
           </button>
 
           {/* 3. Signals */}
           <button
             onClick={() => setActiveModal("signals")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-blue-50/60 hover:bg-blue-100/80 border border-blue-200/80 text-blue-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-blue-50/60 hover:bg-blue-100/80 border border-blue-200/80 text-blue-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
           >
             <TrendingUp className="w-4 h-4 mb-1 text-blue-600 group-hover:scale-110 transition-transform" />
             <span className="text-xs">Ingest Signal</span>
-            <span className="text-[10px] text-blue-500 font-normal mt-0.5">Buying Intent</span>
+            <span className="text-[9px] text-blue-500 font-normal mt-0.5">Buying Intent</span>
           </button>
 
           {/* 4. Link Session */}
           <button
             onClick={() => setActiveModal("session")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-cyan-50/60 hover:bg-cyan-100/80 border border-cyan-200/80 text-cyan-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-cyan-50/60 hover:bg-cyan-100/80 border border-cyan-200/80 text-cyan-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
           >
             <Link2 className="w-4 h-4 mb-1 text-cyan-600 group-hover:scale-110 transition-transform" />
             <span className="text-xs">Link Session</span>
-            <span className="text-[10px] text-cyan-500 font-normal mt-0.5">Web Visitor</span>
+            <span className="text-[9px] text-cyan-500 font-normal mt-0.5">Web Visitor</span>
           </button>
 
           {/* 5. Check SLA */}
           <button
             onClick={() => setActiveModal("sla")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-amber-50/60 hover:bg-amber-100/80 border border-amber-200/80 text-amber-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-amber-50/60 hover:bg-amber-100/80 border border-amber-200/80 text-amber-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
           >
             <Clock className="w-4 h-4 mb-1 text-amber-600 group-hover:scale-110 transition-transform" />
             <span className="text-xs">Check SLA</span>
-            <span className="text-[10px] text-amber-500 font-normal mt-0.5">Benchmark</span>
+            <span className="text-[9px] text-amber-500 font-normal mt-0.5">Benchmark</span>
           </button>
 
           {/* 6. Feedback */}
           <button
             onClick={() => setActiveModal("feedback")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-rose-50/60 hover:bg-rose-100/80 border border-rose-200/80 text-rose-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-rose-50/60 hover:bg-rose-100/80 border border-rose-200/80 text-rose-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
           >
             <Star className="w-4 h-4 mb-1 text-rose-600 group-hover:scale-110 transition-transform" />
             <span className="text-xs">Feedback</span>
-            <span className="text-[10px] text-rose-500 font-normal mt-0.5">Outcome Loop</span>
+            <span className="text-[9px] text-rose-500 font-normal mt-0.5">Outcome Loop</span>
           </button>
 
-          {/* 7. Convert Deal */}
+          {/* 7. Enrich Lead */}
+          <button
+            onClick={() => setActiveModal("enrich")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-teal-50/60 hover:bg-teal-100/80 border border-teal-200/80 text-teal-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+          >
+            <Database className="w-4 h-4 mb-1 text-teal-600 group-hover:scale-110 transition-transform" />
+            <span className="text-xs">Enrich Lead</span>
+            <span className="text-[9px] text-teal-500 font-normal mt-0.5">Data Fetch</span>
+          </button>
+
+          {/* 8. Qualify Lead */}
+          <button
+            onClick={() => setActiveModal("qualify")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-violet-50/60 hover:bg-violet-100/80 border border-violet-200/80 text-violet-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+          >
+            <ShieldCheck className="w-4 h-4 mb-1 text-violet-600 group-hover:scale-110 transition-transform" />
+            <span className="text-xs">Qualify Lead</span>
+            <span className="text-[9px] text-violet-500 font-normal mt-0.5">ICP & Fit</span>
+          </button>
+
+          {/* 9. Auto Route */}
+          <button
+            onClick={() => setActiveModal("route")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-orange-50/60 hover:bg-orange-100/80 border border-orange-200/80 text-orange-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+          >
+            <UserCheck className="w-4 h-4 mb-1 text-orange-600 group-hover:scale-110 transition-transform" />
+            <span className="text-xs">Auto Route</span>
+            <span className="text-[9px] text-orange-500 font-normal mt-0.5">Rep Assign</span>
+          </button>
+
+          {/* 10. Rule Config */}
+          <button
+            onClick={() => setActiveModal("rule")}
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-slate-100/80 hover:bg-slate-200/80 border border-slate-300/80 text-slate-700 font-semibold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-xs"
+          >
+            <Settings className="w-4 h-4 mb-1 text-slate-600 group-hover:scale-110 transition-transform" />
+            <span className="text-xs">Rule Config</span>
+            <span className="text-[9px] text-slate-500 font-normal mt-0.5">Routing Rules</span>
+          </button>
+
+          {/* 11. Convert Deal */}
           <button
             onClick={() => setActiveModal("convert")}
-            className="flex flex-col items-center justify-center p-3 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-md shadow-indigo-100 col-span-2 sm:col-span-1"
+            className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-bold transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] group text-center shadow-md shadow-indigo-100"
           >
             <Briefcase className="w-4 h-4 mb-1 text-white group-hover:scale-110 transition-transform" />
             <span className="text-xs">Convert Deal</span>
-            <span className="text-[10px] text-indigo-100 font-normal mt-0.5">Pipeline Create</span>
+            <span className="text-[9px] text-indigo-100 font-normal mt-0.5">Pipeline Create</span>
           </button>
         </div>
       </div>
@@ -285,16 +373,14 @@ export function LeadApiActionsToolbar({
                 <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">
                   Target Stage <span className="text-purple-600">*</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
                   {[
                     "NEW",
-                    "CONTACTED",
-                    "QUALIFIED",
-                    "UNQUALIFIED",
-                    "PROPOSAL",
-                    "NEGOTIATION",
-                    "CLOSED_WON",
-                    "CLOSED_LOST",
+                    "WARM",
+                    "HOT",
+                    "WON",
+                    "LOST",
+                    "DEAD",
                   ].map((st) => (
                     <button
                       key={st}
@@ -919,6 +1005,254 @@ export function LeadApiActionsToolbar({
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 8: Lead Data Enrichment */}
+      {activeModal === "enrich" && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-8 text-slate-800 transform transition-all">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-teal-100 text-teal-700">
+                  <Database className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xl text-slate-900">Enrich Lead Profile</h4>
+                  <p className="text-xs text-slate-500">Fetch company, social, and contact details for <span className="font-semibold text-slate-700">{leadName}</span></p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Triggers external clearbit/cached data enrichment for <strong>{leadName}</strong> to populate missing company size, industry, location, and social handles.
+              </p>
+
+              <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+                POST /leads/{leadId}/enrichment
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEnrichSubmit}
+                  disabled={loadingEnrich}
+                  className="px-6 py-2.5 text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white rounded-xl shadow-md shadow-teal-200 flex items-center space-x-2 disabled:opacity-50 transition-all"
+                >
+                  {loadingEnrich ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Execute Enrichment</span>
+                      <Database className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 9: Qualify Lead ICP */}
+      {activeModal === "qualify" && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-8 text-slate-800 transform transition-all">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-violet-100 text-violet-700">
+                  <ShieldCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xl text-slate-900">Qualify Lead ICP & Fit</h4>
+                  <p className="text-xs text-slate-500">Calculate qualification score, intent, and risk for <span className="font-semibold text-slate-700">{leadName}</span></p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Evaluates firmographic fit, budget intent, and engagement velocity to produce a definitive ICP status (QUALIFIED / UNQUALIFIED / REVIEW_NEEDED).
+              </p>
+
+              <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+                POST /leads/{leadId}/qualify
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleQualifySubmit}
+                  disabled={loadingQualify}
+                  className="px-6 py-2.5 text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white rounded-xl shadow-md shadow-violet-200 flex items-center space-x-2 disabled:opacity-50 transition-all"
+                >
+                  {loadingQualify ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Run Qualification</span>
+                      <ShieldCheck className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 10: Auto Route Lead */}
+      {activeModal === "route" && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-8 text-slate-800 transform transition-all">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-orange-100 text-orange-700">
+                  <UserCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xl text-slate-900">Automated Lead Routing</h4>
+                  <p className="text-xs text-slate-500">Route <span className="font-semibold text-slate-700">{leadName}</span> to best-matching sales rep</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-5">
+              <p className="text-xs text-slate-600 leading-relaxed">
+                Executes active routing rules (AI recommendation, round-robin, load balanced) to assign lead ownership immediately.
+              </p>
+
+              <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+                POST /leads/{leadId}/route
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleRouteSubmit}
+                  disabled={loadingRoute}
+                  className="px-6 py-2.5 text-xs font-bold bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-md shadow-orange-200 flex items-center space-x-2 disabled:opacity-50 transition-all"
+                >
+                  {loadingRoute ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Execute Auto Route</span>
+                      <UserCheck className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 11: Rule Configuration */}
+      {activeModal === "rule" && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 sm:p-6 overflow-y-auto">
+          <div className="w-full max-w-xl bg-white border border-slate-200 rounded-3xl shadow-2xl p-6 sm:p-8 text-slate-800 transform transition-all">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-slate-100 text-slate-700">
+                  <Settings className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-xl text-slate-900">Assignment Rule Configuration</h4>
+                  <p className="text-xs text-slate-500">Configure global lead distribution strategy</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveModal(null)}
+                className="text-slate-400 hover:text-slate-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRuleSubmit} className="mt-6 space-y-5">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1.5">
+                  Routing Strategy <span className="text-blue-600">*</span>
+                </label>
+                <select
+                  value={ruleStrategy}
+                  onChange={(e) => setRuleStrategy(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
+                >
+                  <option value="ai_recommendation">AI 3-Pillar Recommendation & Scoring</option>
+                  <option value="round_robin">Round Robin Equal Distribution</option>
+                  <option value="load_balanced">Load Balanced Capacity Strategy</option>
+                  <option value="manual">Manual Sales Manager Assignment</option>
+                </select>
+              </div>
+
+              <div className="text-xs text-slate-500 bg-slate-50 p-3 rounded-xl border border-slate-200 font-mono">
+                POST /leads/assignment-rules
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setActiveModal(null)}
+                  className="px-5 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loadingRule}
+                  className="px-6 py-2.5 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-md flex items-center space-x-2 disabled:opacity-50 transition-all"
+                >
+                  {loadingRule ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <span>Save Rule Config</span>
+                      <Settings className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
