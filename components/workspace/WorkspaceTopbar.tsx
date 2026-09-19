@@ -146,55 +146,18 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
             <LayoutGrid className="w-4 h-4" />
           </Link>
 
-<<<<<<< Updated upstream
-          {breadcrumbs.map((crumb, idx) => (
-            <React.Fragment key={crumb.href + idx}>
-              <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 flex-shrink-0" />
-              <Link
-                href={crumb.href}
-                className={`truncate max-w-[140px] md:max-w-[200px] transition ${idx === breadcrumbs.length - 1
-                    ? "text-slate-900 dark:text-white font-semibold"
-                    : "hover:text-slate-900 dark:hover:text-white"
-                  }`}
-              >
-                {crumb.title}
-              </Link>
-            </React.Fragment>
-          ))}
-        </nav>
-      </div>
-
-      {/* Right Area: Create Menu & User Context */}
-      <div className="flex items-center space-x-3 flex-shrink-0">
-        <CreateMenu onOpenCreatePageModal={onOpenCreatePageModal} />
-
-        <Link
-          href="/dashboard"
-          title="Return to Main Dashboard"
-          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
-        >
-          <LayoutGrid className="w-4 h-4" />
-        </Link>
-
-        {/* User Profile Context */}
+          {/* User Profile Context */}
         {user && (
           <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
             <div className="w-7 h-7 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center justify-center shadow-xs">
               {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
-=======
-          {/* User Profile Context */}
-          {user && (
-            <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-              <div className="w-7 h-7 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center justify-center shadow-xs">
-                {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
-              </div>
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 hidden sm:inline-block">
-                {user.name || "User"}
-              </span>
->>>>>>> Stashed changes
             </div>
-          )}
-        </div>
+            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 hidden sm:inline-block">
+              {user.name || "User"}
+            </span>
+          </div>
+        )}
+      </div>
       </header>
 
       {/* Global Search Modal */}

@@ -16,18 +16,12 @@ import {
   Search,
   ImageIcon,
   Paperclip,
-<<<<<<< Updated upstream
   ChevronRight,
   MessageSquare,
   Bookmark,
   Table,
   Database,
   ListTodo,
-=======
-  Image as ImageIcon,
-  ChevronRight,
-  Database,
->>>>>>> Stashed changes
 } from "lucide-react";
 
 export interface BlockOption {

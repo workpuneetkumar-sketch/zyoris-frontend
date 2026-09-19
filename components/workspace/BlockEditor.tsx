@@ -89,14 +89,9 @@ import {
   Link as LinkIcon,
   ExternalLink,
   RefreshCw,
-<<<<<<< Updated upstream
-  Sparkles,
-  Send,
   Database as DatabaseIcon,
-  Table as TableIcon,
-=======
+  Send,
   ChevronRight,
->>>>>>> Stashed changes
 } from "lucide-react";
 
 interface BlockEditorProps {

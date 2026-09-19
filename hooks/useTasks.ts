@@ -9,11 +9,7 @@ import {
     TaskPriority,
     fetchTasks,
     fetchMyTasks,
-<<<<<<< Updated upstream
-    fetchAssignmentEvents,
-=======
     fetchTaskAssignmentEvents,
->>>>>>> Stashed changes
     createTask,
     updateTask,
     deleteTask,
@@ -52,18 +48,8 @@ export function useTasks(currentUserId?: string) {
         setLoading(true);
         setError(null);
         try {
-<<<<<<< Updated upstream
-            if (filter === "my") {
-                const data = await fetchMyTasks();
-                setTasks(data.tasks ?? []);
-            } else {
-                const data = await fetchTasks();
-                setTasks(data.tasks ?? []);
-            }
-=======
             const data = filter === "my" ? await fetchMyTasks() : await fetchTasks();
             setTasks(data.tasks ?? []);
->>>>>>> Stashed changes
         } catch (err) {
             if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 204)) {
                 setTasks([]);
@@ -79,26 +65,6 @@ export function useTasks(currentUserId?: string) {
         loadTasks();
     }, [loadTasks]);
 
-<<<<<<< Updated upstream
-    // ── Short polling for assignment/reassignment events ────────────────────────
-    useEffect(() => {
-        const interval = setInterval(async () => {
-            try {
-                const events = await fetchAssignmentEvents(lastEventCheck);
-                if (events && events.length > 0) {
-                    setLastEventCheck(new Date().toISOString());
-                    // Refresh task list silently when assignment event occurs
-                    const data = filter === "my" ? await fetchMyTasks() : await fetchTasks();
-                    setTasks(data.tasks ?? []);
-                }
-            } catch {
-                // Ignore silent refresh errors
-            }
-        }, 15000); // Check every 15s
-
-        return () => clearInterval(interval);
-    }, [filter, lastEventCheck]);
-=======
     // ── Short polling for assignment / reassignment events ──────────────────────
     useEffect(() => {
         let lastCheck = new Date().toISOString();
@@ -114,7 +80,6 @@ export function useTasks(currentUserId?: string) {
 
         return () => clearInterval(pollInterval);
     }, [loadTasks]);
->>>>>>> Stashed changes
 
     // ── Client-side filtering ─────────────────────────────────────────────────
     const filteredTasks = useMemo(() => {
