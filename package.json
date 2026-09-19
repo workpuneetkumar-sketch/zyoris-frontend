@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --experimental-strip-types --test tests/transformations.test.ts tests/suggestions.test.ts tests/monitoring.test.ts tests/error_management_webhooks.test.ts tests/tasks_foundation.test.ts tests/executions_memory.test.ts tests/action_proposal_card.test.ts tests/lead_apis.test.ts tests/project_workspace_database.test.ts tests/import_wizard_database_views.test.ts tests/my_tasks_export.test.ts tests/jira_full_integration.test.ts tests/win_probability_forecast.test.ts tests/auth_resilience.test.ts"
+    "test": "node --experimental-strip-types --test tests/transformations.test.ts tests/suggestions.test.ts tests/monitoring.test.ts tests/error_management_webhooks.test.ts tests/tasks_foundation.test.ts tests/executions_memory.test.ts tests/action_proposal_card.test.ts tests/lead_apis.test.ts tests/project_workspace_database.test.ts tests/import_wizard_database_views.test.ts tests/my_tasks_export.test.ts tests/jira_full_integration.test.ts tests/win_probability_forecast.test.ts tests/auth_resilience.test.ts tests/day6_agent_result_frame.test.ts tests/day6_data_quality_table.test.ts tests/day6_workflow_draft_review.test.ts tests/day6_nl_report_result.test.ts",
+    "test:day6": "node --experimental-strip-types --test tests/day6_agent_result_frame.test.ts tests/day6_data_quality_table.test.ts tests/day6_workflow_draft_review.test.ts tests/day6_nl_report_result.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
