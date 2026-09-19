@@ -28,7 +28,7 @@ export interface BlockOption {
   type: string;
   label: string;
   description: string;
-  shortcut: string;
+  shortcut?: string;
   icon: React.ElementType;
   keywords: string[];
 }
@@ -240,7 +240,7 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
     return (
       opt.label.toLowerCase().includes(query) ||
       opt.type.toLowerCase().includes(query) ||
-      opt.shortcut.toLowerCase().includes(query) ||
+      (opt.shortcut ? opt.shortcut.toLowerCase().includes(query) : false) ||
       opt.keywords.some((k) => k.includes(query))
     );
   });

@@ -1223,4 +1223,59 @@ a {
 .deal-velocity-bar {
   width: var(--dwell-width, 0%);
 }
+
+/* ── FE-2 Day 5 & Day 6 Enterprise Deals & Manager Inspection Utilities ───── */
+.opportunity-type-new-business {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+.opportunity-type-renewal {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.25);
+}
+
+.opportunity-type-expansion {
+  background-color: rgba(147, 51, 234, 0.1);
+  color: #7e22ce;
+  border-color: rgba(147, 51, 234, 0.25);
+}
+
+.opportunity-type-migration {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.opportunity-type-pilot {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: #4338ca;
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+.risk-severity-critical {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.risk-severity-high {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #c2410c;
+  border-color: rgba(249, 115, 22, 0.25);
+}
+
+.risk-severity-medium {
+  background-color: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border-color: rgba(245, 158, 11, 0.25);
+}
+
+.risk-severity-low {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #047857;
+  border-color: rgba(16, 185, 129, 0.25);
+}
 
