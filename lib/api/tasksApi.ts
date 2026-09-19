@@ -475,6 +475,8 @@ export async function fetchAssignmentEvents(since?: string, limit = 50): Promise
     }
 }
 
+export const fetchTaskAssignmentEvents = fetchAssignmentEvents;
+
 // ── GET single task ───────────────────────────────────────────────────────────
 // Primary: GET /tasks/:id, Fallback: GET /tasks/get-task/:id
 export async function fetchTaskById(id: string): Promise<Task> {

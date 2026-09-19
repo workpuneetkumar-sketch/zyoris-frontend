@@ -36,6 +36,10 @@ import { DealRiskSection } from "./DealRiskSection";
 import { StageTransitionModal } from "./StageTransitionModal";
 import { DealWinProbabilityCard } from "./DealWinProbabilityCard";
 import { DealForecastDetailsCard } from "./DealForecastDetailsCard";
+import { DealEnterpriseCard } from "./DealEnterpriseCard";
+import { createPortal } from "react-dom";
+import { OPPORTUNITY_TYPES } from "@/types/enterpriseDeals";
+import { formatCurrencyWithSnapshot } from "@/utils/currencyFormat";
 
 interface DealDetailProps {
   deal: Deal;
@@ -57,12 +61,41 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
   const [newNoteText, setNewNoteText] = useState("");
   const [addingNote, setAddingNote] = useState(false);
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Edit form state
   const [editForm, setEditForm] = useState({
     name: deal.name,
     amount: deal.amount.toString(),
     stage: deal.stage,
+    currency: deal.currency || "USD",
+    opportunityType: deal.opportunityType || "NEW_BUSINESS",
+    region: deal.region || "",
+    legalEntity: deal.legalEntity || "",
+    channel: deal.channel || "DIRECT",
+    partnerName: deal.partnerName || "",
+    productId: deal.productId || "",
+    parentSubscriptionId: deal.parentSubscriptionId || "",
   });
+
+  useEffect(() => {
+    setEditForm({
+      name: deal.name,
+      amount: deal.amount.toString(),
+      stage: deal.stage,
+      currency: deal.currency || "USD",
+      opportunityType: deal.opportunityType || "NEW_BUSINESS",
+      region: deal.region || "",
+      legalEntity: deal.legalEntity || "",
+      channel: deal.channel || "DIRECT",
+      partnerName: deal.partnerName || "",
+      productId: deal.productId || "",
+      parentSubscriptionId: deal.parentSubscriptionId || "",
+    });
+  }, [deal]);
 
   // Load pipeline stages for criteria & transitions
   const loadPipelineStages = useCallback(async () => {
@@ -98,9 +131,17 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
       setUpdateError(null);
 
       const payload: UpdateDealPayload = {
-        name: editForm.name,
+        name: editForm.name.trim(),
         amount: Number(editForm.amount),
         stage: editForm.stage,
+        currency: editForm.currency || "USD",
+        opportunityType: editForm.opportunityType || "NEW_BUSINESS",
+        region: editForm.region.trim() || undefined,
+        legalEntity: editForm.legalEntity.trim() || undefined,
+        channel: editForm.channel || "DIRECT",
+        partnerName: editForm.partnerName.trim() || undefined,
+        productId: editForm.productId.trim() || undefined,
+        parentSubscriptionId: editForm.parentSubscriptionId.trim() || undefined,
       };
 
       await updateDeal(deal.dealId, payload);
@@ -137,12 +178,8 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
     }
   };
 
-  const formatCurrency = (amount: number | undefined): string => {
-    if (amount === undefined || amount === null) return "₹0";
-    if (amount >= 10_000_000) return `₹${(amount / 10_000_000).toFixed(1)}Cr`;
-    if (amount >= 1_000_000) return `₹${(amount / 1_000_000).toFixed(1)}M`;
-    if (amount >= 1_000) return `₹${(amount / 1_000).toFixed(0)}K`;
-    return `₹${amount.toLocaleString("en-IN")}`;
+  const formatCurrency = (amount: number | undefined, currency?: string): string => {
+    return formatCurrencyWithSnapshot(amount, currency || deal.currency || "USD", true);
   };
 
   const formatDate = (dateString: string | null | undefined): string => {
@@ -323,9 +360,9 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
           </div>
 
           {/* Deal Health & Risks Section (FE-2 Day 2) */}
-          <DealHealthCard dealId={deal.dealId} />
+          <DealHealthCard dealId={deal.dealId || (deal as any).id} />
           <DealRiskSection
-            dealId={deal.dealId}
+            dealId={deal.dealId || (deal as any).id}
             onRiskResolved={async () => {
               if (onUpdate) await onUpdate();
             }}
@@ -336,6 +373,13 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
 
           {/* Deal Forecast Details, Aging, Stage Velocity & Slippage (FE-2 Day 4) */}
           <DealForecastDetailsCard dealId={deal.dealId} />
+
+          {/* Deal Enterprise Opportunity Details & Shared Ownership (FE-2 Day 5) */}
+          <DealEnterpriseCard
+            deal={deal}
+            onUpdate={onUpdate}
+            onEdit={() => setIsEditModalOpen(true)}
+          />
 
           {/* Tabs Section: Overview, Commercials, Timeline, Notes */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -600,6 +644,14 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                     name: deal.name,
                     amount: deal.amount.toString(),
                     stage: deal.stage,
+                    currency: deal.currency || "USD",
+                    opportunityType: deal.opportunityType || "NEW_BUSINESS",
+                    region: deal.region || "",
+                    legalEntity: deal.legalEntity || "",
+                    channel: deal.channel || "DIRECT",
+                    partnerName: deal.partnerName || "",
+                    productId: deal.productId || "",
+                    parentSubscriptionId: deal.parentSubscriptionId || "",
                   });
                   setIsEditModalOpen(true);
                 }}
@@ -628,57 +680,96 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
         />
       )}
 
-      {/* ── Edit Deal Modal ── */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150">
-            <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+      {/* ── Edit Deal Modal (Portalled full-screen) ── */}
+      {mounted && isEditModalOpen && typeof document !== "undefined" && createPortal(
+        <div
+          className="fixed inset-0 z-[99999] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isUpdating) setIsEditModalOpen(false);
+          }}
+        >
+          <div className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-150 max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-800/40">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">Edit Deal</h3>
-                <p className="text-[11px] text-gray-400">Update core parameters</p>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">Edit Opportunity & Enterprise Parameters</h3>
+                <p className="text-[11px] text-slate-400">Update opportunity type, commercials, channel attribution, and core deal parameters</p>
               </div>
               <button
                 onClick={() => setIsEditModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 text-sm font-bold"
+                disabled={isUpdating}
+                className="w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
               >
                 ✕
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            {/* Form Body */}
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+              {updateError && (
+                <div className="p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl text-xs text-red-600 dark:text-red-400 font-medium">
+                  {updateError}
+                </div>
+              )}
+
+              {/* Opportunity Name */}
               <div>
-                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                  Deal Name
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                  Opportunity Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={editForm.name}
                   onChange={(e) => setEditForm((prev) => ({ ...prev, name: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                 />
               </div>
 
+              {/* 2-Col Grid: Amount & Currency */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
-                    Amount
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Contract Amount <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="number"
+                    min="0"
+                    step="1"
                     value={editForm.amount}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, amount: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Currency Snapshot
+                  </label>
+                  <select
+                    value={editForm.currency}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, currency: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    <option value="USD">USD ($)</option>
+                    <option value="EUR">EUR (€)</option>
+                    <option value="GBP">GBP (£)</option>
+                    <option value="INR">INR (₹)</option>
+                    <option value="CAD">CAD ($)</option>
+                    <option value="AUD">AUD ($)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* 2-Col Grid: Stage & Opportunity Type */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
                     Stage
                   </label>
                   <select
                     value={editForm.stage}
                     onChange={(e) => setEditForm((prev) => ({ ...prev, stage: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
                   >
                     {availableStages.map((s) => (
                       <option key={s} value={s}>
@@ -687,27 +778,140 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                     ))}
                   </select>
                 </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Opportunity Type
+                  </label>
+                  <select
+                    value={editForm.opportunityType}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, opportunityType: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    {OPPORTUNITY_TYPES.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
-              <div className="pt-3 border-t border-gray-100 flex justify-end gap-2.5">
-                <button
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  disabled={isUpdating || !editForm.name.trim()}
-                  className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-sm shadow-blue-200 flex items-center gap-1.5"
-                >
-                  {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save size={14} />}
-                  Save Changes
-                </button>
+              {/* 2-Col Grid: Region & Legal Entity */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Region
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. North America, EMEA, APAC"
+                    value={editForm.region}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, region: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Legal Entity
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Acme Corp Inc"
+                    value={editForm.legalEntity}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, legalEntity: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* 2-Col Grid: Channel & Partner Name */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Channel Attribution
+                  </label>
+                  <select
+                    value={editForm.channel}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, channel: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  >
+                    <option value="DIRECT">Direct Sales</option>
+                    <option value="PARTNER">Partner Referral</option>
+                    <option value="RESELLER">Value Added Reseller</option>
+                    <option value="DISTRIBUTOR">Distributor</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Partner Name
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. CloudTech Partners"
+                    disabled={editForm.channel === "DIRECT"}
+                    value={editForm.partnerName}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, partnerName: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 font-medium"
+                  />
+                </div>
+              </div>
+
+              {/* 2-Col Grid: Product Name / ID & Parent Subscription ID */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Product Name / ID
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Enterprise Analytics Suite"
+                    value={editForm.productId}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, productId: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+                    Parent Subscription (Renewal/Upsell)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. sub_991823"
+                    value={editForm.parentSubscriptionId}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, parentSubscriptionId: e.target.value }))}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                  />
+                </div>
               </div>
             </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40 flex justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setIsEditModalOpen(false)}
+                disabled={isUpdating}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={isUpdating || !editForm.name.trim()}
+                className="px-5 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 disabled:opacity-50 transition shadow-sm shadow-blue-200 flex items-center gap-1.5"
+              >
+                {isUpdating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save size={14} />}
+                Save Changes
+              </button>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

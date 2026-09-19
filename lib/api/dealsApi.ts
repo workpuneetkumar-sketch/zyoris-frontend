@@ -46,6 +46,7 @@ function mapDeal(raw: BackendDeal): Deal {
     name: raw.name,
     stage: mappedStage,
     amount: raw.amount ?? 0,
+    currency: (raw.currency as string) || "USD",
     conversionProbability: typeof raw.conversionProbability === "number"
       ? raw.conversionProbability
       : 0.5,
@@ -62,6 +63,20 @@ function mapDeal(raw: BackendDeal): Deal {
     forecastCategory: (raw.forecastCategory as string) ?? undefined,
     contactId: (raw.contactId as string) ?? null,
     companyId: (raw.companyId as string) ?? null,
+    // Enterprise BE-2 Day 5 fields
+    opportunityType: (raw.opportunityType as any) || "NEW_BUSINESS",
+    region: (raw.region as string) || undefined,
+    legalEntity: (raw.legalEntity as string) || undefined,
+    channel: (raw.channel as string) || "DIRECT",
+    partnerId: (raw.partnerId as string) || null,
+    partnerName: (raw.partnerName as string) || null,
+    partnerSplitPercentage: typeof raw.partnerSplitPercentage === "number" ? raw.partnerSplitPercentage : null,
+    productId: (raw.productId as string) || null,
+    productName: (raw.productName as string) || null,
+    subscriptionId: (raw.subscriptionId as string) || null,
+    parentSubscriptionId: (raw.parentSubscriptionId as string) || null,
+    subscriptionRelationship: (raw.subscriptionRelationship as string) || null,
+    sharedOwners: Array.isArray(raw.sharedOwners) ? (raw.sharedOwners as any) : undefined,
   };
 }
 
@@ -119,6 +134,17 @@ export interface CreateDealPayload {
     contactId?: string | null;
     companyId?: string | null;
     pipelineId?: string | null;
+    currency?: string | null;
+    opportunityType?: string | null;
+    region?: string | null;
+    legalEntity?: string | null;
+    channel?: string | null;
+    partnerId?: string | null;
+    partnerName?: string | null;
+    partnerSplitPercentage?: number | null;
+    productId?: string | null;
+    subscriptionId?: string | null;
+    parentSubscriptionId?: string | null;
 }
 
 export async function createDeal(data: CreateDealPayload): Promise<Deal> {
@@ -131,6 +157,17 @@ export async function createDeal(data: CreateDealPayload): Promise<Deal> {
     if (data.contactId?.trim())    payload.contactId    = data.contactId.trim();
     if (data.companyId?.trim())    payload.companyId    = data.companyId.trim();
     if (data.pipelineId?.trim())   payload.pipelineId   = data.pipelineId.trim();
+    if (data.currency?.trim())     payload.currency     = data.currency.trim();
+    if (data.opportunityType?.trim()) payload.opportunityType = data.opportunityType.trim();
+    if (data.region?.trim())       payload.region       = data.region.trim();
+    if (data.legalEntity?.trim())  payload.legalEntity  = data.legalEntity.trim();
+    if (data.channel?.trim())      payload.channel      = data.channel.trim();
+    if (data.partnerId?.trim())    payload.partnerId    = data.partnerId.trim();
+    if (data.partnerName?.trim())  payload.partnerName  = data.partnerName.trim();
+    if (typeof data.partnerSplitPercentage === "number") payload.partnerSplitPercentage = data.partnerSplitPercentage;
+    if (data.productId?.trim())    payload.productId    = data.productId.trim();
+    if (data.subscriptionId?.trim()) payload.subscriptionId = data.subscriptionId.trim();
+    if (data.parentSubscriptionId?.trim()) payload.parentSubscriptionId = data.parentSubscriptionId.trim();
 
     const res = await api.post<BackendDeal>("/api/deals/create", payload);
     return mapDeal(res.data);
@@ -158,6 +195,18 @@ export interface UpdateDealPayload {
     contactId?: string | null;
     companyId?: string | null;
     closeDate?: string | null;
+    currency?: string | null;
+    opportunityType?: string | null;
+    region?: string | null;
+    legalEntity?: string | null;
+    channel?: string | null;
+    partnerId?: string | null;
+    partnerName?: string | null;
+    partnerSplitPercentage?: number | null;
+    productId?: string | null;
+    subscriptionId?: string | null;
+    parentSubscriptionId?: string | null;
+    subscriptionRelationship?: string | null;
 }
 
 export async function updateDeal(
@@ -184,6 +233,42 @@ export async function updateDeal(
         }),
         ...(data.closeDate !== undefined && {
             closeDate: data.closeDate,
+        }),
+        ...(data.currency !== undefined && {
+            currency: data.currency,
+        }),
+        ...(data.opportunityType !== undefined && {
+            opportunityType: data.opportunityType,
+        }),
+        ...(data.region !== undefined && {
+            region: data.region,
+        }),
+        ...(data.legalEntity !== undefined && {
+            legalEntity: data.legalEntity,
+        }),
+        ...(data.channel !== undefined && {
+            channel: data.channel,
+        }),
+        ...(data.partnerId !== undefined && {
+            partnerId: data.partnerId,
+        }),
+        ...(data.partnerName !== undefined && {
+            partnerName: data.partnerName,
+        }),
+        ...(data.partnerSplitPercentage !== undefined && {
+            partnerSplitPercentage: data.partnerSplitPercentage,
+        }),
+        ...(data.productId !== undefined && {
+            productId: data.productId,
+        }),
+        ...(data.subscriptionId !== undefined && {
+            subscriptionId: data.subscriptionId,
+        }),
+        ...(data.parentSubscriptionId !== undefined && {
+            parentSubscriptionId: data.parentSubscriptionId,
+        }),
+        ...(data.subscriptionRelationship !== undefined && {
+            subscriptionRelationship: data.subscriptionRelationship,
         }),
     };
 

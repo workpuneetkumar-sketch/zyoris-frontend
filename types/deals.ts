@@ -1,5 +1,4 @@
-// types/deals.ts
-// Reflects the exact shape returned by GET /analytics/conversion/scores
+import { OpportunityType, SharedOwner } from "./enterpriseDeals";
 
 export interface Deal {
   dealId: string;
@@ -7,6 +6,7 @@ export interface Deal {
   name: string;
   stage: string;
   amount: number;
+  currency?: string;
   conversionProbability: number;
   owner?: string;
   companyName?: string;
@@ -28,6 +28,20 @@ export interface Deal {
   legalStatus?: string;
   procurementStatus?: string;
   stageRequirements?: string[];
+  // BE-2 Day 5 Enterprise fields
+  opportunityType?: OpportunityType | string;
+  region?: string;
+  legalEntity?: string;
+  channel?: string;
+  partnerId?: string | null;
+  partnerName?: string | null;
+  partnerSplitPercentage?: number | null;
+  productId?: string | null;
+  productName?: string | null;
+  subscriptionId?: string | null;
+  parentSubscriptionId?: string | null;
+  subscriptionRelationship?: string | null;
+  sharedOwners?: SharedOwner[];
   [key: string]: unknown;
 }
 
@@ -54,6 +68,11 @@ export interface DealsFilters {
   owner: string;
   dateFrom: string;
   dateTo: string;
+  // Day 5 Enterprise filters
+  opportunityType?: string;
+  region?: string;
+  channel?: string;
+  currency?: string;
 }
 
 export const DEFAULT_DEALS_FILTERS: DealsFilters = {
@@ -62,6 +81,10 @@ export const DEFAULT_DEALS_FILTERS: DealsFilters = {
   owner: "All Owners",
   dateFrom: "",
   dateTo: "",
+  opportunityType: "All Types",
+  region: "All Regions",
+  channel: "All Channels",
+  currency: "All Currencies",
 };
 
 export const DEFAULT_DEAL_STAGES = [

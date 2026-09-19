@@ -119,17 +119,73 @@ export async function fetchDealRisks(
   filters?: DealRiskFilters
 ): Promise<DealRisk[]> {
   const params = new URLSearchParams();
-  if (filters?.severity) params.append("severity", filters.severity);
-  if (filters?.riskType) params.append("riskType", filters.riskType);
+  if (filters?.severity && String(filters.severity) !== "ALL") params.append("severity", filters.severity);
+  if (filters?.riskType && String(filters.riskType) !== "ALL") params.append("riskType", filters.riskType);
   if (filters?.isActive !== undefined) params.append("isActive", String(filters.isActive));
 
   const qs = params.toString() ? `?${params.toString()}` : "";
-  const data = await apiGetFallback<any>(
-    `/api/deals/${dealId}/risks${qs}`,
-    `/deals/${dealId}/risks${qs}`
-  );
-  const list = extractData<DealRisk[]>(data);
-  return Array.isArray(list) ? list : [];
+  let list: DealRisk[] = [];
+  try {
+    const data = await apiGetFallback<any>(
+      `/api/deals/${dealId}/risks${qs}`,
+      `/deals/${dealId}/risks${qs}`
+    );
+    const extracted = extractData<any>(data);
+    if (Array.isArray(extracted)) {
+      list = extracted;
+    } else if (Array.isArray(extracted?.risks)) {
+      list = extracted.risks;
+    } else if (Array.isArray(extracted?.data)) {
+      list = extracted.data;
+    } else if (Array.isArray(extracted?.data?.risks)) {
+      list = extracted.data.risks;
+    } else if (Array.isArray(data?.risks)) {
+      list = data.risks;
+    } else if (Array.isArray(data?.data?.risks)) {
+      list = data.data.risks;
+    } else if (Array.isArray(data?.activeRisks)) {
+      list = data.activeRisks;
+    }
+  } catch {
+    list = [];
+  }
+
+  // Fallback: If /deals/:id/risks returns empty array, check /deals/:id/health which computes and returns activeRisks
+  if (!list || list.length === 0) {
+    try {
+      const healthData = await fetchDealHealth(dealId);
+      const activeRisks =
+        healthData?.activeRisks ||
+        (healthData as any)?.data?.activeRisks ||
+        (healthData as any)?.risks;
+      if (Array.isArray(activeRisks) && activeRisks.length > 0) {
+        list = activeRisks;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Apply filters if list was retrieved from fallback or if backend returned unfiltered risks
+  if (filters?.severity && String(filters.severity) !== "ALL") {
+    list = list.filter(
+      (r) => r.severity?.toUpperCase() === String(filters.severity).toUpperCase()
+    );
+  }
+  if (filters?.riskType && String(filters.riskType) !== "ALL") {
+    list = list.filter(
+      (r) => r.riskType?.toUpperCase() === String(filters.riskType).toUpperCase()
+    );
+  }
+  if (filters?.isActive !== undefined) {
+    const activeBool = String(filters.isActive) === "true";
+    list = list.filter((r) => {
+      if (r.isActive !== undefined) return r.isActive === activeBool;
+      return activeBool ? r.status !== "RESOLVED" : r.status === "RESOLVED";
+    });
+  }
+
+  return list;
 }
 
 /**

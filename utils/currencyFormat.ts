@@ -55,3 +55,12 @@ export function formatCurrencyAmount(
     return `${symbol}${amount.toLocaleString("en-US")}`;
   }
 }
+
+export function formatCurrencyWithSnapshot(
+  amount?: number | null,
+  currency: string = "USD",
+  compact: boolean = false
+): string {
+  return formatCurrencyAmount(amount, currency, compact);
+}
+
