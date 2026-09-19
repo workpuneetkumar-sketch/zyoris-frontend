@@ -25,6 +25,8 @@ import {
   FileCheck,
   CreditCard,
   Megaphone,
+  Bot,
+  Send,
 } from "lucide-react";
 import {
   ReportEntityType,
@@ -34,6 +36,9 @@ import {
   getColumnDisplayName,
   getEntityDisplayName,
 } from "@/lib/api/reportsApi";
+import { queryReport } from "@/lib/api/reportingApi";
+import { NLReportResultView } from "@/components/reporting/NLReportResultView";
+import type { NLReportResult } from "@/lib/types/agent-results";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -72,7 +77,118 @@ const EntityIcon = ({ type }: { type: ReportEntityType }) => {
 
 // ─── Main Component ────────────────────────────────────────────────────
 
+// ─── Tab type ──────────────────────────────────────────────────────────────────
+
+type ReportTab = "builder" | "ai";
+
+// ─── AI Query Panel ────────────────────────────────────────────────────────────
+
+function AIQueryPanel() {
+  const [question, setQuestion]         = useState("");
+  const [loading, setLoading]           = useState(false);
+  const [result, setResult]             = useState<NLReportResult | null>(null);
+  const [error, setError]               = useState<string | null>(null);
+  const inputRef                        = React.useRef<HTMLTextAreaElement>(null);
+
+  const SUGGESTIONS = [
+    "What is our pipeline coverage this quarter?",
+    "Show me deal conversion rates by stage",
+    "Which leads were created in the last 30 days?",
+    "What is the average deal size by rep?",
+  ];
+
+  const handleAsk = useCallback(async () => {
+    const q = question.trim();
+    if (!q || loading) return;
+    setLoading(true);
+    setError(null);
+    setResult(null);
+    try {
+      const res = await queryReport({ question: q });
+      setResult(res);
+    } catch (err: any) {
+      setError(err.message ?? "Reporting Agent query failed.");
+    } finally {
+      setLoading(false);
+    }
+  }, [question, loading]);
+
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-5 space-y-3">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="p-2 bg-indigo-50 rounded-lg">
+            <Bot size={18} className="text-indigo-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">AI Report Query</h2>
+            <p className="text-xs text-gray-500">Ask a natural-language question — the agent analyses your CRM data and returns structured results with drill-down links.</p>
+          </div>
+        </div>
+        <textarea
+          ref={inputRef}
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAsk(); } }}
+          placeholder="Ask anything about your CRM data… (Enter to submit)"
+          rows={3}
+          disabled={loading}
+          className="w-full px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 bg-gray-50 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 transition-all disabled:opacity-60"
+        />
+        {!result && !loading && (
+          <div className="flex flex-wrap gap-2">
+            {SUGGESTIONS.map((s) => (
+              <button key={s} onClick={() => { setQuestion(s); inputRef.current?.focus(); }}
+                className="text-[11px] font-medium px-2.5 py-1 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 hover:bg-indigo-50 hover:border-indigo-200 hover:text-indigo-700 transition-colors">
+                {s}
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] text-gray-400">Press Enter to submit, Shift+Enter for new line</p>
+          <button onClick={handleAsk} disabled={!question.trim() || loading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+            {loading ? <RefreshCw size={14} className="animate-spin" /> : <Send size={14} />}
+            {loading ? "Asking…" : "Ask Agent"}
+          </button>
+        </div>
+      </div>
+      {loading && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center animate-pulse">
+          <RefreshCw className="w-8 h-8 text-indigo-600 animate-spin mx-auto mb-3" />
+          <p className="text-gray-600 font-medium text-sm">Analysing your data…</p>
+        </div>
+      )}
+      {error && !loading && (
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200">
+          <X size={16} className="text-red-500 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-red-700">Query failed</p>
+            <p className="text-xs text-red-600 mt-0.5">{error}</p>
+          </div>
+          <button onClick={handleAsk} className="text-xs font-semibold text-red-600 hover:underline shrink-0">Retry</button>
+        </div>
+      )}
+      {result && !loading && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Agent Response</p>
+            <button onClick={() => { setResult(null); setQuestion(""); }} className="text-xs text-indigo-600 hover:underline font-medium">Ask another question</button>
+          </div>
+          <NLReportResultView result={result} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Component ────────────────────────────────────────────────────────────
+
 export default function ReportsPage() {
+  // ─── Tab state ───────────────────────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<ReportTab>("builder");
+
   // ─── State ───────────────────────────────────────────────────────────
 
   const [entityType, setEntityType] = useState<ReportEntityType>("LEADS");
@@ -376,19 +492,48 @@ export default function ReportsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
-          <button
-            onClick={() => setShowSavedReports(!showSavedReports)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
-          >
-            <Eye size={16} />
-            Saved Reports
-            <span className="ml-1 px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-xs font-semibold">
-              {savedReports.length}
-            </span>
-            <ChevronDown size={16} className={`transition-transform ${showSavedReports ? 'rotate-180' : ''}`} />
-          </button>
+          {activeTab === "builder" && (
+            <button
+              onClick={() => setShowSavedReports(!showSavedReports)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
+            >
+              <Eye size={16} />
+              Saved Reports
+              <span className="ml-1 px-2 py-0.5 bg-indigo-100 text-indigo-600 rounded-full text-xs font-semibold">
+                {savedReports.length}
+              </span>
+              <ChevronDown size={16} className={`transition-transform ${showSavedReports ? 'rotate-180' : ''}`} />
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl mb-6 w-fit">
+        {([
+          { id: "builder" as ReportTab, label: "Report Builder", icon: Filter },
+          { id: "ai"      as ReportTab, label: "AI Query",       icon: Bot    },
+        ] as { id: ReportTab; label: string; icon: React.ElementType }[]).map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+              activeTab === id
+                ? "bg-white text-indigo-700 shadow-sm"
+                : "text-gray-500 hover:text-gray-700"
+            }`}
+          >
+            <Icon size={15} />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* AI tab */}
+      {activeTab === "ai" && <AIQueryPanel />}
+
+      {/* Builder tab content */}
+      {activeTab === "builder" && <>
 
       {/* Saved Reports Panel */}
       {showSavedReports && (
@@ -722,6 +867,7 @@ export default function ReportsPage() {
           </p>
         </div>
       )}
+      </>}
     </div>
   );
 }

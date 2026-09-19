@@ -194,7 +194,30 @@ function RecommendationCard({
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  const text = rec.recommendation ?? rec.text ?? rec.title ?? `Recommendation ${index + 1}`;
+  // rec.recommendation (and rec.text / rec.title) may arrive from the backend
+  // as a nested object — e.g. { actionTitle, detailedRationale, recommendedChannel, priority }.
+  // Rendering an object directly as a JSX child throws React error #31.
+  // Extract the most human-readable string from whatever shape arrives.
+  function extractString(val: unknown): string | undefined {
+    if (val == null) return undefined;
+    if (typeof val === "string") return val || undefined;
+    if (typeof val === "object") {
+      const v = val as Record<string, unknown>;
+      // Try known field names from various backend agent shapes
+      const candidate =
+        v.actionTitle ?? v.title ?? v.recommendation ?? v.text ??
+        v.label ?? v.summary ?? v.description ?? v.detailedRationale;
+      if (typeof candidate === "string" && candidate) return candidate;
+      // Last resort: JSON so something is always shown rather than crashing
+      try { return JSON.stringify(val); } catch { return undefined; }
+    }
+    return String(val);
+  }
+  const text =
+    extractString(rec.recommendation) ??
+    extractString(rec.text) ??
+    extractString(rec.title) ??
+    `Recommendation ${index + 1}`;
   const hasEvidence = rec.evidence && rec.evidence.length > 0;
   const hasSuggestedAction = !!rec.suggestedAction;
 
@@ -202,7 +225,11 @@ function RecommendationCard({
   // an executionId / approvalId is present. If not, it shows a
   // confirmation and notes that server-side validation applies.
   const handleApply = async () => {
-    const approvalId = rec.suggestedAction?.payload?.approvalId as string | undefined
+    // suggestedAction may come in various shapes from different agents.
+    // Try the canonical payload.approvalId first, then fall back to executionId.
+    const sa = rec.suggestedAction as Record<string, unknown> | undefined;
+    const approvalId =
+      (sa?.payload as Record<string, unknown> | undefined)?.approvalId as string | undefined
       ?? executionId;
 
     if (!approvalId) {
@@ -291,7 +318,21 @@ function RecommendationCard({
                     {applying ? "Applying…" : "Approve & Apply"}
                   </button>
                   <span className="text-[10px] text-[color:var(--color-text-muted)]">
-                    {rec.suggestedAction?.label ?? rec.suggestedAction?.type}
+                    {(() => {
+                      const sa = rec.suggestedAction;
+                      if (!sa) return null;
+                      // label/type are the canonical fields; fall back to known
+                      // backend variants so an object never reaches JSX (React #31)
+                      const display =
+                        sa.label ??
+                        sa.type ??
+                        (sa as any).actionTitle ??
+                        (sa as any).recommendedChannel ??
+                        (sa as any).priority;
+                      if (typeof display === "string") return display;
+                      // Object or undefined — don't render anything rather than crash
+                      return null;
+                    })()}
                   </span>
                 </div>
               )}
