@@ -78,7 +78,7 @@ export function LeadApiActionsToolbar({
 
   // 3. Signals Form
   const [sourceText, setSourceText] = useState<string>("Visited pricing page & calculated enterprise ROI");
-  const [sourceType, setSourceType] = useState<string>("WEB_INTENT");
+  const [sourceType, setSourceType] = useState<string>("WEBSITE");
   const [signalScore, setSignalScore] = useState<number>(85);
 
   // 4. Session Form
@@ -99,7 +99,14 @@ export function LeadApiActionsToolbar({
   const handleTransitionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await executeTransition({ toStatus, reason: transitionReason });
+      const cleanReason = transitionReason.trim() || `Transitioned lead stage to ${toStatus}`;
+      await executeTransition({
+        toStatus,
+        status: toStatus,
+        toStage: toStatus,
+        stage: toStatus,
+        reason: cleanReason,
+      });
       setActiveModal(null);
     } catch {}
   };
@@ -480,11 +487,10 @@ export function LeadApiActionsToolbar({
                   onChange={(e) => setSourceType(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
                 >
-                  <option value="WEB_INTENT">Web Browsing & Intent</option>
-                  <option value="PRICING_VISIT">Pricing Page Calculation</option>
-                  <option value="CONTENT_DOWNLOAD">Whitepaper / Case Study Download</option>
-                  <option value="EMAIL_CLICK">Email CTA Link Click</option>
-                  <option value="DEMO_REQUEST">Demo Booking Inquiry</option>
+                  <option value="WEBSITE">Website Visit & Intent (WEBSITE)</option>
+                  <option value="EMAIL_OPEN">Email Open & Engagement (EMAIL_OPEN)</option>
+                  <option value="PRODUCT_CLICK">Product Feature Click (PRODUCT_CLICK)</option>
+                  <option value="OTHER">Other Custom Signal (OTHER)</option>
                 </select>
               </div>
 
