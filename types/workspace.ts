@@ -18,6 +18,8 @@ export interface BlockFormatting {
   strikethrough?: boolean;
   code?: boolean;
   link?: string | null;
+  isOpen?: boolean;
+  subtext?: string;
 }
 
 export interface WorkspaceBlock {

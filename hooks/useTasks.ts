@@ -9,7 +9,11 @@ import {
     TaskPriority,
     fetchTasks,
     fetchMyTasks,
+<<<<<<< Updated upstream
     fetchAssignmentEvents,
+=======
+    fetchTaskAssignmentEvents,
+>>>>>>> Stashed changes
     createTask,
     updateTask,
     deleteTask,
@@ -48,6 +52,7 @@ export function useTasks(currentUserId?: string) {
         setLoading(true);
         setError(null);
         try {
+<<<<<<< Updated upstream
             if (filter === "my") {
                 const data = await fetchMyTasks();
                 setTasks(data.tasks ?? []);
@@ -55,6 +60,10 @@ export function useTasks(currentUserId?: string) {
                 const data = await fetchTasks();
                 setTasks(data.tasks ?? []);
             }
+=======
+            const data = filter === "my" ? await fetchMyTasks() : await fetchTasks();
+            setTasks(data.tasks ?? []);
+>>>>>>> Stashed changes
         } catch (err) {
             if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 204)) {
                 setTasks([]);
@@ -70,6 +79,7 @@ export function useTasks(currentUserId?: string) {
         loadTasks();
     }, [loadTasks]);
 
+<<<<<<< Updated upstream
     // ── Short polling for assignment/reassignment events ────────────────────────
     useEffect(() => {
         const interval = setInterval(async () => {
@@ -88,6 +98,23 @@ export function useTasks(currentUserId?: string) {
 
         return () => clearInterval(interval);
     }, [filter, lastEventCheck]);
+=======
+    // ── Short polling for assignment / reassignment events ──────────────────────
+    useEffect(() => {
+        let lastCheck = new Date().toISOString();
+        const pollInterval = setInterval(async () => {
+            try {
+                const events = await fetchTaskAssignmentEvents(lastCheck);
+                if (events && events.length > 0) {
+                    lastCheck = new Date().toISOString();
+                    loadTasks();
+                }
+            } catch (e) {}
+        }, 15000); // Poll every 15 seconds for assignment events
+
+        return () => clearInterval(pollInterval);
+    }, [loadTasks]);
+>>>>>>> Stashed changes
 
     // ── Client-side filtering ─────────────────────────────────────────────────
     const filteredTasks = useMemo(() => {

@@ -16,12 +16,18 @@ import {
   Search,
   ImageIcon,
   Paperclip,
+<<<<<<< Updated upstream
   ChevronRight,
   MessageSquare,
   Bookmark,
   Table,
   Database,
   ListTodo,
+=======
+  Image as ImageIcon,
+  ChevronRight,
+  Database,
+>>>>>>> Stashed changes
 } from "lucide-react";
 
 export interface BlockOption {
@@ -145,6 +151,34 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
     description: "Capture a block quote or callout quote.",
     icon: Quote,
     keywords: ["quote", "cite", "blockquote"],
+  },
+  {
+    type: "callout",
+    label: "Callout",
+    description: "Make text stand out with an icon alert box.",
+    icon: Search,
+    keywords: ["callout", "alert", "notice", "box", "tip", "info"],
+  },
+  {
+    type: "toggle",
+    label: "Toggle List",
+    description: "Toggles can hide and show sub-content.",
+    icon: ChevronRight,
+    keywords: ["toggle", "accordion", "expand", "collapse"],
+  },
+  {
+    type: "bookmark",
+    label: "Web Bookmark",
+    description: "Embed a visual link preview card for a website.",
+    icon: LinkIcon,
+    keywords: ["bookmark", "link", "url", "embed", "web"],
+  },
+  {
+    type: "table",
+    label: "Table",
+    description: "Add a grid table to structure data.",
+    icon: Database,
+    keywords: ["table", "grid", "data", "row", "col"],
   },
   {
     type: "divider",

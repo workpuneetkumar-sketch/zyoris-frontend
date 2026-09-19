@@ -219,7 +219,7 @@ function removeLocalBlock(pageId: string, blockId: string) {
     const existing = getLocalBlocks(pageId);
     const updated = existing.filter((b) => b.id !== blockId);
     localStorage.setItem(`zyoris_page_blocks_${pageId}`, JSON.stringify(updated));
-  } catch (e) {}
+  } catch (e) { }
 }
 
 /**
@@ -295,7 +295,7 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
             }
           }
         }
-      } catch (e) {}
+      } catch (e) { }
     }
     throw error;
   }
@@ -352,14 +352,11 @@ export async function updateWorkspacePage(
  * DELETE /workspace/pages/:id
  */
 export async function deleteWorkspacePage(id: string): Promise<void> {
-  if (id.startsWith("page-") || id.startsWith("local-")) {
+  if (id.startsWith("local-") || id.startsWith("page-")) {
     return;
   }
-  try {
-    await api.delete(`/workspace/pages/${id}`);
-  } catch (error) {
-    console.warn(`Backend delete notice for page ${id}:`, error);
-  }
+  const res = await api.delete(`/workspace/pages/${id}`);
+  return res.data;
 }
 
 /* ============================================================================

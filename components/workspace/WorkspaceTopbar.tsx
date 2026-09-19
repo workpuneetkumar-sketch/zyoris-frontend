@@ -1,13 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { WorkspacePageNode } from "@/types/workspace";
 import { CreateMenu } from "./CreateMenu";
-import { Menu, LayoutGrid, User as UserIcon, ChevronRight, FileText } from "lucide-react";
+import { GlobalSearchModal } from "./GlobalSearchModal";
+import { Menu, LayoutGrid, User as UserIcon, ChevronRight, Search, Command } from "lucide-react";
 
 interface WorkspaceTopbarProps {
   onToggleMobileSidebar: () => void;
@@ -21,6 +22,19 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
   const { user } = useAuth();
   const pathname = usePathname();
   const { pageTree } = useWorkspace();
+  const [isSearchOpen, setIsSearchOpen] = useState<boolean>(false);
+
+  // Global Cmd+K / Ctrl+K keyboard shortcut listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // Find active page breadcrumbs path from pageTree
   const findBreadcrumbPath = (): { id?: string; title: string; href: string }[] => {
@@ -71,24 +85,68 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
   const breadcrumbs = findBreadcrumbPath();
 
   return (
-    <header className="h-14 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 flex items-center justify-between z-30 shrink-0">
-      {/* Left Area: Mobile Menu Toggle + Breadcrumbs */}
-      <div className="flex items-center space-x-3 min-w-0">
-        <button
-          onClick={onToggleMobileSidebar}
-          className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
-
-        <nav className="flex items-center space-x-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 min-w-0 overflow-hidden">
-          <Link
-            href="/workspace"
-            className="hover:text-slate-900 dark:hover:text-white transition flex-shrink-0"
+    <>
+      <header className="h-14 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 flex items-center justify-between z-30 shrink-0">
+        {/* Left Area: Mobile Menu Toggle + Breadcrumbs */}
+        <div className="flex items-center space-x-3 min-w-0">
+          <button
+            onClick={onToggleMobileSidebar}
+            className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0"
           >
-            Workspace
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <nav className="flex items-center space-x-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 min-w-0 overflow-hidden">
+            <Link
+              href="/workspace"
+              className="hover:text-slate-900 dark:hover:text-white transition flex-shrink-0"
+            >
+              Workspace
+            </Link>
+
+            {breadcrumbs.map((crumb, idx) => (
+              <React.Fragment key={crumb.href + idx}>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                <Link
+                  href={crumb.href}
+                  className={`truncate max-w-[140px] md:max-w-[200px] transition ${
+                    idx === breadcrumbs.length - 1
+                      ? "text-slate-900 dark:text-white font-semibold"
+                      : "hover:text-slate-900 dark:hover:text-white"
+                  }`}
+                >
+                  {crumb.title}
+                </Link>
+              </React.Fragment>
+            ))}
+          </nav>
+        </div>
+
+        {/* Right Area: Search, Create Menu & User Context */}
+        <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+          {/* Global Search Button */}
+          <button
+            onClick={() => setIsSearchOpen(true)}
+            className="flex items-center space-x-2 px-2.5 py-1.5 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-500 dark:text-slate-400 rounded-xl text-xs font-medium transition"
+          >
+            <Search className="w-3.5 h-3.5 text-slate-400" />
+            <span className="hidden sm:inline">Search...</span>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-[10px] font-mono text-slate-400 border border-slate-200 dark:border-slate-700 shadow-2xs">
+              ⌘K
+            </kbd>
+          </button>
+
+          <CreateMenu onOpenCreatePageModal={onOpenCreatePageModal} />
+
+          <Link
+            href="/dashboard"
+            title="Return to Main Dashboard"
+            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+          >
+            <LayoutGrid className="w-4 h-4" />
           </Link>
 
+<<<<<<< Updated upstream
           {breadcrumbs.map((crumb, idx) => (
             <React.Fragment key={crumb.href + idx}>
               <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 flex-shrink-0" />
@@ -123,13 +181,24 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
           <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
             <div className="w-7 h-7 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center justify-center shadow-xs">
               {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
+=======
+          {/* User Profile Context */}
+          {user && (
+            <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
+              <div className="w-7 h-7 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center justify-center shadow-xs">
+                {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
+              </div>
+              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 hidden sm:inline-block">
+                {user.name || "User"}
+              </span>
+>>>>>>> Stashed changes
             </div>
-            <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 hidden sm:inline-block">
-              {user.name || "User"}
-            </span>
-          </div>
-        )}
-      </div>
-    </header>
+          )}
+        </div>
+      </header>
+
+      {/* Global Search Modal */}
+      <GlobalSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
+    </>
   );
 };

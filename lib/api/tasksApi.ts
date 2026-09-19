@@ -892,6 +892,7 @@ export async function createTaskComment(taskId: string, content: string): Promis
     return (res.data?.data || res.data?.comment || res.data) as TaskComment;
 }
 
+<<<<<<< Updated upstream
 export async function getTaskComment(taskId: string, commentId: string): Promise<TaskComment> {
     const res = await api.get<any>(`/tasks/${taskId}/comments/${commentId}`);
     return (res.data?.data || res.data?.comment || res.data) as TaskComment;
@@ -905,6 +906,65 @@ export async function updateTaskComment(taskId: string, commentId: string, conte
 export async function deleteTaskComment(taskId: string, commentId: string): Promise<boolean> {
     const res = await api.delete<any>(`/tasks/${taskId}/comments/${commentId}`);
     return res.data?.success !== false;
+=======
+// ─── My Tasks & Assignment Events ───────────────────────────────────────────────
+
+/**
+ * Get tasks assigned to the current user.
+ * GET /workspace/my-tasks (alias /tasks/my-tasks)
+ */
+export async function fetchMyTasks(params?: TaskQueryParams): Promise<TasksResponse> {
+    try {
+        const res = await api.get("/workspace/my-tasks", { params });
+        const raw = res.data?.data ?? res.data;
+        if (Array.isArray(raw)) {
+            return { tasks: raw, total: raw.length };
+        }
+        return {
+            tasks: raw?.tasks || raw?.items || [],
+            total: raw?.total ?? (raw?.tasks?.length || 0),
+        };
+    } catch (err) {
+        try {
+            const fallbackRes = await api.get("/tasks/my-tasks", { params });
+            const raw = fallbackRes.data?.data ?? fallbackRes.data;
+            if (Array.isArray(raw)) {
+                return { tasks: raw, total: raw.length };
+            }
+            return {
+                tasks: raw?.tasks || raw?.items || [],
+                total: raw?.total ?? (raw?.tasks?.length || 0),
+            };
+        } catch (e) {
+            console.error("Error fetching my tasks:", e);
+            return { tasks: [], total: 0 };
+        }
+    }
+}
+
+/**
+ * Query recent task assignment / reassignment events for short polling.
+ * GET /workspace/tasks/assignment-events (alias /tasks/assignment-events)
+ */
+export async function fetchTaskAssignmentEvents(since?: string): Promise<any[]> {
+    try {
+        const res = await api.get("/workspace/tasks/assignment-events", {
+            params: { since, limit: 50 },
+        });
+        const raw = res.data?.data ?? res.data;
+        return Array.isArray(raw) ? raw : raw?.events || [];
+    } catch (err) {
+        try {
+            const fallbackRes = await api.get("/tasks/assignment-events", {
+                params: { since, limit: 50 },
+            });
+            const raw = fallbackRes.data?.data ?? fallbackRes.data;
+            return Array.isArray(raw) ? raw : raw?.events || [];
+        } catch (e) {
+            return [];
+        }
+    }
+>>>>>>> Stashed changes
 }
 
 // ── Sub-resources: Subtasks ───────────────────────────────────────────────────

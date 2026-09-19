@@ -89,10 +89,14 @@ import {
   Link as LinkIcon,
   ExternalLink,
   RefreshCw,
+<<<<<<< Updated upstream
   Sparkles,
   Send,
   Database as DatabaseIcon,
   Table as TableIcon,
+=======
+  ChevronRight,
+>>>>>>> Stashed changes
 } from "lucide-react";
 
 interface BlockEditorProps {
@@ -1154,6 +1158,112 @@ function renderBlockInput(
             inputRef={(el) => registerRef(index, el)}
             placeholder="Empty quote..."
             className={`w-full bg-transparent text-sm italic text-slate-700 dark:text-slate-300 focus:outline-none py-0.5 ${getFormatClasses()}`}
+          />
+        </div>
+      );
+
+    case "callout":
+      return (
+        <div className="flex items-start space-x-3 p-3.5 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-900/50 rounded-2xl">
+          <span className="text-xl select-none flex-shrink-0">💡</span>
+          <input
+            type="text"
+            value={text}
+            disabled={!canEdit}
+            onChange={(e) => onChangeText(index, e.target.value)}
+            onKeyDown={(e) => onKeyDown(e, index)}
+            placeholder="Type callout notice..."
+            className={`w-full bg-transparent text-sm font-medium text-amber-950 dark:text-amber-200 focus:outline-none ${getFormatClasses()}`}
+          />
+        </div>
+      );
+
+    case "toggle":
+      return (
+        <div className="space-y-1.5 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 bg-slate-50/40 dark:bg-slate-900/40">
+          <div className="flex items-center space-x-2">
+            <button
+              type="button"
+              onClick={() => {
+                const currentOpen = !!fmt.isOpen;
+                onUpdateBlockFields(index, { formatting: { ...fmt, isOpen: !currentOpen } });
+              }}
+              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-400"
+            >
+              <ChevronRight className={`w-4 h-4 transition-transform ${fmt.isOpen ? "rotate-90" : ""}`} />
+            </button>
+            <input
+              type="text"
+              value={text}
+              disabled={!canEdit}
+              onChange={(e) => onChangeText(index, e.target.value)}
+              onKeyDown={(e) => onKeyDown(e, index)}
+              placeholder="Toggle heading..."
+              className={`w-full bg-transparent text-sm font-bold text-slate-800 dark:text-slate-200 focus:outline-none ${getFormatClasses()}`}
+            />
+          </div>
+          {fmt.isOpen && (
+            <div className="pl-6 pt-1 text-xs text-slate-500">
+              <textarea
+                value={typeof fmt.subtext === "string" ? fmt.subtext : ""}
+                disabled={!canEdit}
+                onChange={(e) => {
+                  onUpdateBlockFields(index, { formatting: { ...fmt, subtext: e.target.value } });
+                }}
+                placeholder="Toggle sub-content..."
+                rows={2}
+                className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
+              />
+            </div>
+          )}
+        </div>
+      );
+
+    case "bookmark":
+      return (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 sm:space-y-0">
+          <div className="flex items-center space-x-3 min-w-0 flex-1">
+            <div className="p-2 bg-blue-50 dark:bg-blue-950/60 rounded-xl text-blue-500 flex-shrink-0">
+              <LinkIcon className="w-4 h-4" />
+            </div>
+            <input
+              type="text"
+              value={text}
+              disabled={!canEdit}
+              onChange={(e) => onChangeText(index, e.target.value)}
+              onKeyDown={(e) => onKeyDown(e, index)}
+              placeholder="Paste bookmark Web URL (https://...)"
+              className="w-full bg-transparent text-xs font-semibold text-slate-800 dark:text-slate-200 focus:outline-none"
+            />
+          </div>
+          {detectedUrl && (
+            <a
+              href={detectedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-1 px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-xs transition"
+            >
+              <span>Visit Link</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          )}
+        </div>
+      );
+
+    case "table":
+      return (
+        <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 overflow-x-auto">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
+            <span>Grid Table</span>
+          </div>
+          <textarea
+            value={text}
+            disabled={!canEdit}
+            onChange={(e) => onChangeText(index, e.target.value)}
+            onKeyDown={(e) => onKeyDown(e, index)}
+            placeholder="Header 1 | Header 2 | Header 3&#10;Value 1  | Value 2  | Value 3"
+            rows={3}
+            className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
           />
         </div>
       );

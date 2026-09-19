@@ -177,23 +177,34 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
 
   if (!page) return null;
 
+  const canEdit = page?.userPermissions?.canEdit ?? true;
+
   return (
     <div className="max-w-4xl mx-auto px-6 md:px-12 py-8 md:py-12">
+      {!canEdit && (
+        <div className="mb-4 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl text-amber-700 dark:text-amber-400 text-xs font-semibold flex items-center space-x-2">
+          <Sparkles className="w-4 h-4 flex-shrink-0" />
+          <span>Read-only Mode: You have view permissions for this page. Editing is disabled.</span>
+        </div>
+      )}
+
       {/* Cover Image Banner */}
       {coverImage && (
         <div className="relative group h-48 w-full rounded-2xl overflow-hidden mb-8 shadow-sm">
           <img src={coverImage} alt="Cover" className="w-full h-full object-cover" />
-          <button
-            onClick={() => handleSelectCover(null)}
-            className="opacity-0 group-hover:opacity-100 absolute top-3 right-3 px-3 py-1.5 bg-slate-900/70 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold backdrop-blur-xs transition"
-          >
-            Remove Cover
-          </button>
+          {canEdit && (
+            <button
+              onClick={() => handleSelectCover(null)}
+              className="opacity-0 group-hover:opacity-100 absolute top-3 right-3 px-3 py-1.5 bg-slate-900/70 hover:bg-slate-900 text-white rounded-lg text-xs font-semibold backdrop-blur-xs transition"
+            >
+              Remove Cover
+            </button>
+          )}
         </div>
       )}
       {/* Page Header Actions Toolbar */}
       <div className="flex items-center justify-between mb-4">
-        {!coverImage && (
+        {!coverImage && canEdit && (
           <button
             onClick={() => setIsCoverPickerOpen(!isCoverPickerOpen)}
             className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition"
@@ -225,7 +236,7 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       </div>
 
       {/* Cover Image Preset Picker */}
-      {isCoverPickerOpen && (
+      {isCoverPickerOpen && canEdit && (
         <div className="mb-6 p-4 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-3">
           <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">
             Select Cover Image Preset
@@ -248,15 +259,16 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       <div className="mb-8">
         <div className="flex items-center space-x-3 mb-3 relative">
           <button
-            onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
-            className="text-4xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition"
-            title="Change Icon"
+            onClick={() => canEdit && setIsEmojiPickerOpen(!isEmojiPickerOpen)}
+            disabled={!canEdit}
+            className="text-4xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition disabled:opacity-80 disabled:cursor-default"
+            title={canEdit ? "Change Icon" : "Page Icon"}
           >
             {icon || "📄"}
           </button>
 
           {/* Emoji Picker Popover */}
-          {isEmojiPickerOpen && (
+          {isEmojiPickerOpen && canEdit && (
             <div className="absolute top-14 left-0 z-50 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl flex flex-wrap gap-2 w-64">
               {EMOJI_LIST.map((emoji) => (
                 <button
@@ -276,9 +288,10 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
           <input
             type="text"
             value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
+            disabled={!canEdit}
+            onChange={(e) => canEdit && handleTitleChange(e.target.value)}
             placeholder="Untitled Page..."
-            className="w-full text-4xl font-extrabold text-slate-900 dark:text-white bg-transparent focus:outline-none tracking-tight placeholder-slate-300 dark:placeholder-slate-700"
+            className="w-full text-4xl font-extrabold text-slate-900 dark:text-white bg-transparent focus:outline-none tracking-tight placeholder-slate-300 dark:placeholder-slate-700 disabled:opacity-90"
           />
         </div>
 

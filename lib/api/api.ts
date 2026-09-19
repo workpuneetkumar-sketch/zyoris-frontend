@@ -351,12 +351,20 @@ api.interceptors.response.use(
                 if (!refreshToken) {
                     const tokenCookie = getCookie("zyoris-token");
                     if (!tokenCookie && !parsedAuth) {
-                        // Definitely unauthenticated session — redirect to login
-                        if (!isRedirecting) {
+                        // Definitely unauthenticated session — redirect to login only if not already on auth pages
+                        localStorage.removeItem("zyoris-auth");
+                        const TOKEN_COOKIE = "zyoris-token";
+                        document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+
+                        const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+                        const isPublicAuthPage =
+                            currentPath === "/login" ||
+                            currentPath.startsWith("/login/") ||
+                            currentPath === "/register" ||
+                            currentPath.startsWith("/register/");
+
+                        if (!isPublicAuthPage && !isRedirecting && typeof window !== "undefined") {
                             isRedirecting = true;
-                            localStorage.removeItem("zyoris-auth");
-                            const TOKEN_COOKIE = "zyoris-token";
-                            document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
                             window.location.href = "/login";
                         }
                     }
@@ -436,12 +444,20 @@ api.interceptors.response.use(
                 /* -----------------------------------
                    REFRESH FAILED -> LOGOUT USER
                 ----------------------------------- */
-                if (!isRedirecting) {
+                setAuthToken(null);
+                localStorage.removeItem("zyoris-auth");
+                const TOKEN_COOKIE = "zyoris-token";
+                document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+
+                const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+                const isPublicAuthPage =
+                    currentPath === "/login" ||
+                    currentPath.startsWith("/login/") ||
+                    currentPath === "/register" ||
+                    currentPath.startsWith("/register/");
+
+                if (!isPublicAuthPage && !isRedirecting && typeof window !== "undefined") {
                     isRedirecting = true;
-                    setAuthToken(null);
-                    localStorage.removeItem("zyoris-auth");
-                    const TOKEN_COOKIE = "zyoris-token";
-                    document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
                     window.location.href = "/login";
                 }
 
