@@ -55,7 +55,7 @@ import { fetchLeads } from "@/lib/api/leadsApi";
 
 // Channel configs with human friendly non-tech guides
 const NO_CODE_CHANNEL_CONFIG: Record<
-  IngestionChannel,
+  Exclude<IngestionChannel, "IMPORTS">,
   {
     title: string;
     subtitle: string;
@@ -161,24 +161,9 @@ const NO_CODE_CHANNEL_CONFIG: Record<
     ],
     samplePayload: CHANNEL_SAMPLE_PAYLOADS.REFERRALS.payload,
   },
-  IMPORTS: {
-    title: "Batch CSV / Excel Importer",
-    subtitle: "Upload CSV spreadsheets or Excel lead lists with 1-click column auto-mapping.",
-    icon: FileSpreadsheet,
-    color: "text-rose-600",
-    bg: "bg-rose-50",
-    borderColor: "border-rose-200",
-    badge: "Instant Import",
-    guideSteps: [
-      "Drag and drop your .csv or .xlsx file in the upload zone below.",
-      "Our system auto-detects Name, Email, Phone, and Company columns.",
-      "Click 'Import Leads Now' to ingest hundreds of leads in seconds."
-    ],
-    samplePayload: CHANNEL_SAMPLE_PAYLOADS.IMPORTS.payload,
-  },
 };
 
-type ActiveTab = "NO_CODE_HUB" | "SIMULATOR" | "DOCS" | "LOGS";
+type ActiveTab = "NO_CODE_HUB" | "SIMULATOR" | "LOGS";
 type IngestMode = "GENERAL_ENVELOPE" | "DIRECT_PATH";
 
 const LOCAL_STORAGE_LOGS_KEY = "zyoris_ingestion_event_logs_v2";
@@ -324,10 +309,6 @@ export function LeadIngestionWorkbench() {
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
 
-  // CSV Drag and Drop states
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [importingCsv, setImportingCsv] = useState(false);
-
   // Execution & Logs state
   const [loading, setLoading] = useState(false);
   const [refreshingLive, setRefreshingLive] = useState(false);
@@ -424,46 +405,6 @@ export function LeadIngestionWorkbench() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Simulate CSV File Import for Non-Tech Users
-  const handleCsvImport = () => {
-    if (!csvFile) return;
-    setImportingCsv(true);
-    setTimeout(() => {
-      const generatedLead: IngestLeadResponse = {
-        leadId: `csv_${Math.random().toString(36).substr(2, 8)}`,
-        organizationId: "org_zyoris_demo",
-        channel: "IMPORTS",
-        source: "CSV_BATCH_IMPORTER",
-        sourceId: `file_${csvFile.name}`,
-        isNewLead: true,
-        idempotencyResult: "CREATED",
-        identityResolution: {
-          matched: true,
-          customerId: "cust_batch_881",
-          matchReason: "EXACT_EMAIL",
-        },
-        lead: {
-          id: `csv_${Math.random().toString(36).substr(2, 8)}`,
-          name: "Rohan Patel (CSV Import)",
-          email: "rohan.patel@solargrid.in",
-          phone: "+919820011223",
-          company: "SolarGrid Tech",
-          status: "NEW",
-          source: "CSV_BATCH_IMPORTER",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        receivedAt: new Date().toISOString(),
-      };
-
-      const updated = [generatedLead, ...logs];
-      saveLogs(updated);
-      setImportingCsv(false);
-      setCsvFile(null);
-      triggerToast(`✅ File '${csvFile.name}' Imported! 1 lead added to CRM.`);
-    }, 1200);
   };
 
   const handleSyncLiveLeads = async () => {
@@ -586,17 +527,11 @@ export function LeadIngestionWorkbench() {
               <Zap size={24} />
             </span>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-black text-gray-900 leading-tight">
-                  Lead Ingestion Center & Channel Connectors
-                </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                  LIVE PIPELINE
-                </span>
-              </div>
+              <h1 className="text-xl font-black text-gray-900 leading-tight">
+                Lead Ingestion Center & Channel Connectors
+              </h1>
               <p className="text-xs text-gray-500 mt-0.5">
-                Connect channels (WhatsApp, Facebook Ads, Website Forms, CSV) without coding, or test raw API JSON payloads.
+                Connect channels (WhatsApp, Facebook Ads, Website Forms) without coding, or test raw API JSON payloads.
               </p>
             </div>
           </div>
@@ -618,7 +553,7 @@ export function LeadIngestionWorkbench() {
           <button
             onClick={() => setActiveTab("SIMULATOR")}
             className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-              activeTab === "SIMULATOR" || activeTab === "DOCS"
+              activeTab === "SIMULATOR"
                 ? "bg-slate-900 text-white shadow-md"
                 : "text-gray-600 hover:text-gray-900"
             }`}
@@ -635,7 +570,6 @@ export function LeadIngestionWorkbench() {
           {[
             { id: "NO_CODE_HUB", label: "No-Code Channel Connectors", icon: MousePointerClick },
             { id: "SIMULATOR", label: "JSON & cURL Developer Testbench", icon: Code2 },
-            { id: "DOCS", label: "REST Endpoint Reference", icon: BookOpen },
             { id: "LOGS", label: "Ingestion Event Activity Logs", icon: Layers, count: logs.length },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -679,21 +613,18 @@ export function LeadIngestionWorkbench() {
           <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 rounded-3xl p-6 text-white shadow-xl relative overflow-hidden">
             <div className="absolute -right-8 -bottom-8 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
             <div className="relative z-10 max-w-2xl space-y-2">
-              <span className="px-3 py-1 bg-white/20 backdrop-blur-md rounded-full text-[11px] font-extrabold tracking-wider uppercase text-white border border-white/30 inline-flex items-center gap-1.5">
-                <Sparkles size={13} className="text-yellow-300" /> Non-Technical Guided Setup
-              </span>
               <h2 className="text-2xl font-black tracking-tight">
                 Connect Lead Channels in 3 Easy Steps — 0% Code Required
               </h2>
               <p className="text-xs text-blue-100 leading-relaxed font-medium">
-                Select any channel card below to get your ready-to-use integration link or drag & drop an Excel/CSV file to instantly import your leads into Zyoris CRM.
+                Select any channel card below to get your ready-to-use integration link to instantly connect your leads into Zyoris CRM.
               </p>
             </div>
           </div>
 
-          {/* 7 Native Channel Cards Grid */}
+          {/* 6 Native Channel Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {(Object.keys(NO_CODE_CHANNEL_CONFIG) as IngestionChannel[]).map((ch) => {
+            {(Object.keys(NO_CODE_CHANNEL_CONFIG) as Array<keyof typeof NO_CODE_CHANNEL_CONFIG>).map((ch) => {
               const conf = NO_CODE_CHANNEL_CONFIG[ch];
               const Icon = conf.icon;
               return (
@@ -728,59 +659,6 @@ export function LeadIngestionWorkbench() {
                 </div>
               );
             })}
-          </div>
-
-          {/* Instant CSV Drag & Drop Batch Upload Zone */}
-          <div className="bg-white p-6 rounded-3xl border border-gray-200 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <div className="flex items-center gap-2.5">
-                <span className="p-2 rounded-xl bg-rose-50 text-rose-600">
-                  <FileSpreadsheet size={20} />
-                </span>
-                <div>
-                  <h3 className="text-sm font-extrabold text-gray-900">Direct Batch CSV / Excel Lead Uploader</h3>
-                  <p className="text-xs text-gray-500">Upload lead spreadsheets to import hundreds of prospects automatically.</p>
-                </div>
-              </div>
-              <span className="text-xs font-bold text-rose-600 bg-rose-50 px-3 py-1 rounded-full">
-                Auto-column Mapping
-              </span>
-            </div>
-
-            <div className="border-2 border-dashed border-gray-200 hover:border-blue-400 bg-gray-50/50 hover:bg-blue-50/30 rounded-2xl p-8 text-center transition-all space-y-3">
-              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-600 flex items-center justify-center mx-auto">
-                <UploadCloud size={24} />
-              </div>
-              <div>
-                <p className="text-xs font-extrabold text-gray-800">
-                  {csvFile ? csvFile.name : "Drag and drop your .csv or .xlsx lead spreadsheet here"}
-                </p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Supports CSV, XLS, XLSX formats up to 50MB</p>
-              </div>
-
-              <div className="flex items-center justify-center gap-3 pt-2">
-                <label className="px-4 py-2 rounded-xl bg-white border border-gray-300 hover:border-gray-400 text-xs font-bold text-gray-700 cursor-pointer shadow-xs">
-                  Choose File
-                  <input
-                    type="file"
-                    accept=".csv,.xls,.xlsx"
-                    onChange={(e) => setCsvFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
-
-                {csvFile && (
-                  <button
-                    onClick={handleCsvImport}
-                    disabled={importingCsv}
-                    className="px-5 py-2 rounded-xl bg-rose-600 text-white font-bold text-xs hover:bg-rose-700 shadow-md shadow-rose-200 flex items-center gap-2"
-                  >
-                    {importingCsv ? <RefreshCw size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                    {importingCsv ? "Importing Leads..." : "Import Leads Now"}
-                  </button>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       )}
@@ -866,16 +744,6 @@ export function LeadIngestionWorkbench() {
               )}
             </div>
           </div>
-        </div>
-      )}
-
-      {/* MODE 3: REST DOCS */}
-      {activeTab === "DOCS" && (
-        <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm space-y-4 animate-in fade-in duration-200">
-          <h2 className="text-base font-bold text-gray-900">REST Integration Endpoints</h2>
-          <pre className="p-4 bg-slate-950 text-slate-100 rounded-xl font-mono text-xs border border-slate-800">
-            {`POST https://api.zyoris.com/leads/ingest\nPOST https://api.zyoris.com/leads/ingest/whatsapp\nPOST https://api.zyoris.com/leads/ingest/forms`}
-          </pre>
         </div>
       )}
 
