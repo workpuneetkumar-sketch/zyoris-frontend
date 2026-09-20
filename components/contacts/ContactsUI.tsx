@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "react-toastify";
 import {
     Search,
     Plus,
@@ -133,8 +134,10 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
             setLoading(true);
             await onSave(form);
             onClose();
-        } catch (err) {
+        } catch (err: any) {
             console.error("Save contact error:", err);
+            const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to save contact";
+            toast.error(msg);
         } finally {
             setLoading(false);
         }
@@ -457,12 +460,14 @@ export function ContactsUI({
 
     const handleCreate = async (data: ContactFormData) => {
         await createContact(data);
+        toast.success("Contact created successfully");
         onReload();
     };
 
     const handleEdit = async (data: ContactFormData) => {
         if (!editingContact) return;
         await updateContact(editingContact.id, data as Partial<Contact>);
+        toast.success("Contact updated successfully");
         onReload();
     };
 

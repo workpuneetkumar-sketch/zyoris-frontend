@@ -110,11 +110,30 @@ export async function createContact(data: {
     assignedToId?: string | null;
     tags?: string[];
     note?: string;
+    notes?: string;
 }): Promise<Contact> {
-    const res = await api.post<Contact>("/api/contact/create", {
-        ...data,
-        assignedToId: data.assignedToId?.trim() || null,
-    });
+    const payload: Record<string, any> = {
+        name: data.name.trim(),
+        email: data.email.trim(),
+    };
+
+    if (data.phone?.trim()) payload.phone = data.phone.trim();
+    if (data.company?.trim()) payload.company = data.company.trim();
+    if (data.companyId?.trim()) payload.companyId = data.companyId.trim();
+    if (data.position?.trim()) payload.position = data.position.trim();
+    if (data.city?.trim()) payload.city = data.city.trim();
+    if (data.source?.trim()) payload.source = data.source.trim();
+    if (data.status?.trim()) payload.status = data.status.trim();
+    if (data.assignedToId?.trim()) payload.assignedToId = data.assignedToId.trim();
+    if (Array.isArray(data.tags) && data.tags.length > 0) payload.tags = data.tags;
+
+    const noteVal = data.notes?.trim() || data.note?.trim();
+    if (noteVal) {
+        payload.notes = noteVal;
+        payload.note = noteVal;
+    }
+
+    const res = await api.post<Contact>("/api/contact/create", payload);
     return res.data;
 }
 
@@ -125,7 +144,20 @@ export async function updateContact(
     id: string,
     data: Partial<Contact>
 ): Promise<Contact> {
-    const res = await api.patch<Contact>(`/api/contact/update-contact/${id}`, data);
+    const payload: Record<string, any> = {};
+    Object.entries(data).forEach(([key, val]) => {
+        if (val !== undefined && val !== null && val !== "") {
+            payload[key] = typeof val === "string" ? val.trim() : val;
+        }
+    });
+
+    if (data.note || (data as any).notes) {
+        const n = (data as any).notes || data.note;
+        payload.note = n;
+        payload.notes = n;
+    }
+
+    const res = await api.patch<Contact>(`/api/contact/update-contact/${id}`, payload);
     return res.data;
 }
 
