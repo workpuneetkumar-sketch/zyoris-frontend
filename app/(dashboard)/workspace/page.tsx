@@ -37,23 +37,19 @@ export default function WorkspaceHomePage() {
   return (
     <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
       {/* Hero Welcome Header */}
-      <div className="bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 rounded-3xl p-8 md:p-10 text-white shadow-xl relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative z-10 max-w-2xl space-y-4">
-          <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-500/20 border border-blue-400/30 rounded-full text-xs font-semibold text-blue-300">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Notion-Style Collaborative Workspace</span>
-          </div>
-          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
+      <div className="bg-gradient-to-br from-blue-50/90 via-indigo-50/60 to-white border border-blue-100/80 rounded-3xl p-8 md:p-10 text-slate-900 shadow-sm relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-96 h-96 bg-blue-400/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10 max-w-2xl space-y-3">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900">
             Welcome to your Workspace
           </h1>
-          <p className="text-slate-300 text-sm md:text-base leading-relaxed">
+          <p className="text-slate-600 text-sm md:text-base leading-relaxed">
             Organize documents, pages, tasks, and project databases in one centralized place.
           </p>
           <div className="pt-2 flex flex-wrap gap-3">
             <button
               onClick={() => setIsModalOpen(true)}
-              className="inline-flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold text-sm shadow-lg shadow-blue-600/30 transition"
+              className="inline-flex items-center space-x-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold text-sm shadow-md shadow-blue-600/20 transition"
             >
               <Plus className="w-4 h-4" />
               <span>Create First Page</span>

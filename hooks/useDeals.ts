@@ -11,7 +11,7 @@ import {
     CreateDealPayload,
 } from "@/lib/api/dealsApi";
 
-export function useDeals() {
+export function useDeals(customStages?: string[]) {
     const [deals, setDeals] = useState<Deal[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -51,15 +51,53 @@ export function useDeals() {
     const filteredDeals = useMemo<Deal[]>(() => {
         let result = deals;
 
-        if (filters.search.trim()) {
-            const q = filters.search.toLowerCase();
+        if (filters.search && filters.search.trim()) {
+            const q = filters.search.toLowerCase().trim();
             result = result.filter((d) => d.name.toLowerCase().includes(q));
         }
 
-        if (filters.stage !== "All Stages") {
+        if (filters.stage && filters.stage !== "All Stages") {
             result = result.filter(
                 (d) => d.stage.toLowerCase() === filters.stage.toLowerCase()
             );
+        }
+
+        if (
+            filters.opportunityType &&
+            filters.opportunityType !== "All Types" &&
+            filters.opportunityType !== "All Opportunity Types" &&
+            filters.opportunityType.trim() !== ""
+        ) {
+            const target = filters.opportunityType.toUpperCase().replace(/[\s_-]+/g, "");
+            result = result.filter((d) => {
+                const dealType = (d.opportunityType || "NEW_BUSINESS")
+                    .toUpperCase()
+                    .replace(/[\s_-]+/g, "");
+                return dealType === target;
+            });
+        }
+
+        if (filters.channel && filters.channel !== "All Channels" && filters.channel.trim() !== "") {
+            const targetChannel = filters.channel.toUpperCase().replace(/[\s_-]+/g, "");
+            result = result.filter((d) => {
+                const dealChannel = (d.channel || "DIRECT").toUpperCase().replace(/[\s_-]+/g, "");
+                return dealChannel === targetChannel;
+            });
+        }
+
+        if (filters.owner && filters.owner !== "All Owners" && filters.owner.trim() !== "") {
+            const targetOwner = filters.owner.toLowerCase().trim();
+            result = result.filter((d) => (d.owner || "").toLowerCase().trim() === targetOwner);
+        }
+
+        if (filters.region && filters.region !== "All Regions" && filters.region.trim() !== "") {
+            const targetRegion = filters.region.toLowerCase().trim();
+            result = result.filter((d) => (d.region || "").toLowerCase().trim() === targetRegion);
+        }
+
+        if (filters.currency && filters.currency !== "All Currencies" && filters.currency.trim() !== "") {
+            const targetCurrency = filters.currency.toUpperCase().trim();
+            result = result.filter((d) => (d.currency || "USD").toUpperCase().trim() === targetCurrency);
         }
 
         return result;
@@ -91,23 +129,21 @@ export function useDeals() {
     // ── Deals grouped by stage (Kanban) ───────────────────────────────────
     const dealsByStage = useMemo(() => {
         const map = new Map<string, Deal[]>();
-        // Initialize default stages to empty arrays
-        for (const stage of DEFAULT_DEAL_STAGES) {
-            map.set(stage, []);
+        const initialStages = customStages && customStages.length > 0 ? customStages : DEFAULT_DEAL_STAGES;
+        for (const stage of initialStages) {
+            map.set(stage.toUpperCase(), []);
         }
         // Add all deals to the map, creating stages as needed
         for (const d of filteredDeals) {
-            const stage = d.stage.toUpperCase(); // Normalize to uppercase to match default stages!
-            console.log(`[useDeals] Processing deal:`, { dealId: d.dealId, name: d.name, originalStage: d.stage, normalizedStage: stage });
+            const stage = (d.stage || "NEW").toUpperCase();
             if (!map.has(stage)) {
                 map.set(stage, []);
             }
             const arr = map.get(stage)!;
             arr.push(d);
         }
-        console.log(`[useDeals] Final dealsByStage:`, Array.from(map.entries()));
         return map;
-    }, [filteredDeals]);
+    }, [filteredDeals, customStages]);
 
     // ── Create deal ────────────────────────────────────────────────────────
     const handleOpenCreate = useCallback((stage?: string) => {

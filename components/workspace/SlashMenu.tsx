@@ -28,7 +28,7 @@ export interface BlockOption {
   type: string;
   label: string;
   description: string;
-  shortcut: string;
+  shortcut?: string;
   icon: React.ElementType;
   keywords: string[];
 }
@@ -147,6 +147,34 @@ export const SUPPORTED_BLOCK_TYPES: BlockOption[] = [
     keywords: ["quote", "cite", "blockquote"],
   },
   {
+    type: "callout",
+    label: "Callout",
+    description: "Make text stand out with an icon alert box.",
+    icon: Search,
+    keywords: ["callout", "alert", "notice", "box", "tip", "info"],
+  },
+  {
+    type: "toggle",
+    label: "Toggle List",
+    description: "Toggles can hide and show sub-content.",
+    icon: ChevronRight,
+    keywords: ["toggle", "accordion", "expand", "collapse"],
+  },
+  {
+    type: "bookmark",
+    label: "Web Bookmark",
+    description: "Embed a visual link preview card for a website.",
+    icon: LinkIcon,
+    keywords: ["bookmark", "link", "url", "embed", "web"],
+  },
+  {
+    type: "table",
+    label: "Table",
+    description: "Add a grid table to structure data.",
+    icon: Database,
+    keywords: ["table", "grid", "data", "row", "col"],
+  },
+  {
     type: "divider",
     label: "Divider",
     shortcut: "---",
@@ -212,7 +240,7 @@ export const SlashMenu: React.FC<SlashMenuProps> = ({
     return (
       opt.label.toLowerCase().includes(query) ||
       opt.type.toLowerCase().includes(query) ||
-      opt.shortcut.toLowerCase().includes(query) ||
+      (opt.shortcut ? opt.shortcut.toLowerCase().includes(query) : false) ||
       opt.keywords.some((k) => k.includes(query))
     );
   });

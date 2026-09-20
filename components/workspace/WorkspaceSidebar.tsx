@@ -66,28 +66,17 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
           isMobileOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-200/60 dark:border-slate-800">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-sm font-bold text-sm">
-              Z
-            </div>
-            <div className="flex flex-col">
-              <span className="text-xs font-extrabold tracking-tight text-slate-900 dark:text-white uppercase">
-                Zyoris Workspace
-              </span>
-              <span className="text-[10px] text-slate-400 font-medium">Notion Docs & Tasks</span>
-            </div>
-          </div>
-          {onCloseMobile && (
+        {/* Header (mobile close only if present) */}
+        {onCloseMobile && (
+          <div className="flex items-center justify-end px-4 py-2 border-b border-slate-200/60 dark:border-slate-800 md:hidden">
             <button
               onClick={onCloseMobile}
-              className="md:hidden p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
             >
               <X className="w-5 h-5" />
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Quick Nav Links */}
         <div className="p-3 space-y-0.5 border-b border-slate-200/60 dark:border-slate-800">

@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
 import { updateLead, deleteLead, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
+
 import { toast } from "react-toastify";
 import { LeadCheckbox } from "./BulkActionsToolbar";
 import { AiBadge } from "@/components/ai/AiBadge";
@@ -492,6 +494,7 @@ export function LeadsTable({
     usingAdvanced = false,
     onPromoteToCustomer,
 }: LeadsTableProps) {
+    const router = useRouter();
     const totalPages = Math.max(1, Math.ceil(total / perPage));
     const safeLeads = leads ?? [];
 
@@ -653,7 +656,7 @@ export function LeadsTable({
                                     return (
                                         <tr
                                             key={lead.id}
-                                            onClick={() => { setViewingLead(lead); setIsViewOpen(true); }}
+                                            onClick={() => { router.push(`/leads/${lead.id}`); }}
                                             className="border-b border-gray-50 hover:bg-blue-50/40 transition-colors cursor-pointer"
                                         >
                                             {/* Checkbox — stop propagation so selecting doesn't open modal */}
@@ -877,7 +880,7 @@ export function LeadsTable({
                             <button
                                 onClick={() => {
                                     const lead = safeLeads.find((l) => l.id === openMenu);
-                                    if (lead) { setViewingLead(lead); setIsViewOpen(true); setOpenMenu(null); setMenuPos(null); }
+                                    if (lead) { router.push(`/leads/${lead.id}`); setOpenMenu(null); setMenuPos(null); }
                                 }}
                                 className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
                             >

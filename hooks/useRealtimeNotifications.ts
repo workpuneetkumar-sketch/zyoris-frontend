@@ -10,19 +10,20 @@ const MAX_NOTIFICATIONS = 50;
 
 function realtimeEventToNotification(event: RealtimeEvent): Notification {
   const typeMap: Record<string, NotificationType> = {
-    lead_updated: "info",
-    lead_assigned: "lead_assigned",
-    lead_merged: "success",
-    deal_stage_changed: "success",
-    activity_created: "info",
-    analytics_refreshed: "info",
-    dashboard_refreshed: "info",
-    assignment_changed: "warning",
-    merge_completed: "success",
+    lead_updated: "INFO",
+    lead_assigned: "INFO",
+    lead_merged: "SUCCESS",
+    deal_stage_changed: "SUCCESS",
+    activity_created: "INFO",
+    analytics_refreshed: "INFO",
+    dashboard_refreshed: "INFO",
+    assignment_changed: "WARNING",
+    merge_completed: "SUCCESS",
   };
 
   return {
     id: event.id,
+    userId: event.userId ?? "",
     title: event.title,
     message: event.message,
     read: false,

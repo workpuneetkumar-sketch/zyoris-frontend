@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { WorkspacePageNode } from "@/types/workspace";
 import { updateWorkspacePage } from "@/lib/api/workspaceApi";
 import { FolderInput, X, Loader2, AlertCircle, Check } from "lucide-react";
@@ -24,13 +25,18 @@ export const MovePageModal: React.FC<MovePageModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const [mounted, setMounted] = useState<boolean>(false);
   const [selectedParentId, setSelectedParentId] = useState<string | null>(
     currentParentId
   );
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
   const flattenTree = (
     nodes: WorkspacePageNode[],
@@ -70,8 +76,13 @@ export const MovePageModal: React.FC<MovePageModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xs animate-in fade-in duration-150">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) onClose();
+      }}
+    >
       <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-2">
@@ -143,6 +154,7 @@ export const MovePageModal: React.FC<MovePageModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

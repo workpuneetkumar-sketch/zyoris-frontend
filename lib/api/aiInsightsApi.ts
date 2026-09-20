@@ -173,7 +173,7 @@ export interface CommunicationIntelligenceData {
   buyingProbability: number; // 0-100
   intent: string;
   mood: string;
-  nextBestAction: string;
+  nextBestAction: any;
   suggestedReplies?: string[];
   engagementScore?: number;
   riskLevel?: string;
@@ -190,6 +190,17 @@ export async function getCommunicationIntelligence(
   try {
     const response = await api.get(`/crm/communication-intelligence/${leadId}`);
     const raw = response.data?.data || response.data;
+    
+    // Extract text helper for items that might be objects
+    const extractText = (val: any, defaultText: string = ""): string => {
+      if (!val) return defaultText;
+      if (typeof val === "string") return val;
+      if (typeof val === "object") {
+        return val.actionTitle || val.title || val.detailedRationale || val.reason || val.text || JSON.stringify(val);
+      }
+      return String(val);
+    };
+
     const rawSuggestions = Array.isArray(raw.suggestedReplies)
       ? raw.suggestedReplies
       : Array.isArray(raw.suggestions)
@@ -198,13 +209,19 @@ export async function getCommunicationIntelligence(
       ? raw.recommendedReplies
       : [];
 
-    const suggestedReplies = rawSuggestions.length > 0
-      ? rawSuggestions
-      : [
-          raw.nextBestAction || "Follow up on product demo request",
-          "Send customized pricing & proposal details",
-          "Schedule a 15-minute quick call to address questions",
-        ];
+    const suggestedReplies = (
+      rawSuggestions.length > 0
+        ? rawSuggestions
+        : [
+            raw.nextBestAction,
+            "Send customized pricing & proposal details",
+            "Schedule a 15-minute quick call to address questions",
+          ]
+    ).map((s: any) => extractText(s, "Follow up on lead"));
+
+    const intentStr = typeof raw.intent === "object" ? (raw.intent?.label || raw.intent?.intentLabel || extractText(raw.intent, "Unknown")) : (raw.intent || raw.intentLabel || "Unknown");
+    const moodStr = typeof raw.mood === "object" ? (raw.mood?.label || raw.mood?.sentiment || extractText(raw.mood, "Neutral")) : (raw.mood || raw.sentiment || "Neutral");
+    const riskStr = typeof raw.riskLevel === "object" ? (raw.riskLevel?.level || extractText(raw.riskLevel, "Low")) : raw.riskLevel;
 
     return {
       buyingProbability: typeof raw.buyingProbability === "number"
@@ -212,12 +229,12 @@ export async function getCommunicationIntelligence(
         : typeof raw.score === "number"
         ? raw.score
         : 0,
-      intent: raw.intent || raw.intentLabel || "Unknown",
-      mood: raw.mood || raw.sentiment || "Neutral",
+      intent: String(intentStr),
+      mood: String(moodStr),
       nextBestAction: raw.nextBestAction || raw.recommendation || "No recommendation available.",
       suggestedReplies,
       engagementScore: raw.engagementScore,
-      riskLevel: raw.riskLevel,
+      riskLevel: riskStr ? String(riskStr) : undefined,
       generatedAt: raw.generatedAt,
       fallback: raw.fallback || false,
     };

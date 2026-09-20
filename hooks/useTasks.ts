@@ -9,7 +9,7 @@ import {
     TaskPriority,
     fetchTasks,
     fetchMyTasks,
-    fetchAssignmentEvents,
+    fetchTaskAssignmentEvents,
     createTask,
     updateTask,
     deleteTask,
@@ -48,13 +48,8 @@ export function useTasks(currentUserId?: string) {
         setLoading(true);
         setError(null);
         try {
-            if (filter === "my") {
-                const data = await fetchMyTasks();
-                setTasks(data.tasks ?? []);
-            } else {
-                const data = await fetchTasks();
-                setTasks(data.tasks ?? []);
-            }
+            const data = filter === "my" ? await fetchMyTasks() : await fetchTasks();
+            setTasks(data.tasks ?? []);
         } catch (err) {
             if (axios.isAxiosError(err) && (err.response?.status === 404 || err.response?.status === 204)) {
                 setTasks([]);
@@ -70,24 +65,21 @@ export function useTasks(currentUserId?: string) {
         loadTasks();
     }, [loadTasks]);
 
-    // ── Short polling for assignment/reassignment events ────────────────────────
+    // ── Short polling for assignment / reassignment events ──────────────────────
     useEffect(() => {
-        const interval = setInterval(async () => {
+        let lastCheck = new Date().toISOString();
+        const pollInterval = setInterval(async () => {
             try {
-                const events = await fetchAssignmentEvents(lastEventCheck);
+                const events = await fetchTaskAssignmentEvents(lastCheck);
                 if (events && events.length > 0) {
-                    setLastEventCheck(new Date().toISOString());
-                    // Refresh task list silently when assignment event occurs
-                    const data = filter === "my" ? await fetchMyTasks() : await fetchTasks();
-                    setTasks(data.tasks ?? []);
+                    lastCheck = new Date().toISOString();
+                    loadTasks();
                 }
-            } catch {
-                // Ignore silent refresh errors
-            }
-        }, 15000); // Check every 15s
+            } catch (e) {}
+        }, 15000); // Poll every 15 seconds for assignment events
 
-        return () => clearInterval(interval);
-    }, [filter, lastEventCheck]);
+        return () => clearInterval(pollInterval);
+    }, [loadTasks]);
 
     // ── Client-side filtering ─────────────────────────────────────────────────
     const filteredTasks = useMemo(() => {

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -30,6 +31,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const [mounted, setMounted] = useState<boolean>(false);
   const [query, setQuery] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"ALL" | "PAGES" | "BLOCKS" | "DATABASES">("ALL");
   const [searchResults, setSearchResults] = useState<WorkspaceSearchResponse | null>(null);
@@ -38,6 +40,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Focus input when modal opens
   useEffect(() => {
@@ -122,12 +128,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-16 md:pt-24 px-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
+      className="fixed inset-0 z-[9999] flex items-start justify-center pt-16 md:pt-24 px-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-150"
       onKeyDown={handleKeyDown}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div
         className="w-full max-w-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
@@ -265,6 +274,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           <span className="font-semibold text-blue-500">Permission Filtered Search</span>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

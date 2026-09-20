@@ -15,6 +15,10 @@ import {
     Users,
     X,
     ExternalLink,
+    CheckCircle2,
+    Briefcase,
+    Layers,
+    ArrowUpRight,
 } from "lucide-react";
 import {
     Company,
@@ -46,11 +50,11 @@ const INDUSTRY_OPTIONS = [
 const STATUS_OPTIONS = ["Active", "Inactive"];
 
 const STATUS_STYLES: Record<string, string> = {
-    Active: "bg-green-50 text-green-600 border border-green-200",
-    Inactive: "bg-gray-100 text-gray-500 border border-gray-200",
-    Prospect: "bg-blue-50 text-blue-600 border border-blue-200",
-    Customer: "bg-purple-50 text-purple-600 border border-purple-200",
-    Partner: "bg-amber-50 text-amber-600 border border-amber-200",
+    Active: "bg-emerald-50 text-emerald-700 border border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60",
+    Inactive: "bg-slate-100 text-slate-500 border border-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700",
+    Prospect: "bg-blue-50 text-blue-700 border border-blue-200/80 dark:bg-blue-950/40 dark:text-blue-400 dark:border-blue-800/60",
+    Customer: "bg-purple-50 text-purple-700 border border-purple-200/80 dark:bg-purple-950/40 dark:text-purple-400 dark:border-purple-800/60",
+    Partner: "bg-amber-50 text-amber-700 border border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60",
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -60,9 +64,9 @@ function CompanyAvatar({ name }: { name: string }) {
         .split(" ")
         .map((p) => p[0]?.toUpperCase() ?? "")
         .join("")
-        .slice(0, 2);
+        .slice(0, 2) || "CO";
     return (
-        <div className="w-9 h-9 rounded-xl bg-blue-100 text-blue-700 text-[13px] font-bold flex items-center justify-center shrink-0">
+        <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white text-xs font-extrabold flex items-center justify-center shrink-0 shadow-2xs">
             {initials}
         </div>
     );
@@ -73,19 +77,19 @@ function ContactAvatar({ name }: { name: string }) {
         .split(" ")
         .map((p) => p[0]?.toUpperCase() ?? "")
         .join("")
-        .slice(0, 2);
+        .slice(0, 2) || "CT";
     return (
-        <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-600 text-[11px] font-bold flex items-center justify-center shrink-0">
+        <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[11px] font-bold flex items-center justify-center shrink-0">
             {initials}
         </div>
     );
 }
 
 function StatusBadge({ status }: { status?: string }) {
-    if (!status) return <span className="text-gray-400 text-[12px]">—</span>;
-    const style = STATUS_STYLES[status] ?? "bg-gray-100 text-gray-500 border border-gray-200";
+    if (!status) return <span className="text-slate-400 text-xs">—</span>;
+    const style = STATUS_STYLES[status] ?? "bg-slate-100 text-slate-500 border border-slate-200";
     return (
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${style}`}>
+        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold tracking-tight shadow-2xs ${style}`}>
             {status}
         </span>
     );
@@ -154,150 +158,147 @@ function CompanyModal({ mode, initial, onClose, onSave }: CompanyModalProps) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="bg-gray-50 w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in duration-200">
+            <div className="bg-white dark:bg-slate-900 w-full max-w-2xl rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 overflow-hidden my-auto animate-in zoom-in-95 duration-200">
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200">
+                <div className="flex items-center justify-between px-6 py-5 bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-800">
                     <div>
-                        <h2 className="text-lg font-semibold text-gray-900">
+                        <h2 className="text-base font-bold text-slate-900 dark:text-white">
                             {mode === "create" ? "New Company" : "Edit Company"}
                         </h2>
-                        <p className="text-sm text-gray-400 mt-0.5">
-                            {mode === "create" ? "Add a new company" : "Update company details"}
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            {mode === "create" ? "Add a new company profile to your CRM" : "Update company details and account settings"}
                         </p>
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-100 transition-colors"
+                        className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
                     >
-                        <X size={16} className="text-gray-500" />
+                        <X size={16} />
                     </button>
                 </div>
 
                 {/* Body */}
                 <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
-                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">
+                    <div className="bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5 space-y-4">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                             Company Information
                         </h3>
                         <div className="grid grid-cols-2 gap-4">
                             <div className="col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Company Name *</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Company Name *</label>
                                 <input
                                     name="name"
                                     value={form.name}
                                     onChange={handleChange}
                                     placeholder="Acme Corporation"
-                                    className={`w-full h-10 rounded-lg border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-500 ${errors.name ? "border-red-400" : "border-gray-300 focus:border-blue-500"}`}
+                                    className={`w-full h-10 rounded-xl border px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 ${errors.name ? "border-rose-400" : "border-slate-200 dark:border-slate-700 focus:border-blue-500"}`}
                                 />
-                                {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
+                                {errors.name && <p className="text-[11px] text-rose-500 mt-1 font-medium">{errors.name}</p>}
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Industry</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Industry</label>
                                 <select
                                     name="industry"
                                     value={form.industry}
                                     onChange={handleChange}
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 >
                                     <option value="">Select Industry</option>
                                     {INDUSTRY_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Status</label>
                                 <select
                                     name="status"
                                     value={form.status}
                                     onChange={handleChange}
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 >
                                     <option value="">Select Status</option>
                                     {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Email</label>
                                 <input
                                     name="email"
                                     type="email"
                                     value={form.email}
                                     onChange={handleChange}
                                     placeholder="contact@acme.com"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Phone</label>
                                 <input
                                     name="phone"
                                     value={form.phone}
                                     onChange={handleChange}
                                     placeholder="+1 555 000 0000"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">City</label>
                                 <input
                                     name="city"
                                     value={form.city}
                                     onChange={handleChange}
                                     placeholder="San Francisco"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Country</label>
                                 <input
                                     name="country"
                                     value={form.country}
                                     onChange={handleChange}
                                     placeholder="United States"
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Company Size</label>
-                                <select
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Company Size</label>
+                                <input
                                     name="size"
                                     value={form.size}
                                     onChange={handleChange}
-                                    className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="">Select Size</option>
-                                    {["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"].map((s) => (
-                                        <option key={s} value={s}>{s} employees</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="col-span-2">
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                                <textarea
-                                    name="description"
-                                    value={form.description}
-                                    onChange={handleChange}
-                                    placeholder="Brief description..."
-                                    rows={3}
-                                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
+                                    placeholder="e.g. 50-200 employees"
+                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
                                 />
                             </div>
                         </div>
                     </div>
+
+                    <div className="bg-slate-50/50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-5">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Company Overview</h3>
+                        <textarea
+                            name="description"
+                            value={form.description}
+                            onChange={handleChange}
+                            placeholder="Add brief description or company background..."
+                            rows={3}
+                            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none resize-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                        />
+                    </div>
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-3 px-6 py-4 bg-white border-t border-gray-200">
+                <div className="flex items-center justify-end gap-3 px-6 py-4 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
                     <button
                         onClick={onClose}
-                        className="h-10 px-5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                        className="h-10 px-5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleSubmit}
                         disabled={loading}
-                        className="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-70 transition-colors"
+                        className="h-10 px-6 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold shadow-xs hover:shadow-md disabled:opacity-70 transition-all"
                     >
                         {loading ? "Saving..." : mode === "create" ? "Create Company" : "Save Changes"}
                     </button>
@@ -307,16 +308,7 @@ function CompanyModal({ mode, initial, onClose, onSave }: CompanyModalProps) {
     );
 }
 
-// ── Company Detail Panel ──────────────────────────────────────────────────────
-
-interface DetailPanelProps {
-    company: Company;
-    contacts: Contact[];
-    contactsLoading: boolean;
-    contactsError: string | null;
-    onClose: () => void;
-    onEdit: (company: Company) => void;
-}
+// ── Company Detail Slide-out / Panel ──────────────────────────────────────────
 
 function CompanyDetailPanel({
     company,
@@ -325,154 +317,145 @@ function CompanyDetailPanel({
     contactsError,
     onClose,
     onEdit,
-}: DetailPanelProps) {
+}: {
+    company: Company;
+    contacts: Contact[];
+    contactsLoading: boolean;
+    contactsError: string | null;
+    onClose: () => void;
+    onEdit: (company: Company) => void;
+}) {
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col h-full overflow-hidden">
-            {/* Panel Header */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 space-y-5 animate-in slide-in-from-right-4 duration-200">
+            {/* Top Bar */}
+            <div className="flex items-start justify-between">
                 <div className="flex items-center gap-3">
                     <CompanyAvatar name={company.name} />
                     <div>
-                        <h2 className="text-[15px] font-semibold text-gray-900 leading-tight">{company.name}</h2>
-                        <p className="text-[12px] text-gray-400">{company.industry || "Company"}</p>
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white leading-tight">{company.name}</h3>
+                        <p className="text-xs font-semibold text-slate-400 mt-0.5">{company.industry || "Company Record"}</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5">
                     <button
                         onClick={() => onEdit(company)}
-                        className="h-8 px-3 rounded-lg border border-gray-200 text-[12px] font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                        className="h-8 px-3 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                     >
                         Edit
                     </button>
                     <button
                         onClick={onClose}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-400 transition-colors"
+                        className="w-8 h-8 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-center hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 transition-colors"
                     >
                         <X size={15} />
                     </button>
                 </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-                {/* Status */}
-                <div className="flex gap-3">
-                    <div className="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
-                        <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-1">Status</p>
-                        <StatusBadge status={company.status} />
-                    </div>
-                    <div className="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
-                        <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-1">Size</p>
-                        <span className="text-[13px] font-medium text-gray-700">{company.size || "—"}</span>
-                    </div>
-                    <div className="flex-1 bg-gray-50 rounded-xl p-3 border border-gray-100">
-                        <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-1">Contacts</p>
-                        <span className="text-[13px] font-medium text-gray-700">{company.contactCount ?? contacts.length}</span>
-                    </div>
+            {/* Account Details */}
+            <div className="space-y-4">
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/70 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800">
+                    <span className="text-xs font-semibold text-slate-500">Account Status</span>
+                    <StatusBadge status={company.status} />
                 </div>
 
-                {/* Contact Details */}
-                <div className="bg-gray-50 rounded-xl border border-gray-100 p-4 space-y-2.5">
-                    <p className="text-[12px] font-semibold text-gray-600 mb-3">Company Details</p>
+                <div className="space-y-2.5 p-4 rounded-2xl bg-slate-50/50 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-800">
+                    {company.website && (
+                        <div className="flex items-center gap-2.5">
+                            <Globe size={14} className="text-slate-400 shrink-0" />
+                            <a
+                                href={company.website.startsWith("http") ? company.website : `https://${company.website}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1 truncate"
+                            >
+                                <span className="truncate">{company.website.replace(/^https?:\/\//, "")}</span>
+                                <ExternalLink size={10} />
+                            </a>
+                        </div>
+                    )}
                     {company.email && (
                         <div className="flex items-center gap-2.5">
-                            <Mail size={13} className="text-gray-400 shrink-0" />
-                            <span className="text-[12px] text-gray-600">{company.email}</span>
+                            <Mail size={14} className="text-slate-400 shrink-0" />
+                            <a href={`mailto:${company.email}`} className="text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-blue-600 truncate">
+                                {company.email}
+                            </a>
                         </div>
                     )}
                     {company.phone && (
                         <div className="flex items-center gap-2.5">
-                            <Phone size={13} className="text-gray-400 shrink-0" />
-                            <span className="text-[12px] text-gray-600">{company.phone}</span>
-                        </div>
-                    )}
-                    {company.website && (
-                        <div className="flex items-center gap-2.5">
-                            <Globe size={13} className="text-gray-400 shrink-0" />
-                            <a
-                                href={company.website}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-[12px] text-blue-600 hover:underline flex items-center gap-1"
-                            >
-                                {company.website.replace(/^https?:\/\//, "")}
-                                <ExternalLink size={10} />
+                            <Phone size={14} className="text-slate-400 shrink-0" />
+                            <a href={`tel:${company.phone}`} className="text-xs font-semibold text-slate-700 dark:text-slate-300 hover:text-emerald-600">
+                                {company.phone}
                             </a>
                         </div>
                     )}
                     {(company.city || company.country) && (
                         <div className="flex items-center gap-2.5">
-                            <MapPin size={13} className="text-gray-400 shrink-0" />
-                            <span className="text-[12px] text-gray-600">
+                            <MapPin size={14} className="text-slate-400 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
                                 {[company.city, company.country].filter(Boolean).join(", ")}
                             </span>
                         </div>
                     )}
                     {company.description && (
-                        <p className="text-[12px] text-gray-500 mt-2 pt-2 border-t border-gray-200">
+                        <p className="text-xs text-slate-600 dark:text-slate-400 mt-2 pt-2 border-t border-slate-200/60 dark:border-slate-700/60 leading-relaxed font-normal">
                             {company.description}
                         </p>
                     )}
                 </div>
 
-                {/* Linked Contacts */}
+                {/* Linked Contacts Section */}
                 <div>
                     <div className="flex items-center justify-between mb-3">
-                        <p className="text-[13px] font-semibold text-gray-700 flex items-center gap-1.5">
-                            <Users size={14} className="text-gray-400" />
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                            <Users size={15} className="text-blue-500" />
                             Linked Contacts
                         </p>
-                        <span className="text-[12px] text-gray-400">
+                        <span className="text-[11px] font-bold text-slate-400">
                             {contactsLoading ? "Loading..." : `${contacts.length} contact${contacts.length !== 1 ? "s" : ""}`}
                         </span>
                     </div>
 
                     {contactsLoading ? (
-                        <div className="space-y-2.5">
-                            {[1, 2, 3].map((i) => (
-                                <div key={i} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 animate-pulse">
-                                    <div className="w-7 h-7 rounded-full bg-gray-100 shrink-0" />
+                        <div className="space-y-2">
+                            {[1, 2].map((i) => (
+                                <div key={i} className="flex items-center gap-3 p-3 rounded-2xl border border-slate-100 dark:border-slate-800 animate-pulse">
+                                    <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 shrink-0" />
                                     <div className="flex-1">
-                                        <div className="h-3 bg-gray-100 rounded w-2/3 mb-1.5" />
-                                        <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+                                        <div className="h-3 bg-slate-100 dark:bg-slate-800 rounded w-2/3 mb-1.5" />
+                                        <div className="h-2.5 bg-slate-100 dark:bg-slate-800 rounded w-1/2" />
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : contactsError ? (
-                        <div className="py-4 text-center text-[13px] text-red-400">{contactsError}</div>
+                        <div className="py-4 text-center text-xs text-rose-500 font-medium">{contactsError}</div>
                     ) : contacts.length === 0 ? (
-                        <div className="py-8 text-center text-[13px] text-gray-400">
-                            <Building2 size={28} className="text-gray-200 mx-auto mb-2" />
+                        <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl p-4">
+                            <Building2 size={24} className="text-slate-300 dark:text-slate-600 mx-auto mb-1.5" />
                             No contacts linked to this company yet.
                         </div>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                             {contacts.map((contact) => (
                                 <div
                                     key={contact.id}
-                                    className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-gray-50 transition-colors"
+                                    className="flex items-center gap-3 p-2.5 rounded-2xl border border-slate-200/70 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                                 >
                                     <ContactAvatar name={contact.name} />
                                     <div className="flex-1 min-w-0">
-                                        <p className="text-[13px] font-medium text-gray-800 truncate">{contact.name}</p>
-                                        <p className="text-[11px] text-gray-400 truncate">
+                                        <p className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">{contact.name}</p>
+                                        <p className="text-[11px] text-slate-400 truncate">
                                             {contact.position || contact.email || "—"}
                                         </p>
                                     </div>
                                     {contact.email && (
                                         <a
                                             href={`mailto:${contact.email}`}
-                                            className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 text-gray-400 hover:text-blue-500 transition-colors"
+                                            className="p-1.5 rounded-lg hover:bg-white dark:hover:bg-slate-700 text-slate-400 hover:text-blue-600 transition-colors"
                                         >
                                             <Mail size={13} />
-                                        </a>
-                                    )}
-                                    {contact.phone && (
-                                        <a
-                                            href={`tel:${contact.phone}`}
-                                            className="p-1.5 rounded-lg hover:bg-white border border-transparent hover:border-gray-200 text-gray-400 hover:text-green-500 transition-colors"
-                                        >
-                                            <Phone size={13} />
                                         </a>
                                     )}
                                 </div>
@@ -535,6 +518,9 @@ export function CompaniesUI({
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
+    const activeCount = safeCompanies.filter((c) => c.status === "Active").length;
+    const uniqueIndustries = new Set(safeCompanies.map((c) => c.industry).filter(Boolean)).size;
+
     // ── Bulk state ────────────────────────────────────────────────────────────
     const [bulkUpdateIndustry, setBulkUpdateIndustry] = useState("");
 
@@ -572,65 +558,101 @@ export function CompaniesUI({
     };
 
     return (
-        <div className="min-h-full">
-            {/* Header */}
-            <div className="flex items-start justify-between mb-6">
-                <div>
-                    <h1 className="text-2xl font-bold text-gray-900 leading-tight">Companies</h1>
-                    <p className="text-sm text-gray-400 mt-0.5">Manage and track all your companies.</p>
+        <div className="space-y-6">
+            {/* Header & Action CTA */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-2xl bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-100 dark:border-blue-900/60 shadow-2xs shrink-0">
+                        <Building2 size={20} />
+                    </div>
+                    <div>
+                        <h1 className="text-2xl font-bold text-slate-900 dark:text-white leading-tight">Companies</h1>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Manage enterprise accounts, company details, and linked contact lists.</p>
+                    </div>
                 </div>
                 <button
                     onClick={() => setIsCreateOpen(true)}
-                    className="flex items-center gap-1.5 h-9 px-4 rounded-lg bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                    className="flex items-center gap-2 h-9 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md shrink-0"
                 >
                     <Plus size={15} />
                     New Company
                 </button>
             </div>
 
-            {/* Content — split layout when a company is selected */}
-            <div
-  className={
-    selectedCompany
-      ? "grid grid-cols-[minmax(0,1fr)_340px] gap-5 items-start"
-      : "flex gap-5 items-start"
-  }
->
+            {/* Stat Summary Cards */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Companies</span>
+                        <Building2 size={16} className="text-blue-500" />
+                    </div>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{total}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Active Accounts</span>
+                        <CheckCircle2 size={16} className="text-emerald-500" />
+                    </div>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{activeCount}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Industries</span>
+                        <Globe size={16} className="text-indigo-500" />
+                    </div>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{uniqueIndustries}</p>
+                </div>
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Linked Contacts</span>
+                        <Users size={16} className="text-purple-500" />
+                    </div>
+                    <p className="text-2xl font-black text-slate-900 dark:text-white mt-1">{companyContacts.length || safeCompanies.length}</p>
+                </div>
+            </div>
 
-                {/* Left: Table */}
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm min-w-0">
+            {/* Split layout when a company is selected */}
+            <div
+                className={
+                    selectedCompany
+                        ? "grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-5 items-start"
+                        : "flex gap-5 items-start"
+                }
+            >
+                {/* Table Card */}
+                <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-xs min-w-0 w-full overflow-hidden">
                     {/* Filters */}
-                    <div className="flex items-center gap-3 px-5 py-4 border-b border-gray-100 flex-wrap">
+                    <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex-wrap">
                         <div className="relative">
                             <select
                                 value={filters.industry}
                                 onChange={(e) => { onFiltersChange({ ...filters, industry: e.target.value }); onPageChange(1); }}
-                                className="appearance-none h-9 pl-3 pr-8 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                                className="appearance-none h-9 pl-3 pr-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
                             >
                                 <option>All Industries</option>
                                 {INDUSTRY_OPTIONS.map((i) => <option key={i}>{i}</option>)}
                             </select>
-                            <ChevronRight size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-gray-400 pointer-events-none" />
+                            <ChevronRight size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" />
                         </div>
                         <div className="relative">
                             <select
                                 value={filters.status}
                                 onChange={(e) => { onFiltersChange({ ...filters, status: e.target.value }); onPageChange(1); }}
-                                className="appearance-none h-9 pl-3 pr-8 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                                className="appearance-none h-9 pl-3 pr-8 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-200 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
                             >
                                 <option>All Status</option>
                                 {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
                             </select>
-                            <ChevronRight size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-gray-400 pointer-events-none" />
+                            <ChevronRight size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" />
                         </div>
-                        <div className="relative ml-auto">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <div className="relative sm:ml-auto w-full sm:w-64">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="text"
                                 placeholder="Search companies..."
                                 value={filters.search}
                                 onChange={(e) => { onFiltersChange({ ...filters, search: e.target.value }); onPageChange(1); }}
-                                className="h-9 pl-8 pr-4 rounded-lg border border-gray-200 bg-white text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+                                className="w-full h-9 pl-8 pr-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800 text-xs text-slate-800 dark:text-slate-200 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 font-medium"
                             />
                         </div>
                     </div>
@@ -659,32 +681,32 @@ export function CompaniesUI({
 
                     {/* Table */}
                     <div className="overflow-x-auto overflow-y-visible w-full">
-                        <table className="min-w-[900px] text-sm">
+                        <table className="w-full text-left border-collapse min-w-[800px]">
                             <thead>
-                                <tr className="border-b border-gray-100">
-                                    <th className="text-left px-3 py-3 w-8"></th>
-                                    {["Company", "Industry", "Email", "Phone", "City", "Status", "Created", "Actions"].map((h) => (
-                                        <th key={h} className="text-left px-5 py-3 text-[12px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                                <tr className="border-b border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40">
+                                    <th className="text-left px-4 py-3.5 w-10"></th>
+                                    {["Company", "Industry", "Email", "Phone", "Location", "Status", "Created", "Actions"].map((h) => (
+                                        <th key={h} className="px-4 py-3.5 text-[11px] font-extrabold text-slate-400 uppercase tracking-wider whitespace-nowrap">
                                             {h}
                                         </th>
                                     ))}
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-xs">
                                 {loading ? (
                                     Array.from({ length: perPage }).map((_, i) => (
-                                        <tr key={i} className="border-b border-gray-50">
-                                            <td className="px-3 py-4"></td>
+                                        <tr key={i}>
+                                            <td className="px-4 py-4"></td>
                                             {Array.from({ length: 8 }).map((_, j) => (
-                                                <td key={j} className="px-5 py-4">
-                                                    <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
+                                                <td key={j} className="px-4 py-4">
+                                                    <div className="h-3.5 bg-slate-100 dark:bg-slate-800 rounded-md animate-pulse w-3/4" />
                                                 </td>
                                             ))}
                                         </tr>
                                     ))
                                 ) : safeCompanies.length === 0 ? (
                                     <tr>
-                                        <td colSpan={9} className="text-center py-16 text-gray-400 text-sm">
+                                        <td colSpan={9} className="text-center py-16 text-slate-400 text-xs font-medium">
                                             No companies found.
                                         </td>
                                     </tr>
@@ -693,16 +715,16 @@ export function CompaniesUI({
                                         <tr
                                             key={company.id}
                                             onClick={() => onSelectCompany(selectedCompany?.id === company.id ? null : company)}
-                                            className={`border-b border-gray-50 cursor-pointer transition-colors ${
+                                            className={`cursor-pointer transition-colors duration-150 ${
                                                 selectedCompany?.id === company.id
-                                                    ? "bg-blue-50/60"
+                                                    ? "bg-blue-50/70 dark:bg-blue-950/30"
                                                     : bulk.isSelected(company.id)
-                                                    ? "bg-blue-50/30"
-                                                    : "hover:bg-gray-50/60"
+                                                    ? "bg-blue-50/40 dark:bg-blue-950/20"
+                                                    : "hover:bg-slate-50/80 dark:hover:bg-slate-800/50"
                                             }`}
                                         >
                                             <td
-                                                className="px-3 py-3.5"
+                                                className="px-4 py-3.5"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <BulkCheckbox
@@ -712,66 +734,66 @@ export function CompaniesUI({
                                                     label={`Select ${company.name}`}
                                                 />
                                             </td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
-                                                <div className="flex items-center gap-2.5">
+                                            <td className="px-4 py-3.5 whitespace-nowrap">
+                                                <div className="flex items-center gap-3">
                                                     <CompanyAvatar name={company.name} />
                                                     <div>
-                                                        <p className="font-medium text-gray-800 text-[13px]">{company.name}</p>
+                                                        <p className="font-bold text-slate-900 dark:text-slate-100 block text-xs">{company.name}</p>
                                                         {company.website && (
-                                                            <p className="text-[11px] text-gray-400 truncate max-w-[140px]">
+                                                            <p className="text-[11px] text-slate-400 font-medium truncate max-w-[140px]">
                                                                 {company.website.replace(/^https?:\/\//, "")}
                                                             </p>
                                                         )}
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-5 py-3.5 text-gray-500 whitespace-nowrap">{company.industry || "—"}</td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-4 py-3.5 text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">{company.industry || "—"}</td>
+                                            <td className="px-4 py-3.5 whitespace-nowrap">
                                                 {company.email ? (
                                                     <a
                                                         href={`mailto:${company.email}`}
-                                                        className="text-[13px] text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1.5"
+                                                        className="text-xs font-semibold text-blue-600 hover:underline flex items-center gap-1.5"
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
                                                         <Mail size={13} />
-                                                        <span className="truncate max-w-[160px]">{company.email}</span>
+                                                        <span className="truncate max-w-[150px]">{company.email}</span>
                                                     </a>
                                                 ) : (
-                                                    <span className="text-gray-400 text-[13px]">—</span>
+                                                    <span className="text-slate-400 text-xs">—</span>
                                                 )}
                                             </td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-4 py-3.5 whitespace-nowrap">
                                                 {company.phone ? (
                                                     <a
                                                         href={`tel:${company.phone}`}
-                                                        className="text-[13px] text-green-600 hover:text-green-700 hover:underline flex items-center gap-1.5"
+                                                        className="text-xs font-semibold text-emerald-600 hover:underline flex items-center gap-1.5"
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
                                                         <Phone size={13} />
                                                         <span>{company.phone}</span>
                                                     </a>
                                                 ) : (
-                                                    <span className="text-gray-400 text-[13px]">—</span>
+                                                    <span className="text-slate-400 text-xs">—</span>
                                                 )}
                                             </td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-4 py-3.5 whitespace-nowrap">
                                                 {company.city || company.country ? (
-                                                    <div className="flex items-center gap-1.5 text-[13px] text-gray-600">
-                                                        <MapPin size={13} />
+                                                    <div className="flex items-center gap-1.5 text-xs font-medium text-slate-600 dark:text-slate-300">
+                                                        <MapPin size={13} className="text-slate-400 shrink-0" />
                                                         <span>{[company.city, company.country].filter(Boolean).join(", ")}</span>
                                                     </div>
                                                 ) : (
-                                                    <span className="text-gray-400 text-[13px]">—</span>
+                                                    <span className="text-slate-400 text-xs">—</span>
                                                 )}
                                             </td>
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-4 py-3.5 whitespace-nowrap">
                                                 <StatusBadge status={company.status} />
                                             </td>
-                                            <td className="px-5 py-3.5 text-gray-400 whitespace-nowrap text-[13px]">
+                                            <td className="px-4 py-3.5 text-slate-400 font-medium whitespace-nowrap text-[11px]">
                                                 {company.createdAt?.split("T")[0] || "—"}
                                             </td>
                                             <td
-                                                className="px-5 py-3.5 whitespace-nowrap"
+                                                className="px-4 py-3.5 whitespace-nowrap"
                                                 onClick={(e) => e.stopPropagation()}
                                             >
                                                 <button
@@ -786,9 +808,9 @@ export function CompaniesUI({
                                                             setOpenMenu(company.id);
                                                         }
                                                     }}
-                                                    className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                                                    className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-700 transition-colors"
                                                 >
-                                                    <MoreVertical size={16} />
+                                                    <MoreVertical size={15} />
                                                 </button>
                                             </td>
                                         </tr>
@@ -799,17 +821,17 @@ export function CompaniesUI({
                     </div>
 
                     {/* Pagination */}
-                    <div className="flex items-center justify-between px-5 py-4 border-t border-gray-100">
-                        <p className="text-[13px] text-gray-400">
+                    <div className="flex items-center justify-between px-5 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30">
+                        <p className="text-xs font-medium text-slate-500">
                             {loading
-                                ? "Loading..."
+                                ? "Loading records..."
                                 : `Showing ${total === 0 ? 0 : (page - 1) * perPage + 1} to ${Math.min(page * perPage, total)} of ${total} companies`}
                         </p>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
                             <button
                                 onClick={() => onPageChange(Math.max(1, page - 1))}
                                 disabled={page === 1 || loading}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                                 <ChevronLeft size={14} />
                             </button>
@@ -818,15 +840,15 @@ export function CompaniesUI({
                                 .map((p, idx, arr) => (
                                     <span key={p} className="contents">
                                         {idx > 0 && arr[idx - 1] !== p - 1 && (
-                                            <span className="w-8 h-8 flex items-center justify-center text-gray-400 text-sm">…</span>
+                                            <span className="w-8 h-8 flex items-center justify-center text-slate-400 text-xs font-bold">…</span>
                                         )}
                                         <button
                                             onClick={() => onPageChange(p)}
                                             disabled={loading}
-                                            className={`w-8 h-8 flex items-center justify-center rounded-lg text-[13px] font-medium transition-colors ${
+                                            className={`w-8 h-8 flex items-center justify-center rounded-xl text-xs font-bold transition-all ${
                                                 page === p
-                                                    ? "bg-blue-600 text-white shadow-sm shadow-blue-200"
-                                                    : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                                                    ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-2xs"
+                                                    : "border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                                             }`}
                                         >
                                             {p}
@@ -836,7 +858,7 @@ export function CompaniesUI({
                             <button
                                 onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                                 disabled={page === totalPages || loading}
-                                className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                className="w-8 h-8 flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                             >
                                 <ChevronRight size={14} />
                             </button>
@@ -869,7 +891,7 @@ export function CompaniesUI({
                     />
                     {menuPos && (
                         <div
-                            className="fixed z-[9999] bg-white border border-gray-100 rounded-xl shadow-lg py-1 w-36"
+                            className="fixed z-[9999] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xl py-1.5 w-36 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
                             style={{ top: menuPos.top, left: menuPos.left }}
                         >
                             {["View Details", "Edit", "Delete"].map((action) => (
@@ -888,8 +910,8 @@ export function CompaniesUI({
                                             onDelete(company.id, company.name);
                                         }
                                     }}
-                                    className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors ${
-                                        action === "Delete" ? "text-red-500" : "text-gray-700"
+                                    className={`w-full text-left px-4 py-2 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${
+                                        action === "Delete" ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-200"
                                     }`}
                                 >
                                     {action}
@@ -937,12 +959,12 @@ export function CompaniesUI({
                     fields={
                         <div className="space-y-3">
                             <div>
-                                <label className="text-xs font-medium text-gray-600 mb-1.5 block">Industry</label>
+                                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 block">Industry</label>
                                 <select
                                     value={bulkUpdateIndustry}
                                     onChange={(e) => setBulkUpdateIndustry(e.target.value)}
                                     disabled={bulk.bulkState.isProcessing}
-                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+                                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-50"
                                 >
                                     <option value="">— keep existing —</option>
                                     {INDUSTRY_OPTIONS.map((i) => <option key={i} value={i}>{i}</option>)}

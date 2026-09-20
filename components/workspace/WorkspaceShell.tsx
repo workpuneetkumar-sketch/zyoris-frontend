@@ -22,30 +22,16 @@ export const WorkspaceShell: React.FC<WorkspaceShellProps> = ({ children }) => {
   };
 
   return (
-    <div className="h-full w-full flex bg-white dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans overflow-hidden">
-      {/* Persistent Left Sidebar */}
-      <WorkspaceSidebar
-        pageTree={pageTree}
-        isLoadingTree={isLoading}
-        treeError={error}
-        onRefetchTree={refetchTree}
+    <div className="w-full space-y-4">
+      {/* Topbar & Sub-Navigation Header */}
+      <WorkspaceTopbar
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
         onOpenCreatePageModal={handleOpenCreatePageModal}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Main Container */}
-      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
-        {/* Topbar */}
-        <WorkspaceTopbar
-          onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-          onOpenCreatePageModal={handleOpenCreatePageModal}
-        />
-
-        {/* Page Content View */}
-        <main className="flex-1 overflow-y-auto bg-white dark:bg-slate-950">
-          {children}
-        </main>
+      {/* Main Page Content */}
+      <div>
+        {children}
       </div>
 
       {/* Universal Page Creation Dialog */}

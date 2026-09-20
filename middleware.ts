@@ -33,20 +33,8 @@ export function middleware(request: NextRequest) {
         return NextResponse.redirect(new URL("/icon.svg", request.url), { status: 301 });
     }
 
-    const token = request.cookies.get(COOKIE_NAME)?.value;
-    const isPublicPath = PUBLIC_PATHS.some(
-        (p) => pathname === p || pathname.startsWith(`${p}/`)
-    );
-
-    // Logged-in user trying to access login/register → send to dashboard
-    if (token && isPublicPath) {
-        return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
-
-    // For all other routes: always pass through.
-    // Client-side AuthContext restores the session from localStorage and
-    // DashboardLayout redirects to /login only after confirming no valid
-    // session exists — avoiding the hard-refresh race condition.
+    // Pass all requests through cleanly. Client-side AuthContext + DashboardLayout
+    // handle session validation and route redirection safely.
     return NextResponse.next();
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Download,
@@ -13,7 +14,13 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react';
-import { createExport, downloadExportResult, ExportFormat } from '@/lib/api/exportApi';
+import {
+  createExport,
+  downloadExportResult,
+  exportDatabaseTableToFile,
+  ExportFormat,
+  FORMAT_EXTENSIONS,
+} from '@/lib/api/exportApi';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -21,6 +28,11 @@ interface ExportModalProps {
   entityType: 'PAGE' | 'TASK' | 'PROJECT';
   entityId: string;
   entityName?: string;
+  title?: string;
+  defaultFormat?: ExportFormat;
+  databaseId?: string;
+  databaseRows?: Array<{ data: Record<string, any>; [key: string]: any }>;
+  databaseProperties?: Array<{ name: string; [key: string]: any }>;
 }
 
 const FORMAT_OPTIONS: {
@@ -79,14 +91,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   entityType,
   entityId,
   entityName = 'Item',
+  title,
+  defaultFormat,
+  databaseId,
+  databaseRows,
+  databaseProperties,
 }) => {
-  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>('MARKDOWN');
+  const [selectedFormat, setSelectedFormat] = useState<ExportFormat>(defaultFormat || 'MARKDOWN');
   const [includeAttachments, setIncludeAttachments] = useState(true);
+  const [includeChildren, setIncludeChildren] = useState(true);
+  const [includeActivities, setIncludeActivities] = useState(false);
+  const [includeComments, setIncludeComments] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!isOpen || !mounted || typeof document === 'undefined') return null;
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -94,12 +119,57 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setSuccessMsg(null);
 
     try {
-      // Step 1: Request export job or payload from backend
+      // ── Specialized Flow: Database Table Export ────────────────────────────
+      if (databaseRows) {
+        // If entityId is a valid project ID, notify backend export audit service
+        if (entityId && entityId !== "database") {
+          try {
+            await createExport({
+              entityType: "PROJECT",
+              entityId,
+              format: selectedFormat,
+              options: {
+                databaseId,
+                includeAttachments,
+                includeChildren,
+                includeActivities,
+                includeComments,
+              },
+            });
+          } catch (apiErr: any) {
+            console.warn("Backend export registration notice:", apiErr?.message);
+          }
+        }
+
+        // Generate and download the actual database rows file with columns
+        const ext = FORMAT_EXTENSIONS[selectedFormat] || '.csv';
+        const fileName = `${entityName.replace(/[^a-z0-9_-]/gi, '_')}_data${ext}`;
+        await exportDatabaseTableToFile(
+          databaseProperties || [],
+          databaseRows,
+          selectedFormat,
+          fileName
+        );
+
+        setSuccessMsg(`Successfully exported ${databaseRows.length} database rows as ${selectedFormat}`);
+        setTimeout(() => {
+          setSuccessMsg(null);
+          onClose();
+        }, 1200);
+        return;
+      }
+
+      // ── Standard Entity Export (Project, Page, Task) ───────────────────────
       const result = await createExport({
         entityType,
         entityId,
         format: selectedFormat,
-        options: { includeAttachments },
+        options: {
+          includeAttachments,
+          includeChildren,
+          includeActivities,
+          includeComments,
+        },
       });
 
       // Step 2: Download the generated blob/file
@@ -118,8 +188,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isExporting) onClose();
+      }}
+    >
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800">
@@ -129,7 +204,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
-                Export {entityType.charAt(0) + entityType.slice(1).toLowerCase()}
+                {title || `Export ${entityType.charAt(0) + entityType.slice(1).toLowerCase()}`}
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400 truncate max-w-[280px]">
                 {entityName}
@@ -213,7 +288,11 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           {/* Export Options */}
-          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80">
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 space-y-3">
+            <div className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Export Settings
+            </div>
+
             <label className="flex items-center gap-3 cursor-pointer group">
               <input
                 type="checkbox"
@@ -222,11 +301,62 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800"
               />
               <div>
-                <span className="text-sm font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
                   Include Attachments Manifest
                 </span>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
                   Include file links and attachment metadata in export output
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={includeChildren}
+                onChange={(e) => setIncludeChildren(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800"
+              />
+              <div>
+                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  Include Child Items & Subtasks
+                </span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Recursively bundle subtasks and nested documentation
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={includeComments}
+                onChange={(e) => setIncludeComments(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800"
+              />
+              <div>
+                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  Include Discussion Comments
+                </span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Add thread messages and comment activity logs
+                </p>
+              </div>
+            </label>
+
+            <label className="flex items-center gap-3 cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={includeActivities}
+                onChange={(e) => setIncludeActivities(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800"
+              />
+              <div>
+                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                  Include Audit Activities Timeline
+                </span>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Include audit log history and transition events
                 </p>
               </div>
             </label>
@@ -263,6 +393,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -8,40 +8,53 @@ export type NotificationCategory =
   | "system";
 
 export type NotificationType =
-  | "lead_assigned"
-  | "lead_shared"
-  | "task_assigned"
-  | "mention"
-  | "system_reminder"
-  | "success"
-  | "warning"
-  | "error"
-  | "info";
+  | "INFO"
+  | "SUCCESS"
+  | "WARNING"
+  | "ERROR";
 
-export type NotificationPriority = "critical" | "high" | "medium" | "low" | "urgent";
+export type NotificationPriority = string;
+
+export type NotificationEntityType =
+  | "LEAD"
+  | "DEAL"
+  | "TASK"
+  | "MEETING"
+  | "CALL"
+  | "EMAIL"
+  | "INVOICE"
+  | "PAYMENT";
 
 export interface NotificationActor {
   id: string;
   name: string;
-  avatarUrl?: string;
+  avatarUrl?: string | null;
 }
 
 export interface Notification {
   id: string;
+  organizationId?: string | null;
+  userId: string;
   title: string;
   message: string;
   type: NotificationType;
   category?: NotificationCategory | string;
   priority: NotificationPriority;
+  entityType?: NotificationEntityType | string | null;
+  entityId?: string | null;
+  metadata?: Record<string, unknown> | null;
+  eventId?: string | null;
+  action?: string | null;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorAvatar?: string | null;
   createdAt: string;
   read: boolean;
+  readAt?: string | null;
+  archivedAt?: string | null;
   deepLink?: string | null;
   actor?: NotificationActor | null;
   icon?: string | null;
-  entityType?: string | null;
-  entityId?: string | null;
-  groupKey?: string | null;
-  aggregatedCount?: number | null;
 }
 
 export type NotificationFilter = NotificationCategory;
@@ -62,18 +75,13 @@ export type NotificationPreferences = Record<string, NotificationCategoryPrefere
 
 export interface CursorPaginationResponse<T> {
   data: T[];
-  nextCursor: string | null;
-  limit: number;
+  pagination: { limit: number; nextCursor: string | null; hasNext: boolean };
+  unreadCount: number;
 }
 
-export interface WebsocketNotificationPayload {
-  id?: string;
-  notificationId?: string;
-  notification?: Notification | Record<string, unknown>;
-}
+export type WebsocketNotificationPayload = Notification;
 
 export interface WebsocketCountUpdatedPayload {
-  total: number;
-  byCategory: Record<string, number>;
+  userId: string;
 }
 

@@ -1,8 +1,8 @@
 // app/(dashboard)/workspace/tasks/page.tsx
 "use client";
 
-import TasksPage from "../../tasks/page";
+import { TasksPageContent } from "@/components/tasks/TasksPageContent";
 
 export default function WorkspaceTasksPage() {
-  return <TasksPage />;
+  return <TasksPageContent defaultTab="my" />;
 }

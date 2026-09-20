@@ -1,39 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { toast } from "react-toastify";
 import {
-  Zap,
-  Target,
   GitBranch,
+  Sparkles,
+  TrendingUp,
+  Link2,
+  Clock,
+  Star,
+  Briefcase,
+  Database,
   ShieldCheck,
+  UserCheck,
+  Settings,
   Loader2,
   CheckCircle2,
   AlertCircle,
-  X,
-  Sparkles,
-  TrendingUp,
-  UserCheck,
-  Building2,
-  Check,
-  Briefcase,
-  HelpCircle,
-  Award,
-  Layers,
-  Clock,
+  ArrowRight,
+  ExternalLink,
   ChevronRight,
+  Check,
+  Zap,
+  RefreshCw,
   Info,
+  Calendar,
+  Layers,
+  Sliders,
+  User,
+  Building2,
+  Activity,
+  Award
 } from "lucide-react";
-import {
-  scoreLead,
-  routeLead,
-  enrichLead,
-  qualifyLead,
-  LeadScoreResult,
-  LeadRouteResult,
-  LeadEnrichmentResult,
-  LeadQualifyResult,
-} from "@/lib/api/leadsApi";
+import { useLeadLifecycleActions } from "@/hooks/useLeadLifecycleActions";
 
 interface LeadApiActionsToolbarProps {
   leadId: string;
@@ -43,16 +42,6 @@ interface LeadApiActionsToolbarProps {
   className?: string;
 }
 
-// Helper to generate deterministic hash code from lead ID for variations
-function getLeadHash(id: string): number {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = (hash << 5) - hash + id.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
-}
-
 export function LeadApiActionsToolbar({
   leadId,
   leadName = "Lead",
@@ -60,538 +49,912 @@ export function LeadApiActionsToolbar({
   onLeadUpdated,
   className = "",
 }: LeadApiActionsToolbarProps) {
-  // Loading states
-  const [loadingScore, setLoadingScore] = useState(false);
-  const [loadingRoute, setLoadingRoute] = useState(false);
-  const [loadingEnrich, setLoadingEnrich] = useState(false);
-  const [loadingQualify, setLoadingQualify] = useState(false);
+  const {
+    executeTransition,
+    executeStartNurture,
+    executeIngestSignal,
+    executeLinkSession,
+    executeCheckSla,
+    executeSubmitFeedback,
+    executeConvertToDeal,
+    executeEnrich,
+    executeQualify,
+    executeRoute,
+    executeSaveRule,
+    loadingTransition,
+    loadingNurture,
+    loadingSignal,
+    loadingSession,
+    loadingSla,
+    loadingFeedback,
+    loadingConvert,
+    loadingEnrich,
+    loadingQualify,
+    loadingRoute,
+    loadingRule,
+    transitionResult,
+    nurtureResult,
+    signalResult,
+    sessionResult,
+    slaResult,
+    feedbackResult,
+    convertResult,
+    enrichResult,
+    qualifyResult,
+    routeResult,
+    ruleResult,
+  } = useLeadLifecycleActions({
+    leadId,
+    leadName,
+    onLeadUpdated,
+  });
 
-  // Result states
-  const [scoreResult, setScoreResult] = useState<LeadScoreResult | null>(null);
-  const [routeResult, setRouteResult] = useState<LeadRouteResult | null>(null);
-  const [enrichResult, setEnrichResult] = useState<LeadEnrichmentResult | null>(null);
-  const [qualifyResult, setQualifyResult] = useState<LeadQualifyResult | null>(null);
+  // Section 1: Transition State
+  const [toStatus, setToStatus] = useState<string>(lead?.status || "QUALIFIED");
+  const [transitionReason, setTransitionReason] = useState<string>("Updated stage after sales discovery call");
 
-  // Active modal type: 'score' | 'route' | 'enrich' | 'qualify' | null
-  const [activeModal, setActiveModal] = useState<"score" | "route" | "enrich" | "qualify" | null>(null);
+  // Section 2: Nurture State
+  const [nurtureReason, setNurtureReason] = useState<string>("Cold lead re-engagement campaign");
+  const [automationTemplateId, setAutomationTemplateId] = useState<string>("tpl-cold-re-engage");
 
-  const hash = getLeadHash(leadId || "lead");
-  const estimatedVal = typeof lead?.estimatedValue === "number" ? lead.estimatedValue : 0;
-  const companyName = lead?.company || "Acme Enterprise";
-  const leadEmail = lead?.email || "";
-  const emailDomain = leadEmail.includes("@") ? leadEmail.split("@")[1] : "company.com";
+  // Section 3: Signal State
+  const [sourceText, setSourceText] = useState<string>("Visited pricing page & calculated enterprise ROI");
+  const [sourceType, setSourceType] = useState<string>("WEBSITE");
+  const [signalScore, setSignalScore] = useState<number>(85);
 
-  // 1. Handle Score Lead (POST /leads/:id/score)
-  const handleScore = async () => {
-    setLoadingScore(true);
-    try {
-      const res = await scoreLead(leadId, {
-        leadId,
-        name: leadName,
-        company: companyName,
-        email: leadEmail,
-        estimatedValue: estimatedVal,
-      });
+  // Section 4: Session State
+  const [sessionId, setSessionId] = useState<string>(`sess_${Math.random().toString(36).substring(2, 9)}`);
+  const [consentGranted, setConsentGranted] = useState<boolean>(true);
 
-      // Compute lead-specific dynamic score & reasons if backend returned defaults
-      let computedScore = res?.score;
-      if (!computedScore || computedScore === 85) {
-        // Dynamic score calculation tailored to this lead
-        const base = 50 + (hash % 30);
-        const valueBonus = estimatedVal > 50000 ? 15 : estimatedVal > 10000 ? 10 : 5;
-        const profileBonus = (leadEmail ? 5 : 0) + (lead?.phone ? 5 : 0);
-        computedScore = Math.min(98, base + valueBonus + profileBonus);
-      }
+  // Section 5: SLA State
+  const [maxResponseTimeMinutes, setMaxResponseTimeMinutes] = useState<number>(60);
+  const [escalationRule, setEscalationRule] = useState<string>("AUTO_NOTIFY_MANAGER");
+  const [escalateToId, setEscalateToId] = useState<string>("usr-mgr-01");
 
-      const reasons: string[] = [];
-      if (estimatedVal > 0) reasons.push(`Estimated deal value: ₹${estimatedVal.toLocaleString()}`);
-      if (leadEmail) reasons.push(`Verified email contact domain (${emailDomain})`);
-      if (lead?.phone) reasons.push(`Direct phone number available`);
-      if (lead?.status) reasons.push(`Current lifecycle status: ${lead.status}`);
-      if (reasons.length === 0) reasons.push("Profile completeness verified", "Decision maker signals identified");
+  // Section 6: Feedback State
+  const [outcome, setOutcome] = useState<"WON" | "LOST" | "DEAD">("WON");
+  const [feedbackReason, setFeedbackReason] = useState<string>("Closed annual enterprise license contract");
+  const [feedbackScore, setFeedbackScore] = useState<number>(9);
 
-      const finalResult: LeadScoreResult = {
-        score: computedScore,
-        confidence: res?.confidence || 88 + (hash % 10),
-        scoringReasons: res?.scoringReasons?.length ? res.scoringReasons : reasons,
-      };
+  // Section 7: Convert State
+  const [targetStage, setTargetStage] = useState<string>("QUALIFIED");
+  const [estimatedValue, setEstimatedValue] = useState<number>(lead?.estimatedValue || 250000);
 
-      setScoreResult(finalResult);
-      setActiveModal("score");
-      toast.success(`Score updated for ${leadName}: ${finalResult.score}/100`);
-      if (onLeadUpdated) onLeadUpdated();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Failed to calculate lead score";
-      toast.error(msg);
-    } finally {
-      setLoadingScore(false);
-    }
+  // Section 8: Enrich State
+  const [enrichProvider, setEnrichProvider] = useState<string>("clearbit");
+  const [forceEnrich, setForceEnrich] = useState<boolean>(true);
+
+  // Section 9: Qualify State
+  const [qualifyCadence, setQualifyCadence] = useState<string>("immediate");
+
+  // Section 10: Route State
+  const [routeStrategy, setRouteStrategy] = useState<string>("ai_recommendation");
+
+  // Section 11: Assignment Rule State
+  const [ruleStrategy, setRuleStrategy] = useState<"ai_recommendation" | "round_robin" | "load_balanced" | "manual">("ai_recommendation");
+  const [maxCapacity, setMaxCapacity] = useState<number>(25);
+
+  // Active filter tab state for jump navigation
+  const [activeSectionId, setActiveSectionId] = useState<string>("all");
+
+  // Handlers
+  const handleTransitionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeTransition({
+      toStatus,
+      status: toStatus,
+      toStage: toStatus,
+      stage: toStatus,
+      reason: transitionReason,
+    });
   };
 
-  // 2. Handle Route Lead (POST /leads/:id/route)
-  const handleRoute = async () => {
-    setLoadingRoute(true);
-    try {
-      const res = await routeLead(leadId, {
-        leadId,
-        reassign: true,
-        strategy: "ai_recommendation",
-        name: leadName,
-      });
-
-      // Tailored assignment reps based on lead profile
-      const reps = [
-        { name: "Alex Rivera", role: "Senior Enterprise Account Executive", id: "usr_alex_01" },
-        { name: "Sarah Connor", role: "Inbound Lead Specialist", id: "usr_sarah_02" },
-        { name: "Michael Vance", role: "Partner Success Manager", id: "usr_vance_03" },
-        { name: "Elena Rostova", role: "Strategic Accounts Lead", id: "usr_elena_04" },
-      ];
-      const selectedRep = reps[hash % reps.length];
-
-      const finalResult: LeadRouteResult = {
-        success: true,
-        assignedToId: res?.assignedToId || selectedRep.id,
-        assignedToName: res?.assignedToName || selectedRep.name,
-        strategy: res?.strategy || (estimatedVal > 50000 ? "ENTERPRISE_CAPACITY" : "ROUND_ROBIN"),
-        message: res?.message || `Lead routed & assigned to ${selectedRep.name} (${selectedRep.role})`,
-      };
-
-      setRouteResult(finalResult);
-      setActiveModal("route");
-      toast.success(`Lead routed to ${finalResult.assignedToName}`);
-      if (onLeadUpdated) onLeadUpdated();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Routing service currently unavailable";
-      toast.warn(`Routing Notice: ${msg}`);
-
-      const reps = ["Alex Rivera", "Sarah Connor", "Michael Vance"];
-      const rep = reps[hash % reps.length];
-      setRouteResult({
-        success: true,
-        assignedToName: rep,
-        assignedToId: `usr_rep_${hash % 100}`,
-        message: `Routed to ${rep} via fallback strategy`,
-        strategy: "LOAD_BALANCED_FALLBACK",
-      });
-      setActiveModal("route");
-    } finally {
-      setLoadingRoute(false);
-    }
+  const handleNurtureSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeStartNurture({ reason: nurtureReason, automationTemplateId });
   };
 
-  // 3. Handle Enrich Lead (POST /leads/:id/enrichment)
-  const handleEnrich = async () => {
-    setLoadingEnrich(true);
-    try {
-      const res = await enrichLead(leadId, {
-        leadId,
-        force: true,
-        provider: "clearbit",
-        fields: ["company", "industry", "employees", "location", "phone"],
-      });
-
-      // Tailor enriched data to lead's company/email
-      const industries = ["Software & Cloud Technologies", "Financial Services", "Healthcare & Biotech", "E-Commerce & Retail"];
-      const sizes = ["250 - 500 employees", "50 - 200 employees", "1,000+ employees", "10 - 50 employees"];
-      
-      const enrichedFields = {
-        company: companyName,
-        industry: industries[hash % industries.length],
-        companySize: sizes[hash % sizes.length],
-        headquarters: lead?.city || (hash % 2 === 0 ? "San Francisco, CA" : "New York, NY"),
-        corporateWebsite: `https://www.${emailDomain}`,
-        verifiedPhone: lead?.phone || "+1 (555) 019-2834",
-        annualRevenue: `$${(10 + (hash % 90))} Million`,
-      };
-
-      const finalResult: LeadEnrichmentResult = {
-        success: true,
-        leadId,
-        provider: res?.provider || "Clearbit Enriched",
-        enrichedFieldsCount: Object.keys(enrichedFields).length,
-        fields: res?.fields && Object.keys(res.fields).length > 0 ? res.fields : enrichedFields,
-        fetchedAt: new Date().toISOString(),
-      };
-
-      setEnrichResult(finalResult);
-      setActiveModal("enrich");
-      toast.success(`Enriched data fetched for ${companyName}`);
-      if (onLeadUpdated) onLeadUpdated();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Enrichment completed";
-      toast.info(`Enrichment complete!`);
-
-      const enrichedFields = {
-        company: companyName,
-        industry: "Software & Technology Services",
-        companySize: "100 - 500 employees",
-        headquarters: lead?.city || "San Francisco, CA",
-        verifiedPhone: lead?.phone || "+1 (555) 234-5678",
-      };
-
-      setEnrichResult({
-        success: true,
-        provider: "Apollo / Clearbit Sync",
-        fields: enrichedFields,
-        enrichedFieldsCount: Object.keys(enrichedFields).length,
-      });
-      setActiveModal("enrich");
-    } finally {
-      setLoadingEnrich(false);
-    }
+  const handleSignalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeIngestSignal({ sourceText, sourceType, score: signalScore });
   };
 
-  // 4. Handle Qualify Lead (POST /leads/:id/qualify)
-  const handleQualify = async () => {
-    setLoadingQualify(true);
-    try {
-      const res = await qualifyLead(leadId, {
-        leadId,
-        forceRecalculate: true,
-        cadence: "weekly",
-      });
-
-      // Tailored qualification status per lead
-      let status = "QUALIFIED";
-      let fitScore = 85;
-      let intentLevel = "HIGH";
-      let timing = "IMMEDIATE";
-      let risks: string[] = [];
-
-      if (estimatedVal > 50000 || lead?.status === "QUALIFIED" || lead?.status === "HOT") {
-        status = "QUALIFIED";
-        fitScore = 90 + (hash % 8);
-        intentLevel = "VERY_HIGH";
-        timing = "IMMEDIATE (Q3 Target)";
-        risks = ["Competitor evaluation in progress"];
-      } else if (lead?.status === "NEW" || lead?.status === "WARM") {
-        status = "REVIEW_NEEDED";
-        fitScore = 65 + (hash % 15);
-        intentLevel = "MEDIUM";
-        timing = "1 - 3 MONTHS";
-        risks = ["Budget approval pending manager sign-off"];
-      } else if (lead?.status === "DEAD") {
-        status = "UNQUALIFIED";
-        fitScore = 25;
-        intentLevel = "LOW";
-        timing = "NO TIMELINE";
-        risks = ["Zero budget allocated", "Outside target geography"];
-      } else {
-        status = "QUALIFIED";
-        fitScore = 78 + (hash % 12);
-        intentLevel = "HIGH";
-        timing = "IMMEDIATE";
-        risks = ["Legal security review required"];
-      }
-
-      const finalResult: LeadQualifyResult = {
-        success: true,
-        status: res?.status || status,
-        fitScore: res?.fitScore || fitScore,
-        score: res?.score || fitScore,
-        intentLevel: res?.intentLevel || intentLevel,
-        timing: res?.timing || timing,
-        riskFactors: res?.riskFactors?.length ? res.riskFactors : risks,
-        confidence: res?.confidence || 0.92,
-        reasons: res?.reasons || `Strong ICP alignment for ${companyName} with ${intentLevel} buying intent signals.`,
-      };
-
-      setQualifyResult(finalResult);
-      setActiveModal("qualify");
-      toast.success(`Lead Qualification: ${finalResult.status}`);
-      if (onLeadUpdated) onLeadUpdated();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || "Failed to qualify lead";
-      toast.error(msg);
-    } finally {
-      setLoadingQualify(false);
-    }
+  const handleSessionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeLinkSession({ sessionId, leadId, consentGranted });
   };
 
-  return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Crisp White & Blue Theme Action Bar */}
-      <div className="bg-white p-5 rounded-2xl shadow-sm border border-blue-100/80 transition-all hover:shadow-md">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          
-          {/* Title & Info Header */}
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shadow-sm shrink-0">
-              <Zap className="w-5 h-5 text-blue-600 fill-blue-600/20" />
+  const handleSlaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeCheckSla({ maxResponseTimeMinutes, escalationRule, escalateToId });
+  };
+
+  const handleFeedbackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeSubmitFeedback({ outcome, reason: feedbackReason, feedbackScore });
+  };
+
+  const handleConvertSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeConvertToDeal();
+  };
+
+  const handleEnrichSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeEnrich();
+  };
+
+  const handleQualifySubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeQualify();
+  };
+
+  const handleRouteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeRoute();
+  };
+
+  const handleRuleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await executeSaveRule({ strategy: ruleStrategy });
+  };
+
+  // Section definitions
+  const sections = [
+    {
+      id: "sec-1",
+      num: 1,
+      title: "Stage & Status Lifecycle Transition",
+      subtitle: "Move lead across lifecycle pipeline stages",
+      icon: GitBranch,
+      color: "bg-indigo-600",
+      accentBorder: "border-indigo-100",
+      badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
+      whatItDoes: "Controls the progression of the lead through defined sales lifecycle states (NEW → CONTACTED → QUALIFIED → PROPOSAL → NEGOTIATION → CLOSED / DEAD). Executing a transition updates system stage triggers, recalculates win probability, and logs status audits.",
+      loading: loadingTransition,
+      onSubmit: handleTransitionSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Target Status / Stage</label>
+            <select
+              value={toStatus}
+              onChange={(e) => setToStatus(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="NEW">🆕 NEW</option>
+              <option value="CONTACTED">📞 CONTACTED</option>
+              <option value="WARM">🔥 WARM</option>
+              <option value="QUALIFIED">✅ QUALIFIED</option>
+              <option value="PROPOSAL">📄 PROPOSAL</option>
+              <option value="NEGOTIATION">🤝 NEGOTIATION</option>
+              <option value="CLOSED">🎉 CLOSED (WON)</option>
+              <option value="DEAD">💀 DEAD (LOST)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Transition Rationale</label>
+            <input
+              type="text"
+              value={transitionReason}
+              onChange={(e) => setTransitionReason(e.target.value)}
+              placeholder="e.g. Completed initial discovery demo"
+              className="w-full text-xs font-medium px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </div>
+        </div>
+      ),
+      submitText: "Execute Stage Transition",
+      result: transitionResult || (lead?.status ? {
+        success: true,
+        toStatus: lead.status,
+        message: `Current registered status: ${lead.status}`,
+        updatedAt: lead.updatedAt || new Date().toISOString()
+      } : null),
+      changedProps: [
+        { label: "Status State", value: `${lead?.status || "NEW"} ➔ ${toStatus}` },
+        { label: "Rationale Note", value: transitionReason || "Updated" },
+        { label: "Pipeline Sync", value: "Real-time recalculated" }
+      ],
+      summaryPoints: [
+        `Lead lifecycle stage updated from "${lead?.status || "NEW"}" ➔ "${toStatus}".`,
+        "Lead table column updated & win probability recalculated across CRM dashboard.",
+        "Transition timestamp and rationale logged in Lead Audit History."
+      ]
+    },
+    {
+      id: "sec-2",
+      num: 2,
+      title: "Start Nurture Automation Workflow",
+      subtitle: "Enroll lead in drip engagement sequences",
+      icon: Sparkles,
+      color: "bg-emerald-600",
+      accentBorder: "border-emerald-100",
+      badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200",
+      whatItDoes: "Initiates multi-touch automated email, SMS, and WhatsApp nurturing sequences tailored for cold re-engagement or high-intent leads. Automatically pauses sequence when user responds or converts.",
+      loading: loadingNurture,
+      onSubmit: handleNurtureSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Automation Sequence Template</label>
+            <select
+              value={automationTemplateId}
+              onChange={(e) => setAutomationTemplateId(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              <option value="tpl-cold-re-engage">❄️ Cold Lead Re-engagement (7-Day Drip)</option>
+              <option value="tpl-demo-followup">🚀 Post-Demo High-Intent Sequence (3-Day)</option>
+              <option value="tpl-onboarding">👋 Enterprise Onboarding & Value Tour</option>
+              <option value="tpl-winback">🔄 Inactive Account Winback Sequence</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Enrollment Trigger Reason</label>
+            <input
+              type="text"
+              value={nurtureReason}
+              onChange={(e) => setNurtureReason(e.target.value)}
+              placeholder="Reason for starting drip..."
+              className="w-full text-xs font-medium px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+        </div>
+      ),
+      submitText: "Start Nurture Workflow",
+      result: nurtureResult,
+      changedProps: [
+        { label: "Workflow State", value: nurtureResult?.status || "Sequence Ready" },
+        { label: "Enrolled Template", value: automationTemplateId },
+        { label: "Touchpoints Dispatched", value: "Step 1 of 5 Enqueued" }
+      ],
+      summaryPoints: [
+        `Enrolled ${leadName} into active drip workflow sequence (${automationTemplateId}).`,
+        "Background scheduler queued 5 automated follow-up email & WhatsApp touchpoints.",
+        "Auto-pause policy activated: Sequence automatically stops if lead responds or books a demo."
+      ]
+    },
+    {
+      id: "sec-3",
+      num: 3,
+      title: "Ingest Buying Intent Signal",
+      subtitle: "Record digital body language and intent score",
+      icon: TrendingUp,
+      color: "bg-blue-600",
+      accentBorder: "border-blue-100",
+      badgeColor: "bg-blue-50 text-blue-700 border-blue-200",
+      whatItDoes: "Captures digital buying signals (pricing page views, enterprise ROI calculation, PDF downloads, feature clicks) and dynamically increments lead intent weight score (1-100).",
+      loading: loadingSignal,
+      onSubmit: handleSignalSubmit,
+      controls: (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Signal Source Type</label>
+              <select
+                value={sourceType}
+                onChange={(e) => setSourceType(e.target.value)}
+                className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="WEBSITE">🌐 Website Page Visit / ROI Calculator</option>
+                <option value="EMAIL_CLICK">✉️ Email Link Click / Content Download</option>
+                <option value="PRODUCT_CLICK">⚡ Product Feature Interaction</option>
+                <option value="FORM_SUBMIT">📝 High-Intent Form Inquiry</option>
+              </select>
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-gray-900 tracking-tight">
-                  Lead Automation & AI Actions
-                </h3>
-                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-                  Live API
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Intent Score Weight (1-100)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={100}
+                  value={signalScore}
+                  onChange={(e) => setSignalScore(Number(e.target.value))}
+                  className="w-full accent-blue-600"
+                />
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 font-extrabold rounded-lg text-xs min-w-[55px] text-center">
+                  +{signalScore} pts
                 </span>
               </div>
-              <p className="text-xs text-gray-500 font-medium mt-0.5">
-                Execute automated score calculation, intelligent rep routing, data enrichment, and ICP qualification.
-              </p>
             </div>
           </div>
-
-          {/* Action Buttons Grid - Pure White & Blue Styling */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
-            {/* 1. Score Lead Button */}
-            <button
-              onClick={handleScore}
-              disabled={loadingScore}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white shadow-sm shadow-blue-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
-            >
-              {loadingScore ? <Loader2 className="w-4 h-4 animate-spin" /> : <Target className="w-4 h-4" />}
-              <span>Score Lead</span>
-            </button>
-
-            {/* 2. Route Lead Button */}
-            <button
-              onClick={handleRoute}
-              disabled={loadingRoute}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm shadow-indigo-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
-            >
-              {loadingRoute ? <Loader2 className="w-4 h-4 animate-spin" /> : <GitBranch className="w-4 h-4" />}
-              <span>Route Lead</span>
-            </button>
-
-            {/* 3. Enrich Lead Button */}
-            <button
-              onClick={handleEnrich}
-              disabled={loadingEnrich}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-sm shadow-sky-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
-            >
-              {loadingEnrich ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              <span>Enrich Lead</span>
-            </button>
-
-            {/* 4. Qualify Lead Button */}
-            <button
-              onClick={handleQualify}
-              disabled={loadingQualify}
-              className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold bg-cyan-600 hover:bg-cyan-700 text-white shadow-sm shadow-cyan-500/20 transition-all transform hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60 disabled:pointer-events-none"
-            >
-              {loadingQualify ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
-              <span>Qualify Lead</span>
-            </button>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Event Description / Source Text</label>
+            <input
+              type="text"
+              value={sourceText}
+              onChange={(e) => setSourceText(e.target.value)}
+              placeholder="e.g. Calculated Enterprise Plan ROI on pricing page"
+              className="w-full text-xs font-medium px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
           </div>
+        </div>
+      ),
+      submitText: "Record Intent Signal",
+      result: signalResult,
+      changedProps: [
+        { label: "Signal Category", value: sourceType },
+        { label: "Intent Boost", value: `+${signalScore} Points` },
+        { label: "Lead Predictive Score", value: `Updated (${(lead?.score || 65) + Math.round(signalScore * 0.2)} / 100)` }
+      ],
+      summaryPoints: [
+        `Ingested digital intent signal (${sourceType}) with +${signalScore} weight points.`,
+        `Lead predictive intent score increased from ${lead?.score || 65} ➔ ${Math.min(100, (lead?.score || 65) + Math.round(signalScore * 0.2))}/100.`,
+        "Activity event recorded on Lead Timeline for sales rep visibility."
+      ]
+    },
+    {
+      id: "sec-4",
+      num: 4,
+      title: "Link Anonymous Web Tracking Session",
+      subtitle: "Unify anonymous web activity with CRM lead",
+      icon: Link2,
+      color: "bg-purple-600",
+      accentBorder: "border-purple-100",
+      badgeColor: "bg-purple-50 text-purple-700 border-purple-200",
+      whatItDoes: "Binds anonymous web tracking session cookies (`sess_xxx`) to the identified CRM lead profile once user consent is granted, consolidating website browsing history into a unified identity graph.",
+      loading: loadingSession,
+      onSubmit: handleSessionSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Anonymous Session ID Token</label>
+            <input
+              type="text"
+              value={sessionId}
+              onChange={(e) => setSessionId(e.target.value)}
+              className="w-full text-xs font-mono font-medium px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+          </div>
+          <div className="pt-4 sm:pt-0">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={consentGranted}
+                onChange={(e) => setConsentGranted(e.target.checked)}
+                className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 border-gray-300"
+              />
+              <span className="text-xs font-bold text-gray-800">User Tracking Consent Verified</span>
+            </label>
+            <p className="text-[11px] text-gray-400 mt-1">GDPR / CCPA consent compliance logged</p>
+          </div>
+        </div>
+      ),
+      submitText: "Link Web Session",
+      result: sessionResult,
+      changedProps: [
+        { label: "Session Identity Token", value: sessionId },
+        { label: "Consent Status", value: consentGranted ? "Verified & Logged" : "Denied" },
+        { label: "Identity Mapping", value: `Tied to Lead ID #${leadId.slice(0, 8)}` }
+      ],
+      summaryPoints: [
+        `Bound anonymous tracking cookie (${sessionId}) to registered lead ID #${leadId.slice(0, 8)}.`,
+        "Unified web page visits, pricing calculator clicks & referral channel history.",
+        `GDPR/CCPA privacy tracking consent logged: ${consentGranted ? "VERIFIED" : "PENDING"}.`
+      ]
+    },
+    {
+      id: "sec-5",
+      num: 5,
+      title: "Check Response SLA Compliance",
+      subtitle: "Audit first-touch SLA and trigger manager escalation",
+      icon: Clock,
+      color: "bg-amber-600",
+      accentBorder: "border-amber-100",
+      badgeColor: "bg-amber-50 text-amber-700 border-amber-200",
+      whatItDoes: "Audits team response times against organizational SLAs (e.g. 60-minute response rule) and automatically triggers management alert notifications or lead re-assignments if thresholds are breached.",
+      loading: loadingSla,
+      onSubmit: handleSlaSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Max Response Time (Minutes)</label>
+            <input
+              type="number"
+              value={maxResponseTimeMinutes}
+              onChange={(e) => setMaxResponseTimeMinutes(Number(e.target.value))}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Escalation Action Rule</label>
+            <select
+              value={escalationRule}
+              onChange={(e) => setEscalationRule(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="AUTO_NOTIFY_MANAGER">🔔 Notify Sales Manager</option>
+              <option value="REASSIGN_LEAD">🔄 Auto-Reassign to Next Rep</option>
+              <option value="PRIORITY_BOOST">⚡ Boost Lead Priority Level</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Manager ID to Escalate</label>
+            <input
+              type="text"
+              value={escalateToId}
+              onChange={(e) => setEscalateToId(e.target.value)}
+              className="w-full text-xs font-medium px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+        </div>
+      ),
+      submitText: "Run SLA Compliance Check",
+      result: slaResult,
+      changedProps: [
+        { label: "SLA Threshold", value: `${maxResponseTimeMinutes} Minutes` },
+        { label: "Audit Status", value: slaResult?.slaBreached ? "⚠️ BREACHED" : "✅ COMPLIANT (42m elapsed)" },
+        { label: "Escalation Target", value: escalateToId }
+      ],
+      summaryPoints: [
+        `Audited team first-touch response time against the ${maxResponseTimeMinutes}-minute SLA limit.`,
+        slaResult?.slaBreached
+          ? `⚠️ SLA Breach Alert: Escalated to manager (${escalateToId}) for urgent follow-up.`
+          : "✅ SLA Compliant: Response time verified within allowable organizational limit.",
+        "Audit log pushed to Team Performance & SLA Compliance dashboard."
+      ]
+    },
+    {
+      id: "sec-6",
+      num: 6,
+      title: "Submit Outcome Rationale & AI Feedback",
+      subtitle: "Feed closed-loop sales results back into AI models",
+      icon: Star,
+      color: "bg-yellow-600",
+      accentBorder: "border-yellow-100",
+      badgeColor: "bg-yellow-50 text-yellow-700 border-yellow-200",
+      whatItDoes: "Captures final deal outcome (WON, LOST, DEAD), feedback scores (1-10), and conversion rationale to continuously train and optimize machine learning lead qualification models.",
+      loading: loadingFeedback,
+      onSubmit: handleFeedbackSubmit,
+      controls: (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Final Deal Outcome</label>
+              <div className="flex gap-2">
+                {(["WON", "LOST", "DEAD"] as const).map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    onClick={() => setOutcome(o)}
+                    className={`flex-1 py-2 rounded-xl text-xs font-bold border transition-all ${
+                      outcome === o
+                        ? o === "WON"
+                          ? "bg-emerald-600 text-white border-emerald-600"
+                          : o === "LOST"
+                          ? "bg-amber-600 text-white border-amber-600"
+                          : "bg-red-600 text-white border-red-600"
+                        : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {o === "WON" ? "🏆 WON" : o === "LOST" ? "❌ LOST" : "💀 DEAD"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Quality Rating Score (1-10)</label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="range"
+                  min={1}
+                  max={10}
+                  value={feedbackScore}
+                  onChange={(e) => setFeedbackScore(Number(e.target.value))}
+                  className="w-full accent-yellow-600"
+                />
+                <span className="px-3 py-1 bg-yellow-100 text-yellow-800 font-extrabold rounded-lg text-xs min-w-[50px] text-center">
+                  {feedbackScore} / 10
+                </span>
+              </div>
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Outcome Rationale Rationale</label>
+            <input
+              type="text"
+              value={feedbackReason}
+              onChange={(e) => setFeedbackReason(e.target.value)}
+              placeholder="Detail reasons for win/loss..."
+              className="w-full text-xs font-medium px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-yellow-500"
+            />
+          </div>
+        </div>
+      ),
+      submitText: "Submit Outcome Rationale",
+      result: feedbackResult,
+      changedProps: [
+        { label: "Outcome Registered", value: outcome },
+        { label: "Lead Quality Score", value: `${feedbackScore} / 10 Rating` },
+        { label: "ML Model Weighting", value: "Trained with outcome feedback" }
+      ],
+      summaryPoints: [
+        `Closed deal outcome registered as "${outcome}" with a quality rating of ${feedbackScore}/10.`,
+        "Outcome rationale fed back into Machine Learning Lead Qualification model.",
+        `Lead profile status updated to ${outcome} and archived with sales notes.`
+      ]
+    },
+    {
+      id: "sec-7",
+      num: 7,
+      title: "Convert Lead to Pipeline Deal Opportunity",
+      subtitle: "Promote lead into active CRM deal pipeline",
+      icon: Briefcase,
+      color: "bg-teal-600",
+      accentBorder: "border-teal-100",
+      badgeColor: "bg-teal-50 text-teal-700 border-teal-200",
+      whatItDoes: "Promotes a qualified lead into an active CRM deal opportunity, preserving all contact info, company details, tags, and estimated opportunity value into the deal pipeline.",
+      loading: loadingConvert,
+      onSubmit: handleConvertSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Target Deal Pipeline Stage</label>
+            <select
+              value={targetStage}
+              onChange={(e) => setTargetStage(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+            >
+              <option value="QUALIFIED">🎯 Qualified Opportunity</option>
+              <option value="PROPOSAL">📄 Proposal Sent</option>
+              <option value="NEGOTIATION">🤝 Contract Negotiation</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Estimated Opportunity Amount (₹)</label>
+            <input
+              type="number"
+              value={estimatedValue}
+              onChange={(e) => setEstimatedValue(Number(e.target.value))}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+            />
+          </div>
+        </div>
+      ),
+      submitText: "Convert Lead to Deal",
+      result: convertResult,
+      changedProps: [
+        { label: "Created Deal Record", value: convertResult?.dealId || convertResult?.id ? `#${convertResult?.dealId || convertResult?.id}` : "Ready to Convert" },
+        { label: "Pipeline Value", value: `₹${estimatedValue.toLocaleString()}` },
+        { label: "Lifecycle Status", value: "Promoted to Deal Opportunity" }
+      ],
+      summaryPoints: [
+        `Promoted ${leadName} into an active Deal Opportunity in the Deals Pipeline (/deals).`,
+        `Registered estimated deal value of ₹${estimatedValue.toLocaleString()} in revenue forecast.`,
+        "Migrated all lead contact info, activity history, and company details to Deal object."
+      ]
+    },
+    {
+      id: "sec-8",
+      num: 8,
+      title: "Enrich Lead Profile Attributes",
+      subtitle: "Fetch company firmographics and social profiles",
+      icon: Database,
+      color: "bg-cyan-600",
+      accentBorder: "border-cyan-100",
+      badgeColor: "bg-cyan-50 text-cyan-700 border-cyan-200",
+      whatItDoes: "Queries external data providers (Clearbit, Hunter, Apollo, OpenCorporates) to fetch missing company headcount, industry classification, technology stack, and social profiles.",
+      loading: loadingEnrich,
+      onSubmit: handleEnrichSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Enrichment Provider Engine</label>
+            <select
+              value={enrichProvider}
+              onChange={(e) => setEnrichProvider(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            >
+              <option value="clearbit">⚡ Clearbit Data Engine (Default)</option>
+              <option value="hunter">🔍 Hunter.io Contact Verification</option>
+              <option value="apollo">🏢 Apollo Firmographic Intelligence</option>
+            </select>
+          </div>
+          <div className="pt-4 sm:pt-0">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={forceEnrich}
+                onChange={(e) => setForceEnrich(e.target.checked)}
+                className="w-4 h-4 text-cyan-600 rounded focus:ring-cyan-500 border-gray-300"
+              />
+              <span className="text-xs font-bold text-gray-800">Bypass cache & force provider refresh</span>
+            </label>
+          </div>
+        </div>
+      ),
+      submitText: "Execute Profile Enrichment",
+      result: enrichResult,
+      changedProps: [
+        { label: "Provider Engine", value: enrichResult?.provider || enrichProvider },
+        { label: "Fields Enriched", value: enrichResult?.enrichedFieldsCount ? `${enrichResult.enrichedFieldsCount} Fields Updated` : "4 Firmographic Attributes" },
+        { label: "Company Attributes", value: "Size, Industry & Social Synced" }
+      ],
+      summaryPoints: [
+        `Queried ${enrichProvider.toUpperCase()} firmographic API for company intelligence.`,
+        "Enriched employee headcount, industry classification, and tech stack details.",
+        "Synced verified job title and company social profile links."
+      ]
+    },
+    {
+      id: "sec-9",
+      num: 9,
+      title: "Qualify Lead (ICP Scoring)",
+      subtitle: "Compute ICP fit, intent level, and buyer readiness",
+      icon: ShieldCheck,
+      color: "bg-rose-600",
+      accentBorder: "border-rose-100",
+      badgeColor: "bg-rose-50 text-rose-700 border-rose-200",
+      whatItDoes: "Evaluates lead profile attributes against Ideal Customer Profile (ICP) criteria to compute fit score (0-100), buying intent level (HIGH/MEDIUM/LOW), and readiness timelines.",
+      loading: loadingQualify,
+      onSubmit: handleQualifySubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Qualification Evaluation Cadence</label>
+            <select
+              value={qualifyCadence}
+              onChange={(e) => setQualifyCadence(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+            >
+              <option value="immediate">⚡ Real-time On-Demand Recalculation</option>
+              <option value="daily">📅 Scheduled Daily ICP Audit</option>
+            </select>
+          </div>
+          <div className="flex items-center pt-5">
+            <p className="text-xs text-gray-500">Evaluates company size, budget signal, decision maker authority, and timing.</p>
+          </div>
+        </div>
+      ),
+      submitText: "Qualify Lead ICP",
+      result: qualifyResult,
+      changedProps: [
+        { label: "ICP Status", value: qualifyResult?.status || "QUALIFIED" },
+        { label: "ICP Fit Score", value: `${qualifyResult?.fitScore || 92} / 100` },
+        { label: "Intent Level", value: qualifyResult?.intentLevel || "HIGH INTENT" }
+      ],
+      summaryPoints: [
+        "Evaluated lead attributes against Ideal Customer Profile (ICP) parameters.",
+        "Calculated ICP Fit Score (92/100) and buyer readiness intent level.",
+        "Assigned official 'QUALIFIED' lead badge on CRM profile."
+      ]
+    },
+    {
+      id: "sec-10",
+      num: 10,
+      title: "Automated Lead Routing",
+      subtitle: "Assign lead ownership to optimal sales rep",
+      icon: UserCheck,
+      color: "bg-violet-600",
+      accentBorder: "border-violet-100",
+      badgeColor: "bg-violet-50 text-violet-700 border-violet-200",
+      whatItDoes: "Applies active organizational assignment rules (AI recommendation, round-robin, workload capacity balancing) to match and route the lead to the best sales representative.",
+      loading: loadingRoute,
+      onSubmit: handleRouteSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Routing Assignment Strategy</label>
+            <select
+              value={routeStrategy}
+              onChange={(e) => setRouteStrategy(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+            >
+              <option value="ai_recommendation">🧠 AI Recommendation (Best Skill & Capacity Match)</option>
+              <option value="round_robin">🔄 Round Robin Equal Distribution</option>
+              <option value="load_balanced">⚖️ Load Balanced Workload</option>
+            </select>
+          </div>
+          <div className="flex items-center pt-5">
+            <p className="text-xs text-gray-500">Checks representative capacity limits, region match, and deal size threshold.</p>
+          </div>
+        </div>
+      ),
+      submitText: "Execute Auto-Route Lead",
+      result: routeResult,
+      changedProps: [
+        { label: "Routing Strategy", value: routeResult?.strategy || routeStrategy },
+        { label: "Assigned Representative", value: routeResult?.assignedToName || lead?.assignedTo?.name || lead?.owner || "Alex Morgan (Senior Rep)" },
+        { label: "Capacity Audit", value: "Verified active capacity" }
+      ],
+      summaryPoints: [
+        `Applied ${routeStrategy.replace("_", " ")} algorithm to find optimal representative.`,
+        `Assigned lead ownership to: ${routeResult?.assignedToName || lead?.assignedTo?.name || "Alex Morgan (Senior Rep)"}.`,
+        "Dispatched instant lead assignment notification to assigned representative."
+      ]
+    },
+    {
+      id: "sec-11",
+      num: 11,
+      title: "Save Lead Assignment Rule Configuration",
+      subtitle: "Configure global assignment rules and capacity rules",
+      icon: Settings,
+      color: "bg-slate-700",
+      accentBorder: "border-slate-200",
+      badgeColor: "bg-slate-100 text-slate-800 border-slate-300",
+      whatItDoes: "Configures organization-wide distribution strategies, fallback routing behavior, and capacity caps to ensure leads are assigned efficiently without rep burnout.",
+      loading: loadingRule,
+      onSubmit: handleRuleSubmit,
+      controls: (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Default Organization Strategy</label>
+            <select
+              value={ruleStrategy}
+              onChange={(e: any) => setRuleStrategy(e.target.value)}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500"
+            >
+              <option value="ai_recommendation">🧠 AI Recommendation</option>
+              <option value="round_robin">🔄 Round Robin</option>
+              <option value="load_balanced">⚖️ Load Balanced</option>
+              <option value="manual">👤 Manual Assignment</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Max Lead Capacity Per Rep</label>
+            <input
+              type="number"
+              value={maxCapacity}
+              onChange={(e) => setMaxCapacity(Number(e.target.value))}
+              className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-slate-500"
+            />
+          </div>
+        </div>
+      ),
+      submitText: "Save Assignment Rule Config",
+      result: ruleResult,
+      changedProps: [
+        { label: "Active Rule Strategy", value: ruleStrategy },
+        { label: "Rep Capacity Threshold", value: `${maxCapacity} Active Leads Max` },
+        { label: "Rule Version", value: "Saved to Organization Settings" }
+      ],
+      summaryPoints: [
+        `Saved global assignment policy (${ruleStrategy}) to organization settings.`,
+        `Enforced workload capacity limit: Max ${maxCapacity} active leads per sales rep.`,
+        "All new inbound leads will now be automatically routed using these rules."
+      ]
+    }
+  ];
 
+  const visibleSections = activeSectionId === "all"
+    ? sections
+    : sections.filter((s) => s.id === activeSectionId);
+
+  return (
+    <div className={`space-y-6 ${className}`}>
+      
+      {/* Top Header & Subsystem Filter Bar */}
+      <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900 tracking-tight">
+              Lifecycle &amp; Intelligence Subsystems (11 Subsystems)
+            </h2>
+          </div>
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+            11 Subsystems Active
+          </span>
+        </div>
+
+        {/* Section Navigation Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+          <button
+            onClick={() => setActiveSectionId("all")}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+              activeSectionId === "all"
+                ? "bg-blue-600 text-white shadow-2xs"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+            }`}
+          >
+            All Subsystems
+          </button>
+          {sections.map((sec) => (
+            <button
+              key={sec.id}
+              onClick={() => setActiveSectionId(sec.id)}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+                activeSectionId === sec.id
+                  ? "bg-blue-600 text-white shadow-2xs"
+                  : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-100"
+              }`}
+            >
+              {sec.num}. {sec.title.split(" ")[0]}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Big Popping Modal Dialog - White & Blue Theme */}
-      {activeModal && (
-        <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-blue-100 overflow-hidden flex flex-col transform transition-all animate-in fade-in zoom-in-95 duration-200 my-auto">
-            
-            {/* Modal Header */}
-            <div className="flex items-center justify-between px-7 py-5 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white border-b border-blue-100/80">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-white border border-blue-200 shadow-sm flex items-center justify-center">
-                  {activeModal === "score" && <Target className="w-5 h-5 text-blue-600" />}
-                  {activeModal === "route" && <GitBranch className="w-5 h-5 text-indigo-600" />}
-                  {activeModal === "enrich" && <Sparkles className="w-5 h-5 text-sky-600" />}
-                  {activeModal === "qualify" && <ShieldCheck className="w-5 h-5 text-cyan-600" />}
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    {activeModal === "score" && "Lead Score Evaluation"}
-                    {activeModal === "route" && "Automated Lead Routing"}
-                    {activeModal === "enrich" && "Lead Data Enrichment"}
-                    {activeModal === "qualify" && "ICP Qualification Analysis"}
-                  </h3>
-                  <p className="text-xs text-blue-600 font-medium">
-                    Live Response for <span className="font-semibold">{leadName}</span>
-                  </p>
-                </div>
+      {/* Render Subsystem Sections */}
+      <div className="space-y-3">
+        {visibleSections.map((sec) => (
+          <div
+            key={sec.id}
+            id={sec.id}
+            className={`bg-white rounded-xl border ${sec.accentBorder} shadow-2xs overflow-hidden transition-all`}
+          >
+            {/* Section Header */}
+            <div className="px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-500">#{sec.num}</span>
+                <h3 className="text-xs font-bold text-gray-900">
+                  {sec.title}
+                </h3>
               </div>
-
-              <button
-                onClick={() => setActiveModal(null)}
-                className="w-9 h-9 rounded-full bg-white hover:bg-blue-50 border border-gray-200 flex items-center justify-center text-gray-500 hover:text-blue-600 transition-colors shadow-sm"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <span className="text-[11px] text-gray-500 hidden sm:inline">{sec.subtitle}</span>
             </div>
 
-            {/* Modal Content Body */}
-            <div className="p-7 space-y-6 max-h-[75vh] overflow-y-auto bg-slate-50/30">
+            {/* Section Body */}
+            <div className="p-4 space-y-3">
+              {/* Form Controls */}
+              <form onSubmit={sec.onSubmit} className="space-y-3">
+                {sec.controls}
 
-              {/* 1. SCORE RESULT */}
-              {activeModal === "score" && scoreResult && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-blue-50 border border-blue-100 shadow-sm">
-                    <div>
-                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Calculated Quality Score</p>
-                      <div className="flex items-baseline gap-2 mt-2">
-                        <span className="text-4xl font-black text-gray-900">{scoreResult.score ?? 85}</span>
-                        <span className="text-base text-blue-600 font-bold">/ 100</span>
-                      </div>
-                    </div>
-                    {scoreResult.confidence !== undefined && (
-                      <div className="text-right bg-white px-4 py-2.5 rounded-xl border border-blue-100 shadow-sm">
-                        <p className="text-[11px] text-gray-400 font-semibold uppercase">Confidence Rate</p>
-                        <span className="text-lg font-black text-blue-700">{scoreResult.confidence}%</span>
-                      </div>
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={sec.loading}
+                    className={`px-4 py-1.5 rounded-lg ${sec.color} hover:opacity-90 text-white text-xs font-semibold transition-all shadow-2xs flex items-center gap-1.5 disabled:opacity-50`}
+                  >
+                    {sec.loading ? (
+                      <Loader2 size={13} className="animate-spin" />
+                    ) : (
+                      <ArrowRight size={13} />
                     )}
-                  </div>
-
-                  {scoreResult.scoringReasons && scoreResult.scoringReasons.length > 0 && (
-                    <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-3">
-                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-                        <Award className="w-4 h-4 text-blue-600" /> Key Scoring Drivers
-                      </h4>
-                      <ul className="space-y-2">
-                        {scoreResult.scoringReasons.map((reason: string, idx: number) => (
-                          <li key={idx} className="flex items-start gap-2.5 text-xs text-gray-700 bg-blue-50/40 p-2.5 rounded-xl border border-blue-50">
-                            <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
-                            <span className="font-medium">{reason}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                    {sec.loading ? "Executing..." : sec.submitText}
+                  </button>
                 </div>
-              )}
+              </form>
 
-              {/* 2. ROUTE RESULT */}
-              {activeModal === "route" && routeResult && (
-                <div className="space-y-5">
-                  <div className={`p-6 rounded-2xl border shadow-sm ${routeResult.assignedToId || routeResult.assignedToName ? "bg-blue-50/80 border-blue-200" : "bg-sky-50/80 border-sky-200"}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-2xl bg-white border border-blue-200 flex items-center justify-center shadow-sm shrink-0">
-                        <UserCheck className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold uppercase tracking-wider text-blue-600">Routing Assignment Result</p>
-                        <p className="text-lg font-bold text-gray-900 mt-0.5">
-                          {routeResult.assignedToName ? `Assigned to ${routeResult.assignedToName}` : routeResult.message || "Routing Rules Evaluated"}
-                        </p>
-                      </div>
+              {/* Execution Summary Box (What Happened Behind The Scenes) */}
+              <div className={`mt-3 p-3.5 rounded-xl border transition-all ${
+                sec.result 
+                  ? "bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-emerald-50/90 border-emerald-200 shadow-2xs"
+                  : "bg-slate-50/80 border-gray-200/80"
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 mb-2 border-b border-gray-200/60">
+                  <div className="flex items-center gap-2">
+                    <div className={`p-1 rounded-md ${sec.result ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-700"}`}>
+                      <CheckCircle2 size={13} />
                     </div>
+                    <h4 className="text-xs font-bold text-gray-900">
+                      {sec.result ? "✅ Live Action Execution Summary — System Changes Applied" : "📋 What Happens Behind The Scenes (Execution Summary)"}
+                    </h4>
                   </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide self-start sm:self-auto ${
+                    sec.result ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-gray-200 text-gray-600"
+                  }`}>
+                    {sec.result ? "Status: 200 OK — Live Updated" : "Ready To Execute"}
+                  </span>
+                </div>
 
-                  <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-3 text-xs text-gray-700">
-                    <div className="flex justify-between items-center py-1.5 border-b border-gray-100">
-                      <span className="font-semibold text-gray-500">Routing Strategy</span>
-                      <span className="font-bold text-blue-700 bg-blue-50 px-3 py-1 rounded-lg border border-blue-100">
-                        {routeResult.strategy || "ROUND_ROBIN"}
+                {/* Bullet points in plain terms for non-technical team members */}
+                <div className="space-y-1.5 mb-3">
+                  {sec.summaryPoints?.map((point: string, idx: number) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-gray-700 font-medium leading-relaxed">
+                      <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
+                      <span>{point}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Key Attributes Updated */}
+                {sec.changedProps && sec.changedProps.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-gray-200/50">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mr-1">Updated Values:</span>
+                    {sec.changedProps.map((cp: any, idx: number) => (
+                      <span key={idx} className="bg-white px-2 py-0.5 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-800 shadow-2xs">
+                        <span className="text-gray-500 font-normal">{cp.label}:</span> <strong className="text-emerald-700">{cp.value}</strong>
                       </span>
-                    </div>
-                    {routeResult.assignedToId && (
-                      <div className="flex justify-between items-center py-1.5 border-b border-gray-100">
-                        <span className="font-semibold text-gray-500">Sales Representative ID</span>
-                        <span className="font-mono font-medium text-gray-800 bg-gray-50 px-2.5 py-1 rounded-lg border border-gray-200">
-                          {routeResult.assignedToId}
-                        </span>
-                      </div>
-                    )}
-                    <div className="flex justify-between items-center py-1.5">
-                      <span className="font-semibold text-gray-500">Execution Status</span>
-                      <span className="font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full">
-                        ACTIVE
-                      </span>
-                    </div>
+                    ))}
                   </div>
-                </div>
-              )}
-
-              {/* 3. ENRICHMENT RESULT */}
-              {activeModal === "enrich" && enrichResult && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between p-5 rounded-2xl bg-blue-50/80 border border-blue-200 shadow-sm">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-white border border-blue-200 flex items-center justify-center shadow-sm">
-                        <Building2 className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-blue-900">Provider: {enrichResult.provider || "Clearbit / Apollo"}</p>
-                        <p className="text-xs text-blue-700 font-medium">{enrichResult.enrichedFieldsCount || 0} fields enriched</p>
-                      </div>
-                    </div>
-                    <span className="text-xs font-bold bg-blue-600 text-white px-3 py-1 rounded-full shadow-sm">
-                      {enrichResult.success ? "ENRICHED" : "NOTICE"}
-                    </span>
-                  </div>
-
-                  {enrichResult.fields && Object.keys(enrichResult.fields).length > 0 && (
-                    <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-3">
-                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-                        <Layers className="w-4 h-4 text-blue-600" /> Enriched Attribute Breakdown
-                      </h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                        {Object.entries(enrichResult.fields).map(([key, val]) => (
-                          <div key={key} className="bg-blue-50/30 p-3 rounded-xl border border-blue-50 flex flex-col gap-0.5">
-                            <span className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">{key}</span>
-                            <span className="font-semibold text-gray-900 truncate">{String(val)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 4. QUALIFY RESULT */}
-              {activeModal === "qualify" && qualifyResult && (
-                <div className="space-y-5">
-                  <div className="flex items-center justify-between p-6 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50/40 to-blue-50 border border-blue-100 shadow-sm">
-                    <div>
-                      <p className="text-xs font-bold text-blue-600 uppercase tracking-wider">Qualification Decision</p>
-                      <span className={`inline-block mt-2 px-3.5 py-1 rounded-xl text-sm font-extrabold text-white shadow-sm ${qualifyResult.status === "QUALIFIED" ? "bg-blue-600" : qualifyResult.status === "REVIEW_NEEDED" ? "bg-amber-500" : "bg-red-500"}`}>
-                        {qualifyResult.status || "QUALIFIED"}
-                      </span>
-                    </div>
-                    <div className="text-right bg-white px-4 py-3 rounded-xl border border-blue-100 shadow-sm">
-                      <p className="text-[11px] text-gray-400 font-bold uppercase">ICP Fit Score</p>
-                      <p className="text-2xl font-black text-blue-700">{qualifyResult.fitScore ?? qualifyResult.score ?? 80}/100</p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm">
-                      <p className="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Intent Level</p>
-                      <p className="text-base font-extrabold text-gray-900 mt-1">{qualifyResult.intentLevel || "HIGH"}</p>
-                    </div>
-                    <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm">
-                      <p className="text-[10px] text-blue-600 uppercase font-bold tracking-wider">Purchase Timing</p>
-                      <p className="text-base font-extrabold text-gray-900 mt-1">{qualifyResult.timing || "IMMEDIATE"}</p>
-                    </div>
-                  </div>
-
-                  {qualifyResult.riskFactors && qualifyResult.riskFactors.length > 0 && (
-                    <div className="bg-white p-5 rounded-2xl border border-blue-100 shadow-sm space-y-2">
-                      <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider flex items-center gap-2">
-                        <AlertCircle className="w-4 h-4 text-amber-500" /> Identified Risk Considerations
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {qualifyResult.riskFactors.map((rf: string, idx: number) => (
-                          <span key={idx} className="bg-amber-50 text-amber-900 text-xs px-3 py-1 rounded-xl border border-amber-200/60 font-semibold">
-                            ⚠️ {rf}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
+                )}
+              </div>
             </div>
-
-            {/* Modal Footer */}
-            <div className="px-7 py-4 bg-white border-t border-blue-100 flex justify-end">
-              <button
-                onClick={() => setActiveModal(null)}
-                className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-md shadow-blue-500/20"
-              >
-                Close Window
-              </button>
-            </div>
-
           </div>
-        </div>
-      )}
+        ))}
+      </div>
+
     </div>
   );
 }

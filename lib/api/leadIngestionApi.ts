@@ -9,7 +9,7 @@ export type IngestionChannel =
   | "REFERRALS"
   | "IMPORTS";
 
-export type IdempotencyStatus = "PROCESSED" | "DUPLICATE_IDEMPOTENT" | "UPDATED";
+export type IdempotencyStatus = "PROCESSED" | "DUPLICATE_IDEMPOTENT" | "UPDATED" | "CREATED";
 
 export interface IdentityResolution {
   matched: boolean;

@@ -39,19 +39,40 @@ function normaliseList(raw: unknown): ApprovalListResponse {
 
   if (u && typeof u === "object") {
     const obj = u as Record<string, unknown>;
-    if (Array.isArray(obj.approvals)) {
+
+    // ── Find the array under whatever key the backend uses ─────────────────
+    // Covers: approvals, items, records, requests, data, results, pendingApprovals
+    const list: Approval[] | null =
+      Array.isArray(obj.approvals)         ? (obj.approvals as Approval[])         :
+      Array.isArray(obj.items)             ? (obj.items as Approval[])             :
+      Array.isArray(obj.records)           ? (obj.records as Approval[])           :
+      Array.isArray(obj.requests)          ? (obj.requests as Approval[])          :
+      Array.isArray(obj.results)           ? (obj.results as Approval[])           :
+      Array.isArray(obj.pendingApprovals)  ? (obj.pendingApprovals as Approval[])  :
+      Array.isArray(obj.data)              ? (obj.data as Approval[])              :
+      null;
+
+    if (list !== null) {
+      // Normalise the status field on each record — the backend may return
+      // lowercase ("pending") or mixed-case; the frontend expects uppercase.
+      const normalised = list.map((a) => ({
+        ...a,
+        status: typeof a.status === "string"
+          ? (a.status.toUpperCase() as Approval["status"])
+          : a.status,
+      }));
+
       return {
-        approvals: obj.approvals as Approval[],
+        approvals: normalised,
         total:
-          typeof obj.total === "number"
-            ? obj.total
-            : (obj.approvals as Approval[]).length,
+          typeof obj.total === "number"        ? obj.total        :
+          typeof obj.count === "number"        ? obj.count        :
+          typeof obj.totalCount === "number"   ? obj.totalCount   :
+          normalised.length,
         pendingCount:
-          typeof obj.pendingCount === "number" ? obj.pendingCount : undefined,
+          typeof obj.pendingCount === "number" ? obj.pendingCount :
+          normalised.filter((a) => a.status === "PENDING").length,
       };
-    }
-    if (Array.isArray(obj.items)) {
-      return { approvals: obj.items as Approval[], total: (obj.items as Approval[]).length };
     }
   }
 
@@ -62,7 +83,7 @@ function normaliseList(raw: unknown): ApprovalListResponse {
 function buildParams(filters: ApprovalListFilters): Record<string, string> {
   const p: Record<string, string> = {};
   if (filters.status)           p.status  = filters.status;
-  if (filters.agentId)          p.agentId = filters.agentId;
+  if (filters.agentId?.trim())  p.agentId = filters.agentId.trim();
   if (filters.search?.trim())   p.search  = filters.search.trim();
   return p;
 }
@@ -95,7 +116,13 @@ export async function getApprovals(
 export async function getApproval(id: string): Promise<ApprovalDetail> {
   try {
     const res = await api.get(`${BASE}/${id}`);
-    return unwrap<ApprovalDetail>(res.data);
+    const detail = unwrap<ApprovalDetail>(res.data);
+    // Normalise status to uppercase so the DecidePanel isClosed check
+    // (APPROVED | REJECTED | EXPIRED) always matches regardless of backend casing.
+    if (detail && typeof detail.status === "string") {
+      detail.status = detail.status.toUpperCase() as ApprovalDetail["status"];
+    }
+    return detail;
   } catch (err: any) {
     throw new Error(
       err.response?.data?.message ||

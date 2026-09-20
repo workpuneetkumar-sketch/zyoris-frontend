@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { WorkspacePageNode, CreateWorkspacePageDto, WorkspacePage } from "@/types/workspace";
 import { createWorkspacePage, createWorkspaceDatabase } from "@/lib/api/workspaceApi";
@@ -25,6 +26,7 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
   pageTree = [],
 }) => {
   const router = useRouter();
+  const [mounted, setMounted] = useState<boolean>(false);
   const [title, setTitle] = useState<string>("");
   const [icon, setIcon] = useState<string>("📄");
   const [parentId, setParentId] = useState<string | null>(initialParentId);
@@ -33,10 +35,14 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
     setParentId(initialParentId);
   }, [initialParentId, isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted || typeof document === "undefined") return null;
 
   const handlePageTypeSelect = (type: "document" | "folder" | "database") => {
     setPageType(type);
@@ -164,8 +170,13 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) onClose();
+      }}
+    >
       <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
@@ -334,6 +345,7 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

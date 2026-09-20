@@ -1,9 +1,6 @@
 // lib/api/contactsApi.ts
-// All network calls for the Contacts module.
-// Uses the shared axios instance — handles auth, token refresh, and logout.
-//
-// Endpoints confirmed against deployed Swagger at https://zyoris.onrender.com/docs
-// Section: Contact — all routes are prefixed /api/contact/
+// Network calls for the Contacts module.
+// Strictly aligned with Swagger API spec at POST /api/contact/create
 
 import api from "@/lib/api/api";
 
@@ -28,6 +25,7 @@ export interface Contact {
     };
     tags?: string[];
     note?: string;
+    notes?: string;
     createdAt: string;
     updatedAt?: string;
     [key: string]: unknown;
@@ -64,26 +62,27 @@ export async function fetchContacts(
         limit: CONTACTS_PER_PAGE,
     };
 
-    if (filters.status !== "All Status") params.status = filters.status;
-    if (filters.source !== "All Sources") params.source = filters.source;
+    if (filters.status && filters.status !== "All Status") params.status = filters.status;
+    if (filters.source && filters.source !== "All Sources") params.source = filters.source;
     if (filters.search) params.search = filters.search;
 
     try {
         const res = await api.get("/api/contact/get-contacts", { params });
-
-        // Normalise response shape — handle array, { data, pagination }, { contacts, total }
         const raw = res.data;
         if (Array.isArray(raw)) {
             return { contacts: raw, total: raw.length };
         }
-        if (Array.isArray(raw.data)) {
+        if (Array.isArray(raw?.data)) {
             return {
                 contacts: raw.data,
-                total: raw.pagination?.total ?? raw.data.length,
+                total: raw.pagination?.total ?? raw.total ?? raw.data.length,
             };
         }
-        if (Array.isArray(raw.contacts)) {
+        if (Array.isArray(raw?.contacts)) {
             return { contacts: raw.contacts, total: raw.total ?? raw.contacts.length };
+        }
+        if (Array.isArray(raw?.items)) {
+            return { contacts: raw.items, total: raw.total ?? raw.items.length };
         }
         return { contacts: [], total: 0 };
     } catch (err: any) {
@@ -96,10 +95,11 @@ export async function fetchContacts(
 
 // ── POST create contact ───────────────────────────────────────────────────────
 // Swagger: POST /api/contact/create
+// Schema: name (req), email, phone, companyId, position, city, source, status, notes
 
 export async function createContact(data: {
     name: string;
-    email: string;
+    email?: string;
     phone?: string;
     company?: string;
     companyId?: string;
@@ -107,14 +107,28 @@ export async function createContact(data: {
     city?: string;
     source?: string;
     status?: string;
-    assignedToId?: string | null;
-    tags?: string[];
     note?: string;
+    notes?: string;
 }): Promise<Contact> {
-    const res = await api.post<Contact>("/api/contact/create", {
-        ...data,
-        assignedToId: data.assignedToId?.trim() || null,
-    });
+    const payload: Record<string, any> = {
+        name: data.name.trim(),
+    };
+
+    if (data.email?.trim()) payload.email = data.email.trim();
+    if (data.phone?.trim()) payload.phone = data.phone.trim();
+
+    const cId = data.companyId?.trim() || data.company?.trim();
+    if (cId) payload.companyId = cId;
+
+    if (data.position?.trim()) payload.position = data.position.trim();
+    if (data.city?.trim()) payload.city = data.city.trim();
+    if (data.source?.trim()) payload.source = data.source.trim();
+    if (data.status?.trim()) payload.status = data.status.trim();
+
+    const notesVal = data.notes?.trim() || data.note?.trim();
+    if (notesVal) payload.notes = notesVal;
+
+    const res = await api.post<Contact>("/api/contact/create", payload);
     return res.data;
 }
 
@@ -125,7 +139,24 @@ export async function updateContact(
     id: string,
     data: Partial<Contact>
 ): Promise<Contact> {
-    const res = await api.patch<Contact>(`/api/contact/update-contact/${id}`, data);
+    const payload: Record<string, any> = {};
+
+    if (data.name?.trim()) payload.name = data.name.trim();
+    if (data.email?.trim()) payload.email = data.email.trim();
+    if (data.phone?.trim()) payload.phone = data.phone.trim();
+
+    const cId = (data.companyId || (data as any).company)?.trim();
+    if (cId) payload.companyId = cId;
+
+    if (data.position?.trim()) payload.position = data.position.trim();
+    if (data.city?.trim()) payload.city = data.city.trim();
+    if (data.source?.trim()) payload.source = data.source.trim();
+    if (data.status?.trim()) payload.status = data.status.trim();
+
+    const notesVal = (data.notes || data.note)?.trim();
+    if (notesVal) payload.notes = notesVal;
+
+    const res = await api.patch<Contact>(`/api/contact/update-contact/${id}`, payload);
     return res.data;
 }
 
@@ -143,3 +174,5 @@ export async function fetchContactById(id: string): Promise<Contact> {
     const res = await api.get<Contact>(`/api/contact/get-contact/${id}`);
     return res.data;
 }
+
+

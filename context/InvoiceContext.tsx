@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { Invoice, UpdateInvoiceData, getInvoices } from "@/lib/api/finance/invoicesApi";
 import { Payment, CreatePaymentData } from "@/lib/api/paymentApi";
+import { useAuth } from "@/context/AuthContext";
 
 interface InvoiceContextType {
   invoices: Invoice[];
@@ -19,9 +20,25 @@ const InvoiceContext = createContext<InvoiceContextType | undefined>(undefined);
 export function InvoiceProvider({ children }: { children: React.ReactNode }) {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  let authContext: any = null;
+  try {
+    authContext = useAuth();
+  } catch {
+    // If used outside of AuthProvider in standalone tests
+  }
+
+  const isAuthenticated = authContext?.isAuthenticated;
+  const isInitializing = authContext?.isInitializing;
 
   const fetchInvoices = useCallback(async () => {
+    if (!isAuthenticated) {
+      setInvoices([]);
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const data = await getInvoices();
@@ -32,11 +49,17 @@ export function InvoiceProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   useEffect(() => {
+    if (isInitializing) return;
+    if (!isAuthenticated) {
+      setInvoices([]);
+      setLoading(false);
+      return;
+    }
     fetchInvoices();
-  }, [fetchInvoices]);
+  }, [fetchInvoices, isAuthenticated, isInitializing]);
 
   const getInvoiceById = useCallback(
     (id: string) => invoices.find((inv) => inv.id === id),

@@ -85,11 +85,15 @@ export function ApprovalStatusBadge({
   variant = "full",
   className,
 }: ApprovalStatusBadgeProps) {
-  const style =
-    STATUS_STYLES[status as ApprovalStatus] ?? FALLBACK_STYLE;
+  // Normalise to uppercase so lowercase values from the backend ("pending",
+  // "approved", etc.) map correctly to the style lookup.
+  const normalisedStatus = (status ?? "").toUpperCase() as ApprovalStatus;
+  const style = STATUS_STYLES[normalisedStatus] ?? FALLBACK_STYLE;
   const { Icon } = style;
   const label =
-    variant === "compact" ? style.shortLabel || status : style.label || status;
+    variant === "compact"
+      ? style.shortLabel || status
+      : style.label || status;
 
   return (
     <span

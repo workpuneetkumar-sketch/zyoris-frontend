@@ -7,7 +7,6 @@ import {
   Check,
   CheckCheck,
   X,
-  Trash2,
   Archive,
   Search,
   BellRing,
@@ -20,21 +19,17 @@ import {
   MessageSquare,
   CheckSquare,
   ShieldAlert,
-  Layers,
-  Loader2,
 } from "lucide-react";
 import classNames from "classnames";
 import { useNotifications } from "@/hooks/useNotifications";
-import { useTheme } from "@/context/ThemeContext";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Avatar } from "./ui/Avatar";
 import { EmptyState } from "./ui/EmptyState";
 import { Skeleton } from "./ui/Skeleton";
 import type {
   Notification,
   NotificationCategory,
-  NotificationCategoryPreferences,
-  NotificationPreferences,
 } from "@/types/notifications";
 import {
   isSoundEnabled,
@@ -48,10 +43,7 @@ import {
   type PushPermissionStatus,
 } from "@/lib/browserPushPermission";
 import { toast } from "sonner";
-import {
-  fetchNotificationPreferences,
-  updateNotificationPreferences,
-} from "@/lib/api/notificationsApi";
+import { getNotificationPath } from "@/utils/notificationNavigation";
 
 // Helper to format date
 function formatRelativeTime(dateString: string): string {
@@ -109,23 +101,18 @@ function NotificationItem({
   notification,
   onMarkRead,
   onDelete,
-  onHardDelete,
   onClick,
 }: {
   notification: Notification;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
-  onHardDelete: (id: string) => void;
   onClick: () => void;
 }) {
-  const isAggregated = Boolean(
-    notification.groupKey || (notification.aggregatedCount && notification.aggregatedCount > 1)
-  );
-
   return (
     <div
       className={classNames(
         "group relative flex flex-col sm:flex-row items-start gap-3 p-4 transition-all duration-200 cursor-pointer",
+        notification.priority.toLowerCase() === "critical" && "border-l-4 border-error",
         !notification.read
           ? "bg-primary/5 dark:bg-primary/10"
           : "hover:bg-surface-hover dark:hover:bg-surface-hover"
@@ -141,7 +128,7 @@ function NotificationItem({
       <div className="shrink-0">
         {notification.actor ? (
           <Avatar
-            src={notification.actor.avatarUrl}
+            src={notification.actor.avatarUrl ?? undefined}
             alt={notification.actor.name}
             fallback={notification.actor.name.charAt(0).toUpperCase()}
             size="md"
@@ -170,12 +157,6 @@ function NotificationItem({
             >
               {notification.title}
             </h4>
-            {isAggregated && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold">
-                <Layers size={10} />
-                {notification.aggregatedCount ? `${notification.aggregatedCount}` : "Grouped"}
-              </span>
-            )}
             {!notification.read && (
               <span className="w-2 h-2 rounded-full bg-primary shrink-0 animate-pulse" />
             )}
@@ -189,6 +170,9 @@ function NotificationItem({
         >
           {notification.message}
         </p>
+        {notification.actorName && (
+          <p className="text-xs text-text-muted mt-2">From {notification.actorName}</p>
+        )}
         <div className="flex items-center justify-between mt-2">
           <span className="text-xs text-text-muted">
             {formatRelativeTime(notification.createdAt)}
@@ -217,16 +201,6 @@ function NotificationItem({
             >
               <Archive size={14} />
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onHardDelete(notification.id);
-              }}
-              className="p-1.5 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
-              title="Delete permanently"
-            >
-              <Trash2 size={14} />
-            </button>
           </div>
         </div>
       </div>
@@ -245,15 +219,7 @@ const CATEGORY_TABS: { id: NotificationCategory; label: string }[] = [
   { id: "system", label: "System" },
 ];
 
-const DEFAULT_PREFERENCES: NotificationPreferences = {
-  leads: { inApp: true, email: true, push: true, sound: false },
-  messages: { inApp: true, email: true, push: false, sound: false },
-  deals: { inApp: true, email: true, push: true, sound: false },
-  tasks: { inApp: true, email: false, push: true, sound: false },
-  system: { inApp: true, email: true, push: false, sound: true },
-};
-
-// Settings Panel Component with User Preference Matrix
+// Settings Panel Component
 function NotificationSettings({
   soundEnabled,
   onToggleSound,
@@ -269,102 +235,6 @@ function NotificationSettings({
 }) {
   const [requesting, setRequesting] = useState(false);
   const [testingSound, setTestingSound] = useState(false);
-  const [preferences, setPreferences] = useState<NotificationPreferences>(DEFAULT_PREFERENCES);
-  const [savingPrefs, setSavingPrefs] = useState<Set<string>>(new Set());
-  const [loadingPrefs, setLoadingPrefs] = useState(true);
-  const originalPrefsRef = useRef<NotificationPreferences>(DEFAULT_PREFERENCES);
-
-  // Load preferences from API
-  useEffect(() => {
-    let active = true;
-    fetchNotificationPreferences()
-      .then((res) => {
-        if (active) {
-          let merged: NotificationPreferences;
-          if (res && Object.keys(res).length > 0) {
-            merged = { ...DEFAULT_PREFERENCES };
-            Object.keys(DEFAULT_PREFERENCES).forEach((cat) => {
-              merged[cat] = { ...DEFAULT_PREFERENCES[cat], ...(res[cat] || {}) };
-            });
-            Object.keys(res).forEach((cat) => {
-              if (!merged[cat]) merged[cat] = { ...res[cat] };
-              else merged[cat] = { ...merged[cat], ...res[cat] };
-            });
-          } else {
-            merged = { ...DEFAULT_PREFERENCES };
-          }
-          setPreferences(merged);
-          originalPrefsRef.current = JSON.parse(JSON.stringify(merged));
-        }
-      })
-      .catch((err: any) => {
-        toast.error(err?.message || "Failed to load preferences");
-      })
-      .finally(() => {
-        if (active) setLoadingPrefs(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const handleTogglePreference = async (
-    category: string,
-    channel: keyof NotificationCategoryPreferences
-  ) => {
-    const key = `${category}:${String(channel)}`;
-    if (savingPrefs.has(key)) return;
-
-    const original = JSON.parse(JSON.stringify(preferences)) as NotificationPreferences;
-    const originalCategory = { ...(preferences[category] || {}) };
-    const newChannelValue = !(preferences[category]?.[channel] ?? true);
-
-    const updated = {
-      ...preferences,
-      [category]: {
-        ...(preferences[category] || {
-          inApp: true,
-          email: true,
-          push: false,
-          sound: false,
-        }),
-        [channel]: newChannelValue,
-      },
-    };
-
-    // Optimistic UI update
-    setPreferences(updated);
-    setSavingPrefs((prev) => new Set(prev).add(key));
-
-    const payloadKey = category;
-    const payloadCategory = {
-      ...updated[category],
-    };
-    Object.entries(payloadCategory).forEach(([k, v]) => {
-      // save-only-changed: only include the channel that actually changed vs original
-    });
-    const savePayload: NotificationPreferences = {
-      [payloadKey]: { [channel]: newChannelValue } as NotificationCategoryPreferences,
-    };
-
-    try {
-      await updateNotificationPreferences(savePayload);
-      // Keep the optimistic state — it's already correct.
-      // Just sync the ref so future rollbacks use the saved value.
-      originalPrefsRef.current = JSON.parse(JSON.stringify(updated));
-      toast.success("Preference saved");
-    } catch (err: any) {
-      // Rollback to pre-toggle state
-      setPreferences({ ...original, [category]: { ...originalCategory } });
-      toast.error(err?.message || "Failed to save preference");
-    } finally {
-      setSavingPrefs((prev) => {
-        const next = new Set(prev);
-        next.delete(key);
-        return next;
-      });
-    }
-  };
 
   const handleRequestPush = async () => {
     setRequesting(true);
@@ -394,14 +264,11 @@ function NotificationSettings({
       ? "text-error"
       : "text-text-muted";
 
-  const categories = ["leads", "messages", "deals", "tasks", "system"];
-
   return (
     <div className="p-4 space-y-5 overflow-y-auto max-h-[75vh]">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-text flex items-center gap-2">
           Notification Settings
-          {savingPrefs.size > 0 && <Loader2 size={12} className="animate-spin text-primary" />}
         </h3>
         <button
           onClick={onClose}
@@ -409,88 +276,6 @@ function NotificationSettings({
         >
           <X size={16} />
         </button>
-      </div>
-
-      {/* User Preference Matrix */}
-      <div className="rounded-xl border border-border bg-background-secondary p-3 space-y-3">
-        <div>
-          <h4 className="text-xs font-bold text-text">Channel Preferences Matrix</h4>
-          <p className="text-[11px] text-text-muted">Customize notifications per category</p>
-        </div>
-
-        {loadingPrefs ? (
-          <div className="py-4 text-center">
-            <Loader2 size={18} className="animate-spin text-primary mx-auto" />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-border text-text-muted">
-                  <th className="py-2 font-semibold">Category</th>
-                  <th className="py-2 text-center font-semibold">In-App</th>
-                  <th className="py-2 text-center font-semibold">Email</th>
-                  <th className="py-2 text-center font-semibold">Push</th>
-                  <th className="py-2 text-center font-semibold">Sound</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border/50">
-                {categories.map((cat) => {
-                  const prefs = preferences[cat] || {
-                    inApp: true,
-                    email: true,
-                    push: false,
-                    sound: false,
-                  };
-                  const changeKey = (ch: string) => `${cat}:${ch}`;
-                  const isSaving = (ch: keyof NotificationCategoryPreferences) =>
-                    savingPrefs.has(changeKey(String(ch)));
-                  return (
-                    <tr key={cat} className="hover:bg-surface-hover/50">
-                      <td className="py-2 font-medium capitalize text-text">{cat}</td>
-                      <td className="py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(prefs.inApp)}
-                          disabled={isSaving("inApp")}
-                          onChange={() => handleTogglePreference(cat, "inApp")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
-                        />
-                      </td>
-                      <td className="py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(prefs.email)}
-                          disabled={isSaving("email")}
-                          onChange={() => handleTogglePreference(cat, "email")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
-                        />
-                      </td>
-                      <td className="py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(prefs.push)}
-                          disabled={isSaving("push")}
-                          onChange={() => handleTogglePreference(cat, "push")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
-                        />
-                      </td>
-                      <td className="py-2 text-center">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(prefs.sound)}
-                          disabled={isSaving("sound")}
-                          onChange={() => handleTogglePreference(cat, "sound")}
-                          className="rounded border-border text-primary focus:ring-primary h-4 w-4 cursor-pointer disabled:opacity-50"
-                        />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
 
       {/* Sound Toggle */}
@@ -573,16 +358,14 @@ export function NotificationBell() {
   const {
     notifications,
     loading,
-    loadingMore,
-    hasMore,
     error,
     unreadCount,
     categoryUnreadCounts,
     markRead,
     markAllRead,
     removeNotification,
-    hardDeleteNotification,
-    fetchNextPage,
+    realtimeStatus,
+    refresh,
   } = useNotifications();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -601,7 +384,7 @@ export function NotificationBell() {
 
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
-    let result = notifications.filter((n) => {
+    const result = notifications.filter((n) => {
       const matchesSearch =
         n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         n.message.toLowerCase().includes(searchQuery.toLowerCase());
@@ -625,25 +408,7 @@ export function NotificationBell() {
       return matchesSearch && matchesFilter;
     });
 
-    // Grouping by groupKey client-side if multiple notifications share a groupKey
-    const groupedMap = new Map<string, Notification>();
-    const finalItems: Notification[] = [];
-
-    result.forEach((n) => {
-      if (n.groupKey) {
-        if (!groupedMap.has(n.groupKey)) {
-          groupedMap.set(n.groupKey, { ...n, aggregatedCount: 1 });
-          finalItems.push(n);
-        } else {
-          const existing = groupedMap.get(n.groupKey)!;
-          existing.aggregatedCount = (existing.aggregatedCount || 1) + 1;
-        }
-      } else {
-        finalItems.push(n);
-      }
-    });
-
-    return finalItems;
+    return result.slice(0, 10);
   }, [notifications, searchQuery, filter]);
 
   // Group notifications by date
@@ -714,10 +479,17 @@ export function NotificationBell() {
   }, [isOpen]);
 
   // Handle notification click
-  const handleNotificationClick = (notification: Notification) => {
-    if (!notification.read) markRead(notification.id);
+  const handleNotificationClick = async (notification: Notification) => {
+    if (!notification.read) {
+      try {
+        await markRead(notification.id);
+      } catch (cause: unknown) {
+        toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+      }
+    }
     setIsOpen(false);
-    router.push(notification.deepLink || "/notifications");
+    const path = getNotificationPath(notification);
+    if (path) router.push(path);
   };
 
   // Handle mark all read (scoped to current filter category)
@@ -726,8 +498,26 @@ export function NotificationBell() {
     setIsMarkingAllRead(true);
     try {
       await markAllRead(filter);
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to mark notifications as read");
     } finally {
       setIsMarkingAllRead(false);
+    }
+  };
+
+  const handleMarkRead = async (id: string) => {
+    try {
+      await markRead(id);
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+    }
+  };
+
+  const handleArchive = async (id: string) => {
+    try {
+      await removeNotification(id);
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to archive notification");
     }
   };
 
@@ -774,7 +564,7 @@ export function NotificationBell() {
         aria-label="Notifications"
         aria-expanded={isOpen}
       >
-        {unreadCount > 0 ? <BellRing size={20} className="animate-bounce" /> : <Bell size={20} />}
+        {unreadCount > 0 ? <BellRing size={20} /> : <Bell size={20} />}
         {unreadCount > 0 && (
           <span className="absolute -top-1 -right-1 min-w-[20px] h-[20px] flex items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold px-1 border-2 border-surface">
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -847,6 +637,12 @@ export function NotificationBell() {
                 />
               ) : (
                 <>
+                  {realtimeStatus !== "connected" && (
+                    <div className="px-4 py-2 text-xs text-text-muted bg-background-secondary border-b border-border flex items-center justify-between">
+                      <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
+                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
+                    </div>
+                  )}
                   {/* Search and Category Tabs */}
                   <div className="p-4 border-b border-border space-y-3 shrink-0">
                     <div className="relative">
@@ -903,11 +699,7 @@ export function NotificationBell() {
                         <Skeleton variant="notification" count={3} />
                       </div>
                     ) : error ? (
-                      <EmptyState
-                        icon={Search}
-                        title="Failed to load notifications"
-                        description={error}
-                      />
+                      <div className="p-6 text-center"><p className="text-sm text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-sm text-primary font-semibold hover:underline">Retry</button></div>
                     ) : groupedNotifications.length === 0 ? (
                       <EmptyState
                         icon={Bell}
@@ -931,41 +723,28 @@ export function NotificationBell() {
                               <NotificationItem
                                 key={notification.id}
                                 notification={notification}
-                                onMarkRead={markRead}
-                                onDelete={removeNotification}
-                                onHardDelete={hardDeleteNotification}
+                                onMarkRead={handleMarkRead}
+                                onDelete={handleArchive}
                                 onClick={() => handleNotificationClick(notification)}
                               />
                             ))}
                           </div>
                         ))}
 
-                        {/* Infinite scroll load more button */}
-                        {hasMore && (
-                          <div className="p-3 text-center">
-                            <button
-                              onClick={() => fetchNextPage()}
-                              disabled={loadingMore}
-                              className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1.5 mx-auto"
-                            >
-                              {loadingMore && <Loader2 size={12} className="animate-spin" />}
-                              {loadingMore ? "Loading more..." : "Load older notifications"}
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )}
                   </div>
 
                   {/* Footer */}
                   <div className="p-4 border-t border-border shrink-0">
-                    <a
+                    <Link
                       href="/notifications"
+                      onClick={() => setIsOpen(false)}
                       className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary-dark transition-colors"
                     >
                       View all notifications
                       <ChevronRight size={16} />
-                    </a>
+                    </Link>
                   </div>
                 </>
               )}
@@ -1047,6 +826,12 @@ export function NotificationBell() {
                 </div>
               ) : (
                 <>
+                  {realtimeStatus !== "connected" && (
+                    <div className="px-4 py-2 text-xs text-text-muted bg-background-secondary border-b border-border flex items-center justify-between">
+                      <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
+                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
+                    </div>
+                  )}
                   {/* Search and Category Tabs */}
                   <div className="p-4 border-b border-border space-y-3 shrink-0">
                     <div className="relative">
@@ -1102,11 +887,7 @@ export function NotificationBell() {
                         <Skeleton variant="notification" count={3} />
                       </div>
                     ) : error ? (
-                      <EmptyState
-                        icon={Search}
-                        title="Failed to load notifications"
-                        description={error}
-                      />
+                      <div className="p-6 text-center"><p className="text-sm text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-sm text-primary font-semibold hover:underline">Retry</button></div>
                     ) : groupedNotifications.length === 0 ? (
                       <EmptyState
                         icon={Bell}
@@ -1130,29 +911,26 @@ export function NotificationBell() {
                               <NotificationItem
                                 key={notification.id}
                                 notification={notification}
-                                onMarkRead={markRead}
-                                onDelete={removeNotification}
-                                onHardDelete={hardDeleteNotification}
+                                onMarkRead={handleMarkRead}
+                                onDelete={handleArchive}
                                 onClick={() => handleNotificationClick(notification)}
                               />
                             ))}
                           </div>
                         ))}
 
-                        {hasMore && (
-                          <div className="p-3 text-center">
-                            <button
-                              onClick={() => fetchNextPage()}
-                              disabled={loadingMore}
-                              className="text-xs text-primary font-semibold hover:underline flex items-center justify-center gap-1.5 mx-auto"
-                            >
-                              {loadingMore && <Loader2 size={12} className="animate-spin" />}
-                              {loadingMore ? "Loading more..." : "Load older notifications"}
-                            </button>
-                          </div>
-                        )}
                       </div>
                     )}
+                  </div>
+                  <div className="p-4 border-t border-border shrink-0">
+                    <Link
+                      href="/notifications"
+                      onClick={() => setIsOpen(false)}
+                      className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary-dark transition-colors"
+                    >
+                      View all notifications
+                      <ChevronRight size={16} />
+                    </Link>
                   </div>
                 </>
               )}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Lead, computeLeadScore } from "@/types/leads";
+
 import { getLeadStatusInfo } from "@/utils/leadStatus";
 import { getLeadScore as fetchLeadScore } from "@/lib/api/leadsApi";
 import { AiExtractionPanel } from "@/components/ai/AiExtractionPanel";
@@ -68,6 +70,13 @@ function getInitials(name: string): string {
 }
 
 export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
+  const router = useRouter();
+  useEffect(() => {
+    if (lead?.id) {
+      router.push(`/leads/${lead.id}`);
+    }
+  }, [lead?.id, router]);
+
   const [score, setScore] = useState<number | null>(lead.score ?? null);
   const [scoreLoading, setScoreLoading] = useState(false);
   const [scoreError, setScoreError] = useState<string | null>(null);
@@ -127,8 +136,8 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
   const hasNote = lead.note && lead.note.trim().length > 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/50 backdrop-blur-md p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-blue-100 my-auto transform transition-all animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 backdrop-blur-md p-4 sm:p-6 overflow-y-auto animate-in fade-in duration-300">
+      <div className="bg-white w-full max-w-6xl rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] border border-blue-100 my-auto transform transition-all animate-in zoom-in-95 duration-200">
         
         {/* Animated Hero Header */}
         <div className="relative px-7 py-6 border-b border-blue-100 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 text-white overflow-hidden">

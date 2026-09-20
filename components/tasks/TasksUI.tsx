@@ -36,6 +36,8 @@ import {
     MessageSquare,
     ListTree,
     Network,
+    Download,
+    ChevronDown,
 } from "lucide-react";
 import {
     Task,
@@ -47,6 +49,11 @@ import {
 } from "@/lib/api/tasksApi";
 import { fetchTeamMembers } from "@/lib/api/leadsApi";
 import { TaskFilter } from "@/hooks/useTasks";
+import {
+    ExportFormat,
+    exportTasksToClientFile,
+    FORMAT_EXTENSIONS,
+} from "@/lib/api/exportApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -582,6 +589,7 @@ export function TasksUI({
     const [bulkStatus, setBulkStatus] = useState<TaskStatus | "">("");
     const [bulkPriority, setBulkPriority] = useState<TaskPriority | "">("");
     const [bulkAssignee, setBulkAssignee] = useState<string>("");
+    const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
 
     // Drag and drop states for Kanban
     const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
@@ -722,6 +730,41 @@ export function TasksUI({
                                 <LayoutList size={14} />
                                 <span>List</span>
                             </button>
+                        </div>
+
+                        {/* Export Tasks Button */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsExportMenuOpen((prev) => !prev)}
+                                className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold shadow-xs transition"
+                            >
+                                <Download size={14} className="text-blue-600 dark:text-blue-400" />
+                                <span>Export</span>
+                                <ChevronDown size={12} className="text-slate-400" />
+                            </button>
+
+                            {isExportMenuOpen && (
+                                <div className="absolute right-0 top-full mt-1.5 z-30 w-52 p-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl space-y-1">
+                                    <div className="px-3 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                        Export Visible Tasks ({filteredTasks.length})
+                                    </div>
+                                    {(["CSV", "XLSX", "MARKDOWN", "HTML", "PDF"] as ExportFormat[]).map((fmt) => (
+                                        <button
+                                            key={fmt}
+                                            onClick={() => {
+                                                setIsExportMenuOpen(false);
+                                                exportTasksToClientFile(filteredTasks, fmt, "tasks_board_export");
+                                            }}
+                                            className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                                        >
+                                            <span>Export as {fmt}</span>
+                                            <span className="text-[10px] text-slate-400 font-mono">
+                                                {FORMAT_EXTENSIONS[fmt]}
+                                            </span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {/* Create Task Button */}

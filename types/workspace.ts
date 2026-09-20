@@ -18,6 +18,8 @@ export interface BlockFormatting {
   strikethrough?: boolean;
   code?: boolean;
   link?: string | null;
+  isOpen?: boolean;
+  subtext?: string;
 }
 
 export interface WorkspaceBlock {
@@ -102,12 +104,38 @@ export interface ReorderBlockItem {
   parentBlockId?: string | null;
 }
 
+export type DatabasePropertyType =
+  | 'text'
+  | 'number'
+  | 'select'
+  | 'multi_select'
+  | 'date'
+  | 'checkbox'
+  | 'url'
+  | 'TEXT'
+  | 'NUMBER'
+  | 'SELECT'
+  | 'MULTI_SELECT'
+  | 'DATE'
+  | 'CHECKBOX'
+  | 'URL';
+
+export type DatabaseViewType =
+  | 'table'
+  | 'board'
+  | 'list'
+  | 'gallery'
+  | 'TABLE'
+  | 'BOARD'
+  | 'LIST'
+  | 'GALLERY';
+
 export interface WorkspaceDatabaseProperty {
   id: string;
   databaseId?: string;
   name: string;
-  type: 'text' | 'number' | 'select' | 'multi_select' | 'date' | 'checkbox' | 'url';
-  options?: string[];
+  type: DatabasePropertyType;
+  options?: string[] | Record<string, any>;
   createdAt?: string;
 }
 
@@ -123,7 +151,7 @@ export interface WorkspaceDatabaseView {
   id: string;
   databaseId?: string;
   name: string;
-  type: 'table' | 'board' | 'list' | 'gallery';
+  type: DatabaseViewType;
   query?: Record<string, any>;
   createdAt?: string;
 }
@@ -131,6 +159,7 @@ export interface WorkspaceDatabaseView {
 export interface WorkspaceDatabase {
   id: string;
   pageId: string;
+  name?: string;
   title?: string;
   properties?: WorkspaceDatabaseProperty[];
   rows?: WorkspaceDatabaseRow[];
@@ -138,3 +167,4 @@ export interface WorkspaceDatabase {
   createdAt?: string;
   updatedAt?: string;
 }
+
