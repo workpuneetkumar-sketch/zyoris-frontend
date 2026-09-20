@@ -18,8 +18,8 @@
  * suggestedAction field. It calls decideApproval() from the existing
  * approvalsApi — no new approval logic is introduced.
  *
- * All colors from CSS variable tokens or Tailwind semantic classes
- * mapped to those tokens.  Zero hardcoded hex/rgb values.
+ * Enhanced with modern premium aesthetic styling for AI score cards,
+ * recommendation badges, and evidence chips.
  */
 
 import { useState } from "react";
@@ -37,6 +37,12 @@ import {
   BookOpen,
   Layers,
   Send,
+  Sparkles,
+  Bot,
+  Brain,
+  ShieldAlert,
+  Target,
+  Zap,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { decideApproval } from "@/lib/api/approvalsApi";
@@ -81,26 +87,25 @@ interface AgentResultModalProps {
 
 // ─── Agent meta ───────────────────────────────────────────────────────────────
 
-const AGENT_META: Record<AgentType, { title: string; description: string }> = {
+const AGENT_META: Record<AgentType, { title: string; description: string; icon: any }> = {
   research: {
     title: "Research Agent",
     description: "AI-generated research and enrichment for this record.",
+    icon: Sparkles,
   },
   qualify_lead: {
     title: "Lead Qualification Agent",
     description: "AI scoring and qualification analysis for this lead.",
+    icon: Brain,
   },
   prepare_meeting: {
     title: "Sales Preparation Agent",
     description: "AI-generated meeting prep, talking points, and context.",
+    icon: Bot,
   },
 };
 
 // ─── Confidence score badge ───────────────────────────────────────────────────
-// Colors map to existing CSS variable tokens:
-//   ≥ 80 → success tokens  (--color-success-light / --color-success)
-//   60–79 → warning tokens (--color-warning-light / --color-warning)
-//   < 60  → neutral        (--color-background-secondary / --color-text-muted)
 
 interface ConfidenceBadgeProps {
   score: number;
@@ -112,30 +117,30 @@ function ConfidenceBadge({ score }: ConfidenceBadgeProps) {
   const { pill, iconClass, Icon } =
     clamped >= 80
       ? {
-          pill: "bg-[color:var(--color-success-light)] text-[color:var(--color-success)] border-[color:var(--color-success-light)]",
-          iconClass: "text-[color:var(--color-success)]",
+          pill: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800/60",
+          iconClass: "text-emerald-600 dark:text-emerald-400",
           Icon: TrendingUp,
         }
       : clamped >= 60
       ? {
-          pill: "bg-[color:var(--color-warning-light)] text-[color:var(--color-warning-foreground)] border-[color:var(--color-warning-light)]",
-          iconClass: "text-[color:var(--color-warning)]",
+          pill: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800/60",
+          iconClass: "text-amber-600 dark:text-amber-400",
           Icon: Minus,
         }
       : {
-          pill: "bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]",
-          iconClass: "text-[color:var(--color-text-muted)]",
+          pill: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800/60",
+          iconClass: "text-rose-600 dark:text-rose-400",
           Icon: TrendingDown,
         };
 
   return (
     <span
       className={classNames(
-        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold border",
+        "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs",
         pill
       )}
     >
-      <Icon size={14} className={classNames("shrink-0", iconClass)} />
+      <Icon size={13} className={classNames("shrink-0", iconClass)} />
       {clamped}% Confidence
     </span>
   );
@@ -157,15 +162,15 @@ function EvidenceChip({
   const url = typeof item === "object" ? item.url : undefined;
 
   const base = classNames(
-    "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-colors",
-    "bg-[color:var(--color-info-light)] text-[color:var(--color-info-foreground)] border-[color:var(--color-info-light)]",
-    url && "cursor-pointer hover:opacity-80"
+    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all duration-150",
+    "bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700/80",
+    url && "cursor-pointer hover:bg-blue-50 hover:border-blue-200 hover:text-blue-700 dark:hover:bg-blue-900/30 dark:hover:text-blue-300"
   );
 
   if (url) {
     return (
       <a href={url} target="_blank" rel="noopener noreferrer" className={base}>
-        <BookOpen size={10} className="shrink-0" />
+        <BookOpen size={11} className="shrink-0 text-blue-500" />
         {label}
       </a>
     );
@@ -173,9 +178,90 @@ function EvidenceChip({
 
   return (
     <span className={base}>
-      <BookOpen size={10} className="shrink-0" />
+      <BookOpen size={11} className="shrink-0 text-slate-400" />
       {label}
     </span>
+  );
+}
+
+// ─── Evaluation Summary Card ──────────────────────────────────────────────────
+
+function EvaluationSummaryCard({ summary }: { summary: string }) {
+  // Regex parsing for Lead Qualification Agent evaluation summary strings
+  const scoreMatch = summary.match(/evaluated as ([A-Z_\s]+)\s*\(Score:\s*([\d\.]+)\/100\)/i);
+  const statusStr = scoreMatch ? scoreMatch[1].trim() : null;
+  const scoreVal = scoreMatch ? parseFloat(scoreMatch[2]) : null;
+
+  const fitMatch = summary.match(/Fit:\s*([\d\.]+|[A-Z\s\(\)]+)/i);
+  const intentMatch = summary.match(/Intent:\s*([\d\.]+\s*\([A-Z]+\)|[\d\.]+|[A-Z\s]+)/i);
+  const engagementMatch = summary.match(/Engagement:\s*([\d\.]+)/i);
+
+  const isQualified = statusStr
+    ? statusStr.toUpperCase().includes("QUALIFIED") && !statusStr.toUpperCase().includes("UNQUALIFIED")
+    : false;
+
+  if (scoreVal !== null || statusStr !== null) {
+    return (
+      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-lg border border-slate-800 relative overflow-hidden">
+        {/* Soft glow background accent */}
+        <div className="absolute top-0 right-0 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <span
+              className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider border shadow-xs ${
+                isQualified
+                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                  : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+              }`}
+            >
+              {statusStr || "EVALUATED"}
+            </span>
+            <span className="text-xs text-slate-400 font-medium">AI Qualification Evaluation</span>
+          </div>
+
+          {scoreVal !== null && (
+            <div className="flex items-baseline gap-1.5 bg-slate-800/90 px-3.5 py-1.5 rounded-xl border border-slate-700/80 shadow-xs">
+              <span className="text-xl font-black text-white">{scoreVal}</span>
+              <span className="text-xs text-slate-400 font-bold">/ 100</span>
+            </div>
+          )}
+        </div>
+
+        {/* Structured 3-Column Metrics Breakdown */}
+        <div className="grid grid-cols-3 gap-3 pt-4">
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-center">
+            <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5 tracking-wider">ICP Fit</span>
+            <span className="text-xs font-bold text-slate-100">{fitMatch ? fitMatch[1] : "0"}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-center">
+            <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5 tracking-wider">Buyer Intent</span>
+            <span className="text-xs font-bold text-slate-100">{intentMatch ? intentMatch[1] : "Low"}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-center">
+            <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5 tracking-wider">Engagement</span>
+            <span className="text-xs font-bold text-slate-100">{engagementMatch ? engagementMatch[1] : "100"}</span>
+          </div>
+        </div>
+
+        {/* Narrative text */}
+        <p className="mt-3.5 text-xs text-slate-300 leading-relaxed font-normal bg-slate-950/40 p-3 rounded-xl border border-slate-800/70">
+          {summary}
+        </p>
+      </div>
+    );
+  }
+
+  // Fallback for generic summary text
+  return (
+    <div className="bg-slate-50 dark:bg-slate-900/80 rounded-2xl p-4 border border-slate-200 dark:border-slate-800">
+      <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2">
+        Summary
+      </p>
+      <p className="text-sm text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
+        {summary}
+      </p>
+    </div>
   );
 }
 
@@ -194,21 +280,15 @@ function RecommendationCard({
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
 
-  // rec.recommendation (and rec.text / rec.title) may arrive from the backend
-  // as a nested object — e.g. { actionTitle, detailedRationale, recommendedChannel, priority }.
-  // Rendering an object directly as a JSX child throws React error #31.
-  // Extract the most human-readable string from whatever shape arrives.
   function extractString(val: unknown): string | undefined {
     if (val == null) return undefined;
     if (typeof val === "string") return val || undefined;
     if (typeof val === "object") {
       const v = val as Record<string, unknown>;
-      // Try known field names from various backend agent shapes
       const candidate =
         v.actionTitle ?? v.title ?? v.recommendation ?? v.text ??
         v.label ?? v.summary ?? v.description ?? v.detailedRationale;
       if (typeof candidate === "string" && candidate) return candidate;
-      // Last resort: JSON so something is always shown rather than crashing
       try { return JSON.stringify(val); } catch { return undefined; }
     }
     return String(val);
@@ -221,12 +301,9 @@ function RecommendationCard({
   const hasEvidence = rec.evidence && rec.evidence.length > 0;
   const hasSuggestedAction = !!rec.suggestedAction;
 
-  // "Approve & Apply" uses the existing decideApproval endpoint when
-  // an executionId / approvalId is present. If not, it shows a
-  // confirmation and notes that server-side validation applies.
+  const isFactorNote = text.toLowerCase().includes("factor note");
+
   const handleApply = async () => {
-    // suggestedAction may come in various shapes from different agents.
-    // Try the canonical payload.approvalId first, then fall back to executionId.
     const sa = rec.suggestedAction as Record<string, unknown> | undefined;
     const approvalId =
       (sa?.payload as Record<string, unknown> | undefined)?.approvalId as string | undefined
@@ -250,18 +327,30 @@ function RecommendationCard({
   };
 
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] overflow-hidden">
+    <div
+      className={`rounded-2xl border bg-white dark:bg-slate-900 overflow-hidden shadow-2xs hover:shadow-xs transition-all duration-150 ${
+        isFactorNote
+          ? "border-slate-200/90 dark:border-slate-800"
+          : "border-slate-200 dark:border-slate-800 border-l-4 border-l-blue-600"
+      }`}
+    >
       {/* Header */}
-      <div className="flex items-start gap-3 p-4">
-        <div className="w-6 h-6 rounded-full bg-[color:var(--color-info-light)] flex items-center justify-center shrink-0 mt-0.5">
-          <Lightbulb size={12} className="text-[color:var(--color-info)]" />
+      <div className="flex items-start gap-3.5 p-4">
+        <div
+          className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 shadow-2xs ${
+            isFactorNote
+              ? "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+              : "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400"
+          }`}
+        >
+          {isFactorNote ? <Target size={15} /> : <Lightbulb size={16} />}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[color:var(--color-text)] leading-snug">
+          <h4 className="text-sm font-bold text-slate-900 dark:text-slate-100 leading-snug">
             {text}
-          </p>
+          </h4>
           {rec.reason && (
-            <p className="mt-1.5 text-xs text-[color:var(--color-text-secondary)] leading-relaxed">
+            <p className="mt-1.5 text-xs text-slate-600 dark:text-slate-400 leading-relaxed font-normal">
               {rec.reason}
             </p>
           )}
@@ -270,21 +359,20 @@ function RecommendationCard({
 
       {/* Evidence chips + Approve button */}
       {(hasEvidence || hasSuggestedAction) && (
-        <div className="px-4 pb-4 space-y-3">
+        <div className="px-4 pb-4 pt-1 space-y-3">
           {/* Evidence toggle */}
           {hasEvidence && (
             <div>
               <button
                 onClick={() => setEvidenceOpen((v) => !v)}
-                className="flex items-center gap-1 text-[11px] font-semibold text-[color:var(--color-primary)] hover:underline mb-2"
+                className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 dark:text-blue-400 hover:underline mb-2"
               >
                 {evidenceOpen ? (
                   <ChevronUp size={12} />
                 ) : (
                   <ChevronDown size={12} />
                 )}
-                {evidenceOpen ? "Hide" : "Show"} evidence (
-                {rec.evidence!.length})
+                {evidenceOpen ? "Hide" : "Show"} evidence ({rec.evidence!.length})
               </button>
               {evidenceOpen && (
                 <div className="flex flex-wrap gap-1.5">
@@ -298,9 +386,9 @@ function RecommendationCard({
 
           {/* Approve & Apply — only when suggestedAction is present */}
           {hasSuggestedAction && (
-            <div className="pt-1 border-t border-[color:var(--color-border-light)]">
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
               {applied ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[color:var(--color-success)]">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                   <CheckCircle2 size={14} /> Applied
                 </span>
               ) : (
@@ -308,21 +396,19 @@ function RecommendationCard({
                   <button
                     onClick={handleApply}
                     disabled={applying}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-dark)] disabled:opacity-60 text-[color:var(--color-primary-foreground)] text-xs font-semibold rounded-xl transition-all"
+                    className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-60 text-white text-xs font-bold rounded-xl transition-all shadow-xs"
                   >
                     {applying ? (
-                      <RefreshCw size={11} className="animate-spin" />
+                      <RefreshCw size={12} className="animate-spin" />
                     ) : (
-                      <Send size={11} />
+                      <Send size={12} />
                     )}
                     {applying ? "Applying…" : "Approve & Apply"}
                   </button>
-                  <span className="text-[10px] text-[color:var(--color-text-muted)]">
+                  <span className="text-[11px] text-slate-500 font-medium">
                     {(() => {
                       const sa = rec.suggestedAction;
                       if (!sa) return null;
-                      // label/type are the canonical fields; fall back to known
-                      // backend variants so an object never reaches JSX (React #31)
                       const display =
                         sa.label ??
                         sa.type ??
@@ -330,7 +416,6 @@ function RecommendationCard({
                         (sa as any).recommendedChannel ??
                         (sa as any).priority;
                       if (typeof display === "string") return display;
-                      // Object or undefined — don't render anything rather than crash
                       return null;
                     })()}
                   </span>
@@ -363,28 +448,28 @@ function EvidenceDrawer({
   if (allItems.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] overflow-hidden">
+    <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 overflow-hidden">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-4 py-3 hover:bg-[color:var(--color-surface-hover)] transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors"
       >
         <div className="flex items-center gap-2">
-          <Layers size={14} className="text-[color:var(--color-text-muted)]" />
-          <span className="text-xs font-bold text-[color:var(--color-text)]">
+          <Layers size={14} className="text-slate-500" />
+          <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
             Evidence & Sources
           </span>
-          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)]">
+          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
             {allItems.length}
           </span>
         </div>
         {open ? (
-          <ChevronUp size={14} className="text-[color:var(--color-text-muted)]" />
+          <ChevronUp size={14} className="text-slate-400" />
         ) : (
-          <ChevronDown size={14} className="text-[color:var(--color-text-muted)]" />
+          <ChevronDown size={14} className="text-slate-400" />
         )}
       </button>
       {open && (
-        <div className="px-4 pb-4 flex flex-wrap gap-1.5 border-t border-[color:var(--color-border-light)]">
+        <div className="px-4 pb-4 border-t border-slate-200/80 dark:border-slate-800">
           <div className="pt-3 w-full flex flex-wrap gap-1.5">
             {allItems.map((item, i) => (
               <EvidenceChip key={i} item={item} index={i} />
@@ -401,9 +486,9 @@ function EvidenceDrawer({
 function LoadingState() {
   return (
     <div className="flex flex-col items-center justify-center py-12 gap-3">
-      <div className="w-8 h-8 border-3 border-[color:var(--color-primary)] border-t-transparent rounded-full animate-spin" />
-      <p className="text-sm text-[color:var(--color-text-secondary)] font-medium animate-pulse">
-        Agent is running…
+      <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin" />
+      <p className="text-sm text-slate-600 dark:text-slate-400 font-semibold animate-pulse">
+        AI Agent is evaluating signals…
       </p>
     </div>
   );
@@ -420,21 +505,21 @@ function ErrorState({
     <div className="flex flex-col items-center justify-center py-10 gap-4 text-center">
       <AlertCircle
         size={40}
-        className="text-[color:var(--color-error)]"
+        className="text-rose-500"
       />
       <div>
-        <p className="text-sm font-semibold text-[color:var(--color-text)] mb-1">
+        <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mb-1">
           Agent execution failed
         </p>
-        <p className="text-xs text-[color:var(--color-text-secondary)] max-w-xs">
+        <p className="text-xs text-slate-500 max-w-xs">
           {message}
         </p>
       </div>
       <button
         onClick={onRetry}
-        className="inline-flex items-center gap-2 px-4 py-2 bg-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-dark)] text-[color:var(--color-primary-foreground)] text-sm font-semibold rounded-xl transition-all"
+        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs"
       >
-        <RefreshCw size={13} /> Retry
+        <RefreshCw size={13} /> Retry Execution
       </button>
     </div>
   );
@@ -443,13 +528,13 @@ function ErrorState({
 function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center py-10 gap-3 text-center">
-      <div className="w-12 h-12 bg-[color:var(--color-background-secondary)] rounded-2xl flex items-center justify-center">
-        <Lightbulb size={24} className="text-[color:var(--color-text-muted)]" />
+      <div className="w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center">
+        <Lightbulb size={24} className="text-slate-400" />
       </div>
-      <p className="text-sm font-semibold text-[color:var(--color-text)]">
+      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
         No insights returned
       </p>
-      <p className="text-xs text-[color:var(--color-text-muted)] max-w-xs">
+      <p className="text-xs text-slate-500 max-w-xs">
         The agent ran successfully but did not produce any recommendations or evidence for this record.
       </p>
     </div>
@@ -468,6 +553,7 @@ export function AgentResultModal({
   onRetry,
 }: AgentResultModalProps) {
   const meta = AGENT_META[agentType] ?? AGENT_META.research;
+  const AgentIcon = meta.icon;
   const output = result?.output;
   const recs = output?.recommendations ?? [];
   const hasContent =
@@ -481,7 +567,6 @@ export function AgentResultModal({
       title={meta.title}
       description={meta.description}
       loading={loading}
-      // Wider than default for the result layout
       className="max-w-2xl"
     >
       {/* Loading handled by Modal's built-in loading prop */}
@@ -499,30 +584,25 @@ export function AgentResultModal({
           {output.confidenceScore != null && (
             <div className="flex items-center gap-3">
               <ConfidenceBadge score={output.confidenceScore} />
-              <span className="text-xs text-[color:var(--color-text-muted)]">
-                Based on available data signals
+              <span className="text-xs text-slate-500 font-medium">
+                Based on active database signals & evidence
               </span>
             </div>
           )}
 
-          {/* Summary */}
+          {/* Summary Card */}
           {output.summary && (
-            <div className="bg-[color:var(--color-surface-active)] rounded-2xl p-4 border border-[color:var(--color-border-light)]">
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2">
-                Summary
-              </p>
-              <p className="text-sm text-[color:var(--color-text)] leading-relaxed">
-                {output.summary}
-              </p>
-            </div>
+            <EvaluationSummaryCard summary={output.summary} />
           )}
 
           {/* Recommendations */}
           {recs.length > 0 && (
             <div>
-              <p className="text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)] mb-3">
-                Recommendations ({recs.length})
-              </p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Recommendations ({recs.length})
+                </p>
+              </div>
               <div className="space-y-3">
                 {recs.map((rec, i) => (
                   <RecommendationCard
@@ -609,18 +689,18 @@ export function AgentTriggerButton({
         onClick={run}
         disabled={running}
         className={classNames(
-          "inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all",
-          "bg-[color:var(--color-info-light)] text-[color:var(--color-info-foreground)] border border-[color:var(--color-info-light)]",
-          "hover:opacity-80 disabled:opacity-60 disabled:cursor-not-allowed",
+          "inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all shadow-2xs",
+          "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300",
+          running && "opacity-60 cursor-not-allowed",
           className
         )}
       >
         {running ? (
-          <RefreshCw size={14} className="animate-spin shrink-0" />
+          <RefreshCw size={13} className="animate-spin text-blue-600" />
         ) : (
-          icon ?? <Lightbulb size={14} className="shrink-0" />
+          icon
         )}
-        {running ? "Running…" : buttonLabel}
+        {running ? "Evaluating…" : buttonLabel}
       </button>
 
       <AgentResultModal

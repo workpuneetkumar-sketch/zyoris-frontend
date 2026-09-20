@@ -19,8 +19,6 @@ import {
   Folder,
   Trash2,
   Search,
-  LayoutGrid,
-  User as UserIcon,
 } from "lucide-react";
 
 interface WorkspaceTopbarProps {
@@ -161,26 +159,6 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
           </button>
 
           <CreateMenu onOpenCreatePageModal={onOpenCreatePageModal} />
-
-          <Link
-            href="/dashboard"
-            title="Return to Main Dashboard"
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
-          >
-            <LayoutGrid className="w-4 h-4" />
-          </Link>
-
-          {/* User Profile Context */}
-          {user && (
-            <div className="flex items-center space-x-2 pl-2 border-l border-slate-200 dark:border-slate-800">
-              <div className="w-7 h-7 rounded-full bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs flex items-center justify-center shadow-xs">
-                {user.name ? user.name.charAt(0).toUpperCase() : <UserIcon className="w-3.5 h-3.5" />}
-              </div>
-              <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 hidden sm:inline-block">
-                {user.name || "User"}
-              </span>
-            </div>
-          )}
         </div>
       </header>
 
