@@ -202,50 +202,47 @@ function EvaluationSummaryCard({ summary }: { summary: string }) {
 
   if (scoreVal !== null || statusStr !== null) {
     return (
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950 text-white rounded-2xl p-5 shadow-lg border border-slate-800 relative overflow-hidden">
-        {/* Soft glow background accent */}
-        <div className="absolute top-0 right-0 w-36 h-36 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="bg-slate-50/90 dark:bg-slate-900/60 text-slate-900 dark:text-white rounded-2xl p-5 shadow-xs border border-slate-200/90 dark:border-slate-800 relative overflow-hidden space-y-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/80 dark:border-slate-800">
           <div className="flex items-center gap-2.5">
             <span
-              className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider border shadow-xs ${
+              className={`px-3 py-1 rounded-full text-xs font-extrabold uppercase tracking-wider border shadow-2xs ${
                 isQualified
-                  ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
-                  : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800"
+                  : "bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-800"
               }`}
             >
               {statusStr || "EVALUATED"}
             </span>
-            <span className="text-xs text-slate-400 font-medium">AI Qualification Evaluation</span>
+            <span className="text-xs text-slate-500 font-semibold">AI Qualification Evaluation</span>
           </div>
 
           {scoreVal !== null && (
-            <div className="flex items-baseline gap-1.5 bg-slate-800/90 px-3.5 py-1.5 rounded-xl border border-slate-700/80 shadow-xs">
-              <span className="text-xl font-black text-white">{scoreVal}</span>
+            <div className="flex items-baseline gap-1.5 bg-white dark:bg-slate-800 px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+              <span className="text-xl font-black text-slate-900 dark:text-white">{scoreVal}</span>
               <span className="text-xs text-slate-400 font-bold">/ 100</span>
             </div>
           )}
         </div>
 
         {/* Structured 3-Column Metrics Breakdown */}
-        <div className="grid grid-cols-3 gap-3 pt-4">
-          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-center">
+        <div className="grid grid-cols-3 gap-3">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-center shadow-2xs">
             <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5 tracking-wider">ICP Fit</span>
-            <span className="text-xs font-bold text-slate-100">{fitMatch ? fitMatch[1] : "0"}</span>
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{fitMatch ? fitMatch[1] : "0"}</span>
           </div>
-          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-center">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-center shadow-2xs">
             <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5 tracking-wider">Buyer Intent</span>
-            <span className="text-xs font-bold text-slate-100">{intentMatch ? intentMatch[1] : "Low"}</span>
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{intentMatch ? intentMatch[1] : "Low"}</span>
           </div>
-          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/50 text-center">
+          <div className="bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-center shadow-2xs">
             <span className="text-[10px] uppercase font-extrabold text-slate-400 block mb-0.5 tracking-wider">Engagement</span>
-            <span className="text-xs font-bold text-slate-100">{engagementMatch ? engagementMatch[1] : "100"}</span>
+            <span className="text-xs font-bold text-slate-900 dark:text-slate-100">{engagementMatch ? engagementMatch[1] : "100"}</span>
           </div>
         </div>
 
         {/* Narrative text */}
-        <p className="mt-3.5 text-xs text-slate-300 leading-relaxed font-normal bg-slate-950/40 p-3 rounded-xl border border-slate-800/70">
+        <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-medium bg-white dark:bg-slate-800/80 p-3 rounded-xl border border-slate-200/70 dark:border-slate-700/70 shadow-2xs">
           {summary}
         </p>
       </div>
