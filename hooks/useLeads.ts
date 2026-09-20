@@ -185,7 +185,8 @@ export function useLeads() {
                 const res = await convertLeadToDeal(lead.id);
                 const dealId =
                     (res.deal?.dealId ?? res.deal?.id) ??
-                    (res.dealId ?? res.id);
+                    (res.dealId ?? res.id) ??
+                    (res.data?.id ?? res.data?.dealId ?? res.data?.deal?.id);
 
                 if (dealId) {
                     router.push(`/deals/${dealId}`);

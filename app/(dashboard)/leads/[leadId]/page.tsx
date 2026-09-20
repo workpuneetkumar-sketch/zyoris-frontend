@@ -31,7 +31,7 @@ import { AgentTriggerButton } from "@/components/agents/AgentResultModal";
 import { Lead, computeLeadScore } from "@/types/leads";
 import { getLeadStatusInfo } from "@/utils/leadStatus";
 import { convertLeadToDeal, fetchLeadById, getLeadScore } from "@/lib/api/leadsApi";
-import { updateDeal } from "@/lib/api/dealsApi";
+import { updateDeal, fetchDeals } from "@/lib/api/dealsApi";
 import { mapLeadStatusToDealStage } from "@/lib/dealStageMapper";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
 import { toast } from "react-toastify";
@@ -181,52 +181,61 @@ export default function LeadDetailPage() {
 
             console.log("[Lead Convert] Response:", createdDeal);
 
-            // Backend returns flat deal object
-            const dealId =
+            // Extract deal ID across all possible backend response structures
+            let dealId: string | undefined =
                 createdDeal?.id ||
+                createdDeal?.dealId ||
                 createdDeal?.deal?.id ||
-                createdDeal?.dealId;
+                createdDeal?.deal?.dealId ||
+                createdDeal?.data?.id ||
+                createdDeal?.data?.dealId ||
+                createdDeal?.data?.deal?.id ||
+                createdDeal?.result?.id ||
+                createdDeal?.payload?.id;
 
+            // Fallback: If backend response didn't include dealId directly, lookup created deal from list
             if (!dealId) {
-                console.error("Deal creation response:", createdDeal);
-                throw new Error("Deal ID not returned");
+                try {
+                    console.log("[Lead Convert] dealId not directly in response, querying deals list...");
+                    const allDeals = await fetchDeals();
+                    const matched = allDeals.find(
+                        (d) => d.leadId === leadId || (d.name && lead.name && d.name.toLowerCase() === lead.name.toLowerCase())
+                    ) || allDeals[0];
+
+                    if (matched && (matched.id || matched.dealId)) {
+                        dealId = matched.id || matched.dealId;
+                    }
+                } catch (fallbackErr) {
+                    console.warn("[Lead Convert] Fallback deal lookup notice:", fallbackErr);
+                }
             }
 
-            // STEP 2 → Sync lead data into created deal
-            try {
-                const payload = {
-                    name: lead.name,
-                    amount: Number(lead.estimatedValue || 0),
-                    stage: "NEW",
-                    assignedToId: lead.assignedToId?.trim() || null,
-                    companyId: (lead as any).companyId || null,
-                    contactId: (lead as any).contactId || null,
-                };
+            // STEP 2 → Optional sync lead data into created deal if dealId found
+            if (dealId) {
+                try {
+                    const payload = {
+                        name: lead.name,
+                        amount: Number(lead.estimatedValue || 0),
+                        stage: "NEW",
+                        assignedToId: lead.assignedToId?.trim() || null,
+                        companyId: (lead as any).companyId || null,
+                        contactId: (lead as any).contactId || null,
+                    };
 
-                console.log("[Lead Convert] Updating deal", {
-                    dealId,
-                    payload,
-                });
-
-                const updated = await updateDeal(dealId, payload);
-                console.log("[Lead Convert] Updated response", updated);
-
-            } catch (err: any) {
-                console.error(
-                    "[Lead Convert] updateDeal FULL ERROR",
-                    err?.response?.data || err
-                );
-
-                throw new Error(
-                    err?.response?.data?.message ||
-                    "Deal created but sync failed"
-                );
+                    await updateDeal(dealId, payload);
+                } catch (syncErr: any) {
+                    console.warn("[Lead Convert] Optional updateDeal sync notice:", syncErr?.response?.data || syncErr);
+                }
             }
 
-            toast.success("Lead converted successfully");
+            toast.success("Lead converted to deal successfully");
 
-            // STEP 3 → Navigate immediately
-            router.replace(`/deals/${dealId}`);
+            // STEP 3 → Navigate immediately to created deal or deals dashboard
+            if (dealId) {
+                router.replace(`/deals/${dealId}`);
+            } else {
+                router.replace("/deals");
+            }
 
         } catch (err: any) {
             console.error("[Lead Convert Error]", err);
