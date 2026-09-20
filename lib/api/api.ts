@@ -3,17 +3,22 @@ import axios, {
     type InternalAxiosRequestConfig,
 } from "axios";
 
-const BASE_URL = (
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    "https://zyoris.onrender.com"
-).replace(/\/+$/, ""); // strip trailing slash to prevent double-slash URLs
+const getBackendUrl = (): string => {
+    const raw = process.env.NEXT_PUBLIC_BACKEND_URL;
+    if (raw && typeof raw === "string" && raw.trim().startsWith("http")) {
+        return raw.trim().replace(/\/+$/, "");
+    }
+    return "https://zyoris.onrender.com";
+};
+
+const BASE_URL = getBackendUrl();
 
 const api = axios.create({
     baseURL: BASE_URL,
     headers: {
         "Content-Type": "application/json",
     },
-    timeout: 30000, // 30 seconds instead of 10
+    timeout: 30000, // 30 seconds
 });
 
 /* ---------------------------------------------------
