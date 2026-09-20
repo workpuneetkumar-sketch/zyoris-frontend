@@ -6,17 +6,14 @@ import {
   Bell,
   Check,
   CheckCheck,
-  Trash2,
   Search,
   Briefcase,
   MessageSquare,
   CheckSquare,
   User,
   ShieldAlert,
-  Layers,
   Loader2,
   Archive,
-  X,
 } from "lucide-react";
 import classNames from "classnames";
 import { useState, useMemo } from "react";
@@ -24,6 +21,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { Notification, NotificationCategory } from "@/types/notifications";
+import { getNotificationPath } from "@/utils/notificationNavigation";
+import { toast } from "sonner";
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -88,23 +87,18 @@ function NotificationPageItem({
   notification,
   onMarkRead,
   onDelete,
-  onHardDelete,
   onOpen,
 }: {
   notification: Notification;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
-  onHardDelete: (id: string) => void;
   onOpen: (notification: Notification) => void;
 }) {
-  const isAggregated = Boolean(
-    notification.groupKey || (notification.aggregatedCount && notification.aggregatedCount > 1)
-  );
-
   return (
     <div
       className={classNames(
         "group relative flex flex-col sm:flex-row items-start gap-4 p-5 transition-all duration-200 rounded-xl cursor-pointer",
+        notification.priority.toLowerCase() === "critical" && "border-l-4 border-error",
         !notification.read
           ? "bg-primary/5 dark:bg-primary/10"
           : "hover:bg-surface-hover dark:hover:bg-surface-hover"
@@ -120,7 +114,7 @@ function NotificationPageItem({
       <div className="shrink-0">
         {notification.actor ? (
           <Avatar
-            src={notification.actor.avatarUrl}
+            src={notification.actor.avatarUrl ?? undefined}
             alt={notification.actor.name}
             fallback={notification.actor.name.charAt(0).toUpperCase()}
             size="lg"
@@ -149,12 +143,6 @@ function NotificationPageItem({
             >
               {notification.title}
             </h3>
-            {isAggregated && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary text-xs font-bold">
-                <Layers size={12} />
-                {notification.aggregatedCount ? `${notification.aggregatedCount}` : "Grouped"}
-              </span>
-            )}
             {!notification.read && (
               <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
             )}
@@ -183,16 +171,6 @@ function NotificationPageItem({
               >
                 <Archive size={16} />
               </button>
-              <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onHardDelete(notification.id);
-                }}
-                className="p-2 rounded-lg hover:bg-error/10 text-text-muted hover:text-error transition-colors"
-                title="Delete permanently"
-              >
-                <Trash2 size={16} />
-              </button>
             </div>
           </div>
         </div>
@@ -204,6 +182,9 @@ function NotificationPageItem({
         >
           {notification.message}
         </p>
+        {notification.actorName && (
+          <p className="text-xs text-text-muted mt-2">From {notification.actorName}</p>
+        )}
         <div className="flex items-center mt-3">
           <span className="text-sm text-text-muted">
             {formatRelativeTime(notification.createdAt)}
@@ -227,22 +208,25 @@ export default function NotificationsPage() {
     markRead,
     markAllRead,
     removeNotification,
-    hardDeleteNotification,
     bulkArchiveAllRead,
     fetchNextPage,
+    realtimeStatus,
+    refresh,
   } = useNotifications();
 
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<NotificationCategory>("all");
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [isArchivingAllRead, setIsArchivingAllRead] = useState(false);
+  const [priority, setPriority] = useState("all");
 
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
-    let result = notifications.filter((n) => {
+    const result = notifications.filter((n) => {
       const matchesSearch =
         n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         n.message.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesPriority = priority === "all" || n.priority.toLowerCase() === priority;
 
       const matchesFilter = (() => {
         switch (filter) {
@@ -260,28 +244,11 @@ export default function NotificationsPage() {
         }
       })();
 
-      return matchesSearch && matchesFilter;
+      return matchesSearch && matchesFilter && matchesPriority;
     });
 
-    const groupedMap = new Map<string, Notification>();
-    const finalItems: Notification[] = [];
-
-    result.forEach((n) => {
-      if (n.groupKey) {
-        if (!groupedMap.has(n.groupKey)) {
-          groupedMap.set(n.groupKey, { ...n, aggregatedCount: 1 });
-          finalItems.push(n);
-        } else {
-          const existing = groupedMap.get(n.groupKey)!;
-          existing.aggregatedCount = (existing.aggregatedCount || 1) + 1;
-        }
-      } else {
-        finalItems.push(n);
-      }
-    });
-
-    return finalItems;
-  }, [notifications, searchQuery, filter]);
+    return result;
+  }, [notifications, searchQuery, filter, priority]);
 
   // Group by date
   const groupedNotifications = useMemo(() => {
@@ -327,6 +294,8 @@ export default function NotificationsPage() {
     setIsMarkingAllRead(true);
     try {
       await markAllRead(filter);
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to mark notifications as read");
     } finally {
       setIsMarkingAllRead(false);
     }
@@ -337,14 +306,33 @@ export default function NotificationsPage() {
     setIsArchivingAllRead(true);
     try {
       await bulkArchiveAllRead();
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to archive read notifications");
     } finally {
       setIsArchivingAllRead(false);
     }
   };
 
-  const handleNotificationOpen = (notification: Notification) => {
-    router.push(notification.deepLink || "/notifications");
-    if (!notification.read) void markRead(notification.id);
+  const handleMarkRead = async (id: string) => {
+    try {
+      await markRead(id);
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+    }
+  };
+
+  const handleArchive = async (id: string) => {
+    try {
+      await removeNotification(id);
+    } catch (cause: unknown) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to archive notification");
+    }
+  };
+
+  const handleNotificationOpen = async (notification: Notification) => {
+    if (!notification.read) await handleMarkRead(notification.id);
+    const path = getNotificationPath(notification);
+    if (path) router.push(path);
   };
 
   return (
@@ -395,6 +383,12 @@ export default function NotificationsPage() {
           </button>
         )}
       </div>
+      {realtimeStatus !== "connected" && (
+        <div className="text-xs text-text-muted flex items-center gap-3">
+          <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
+          <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
+        </div>
+      )}
 
       {/* Search and Category Tabs */}
       <div className="bg-surface border border-border rounded-2xl p-4 space-y-4">
@@ -442,6 +436,18 @@ export default function NotificationsPage() {
             );
           })}
         </div>
+        <select
+          value={priority}
+          onChange={(event) => setPriority(event.target.value)}
+          className="rounded-xl bg-background-secondary border border-border px-3 py-2 text-sm text-text"
+          aria-label="Filter by priority"
+        >
+          <option value="all">All priorities</option>
+          <option value="normal">Normal</option>
+          <option value="reminder">Reminder</option>
+          <option value="high">High</option>
+          <option value="critical">Critical</option>
+        </select>
       </div>
 
       {/* Notifications List */}
@@ -451,11 +457,7 @@ export default function NotificationsPage() {
             <Skeleton variant="notification" count={4} />
           </div>
         ) : error ? (
-          <EmptyState
-            icon={Search}
-            title="Failed to load notifications"
-            description={error}
-          />
+          <div className="p-8 text-center"><p className="text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-primary font-semibold hover:underline">Retry</button></div>
         ) : groupedNotifications.length === 0 ? (
           <EmptyState
             icon={Bell}
@@ -479,9 +481,8 @@ export default function NotificationsPage() {
                   <NotificationPageItem
                     key={notification.id}
                     notification={notification}
-                    onMarkRead={markRead}
-                    onDelete={removeNotification}
-                    onHardDelete={hardDeleteNotification}
+                    onMarkRead={handleMarkRead}
+                    onDelete={handleArchive}
                     onOpen={handleNotificationOpen}
                   />
                 ))}

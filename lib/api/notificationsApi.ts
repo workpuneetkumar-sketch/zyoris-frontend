@@ -1,5 +1,5 @@
 import api from "@/lib/api/api";
-import type { UnreadCountData, NotificationPreferences } from "@/types/notifications";
+import type { NotificationPreferences, UnreadCountData } from "@/types/notifications";
 
 export interface NotificationDto {
   id: string;
@@ -7,14 +7,19 @@ export interface NotificationDto {
   userId: string;
   title: string;
   message: string;
-  type: "INFO" | "SUCCESS" | "WARNING" | "ERROR" | string;
+  type: "INFO" | "SUCCESS" | "WARNING" | "ERROR";
   category?: string | null;
   entityType?: string | null;
   entityId?: string | null;
   deepLink?: string | null;
-  groupKey?: string | null;
-  aggregatedCount?: number | null;
-  priority?: "normal" | "reminder" | "critical" | string | null;
+  priority?: string | null;
+  metadata?: Record<string, unknown> | null;
+  eventId?: string | null;
+  action?: string | null;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorAvatar?: string | null;
+  archivedAt?: string | null;
   actor?: { id: string; name: string; avatarUrl?: string } | null;
   read: boolean;
   readAt?: string | null;
@@ -32,26 +37,27 @@ export interface CreateNotificationPayload {
 }
 
 export interface FetchNotificationsResponse {
-  total: number;
-  unreadCount: number;
-  limit: number;
-  offset: number;
   data: NotificationDto[];
+  pagination: { limit: number; nextCursor: string | null; hasNext: boolean };
+  unreadCount: number;
 }
 
 export const fetchNotifications = async (params?: {
+  read?: boolean;
   unreadOnly?: boolean;
+  priority?: string;
+  category?: string | string[];
+  cursor?: string;
   limit?: number;
-  offset?: number;
-}) => {
+}): Promise<FetchNotificationsResponse> => {
   const query: Record<string, unknown> = {
     limit: params?.limit ?? 20,
-    offset: params?.offset ?? 0,
   };
-  // Filter to unread only if requested
-  if (params?.unreadOnly === true) {
-    query.read = false;
-  }
+  if (params?.read !== undefined) query.read = params.read;
+  if (params?.unreadOnly === true) query.unreadOnly = true;
+  if (params?.priority) query.priority = params.priority;
+  if (params?.category) query.category = params.category;
+  if (params?.cursor) query.cursor = params.cursor;
   const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
   return response.data;
 };
@@ -66,26 +72,26 @@ export const markNotificationAsRead = async (id: string) => {
   return response.data;
 };
 
-export const markAllNotificationsAsRead = async (_category?: string) => {
-  const response = await api.patch("/api/notifications/read-all");
+export const markAllNotificationsAsRead = async (category?: string) => {
+  const response = await api.patch<{ message: string; count: number }>(
+    "/api/notifications/read-all",
+    undefined,
+    { params: category ? { category } : undefined }
+  );
   return response.data;
 };
 
-/** Archive = delete (no dedicated archive endpoint on this API) */
-export const archiveNotification = async (id: string): Promise<void> => {
-  await deleteNotification(id);
+export const archiveNotification = async (id: string): Promise<NotificationDto> => {
+  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/archive`);
+  return response.data;
 };
 
 /** Hard-deletes a notification permanently (DELETE /api/notifications/{id}). */
 export const deleteNotification = async (id: string): Promise<void> => {
   try {
     await api.delete(`/api/notifications/${id}`);
-  } catch (err: any) {
-    const message =
-      err?.response?.data?.message ||
-      err?.response?.data?.error ||
-      err?.message ||
-      "Failed to delete notification";
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : "Failed to delete notification";
     throw new Error(message);
   }
 };
@@ -94,12 +100,14 @@ export interface BulkArchivePayload {
   ids?: string[];
 }
 
-/** Bulk archive = bulk delete (no dedicated bulk-archive endpoint on this API) */
-export const bulkArchiveNotifications = async (payload: BulkArchivePayload = {}): Promise<void> => {
-  if (payload.ids && payload.ids.length > 0) {
-    await Promise.all(payload.ids.map((id) => deleteNotification(id)));
-  }
-  // empty payload = "archive all read" — no-op since we have no bulk endpoint
+export const bulkArchiveNotifications = async (
+  payload: BulkArchivePayload = {}
+): Promise<{ message: string; count: number }> => {
+  const response = await api.post<{ message: string; count: number }>(
+    "/api/notifications/bulk-archive",
+    payload
+  );
+  return response.data;
 };
 
 /**
@@ -108,43 +116,16 @@ export const bulkArchiveNotifications = async (payload: BulkArchivePayload = {})
  * We also cross-check by counting items with read: false in the response.
  */
 export const fetchUnreadCounts = async (): Promise<UnreadCountData> => {
-  const response = await fetchNotifications({ limit: 50, offset: 0 });
-  // Count unread items directly from the data array for accuracy
-  const items: NotificationDto[] = Array.isArray((response as any).data)
-    ? (response as any).data
-    : Array.isArray(response)
-    ? (response as any)
-    : [];
-  const unreadFromItems = items.filter((n) => n.read === false).length;
-  // Prefer the server-reported unreadCount, fall back to counting items
-  const unreadCount = typeof (response as any).unreadCount === "number"
-    ? (response as any).unreadCount
-    : unreadFromItems;
-  return {
-    total: unreadCount,
-    byCategory: {},
-  } as UnreadCountData;
+  const response = await api.get<UnreadCountData>("/api/notifications/unread-count");
+  return response.data;
 };
 
-// Maps frontend category names → backend enum values for preferences API
-const CATEGORY_TO_BACKEND: Record<string, string> = {
-  leads:    "LEAD",
-  messages: "WHATSAPP",
-  deals:    "DEAL",
-  tasks:    "TASK",
-  system:   "SYSTEM",
-};
-
-const BACKEND_TO_CATEGORY: Record<string, string> = Object.fromEntries(
-  Object.entries(CATEGORY_TO_BACKEND).map(([k, v]) => [v, k])
-);
-
-/** Preferences are not supported by this API — return empty object */
+/** Preferences endpoints exist but are not wired into this notification UI yet. */
 export const fetchNotificationPreferences = async (): Promise<NotificationPreferences> => {
   return {};
 };
 
-/** Preferences are not supported by this API — no-op */
+/** Preferences endpoints exist but are not wired into this notification UI yet. */
 export const updateNotificationPreferences = async (
   preferences: NotificationPreferences
 ): Promise<NotificationPreferences> => {
