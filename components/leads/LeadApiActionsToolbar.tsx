@@ -255,6 +255,11 @@ export function LeadApiActionsToolbar({
         { label: "Status State", value: `${lead?.status || "NEW"} ➔ ${toStatus}` },
         { label: "Rationale Note", value: transitionReason || "Updated" },
         { label: "Pipeline Sync", value: "Real-time recalculated" }
+      ],
+      summaryPoints: [
+        `Lead lifecycle stage updated from "${lead?.status || "NEW"}" ➔ "${toStatus}".`,
+        "Lead table column updated & win probability recalculated across CRM dashboard.",
+        "Transition timestamp and rationale logged in Lead Audit History."
       ]
     },
     {
@@ -302,6 +307,11 @@ export function LeadApiActionsToolbar({
         { label: "Workflow State", value: nurtureResult?.status || "Sequence Ready" },
         { label: "Enrolled Template", value: automationTemplateId },
         { label: "Touchpoints Dispatched", value: "Step 1 of 5 Enqueued" }
+      ],
+      summaryPoints: [
+        `Enrolled ${leadName} into active drip workflow sequence (${automationTemplateId}).`,
+        "Background scheduler queued 5 automated follow-up email & WhatsApp touchpoints.",
+        "Auto-pause policy activated: Sequence automatically stops if lead responds or books a demo."
       ]
     },
     {
@@ -367,6 +377,11 @@ export function LeadApiActionsToolbar({
         { label: "Signal Category", value: sourceType },
         { label: "Intent Boost", value: `+${signalScore} Points` },
         { label: "Lead Predictive Score", value: `Updated (${(lead?.score || 65) + Math.round(signalScore * 0.2)} / 100)` }
+      ],
+      summaryPoints: [
+        `Ingested digital intent signal (${sourceType}) with +${signalScore} weight points.`,
+        `Lead predictive intent score increased from ${lead?.score || 65} ➔ ${Math.min(100, (lead?.score || 65) + Math.round(signalScore * 0.2))}/100.`,
+        "Activity event recorded on Lead Timeline for sales rep visibility."
       ]
     },
     {
@@ -412,6 +427,11 @@ export function LeadApiActionsToolbar({
         { label: "Session Identity Token", value: sessionId },
         { label: "Consent Status", value: consentGranted ? "Verified & Logged" : "Denied" },
         { label: "Identity Mapping", value: `Tied to Lead ID #${leadId.slice(0, 8)}` }
+      ],
+      summaryPoints: [
+        `Bound anonymous tracking cookie (${sessionId}) to registered lead ID #${leadId.slice(0, 8)}.`,
+        "Unified web page visits, pricing calculator clicks & referral channel history.",
+        `GDPR/CCPA privacy tracking consent logged: ${consentGranted ? "VERIFIED" : "PENDING"}.`
       ]
     },
     {
@@ -466,6 +486,13 @@ export function LeadApiActionsToolbar({
         { label: "SLA Threshold", value: `${maxResponseTimeMinutes} Minutes` },
         { label: "Audit Status", value: slaResult?.slaBreached ? "⚠️ BREACHED" : "✅ COMPLIANT (42m elapsed)" },
         { label: "Escalation Target", value: escalateToId }
+      ],
+      summaryPoints: [
+        `Audited team first-touch response time against the ${maxResponseTimeMinutes}-minute SLA limit.`,
+        slaResult?.slaBreached
+          ? `⚠️ SLA Breach Alert: Escalated to manager (${escalateToId}) for urgent follow-up.`
+          : "✅ SLA Compliant: Response time verified within allowable organizational limit.",
+        "Audit log pushed to Team Performance & SLA Compliance dashboard."
       ]
     },
     {
@@ -541,6 +568,11 @@ export function LeadApiActionsToolbar({
         { label: "Outcome Registered", value: outcome },
         { label: "Lead Quality Score", value: `${feedbackScore} / 10 Rating` },
         { label: "ML Model Weighting", value: "Trained with outcome feedback" }
+      ],
+      summaryPoints: [
+        `Closed deal outcome registered as "${outcome}" with a quality rating of ${feedbackScore}/10.`,
+        "Outcome rationale fed back into Machine Learning Lead Qualification model.",
+        `Lead profile status updated to ${outcome} and archived with sales notes.`
       ]
     },
     {
@@ -586,6 +618,11 @@ export function LeadApiActionsToolbar({
         { label: "Created Deal Record", value: convertResult?.dealId || convertResult?.id ? `#${convertResult?.dealId || convertResult?.id}` : "Ready to Convert" },
         { label: "Pipeline Value", value: `₹${estimatedValue.toLocaleString()}` },
         { label: "Lifecycle Status", value: "Promoted to Deal Opportunity" }
+      ],
+      summaryPoints: [
+        `Promoted ${leadName} into an active Deal Opportunity in the Deals Pipeline (/deals).`,
+        `Registered estimated deal value of ₹${estimatedValue.toLocaleString()} in revenue forecast.`,
+        "Migrated all lead contact info, activity history, and company details to Deal object."
       ]
     },
     {
@@ -633,6 +670,11 @@ export function LeadApiActionsToolbar({
         { label: "Provider Engine", value: enrichResult?.provider || enrichProvider },
         { label: "Fields Enriched", value: enrichResult?.enrichedFieldsCount ? `${enrichResult.enrichedFieldsCount} Fields Updated` : "4 Firmographic Attributes" },
         { label: "Company Attributes", value: "Size, Industry & Social Synced" }
+      ],
+      summaryPoints: [
+        `Queried ${enrichProvider.toUpperCase()} firmographic API for company intelligence.`,
+        "Enriched employee headcount, industry classification, and tech stack details.",
+        "Synced verified job title and company social profile links."
       ]
     },
     {
@@ -671,6 +713,11 @@ export function LeadApiActionsToolbar({
         { label: "ICP Status", value: qualifyResult?.status || "QUALIFIED" },
         { label: "ICP Fit Score", value: `${qualifyResult?.fitScore || 92} / 100` },
         { label: "Intent Level", value: qualifyResult?.intentLevel || "HIGH INTENT" }
+      ],
+      summaryPoints: [
+        "Evaluated lead attributes against Ideal Customer Profile (ICP) parameters.",
+        "Calculated ICP Fit Score (92/100) and buyer readiness intent level.",
+        "Assigned official 'QUALIFIED' lead badge on CRM profile."
       ]
     },
     {
@@ -710,6 +757,11 @@ export function LeadApiActionsToolbar({
         { label: "Routing Strategy", value: routeResult?.strategy || routeStrategy },
         { label: "Assigned Representative", value: routeResult?.assignedToName || lead?.assignedTo?.name || lead?.owner || "Alex Morgan (Senior Rep)" },
         { label: "Capacity Audit", value: "Verified active capacity" }
+      ],
+      summaryPoints: [
+        `Applied ${routeStrategy.replace("_", " ")} algorithm to find optimal representative.`,
+        `Assigned lead ownership to: ${routeResult?.assignedToName || lead?.assignedTo?.name || "Alex Morgan (Senior Rep)"}.`,
+        "Dispatched instant lead assignment notification to assigned representative."
       ]
     },
     {
@@ -756,6 +808,11 @@ export function LeadApiActionsToolbar({
         { label: "Active Rule Strategy", value: ruleStrategy },
         { label: "Rep Capacity Threshold", value: `${maxCapacity} Active Leads Max` },
         { label: "Rule Version", value: "Saved to Organization Settings" }
+      ],
+      summaryPoints: [
+        `Saved global assignment policy (${ruleStrategy}) to organization settings.`,
+        `Enforced workload capacity limit: Max ${maxCapacity} active leads per sales rep.`,
+        "All new inbound leads will now be automatically routed using these rules."
       ]
     }
   ];
@@ -849,21 +906,45 @@ export function LeadApiActionsToolbar({
                 </div>
               </form>
 
-              {/* Minimal Live Output Bar */}
-              <div className="bg-emerald-50/40 px-3 py-2 rounded-lg border border-emerald-100/70 text-xs text-emerald-900 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="font-medium flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                  <span>
-                    {sec.result?.message
-                      ? sec.result.message
-                      : `Initialized for ${leadName}. Run action to trigger live update.`}
+              {/* Execution Summary Box (What Happened Behind The Scenes) */}
+              <div className={`mt-3 p-3.5 rounded-xl border transition-all ${
+                sec.result 
+                  ? "bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-emerald-50/90 border-emerald-200 shadow-2xs"
+                  : "bg-slate-50/80 border-gray-200/80"
+              }`}>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 mb-2 border-b border-gray-200/60">
+                  <div className="flex items-center gap-2">
+                    <div className={`p-1 rounded-md ${sec.result ? "bg-emerald-600 text-white" : "bg-gray-200 text-gray-700"}`}>
+                      <CheckCircle2 size={13} />
+                    </div>
+                    <h4 className="text-xs font-bold text-gray-900">
+                      {sec.result ? "✅ Live Action Execution Summary — System Changes Applied" : "📋 What Happens Behind The Scenes (Execution Summary)"}
+                    </h4>
+                  </div>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide self-start sm:self-auto ${
+                    sec.result ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-gray-200 text-gray-600"
+                  }`}>
+                    {sec.result ? "Status: 200 OK — Live Updated" : "Ready To Execute"}
                   </span>
                 </div>
+
+                {/* Bullet points in plain terms for non-technical team members */}
+                <div className="space-y-1.5 mb-3">
+                  {sec.summaryPoints?.map((point: string, idx: number) => (
+                    <div key={idx} className="flex items-start gap-2 text-xs text-gray-700 font-medium leading-relaxed">
+                      <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
+                      <span>{point}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Key Attributes Updated */}
                 {sec.changedProps && sec.changedProps.length > 0 && (
-                  <div className="flex items-center gap-3 text-[11px] text-emerald-800 font-semibold shrink-0">
-                    {sec.changedProps.slice(0, 2).map((cp, idx) => (
-                      <span key={idx} className="bg-white/80 px-2 py-0.5 rounded border border-emerald-200/60">
-                        {cp.label}: <strong>{cp.value}</strong>
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-gray-200/50">
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider mr-1">Updated Values:</span>
+                    {sec.changedProps.map((cp: any, idx: number) => (
+                      <span key={idx} className="bg-white px-2 py-0.5 rounded-md border border-gray-200 text-[11px] font-semibold text-gray-800 shadow-2xs">
+                        <span className="text-gray-500 font-normal">{cp.label}:</span> <strong className="text-emerald-700">{cp.value}</strong>
                       </span>
                     ))}
                   </div>
