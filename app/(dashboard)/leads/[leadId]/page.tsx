@@ -110,54 +110,53 @@ export default function LeadDetailPage() {
     const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
     // ── Load lead ─────────────────────────────────────────────────────────────
-    useEffect(() => {
+    const loadLeadData = async () => {
         if (!leadId) return;
         setLoading(true);
         setError(null);
-        
-        const loadLeadData = async () => {
+        try {
+            const data = await fetchLeadById(leadId);
+            let leadScore = data.score;
+            
+            // Try to fetch the real score from the API
             try {
-                const data = await fetchLeadById(leadId);
-                let leadScore = data.score;
-                
-                // Try to fetch the real score from the API
-                try {
-                    const scoreResponse = await getLeadScore(leadId);
-                    leadScore = scoreResponse.score;
-                } catch (scoreErr) {
-                    console.warn("Failed to fetch lead score, falling back to computed:", scoreErr);
-                }
-                
-                // Ensure all fields exist with fallbacks
-                const enrichedLead: Lead = {
-                    ...data,
-                    id: data.id || leadId,
-                    name: data.name || "Unnamed Lead",
-                    company: data.company || "",
-                    source: data.source || "Unknown",
-                    status: data.status || "NEW",
-                    email: data.email || "",
-                    phone: data.phone || "",
-                    city: data.city || "",
-                    score: leadScore ?? computeLeadScore(data),
-                    tags: data.tags || [],
-                    note: data.note || "",
-                    owner: data.owner || "Unassigned",
-                    ownerAvatar: data.ownerAvatar || "",
-                    assignedTo: data.assignedTo || null,
-                    assignedToId: data.assignedToId || null,
-                    estimatedValue: data.estimatedValue || 0,
-                    createdAt: data.createdAt || new Date().toISOString(),
-                    deleted: data.deleted || false,
-                };
-                setLead(enrichedLead);
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Failed to load lead.");
-            } finally {
-                setLoading(false);
+                const scoreResponse = await getLeadScore(leadId);
+                leadScore = scoreResponse.score;
+            } catch (scoreErr) {
+                console.warn("Failed to fetch lead score, falling back to computed:", scoreErr);
             }
-        };
-        
+            
+            // Ensure all fields exist with fallbacks
+            const enrichedLead: Lead = {
+                ...data,
+                id: data.id || leadId,
+                name: data.name || "Unnamed Lead",
+                company: data.company || "",
+                source: data.source || "Unknown",
+                status: data.status || "NEW",
+                email: data.email || "",
+                phone: data.phone || "",
+                city: data.city || "",
+                score: leadScore ?? computeLeadScore(data),
+                tags: data.tags || [],
+                note: data.note || "",
+                owner: data.owner || "Unassigned",
+                ownerAvatar: data.ownerAvatar || "",
+                assignedTo: data.assignedTo || null,
+                assignedToId: data.assignedToId || null,
+                estimatedValue: data.estimatedValue || 0,
+                createdAt: data.createdAt || new Date().toISOString(),
+                deleted: data.deleted || false,
+            };
+            setLead(enrichedLead);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to load lead.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
         loadLeadData();
     }, [leadId]);
 
@@ -376,8 +375,8 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-            {/* Live API Actions Toolbar (Score, Route, Enrich, Qualify) */}
-            <LeadApiActionsToolbar leadId={leadId} leadName={lead.name} lead={lead} />
+            {/* 11 Live Lifecycle & Intelligence Subsystems */}
+            <LeadApiActionsToolbar leadId={leadId} leadName={lead.name} lead={lead} onLeadUpdated={loadLeadData} />
 
             {/* Status / Source / Created row - Fixed Source display */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -478,107 +477,6 @@ export default function LeadDetailPage() {
                     </div>
                 </div>
             </div>
-
-            {/* Lead Score Card */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
-                    <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                        <BarChart2 size={14} className="text-blue-500" />
-                        Lead Score
-                    </h3>
-                </div>
-                <div className="p-5">
-                    {(() => {
-                        // Compute the real component breakdown
-                        const STATUS_SCORE: Record<string, number> = {
-                            CLOSED: 25, NEGOTIATION: 23, PROPOSAL: 20, QUALIFIED: 17,
-                            HOT: 15, WARM: 12, CONTACTED: 10, NEW: 8, DEAD: 2,
-                        };
-                        const SOURCE_SCORE: Record<string, number> = {
-                            Referral: 12, LinkedIn: 10, Website: 8, "Cold Call": 6,
-                        };
-                        const statusPts = STATUS_SCORE[lead.status ?? ""] ?? 8;
-                        const val = typeof lead.estimatedValue === "number" && lead.estimatedValue > 0 ? lead.estimatedValue : 0;
-                        const valuePts = val > 0 ? Math.min(20, Math.round((Math.log10(val + 1) / Math.log10(100_001)) * 20)) : 0;
-                        const sourcePts = SOURCE_SCORE[lead.source ?? ""] ?? 8;
-                        const completePts = Math.min(8,
-                            (lead.name ? 2 : 0) + (lead.email ? 2 : 0) +
-                            (lead.phone ? 1 : 0) + (lead.company ? 1 : 0) +
-                            ((lead as any).city ? 1 : 0) + (lead.status ? 1 : 0)
-                        );
-                        const totalScore = lead.score ?? computeLeadScore(lead);
-
-                        const dims = [
-                            { label: "Status", pts: statusPts, max: 25, color: "#3b82f6", desc: `${lead.status ?? "—"} = ${statusPts}/25 pts` },
-                            { label: "Est. Value", pts: valuePts, max: 20, color: "#8b5cf6", desc: val > 0 ? `₹${val.toLocaleString()} → ${valuePts}/20 pts` : "No value set" },
-                            { label: "Lead Source", pts: sourcePts, max: 12, color: "#10b981", desc: `${safeString(lead.source)} = ${sourcePts}/12 pts` },
-                            { label: "Completeness", pts: completePts, max: 8, color: "#f59e0b", desc: `${completePts}/8 pts (name, email, phone, company, city, status)` },
-                        ];
-
-                        return (
-                            <div className="flex items-start gap-5">
-                                {/* Circular gauge */}
-                                <div
-                                    className="relative w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-2xl"
-                                    style={{
-                                        borderColor: totalScore >= 70 ? "#10b981" : totalScore >= 40 ? "#f59e0b" : "#ef4444",
-                                        color: totalScore >= 70 ? "#059669" : totalScore >= 40 ? "#d97706" : "#dc2626",
-                                    }}
-                                >
-                                    {totalScore}
-                                </div>
-
-                                <div className="flex-1 space-y-2.5 min-w-0">
-                                    {/* Quality label + overall bar */}
-                                    <div className="flex items-center gap-2">
-                                        {totalScore >= 70
-                                            ? <TrendingUp size={14} className="text-emerald-500" />
-                                            : totalScore >= 40
-                                                ? <Minus size={14} className="text-amber-500" />
-                                                : <TrendingDown size={14} className="text-red-500" />}
-                                        <span className={`text-sm font-bold ${totalScore >= 70 ? "text-emerald-600" : totalScore >= 40 ? "text-amber-600" : "text-red-600"}`}>
-                                            {totalScore >= 70 ? "High Quality Lead" : totalScore >= 40 ? "Moderate Potential" : "Low Priority Lead"}
-                                        </span>
-                                        <span className="ml-auto text-xs text-gray-400 font-semibold tabular-nums">{totalScore}/100</span>
-                                    </div>
-
-                                    {/* Overall bar */}
-                                    <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full rounded-full transition-all duration-500"
-                                            style={{
-                                                width: `${totalScore}%`,
-                                                background: totalScore >= 70 ? "#10b981" : totalScore >= 40 ? "#f59e0b" : "#ef4444",
-                                            }}
-                                        />
-                                    </div>
-
-                                    {/* Component breakdown */}
-                                    <div className="grid grid-cols-2 gap-2 pt-1">
-                                        {dims.map((d) => (
-                                            <div key={d.label} className="bg-gray-50 rounded-xl p-2.5 border border-gray-100">
-                                                <div className="flex items-center justify-between mb-1.5">
-                                                    <p className="text-[10px] text-gray-400 font-semibold">{d.label}</p>
-                                                    <span className="text-[10px] font-extrabold tabular-nums" style={{ color: d.color }}>{d.pts}/{d.max}</span>
-                                                </div>
-                                                <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                                                    <div className="h-full rounded-full" style={{ width: `${Math.round((d.pts / d.max) * 100)}%`, background: d.color }} />
-                                                </div>
-                                                <p className="text-[9px] text-gray-400 mt-1 truncate">{d.desc}</p>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        );
-                    })()}
-
-                    <p className="text-xs text-gray-400 mt-4 leading-relaxed">
-                        Score out of 100: Base (35) + Status (25 pts) + Estimated Value (20 pts) + Lead Source (12 pts) + Profile Completeness (8 pts).
-                    </p>
-                </div>
-            </div>
-
             {/* Tags & Notes - Only show if they exist */}
             {(hasTags || hasNote) && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

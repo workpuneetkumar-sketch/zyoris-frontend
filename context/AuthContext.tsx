@@ -137,20 +137,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       // ── Optimistic restore ───────────────────────────────────────────────
-      // Immediately mark as authenticated using the cached user from localStorage.
-      // This prevents the layout from redirecting to /login while API calls are
-      // in-flight on a hard refresh. The session will be invalidated below if the
-      // token turns out to be expired.
+      // Immediately mark as authenticated using the cached user from localStorage,
+      // UNLESS the user is currently on a public auth page (/login or /register).
+      // On public auth pages, optimistic restore causes stale tokens to trigger
+      // a premature redirect to /dashboard followed by a 401 bounce back to /login.
+      const isPublicAuthPage =
+        typeof window !== "undefined" &&
+        (window.location.pathname.startsWith("/login") ||
+          window.location.pathname.startsWith("/register"));
+
       const cachedUser: User | null = parsed?.user ?? null;
       setToken(effectiveToken);
       setTokenCookie(effectiveToken);
       setAuthToken(effectiveToken);
       setPermissionsLoaded(false);
 
-      if (cachedUser) {
+      if (cachedUser && !isPublicAuthPage) {
         setUser(cachedUser);
         setIsAuthenticated(true);
-        setIsInitializing(false); // ← unblock the UI immediately
+        setIsInitializing(false); // ← unblock UI immediately for protected routes
       }
       // ────────────────────────────────────────────────────────────────────
 

@@ -399,14 +399,32 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
-  // Tracks which sidebar module groups (CRM, Comms, Business, ...) are expanded.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-  const toggleGroup = (label: string) =>
-    setOpenGroups((prev) => ({ ...prev, [label]: !prev[label] }));
+  const SIDEBAR_SCROLL_KEY = "sidebar-scroll-position";
+  const SIDEBAR_OPEN_GROUPS_KEY = "zyoris-sidebar-open-groups";
   const logoutTriggeredRef = useRef(false);
   const sidebarNavRef = useRef<HTMLDivElement>(null);
-  const SIDEBAR_SCROLL_KEY = "sidebar-scroll-position";
   const hasMountedSidebarRef = useRef(false);
+
+  // Tracks which sidebar module groups (CRM, Comms, Business, ...) are expanded.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const saved = localStorage.getItem("zyoris-sidebar-open-groups");
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try {
+        localStorage.setItem(SIDEBAR_OPEN_GROUPS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Save sidebar scroll position when scrolling
   const handleSidebarScroll = () => {
@@ -850,7 +868,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           changed = true;
         }
       });
-      return changed ? next : prev;
+      if (changed) {
+        try {
+          localStorage.setItem(SIDEBAR_OPEN_GROUPS_KEY, JSON.stringify(next));
+        } catch {}
+        return next;
+      }
+      return prev;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
@@ -1180,14 +1204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <NotificationBell />
         </header>
 
-        <main
-          className={classNames(
-            "flex-1",
-            pathname?.startsWith("/workspace")
-              ? "overflow-hidden p-0"
-              : "overflow-y-auto p-4 md:p-6"
-          )}
-        >
+        <main className="flex-1 overflow-y-auto p-4 md:p-6">
           {children}
         </main>
       </div>

@@ -20,7 +20,6 @@ import {
 
 import { Lead } from "@/types/leads";
 import { AiExtractionPanel } from "@/components/ai/AiExtractionPanel";
-import { LeadApiActionsToolbar } from "@/components/leads/LeadApiActionsToolbar";
 import {
   getLeadIntelligence,
   getLeadScoreConfig,
@@ -401,24 +400,21 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
       </div>
 
       <div className="p-5 space-y-5 bg-gray-50/20">
-        <LeadApiActionsToolbar leadId={lead.id} leadName={lead.name} />
-
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
           <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
-                  <Brain size={14} className="text-sky-500" /> Live Score Preview
+                  <Brain size={14} className="text-sky-500" /> Lead Score &amp; Fit Metrics
                 </p>
-                <p className="text-[11px] text-gray-400 mt-0.5">Weekly cadence snapshot without persisting</p>
               </div>
               {previewLoading ? (
                 <Loader2 size={14} className="animate-spin text-sky-500" />
-              ) : (
-                <span className="px-2 py-1 rounded-full bg-sky-50 text-sky-700 text-[10px] font-semibold border border-sky-200">
-                  {livePreview?.momentum?.trend ?? "N/A"}
+              ) : livePreview?.momentum?.trend ? (
+                <span className="px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 text-[10px] font-semibold border border-sky-200">
+                  {livePreview.momentum.trend}
                 </span>
-              )}
+              ) : null}
             </div>
 
             {previewError ? (
@@ -427,189 +423,91 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
                 <span>{previewError}</span>
               </div>
             ) : (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Fit</div>
-                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.fit?.score ?? "—"}</div>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center">
+                  <div className="text-[10px] uppercase font-bold text-gray-400">Fit</div>
+                  <div className="mt-1 text-base font-extrabold text-gray-800">{livePreview?.fit?.score ?? "—"}</div>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Engagement</div>
-                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.engagement?.score ?? "—"}</div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center">
+                  <div className="text-[10px] uppercase font-bold text-gray-400">Engagement</div>
+                  <div className="mt-1 text-base font-extrabold text-gray-800">{livePreview?.engagement?.score ?? "—"}</div>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Intent</div>
-                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.intent?.score ?? "—"}</div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center">
+                  <div className="text-[10px] uppercase font-bold text-gray-400">Intent</div>
+                  <div className="mt-1 text-base font-extrabold text-gray-800">{livePreview?.intent?.score ?? "—"}</div>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Momentum</div>
-                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.momentum?.change ?? "—"}</div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center">
+                  <div className="text-[10px] uppercase font-bold text-gray-400">Momentum</div>
+                  <div className="mt-1 text-base font-extrabold text-gray-800">{livePreview?.momentum?.change ?? "—"}</div>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Risk</div>
-                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.risk?.score ?? "—"}</div>
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center">
+                  <div className="text-[10px] uppercase font-bold text-gray-400">Risk</div>
+                  <div className="mt-1 text-base font-extrabold text-gray-800">{livePreview?.risk?.score ?? "—"}</div>
                 </div>
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="text-[10px] uppercase tracking-[0.12em] text-gray-400">Total</div>
-                  <div className="mt-2 text-lg font-bold text-gray-800">{livePreview?.total ?? "—"}</div>
-                </div>
-              </div>
-            )}
-
-            {livePreview && (
-              <div className="space-y-3 text-xs text-gray-600">
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="font-semibold text-gray-700 mb-1">Risk</div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-gray-500">Level</span>
-                    <span className="font-semibold text-gray-800">{livePreview.risk.level}</span>
-                  </div>
-                  {livePreview.risk.reasons?.length ? (
-                    <ul className="mt-2 list-disc list-inside space-y-1 text-gray-600">
-                      {livePreview.risk.reasons.map((reason, idx) => (
-                        <li key={`${reason}-${idx}`}>{reason}</li>
-                      ))}
-                    </ul>
-                  ) : null}
-                </div>
-
-                <div className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                  <div className="font-semibold text-gray-700 mb-1">Intent evidence</div>
-                  {livePreview.intent.reasons?.length ? (
-                    <ul className="list-disc list-inside space-y-1 text-gray-600">
-                      {livePreview.intent.reasons.map((reason, idx) => (
-                        <li key={`${reason}-${idx}`}>{reason}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span className="text-gray-500">No accepted evidence yet.</span>
-                  )}
+                <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center">
+                  <div className="text-[10px] uppercase font-bold text-gray-400">Total</div>
+                  <div className="mt-1 text-base font-extrabold text-gray-800">{livePreview?.total ?? "—"}</div>
                 </div>
               </div>
             )}
 
-            <div className="rounded-xl border border-gray-100 bg-white p-3 text-[11px] text-gray-500">
-              {livePreview ? (
-                <span>
-                  λ={livePreview.engagement.lambda ?? "—"} · trend={livePreview.momentum.trend ?? "—"} · risk={livePreview.risk.level ?? "—"}
-                </span>
-              ) : (
-                <span>Preview data is not available yet.</span>
-              )}
-            </div>
-
-            <div className="flex items-start gap-4">
+            {/* Overall Score Dial */}
+            <div className="flex items-center gap-4 pt-1">
               <div
-                className="relative w-20 h-20 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-2xl"
+                className="relative w-16 h-16 rounded-full flex items-center justify-center shrink-0 border-4 font-extrabold text-xl"
                 style={{ borderColor: tone.border, color: tone.text }}
               >
-                {intelligenceLoading ? <Loader2 size={22} className="animate-spin" /> : score}
+                {intelligenceLoading ? <Loader2 size={18} className="animate-spin" /> : score}
               </div>
-              <div className="flex-1 min-w-0 space-y-2">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className={`text-sm font-bold`} style={{ color: tone.text }}>
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-bold" style={{ color: tone.text }}>
                     {intelligenceLoading ? "Loading intelligence" : tone.label}
                   </span>
-                  <span className="text-xs text-gray-400 font-semibold">
+                  <span className="text-xs text-gray-400 font-semibold tabular-nums">
                     {score}/{total || 100}
                   </span>
                 </div>
-                <div className="w-full bg-gray-100 h-2.5 rounded-full overflow-hidden">
+                <div className="w-full bg-gray-100 h-2 rounded-full overflow-hidden">
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{ width: `${Math.min(100, Math.max(0, score))}%`, background: tone.border }}
                   />
                 </div>
-                <div className="text-[11px] text-gray-500">
-                  Generated {formatDate(intelligence?.score.generatedAt)}
-                </div>
               </div>
             </div>
 
-            {intelligenceError ? (
-              <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 flex items-start gap-2">
-                <AlertCircle size={13} className="shrink-0 mt-0.5" />
-                <span>{intelligenceError}</span>
+            {/* Score Dimensions */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2">
+                <Target size={13} className="text-sky-500" />
+                <p className="text-xs font-bold text-gray-700">Scoring Dimensions</p>
               </div>
-            ) : (
-              <>
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Target size={13} className="text-sky-500" />
-                    <p className="text-xs font-semibold text-gray-600">Dimensions</p>
+              <div className="space-y-2">
+                {(intelligence?.dimensions?.length ? intelligence.dimensions : DEFAULT_DIMENSIONS.map((dimension) => ({
+                  key: dimension.key,
+                  label: dimension.label,
+                  score: 0,
+                  maxScore: 0,
+                  evidence: [],
+                }))).map((dimension) => (
+                  <div key={dimension.key} className="rounded-lg border border-gray-100 bg-gray-50/80 p-2.5 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-gray-800">{dimension.label}</span>
+                      <span className="text-[11px] font-bold text-gray-500 tabular-nums">
+                        {dimension.score}/{dimension.maxScore || 0}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-sky-500"
+                        style={{ width: `${dimension.maxScore > 0 ? Math.round((dimension.score / dimension.maxScore) * 100) : 0}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {(intelligence?.dimensions?.length ? intelligence.dimensions : DEFAULT_DIMENSIONS.map((dimension) => ({
-                      key: dimension.key,
-                      label: dimension.label,
-                      score: 0,
-                      maxScore: 0,
-                      evidence: [],
-                    }))).map((dimension) => (
-                      <div key={dimension.key} className="rounded-xl border border-gray-100 bg-gray-50/80 p-3">
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="text-sm font-medium text-gray-800">{dimension.label}</span>
-                          <span className="text-xs font-bold text-gray-500 tabular-nums">
-                            {dimension.score}/{dimension.maxScore || 0}
-                          </span>
-                        </div>
-                        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-sky-500"
-                            style={{ width: `${dimension.maxScore > 0 ? Math.round((dimension.score / dimension.maxScore) * 100) : 0}%` }}
-                          />
-                        </div>
-                        {dimension.evidence?.[0] && (() => {
-                          const firstEvidence = dimension.evidence[0];
-                          const evidencePayload = firstEvidence.evidence as Record<string, unknown> | undefined;
-                          const evidenceText = String(evidencePayload?.reason ?? evidencePayload?.note ?? "Evidence captured in snapshot.");
-
-                          return (
-                            <p className="text-[11px] text-gray-500 mt-2 line-clamp-2">
-                              <span className="font-semibold text-gray-600">{firstEvidence.factorKey}:</span>{" "}
-                              {evidenceText}
-                            </p>
-                          );
-                        })()}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Sparkles size={13} className="text-violet-500" />
-                    <p className="text-xs font-semibold text-gray-600">Next Best Actions</p>
-                  </div>
-                  <div className="space-y-2">
-                    {(intelligence?.nextBestActions?.length ? intelligence.nextBestActions : [
-                      {
-                        action: "Follow up",
-                        rationale: "No automated action returned yet.",
-                        priority: 1,
-                        metadata: {},
-                      },
-                    ]).map((action) => (
-                      <div key={`${action.action}-${action.priority}`} className="rounded-xl border border-gray-100 bg-white p-3">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="text-sm font-semibold text-gray-800">{action.action}</p>
-                            <p className="text-xs text-gray-500 mt-0.5">{action.rationale}</p>
-                          </div>
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 text-[11px] font-semibold">
-                            P{action.priority}
-                          </span>
-                        </div>
-                        {Object.keys(action.metadata || {}).length > 0 && (
-                          <p className="text-[11px] text-gray-400 mt-2 truncate">
-                            {JSON.stringify(action.metadata)}
-                          </p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
+                ))}
+              </div>
+            </div>
           </div>
 
           <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm space-y-4">

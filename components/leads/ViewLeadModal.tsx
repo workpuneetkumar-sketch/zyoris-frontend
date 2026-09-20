@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Lead, computeLeadScore } from "@/types/leads";
+
 import { getLeadStatusInfo } from "@/utils/leadStatus";
 import { getLeadScore as fetchLeadScore } from "@/lib/api/leadsApi";
 import { AiExtractionPanel } from "@/components/ai/AiExtractionPanel";
@@ -68,6 +70,13 @@ function getInitials(name: string): string {
 }
 
 export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
+  const router = useRouter();
+  useEffect(() => {
+    if (lead?.id) {
+      router.push(`/leads/${lead.id}`);
+    }
+  }, [lead?.id, router]);
+
   const [score, setScore] = useState<number | null>(lead.score ?? null);
   const [scoreLoading, setScoreLoading] = useState(false);
   const [scoreError, setScoreError] = useState<string | null>(null);

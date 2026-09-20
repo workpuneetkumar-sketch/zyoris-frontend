@@ -25,6 +25,7 @@ let inMemoryToken: string | null = null;
 /** Set active in-memory auth token (sanitized) */
 export function setAuthToken(token: string | null) {
     inMemoryToken = sanitizeBearerToken(token);
+    isRedirecting = false;
 }
 
 /** Get active in-memory auth token */

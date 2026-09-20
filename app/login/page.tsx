@@ -51,7 +51,13 @@ export default function LoginPage() {
   const [authState, setAuthState] = useState<AuthState>("landing");
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, isAuthenticated, isInitializing } = useAuth();
+
+  React.useEffect(() => {
+    if (!isInitializing && isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isInitializing, isAuthenticated, router]);
 
   // Handlers for Employee flow
   const handleEmployeeLogin = async (email?: string, password?: string) => {

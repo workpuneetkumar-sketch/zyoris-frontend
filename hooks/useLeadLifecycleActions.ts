@@ -62,6 +62,10 @@ export function useLeadLifecycleActions({
   const [slaResult, setSlaResult] = useState<CheckSlaResponse | null>(null);
   const [feedbackResult, setFeedbackResult] = useState<SubmitFeedbackResponse | null>(null);
   const [convertResult, setConvertResult] = useState<ConvertToDealResponse | null>(null);
+  const [enrichResult, setEnrichResult] = useState<any>(null);
+  const [qualifyResult, setQualifyResult] = useState<any>(null);
+  const [routeResult, setRouteResult] = useState<any>(null);
+  const [ruleResult, setRuleResult] = useState<any>(null);
 
   // 1. Transition Lifecycle
   const executeTransition = async (payload: TransitionLifecyclePayload) => {
@@ -225,7 +229,8 @@ export function useLeadLifecycleActions({
     }
     setLoadingEnrich(true);
     try {
-      const res = await enrichLead(leadId, { force: true });
+      const res = await enrichLead(leadId, { provider: "clearbit", force: true });
+      setEnrichResult(res);
       toast.success(res?.message || "Lead data enrichment executed!");
       onLeadUpdated?.();
       return res;
@@ -247,6 +252,7 @@ export function useLeadLifecycleActions({
     setLoadingQualify(true);
     try {
       const res = await qualifyLead(leadId, { forceRecalculate: true });
+      setQualifyResult(res);
       toast.success(res?.message || `Qualification completed! Status: ${res?.status || "QUALIFIED"}`);
       onLeadUpdated?.();
       return res;
@@ -268,6 +274,7 @@ export function useLeadLifecycleActions({
     setLoadingRoute(true);
     try {
       const res = await routeLead(leadId, { reassign: true });
+      setRouteResult(res);
       toast.success(res?.message || `Lead successfully routed to rep: ${res?.assignedToName || "Assigned"}`);
       onLeadUpdated?.();
       return res;
@@ -285,6 +292,7 @@ export function useLeadLifecycleActions({
     setLoadingRule(true);
     try {
       const res = await saveAssignmentRule(config);
+      setRuleResult(res);
       toast.success("Assignment rule configuration saved!");
       return res;
     } catch (err: any) {
@@ -331,5 +339,10 @@ export function useLeadLifecycleActions({
     slaResult,
     feedbackResult,
     convertResult,
+    enrichResult,
+    qualifyResult,
+    routeResult,
+    ruleResult,
   };
 }
+
