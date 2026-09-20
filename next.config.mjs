@@ -2,6 +2,10 @@
 const nextConfig = {
   transpilePackages: ['framer-motion'],
   reactStrictMode: true,
+  experimental: {
+    workerThreads: false,
+    cpus: 1,
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },
