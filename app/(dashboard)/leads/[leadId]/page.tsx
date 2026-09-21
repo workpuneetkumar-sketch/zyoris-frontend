@@ -203,7 +203,7 @@ export default function LeadDetailPage() {
                     ) || allDeals[0];
 
                     if (matched && (matched.id || matched.dealId)) {
-                        dealId = matched.id || matched.dealId;
+                        dealId = String(matched.id || matched.dealId || "");
                     }
                 } catch (fallbackErr) {
                     console.warn("[Lead Convert] Fallback deal lookup notice:", fallbackErr);

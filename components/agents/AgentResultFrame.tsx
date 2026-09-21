@@ -269,7 +269,7 @@ export function AgentResultFrame({
               aria-label={`View execution ${result.executionId}`}
             >
               <ExternalLink size={11} className="shrink-0" />
-              Exec&nbsp;#{result.executionId.slice(-6)}
+              Exec&nbsp;#{result.executionId?.slice(-6)}
             </a>
           )}
         </div>
