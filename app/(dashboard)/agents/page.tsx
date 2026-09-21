@@ -118,11 +118,24 @@ function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () 
 // ─── Error state ──────────────────────────────────────────────────────────────
 
 function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  // Extract any extra diagnostic detail appended after a " — " separator.
+  // agentApi.ts throws: error.response.data.message || error.message || fallback
+  // The backend 500 body often includes a "statusCode" and "error" field alongside
+  // "message" — those appear in the console log but we surface the message here.
+  const [detail, ...rest] = message.split(" — ");
+  const subtitle = rest.length > 0 ? rest.join(" — ") : null;
+
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6">
       <AlertCircle size={48} className="text-red-400 mb-4" />
       <h3 className="text-lg font-bold text-gray-900 mb-2">Failed to Load Agents</h3>
-      <p className="text-sm text-gray-500 max-w-md mb-6">{message}</p>
+      <p className="text-sm text-gray-500 max-w-md mb-2">{detail}</p>
+      {subtitle && (
+        <p className="text-xs text-gray-400 max-w-md mb-2 font-mono">{subtitle}</p>
+      )}
+      <p className="text-xs text-gray-400 max-w-md mb-6">
+        Check the browser console for the full backend response (status code and error body).
+      </p>
       <button
         onClick={onRetry}
         className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl transition-all"
@@ -173,6 +186,13 @@ function SelectPill<T extends string>({ label, value, options, onChange }: Selec
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
+
+// Module-level guard — survives React StrictMode's mount→unmount→remount cycle.
+// A useRef(false) inside the component gets reset to false on the remount, so
+// the second StrictMode invocation bypasses the guard and fires a duplicate
+// API call + duplicate toast.error. A module-level variable is initialised once
+// per page load and is not affected by component lifecycle.
+let _agentPageFetchInFlight = false;
 
 export default function AgentsPage() {
   const { user, token } = useAuth();
@@ -239,6 +259,16 @@ export default function AgentsPage() {
       } catch (err: any) {
         const msg = err.message ?? "Failed to load agents.";
         setError(msg);
+        // Log the full error detail so engineers can diagnose the real
+        // backend failure (status code, error body, stack) without it
+        // being swallowed by the generic user-facing message.
+        console.error(
+          "[AgentsPage] GET /api/agents failed.",
+          "\nUser-facing message:", msg,
+          "\nFull error object:", err,
+          "\nResponse status:", err?.response?.status,
+          "\nResponse body:", err?.response?.data
+        );
         toast.error(msg);
       } finally {
         setLoading(false);
@@ -250,7 +280,18 @@ export default function AgentsPage() {
   // ── Initial load ───────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
-    fetchAgents({ search: search || undefined, status: status || undefined, riskTier: riskTier || undefined, permissionLevel: permissionLevel || undefined });
+    // Guard against React StrictMode double-invoke: module-level variable
+    // survives the mount→unmount→remount cycle (unlike useRef which resets).
+    if (_agentPageFetchInFlight) return;
+    _agentPageFetchInFlight = true;
+    fetchAgents({
+      search: search || undefined,
+      status: status || undefined,
+      riskTier: riskTier || undefined,
+      permissionLevel: permissionLevel || undefined,
+    }).finally(() => {
+      _agentPageFetchInFlight = false;
+    });
     isFirstMount.current = false;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
@@ -547,14 +588,13 @@ function AgentRow({ agent, onClick }: { agent: Agent; onClick: () => void }) {
             : "—"}
         </span>
       </td>
-
       {/* Permission level */}
       <td className="px-5 py-4 whitespace-nowrap">
         <PermissionLevelBadge level={agent.permissionLevel} variant="compact" />
       </td>
 
       {/* Row action */}
-      <td className="px-5 py-4 text-right whitespace-nowrap">
+      <td className="px-5 py-4 text-right whitespace-nowrap"> 
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 opacity-0 group-hover:opacity-100 transition-opacity">
           View details <ChevronRight size={13} />
         </span>
