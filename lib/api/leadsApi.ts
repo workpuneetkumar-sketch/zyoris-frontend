@@ -929,22 +929,9 @@ export async function transitionLeadLifecycle(
   payload: TransitionLifecyclePayload
 ): Promise<TransitionLifecycleResponse> {
   console.log(`[API] transitionLeadLifecycle - leadId: ${leadId}`, payload);
-  try {
-    const res = await api.post(`/leads/${leadId}/lifecycle/transition`, payload);
-    const data = res.data?.data ?? res.data;
-    return data;
-  } catch (error: any) {
-    console.error(`[API] transitionLeadLifecycle error:`, error.response?.data || error.message);
-    const msg = error.response?.data?.message || error.message;
-    return {
-      success: true,
-      message: `Lifecycle stage transitioned to ${payload.toStatus}. (${msg || "Updated in system"})`,
-      toStatus: payload.toStatus,
-      leadId,
-      updatedAt: new Date().toISOString(),
-      isFallback: true,
-    };
-  }
+  const res = await api.post(`/leads/${leadId}/lifecycle/transition`, payload);
+  const data = res.data?.data ?? res.data;
+  return data;
 }
 
 // 2. Start Nurture Automation Workflow (POST /leads/:id/nurture/start)
