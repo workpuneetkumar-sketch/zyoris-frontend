@@ -908,6 +908,32 @@ export async function qualifyLead(leadId: string, payload?: LeadQualifyPayload):
 
 // ── 7 TARGET LEAD LIFECYCLE & WORKFLOW APIS ─────────────────────────────────
 
+// Helper mappers for strictly allowed backend Enums
+export function mapToStatusEnum(rawStatus: string): string {
+  if (!rawStatus) return "NEW";
+  const s = rawStatus.toUpperCase().trim();
+  if (s === "NEW") return "NEW";
+  if (s === "WARM") return "WARM";
+  if (s === "HOT") return "HOT";
+  if (s === "WON" || s.includes("WON") || s === "CLOSED") return "WON";
+  if (s === "LOST" || s.includes("LOST")) return "LOST";
+  if (s === "DEAD") return "DEAD";
+  if (s.includes("CONTACTED") || s.includes("QUALIFIED") || s.includes("PROPOSAL") || s.includes("NEGOTIATION")) {
+    return "WARM";
+  }
+  return "NEW";
+}
+
+export function mapSourceTypeEnum(rawSourceType: string): string {
+  if (!rawSourceType) return "OTHER";
+  const s = rawSourceType.toUpperCase().trim();
+  if (s === "WEBSITE") return "WEBSITE";
+  if (s === "EMAIL_OPEN" || s.includes("EMAIL")) return "EMAIL_OPEN";
+  if (s === "PRODUCT_CLICK" || s.includes("PRODUCT")) return "PRODUCT_CLICK";
+  if (s === "OTHER") return "OTHER";
+  return "OTHER";
+}
+
 // 1. Transition Lead Lifecycle Stage (POST /leads/:id/lifecycle/transition)
 export interface TransitionLifecyclePayload {
   toStatus: string;
@@ -928,8 +954,13 @@ export async function transitionLeadLifecycle(
   leadId: string,
   payload: TransitionLifecyclePayload
 ): Promise<TransitionLifecycleResponse> {
-  console.log(`[API] transitionLeadLifecycle - leadId: ${leadId}`, payload);
-  const res = await api.post(`/leads/${leadId}/lifecycle/transition`, payload);
+  const cleanToStatus = mapToStatusEnum(payload.toStatus);
+  const cleanPayload = {
+    toStatus: cleanToStatus,
+    ...(payload.reason ? { reason: payload.reason } : {}),
+  };
+  console.log(`[API] transitionLeadLifecycle - leadId: ${leadId}`, cleanPayload);
+  const res = await api.post(`/leads/${leadId}/lifecycle/transition`, cleanPayload);
   const data = res.data?.data ?? res.data;
   return data;
 }
@@ -999,22 +1030,16 @@ export async function ingestLeadSignal(
   leadId: string,
   payload: IngestSignalPayload
 ): Promise<IngestSignalResponse> {
-  console.log(`[API] ingestLeadSignal - leadId: ${leadId}`, payload);
-  try {
-    const res = await api.post(`/leads/${leadId}/signals`, payload);
-    const data = res.data?.data ?? res.data;
-    return data;
-  } catch (error: any) {
-    console.error(`[API] ingestLeadSignal error:`, error.response?.data || error.message);
-    return {
-      success: true,
-      signalId: `sig_${Math.random().toString(36).substring(2, 9)}`,
-      message: `Intent signal logged: "${payload.sourceText}" (+${payload.score} pts)`,
-      score: payload.score,
-      ingestedAt: new Date().toISOString(),
-      isFallback: true,
-    };
-  }
+  const cleanSourceType = mapSourceTypeEnum(payload.sourceType);
+  const cleanPayload = {
+    sourceText: payload.sourceText,
+    sourceType: cleanSourceType,
+    score: Number(payload.score) || 0,
+  };
+  console.log(`[API] ingestLeadSignal - leadId: ${leadId}`, cleanPayload);
+  const res = await api.post(`/leads/${leadId}/signals`, cleanPayload);
+  const data = res.data?.data ?? res.data;
+  return data;
 }
 
 // 4. Link Anonymous Session (POST /leads/sessions/link)

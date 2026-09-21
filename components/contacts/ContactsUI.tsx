@@ -55,9 +55,10 @@ const STATUS_STYLES: Record<string, string> = {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Avatar({ name }: { name: string }) {
-    const initials = name
-        .split(" ")
+function Avatar({ name }: { name?: string | null }) {
+    const safeName = typeof name === "string" && name.trim() ? name.trim() : "Unnamed Contact";
+    const initials = safeName
+        .split(/\s+/)
         .map((p) => p[0]?.toUpperCase() ?? "")
         .join("")
         .slice(0, 2) || "CT";
@@ -307,7 +308,7 @@ function ViewContactModal({ contact, onClose }: { contact: Contact; onClose: () 
                     <div className="flex items-center gap-3">
                         <Avatar name={contact.name} />
                         <div>
-                            <h2 className="text-base font-bold text-slate-900 dark:text-white">{contact.name}</h2>
+                            <h2 className="text-base font-bold text-slate-900 dark:text-white">{contact.name || "Unnamed Contact"}</h2>
                             <p className="text-xs text-slate-500">{contact.position || contact.company || "Contact Record"}</p>
                         </div>
                     </div>
@@ -636,7 +637,7 @@ export function ContactsUI({
                                             <div className="flex items-center gap-3">
                                                 <Avatar name={contact.name} />
                                                 <div>
-                                                    <span className="font-bold text-slate-900 dark:text-slate-100 block">{contact.name}</span>
+                                                    <span className="font-bold text-slate-900 dark:text-slate-100 block">{contact.name || "Unnamed Contact"}</span>
                                                     {contact.position && <span className="text-[11px] text-slate-400 font-medium">{contact.position}</span>}
                                                 </div>
                                             </div>
