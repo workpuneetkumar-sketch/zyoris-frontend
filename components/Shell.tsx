@@ -259,6 +259,18 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
+        href: "/support",
+        label: "Support",
+        icon: MessageSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/revops",
+        label: "RevOps",
+        icon: TrendingUp,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
         href: "/automation",
         label: "Automation",
         icon: Zap,
@@ -753,7 +765,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/payment": "Business", "/payment/invoices": "Business",
         "/marketing": "Business", "/projects": "Business",
         "/documents": "Business", "/knowledge-base": "Business", "/notes": "Business",
-        "/analytics": "Platform", "/reports": "Platform", "/automation": "Platform",
+        "/analytics": "Platform", "/reports": "Platform", "/automation": "Platform", "/support": "Platform", "/revops": "Platform",
         "/settings": "Management",
         "/ceo": "Role Dashboards", "/cfo": "Role Dashboards",
         "/sales": "Role Dashboards", "/operations": "Role Dashboards", "/admin": "Role Dashboards",

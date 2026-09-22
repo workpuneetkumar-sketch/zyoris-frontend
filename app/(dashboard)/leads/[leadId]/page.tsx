@@ -202,8 +202,8 @@ export default function LeadDetailPage() {
                         (d) => d.leadId === leadId || (d.name && lead.name && d.name.toLowerCase() === lead.name.toLowerCase())
                     ) || allDeals[0];
 
-                    if (matched && (matched.id || matched.dealId)) {
-                        dealId = String(matched.id || matched.dealId || "");
+                    if (matched && (matched.id || (matched as any).dealId)) {
+                        dealId = (matched.id || (matched as any).dealId) as string;
                     }
                 } catch (fallbackErr) {
                     console.warn("[Lead Convert] Fallback deal lookup notice:", fallbackErr);
