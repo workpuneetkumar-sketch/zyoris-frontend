@@ -636,7 +636,9 @@ export async function saveAssignmentRule(config: AssignmentRuleConfig): Promise<
  */
 export async function executeAssignmentRule(leadId: string, rule?: AssignmentRuleConfig): Promise<any> {
   try {
-    const res = await api.post(`/leads/${leadId}/execute-assignment-rule`, { rule });
+    const res = await api.post(`/leads/${leadId}/execute-assignment-rule`, { rule }, {
+      headers: { "x-skip-auto-notification": "true" }
+    });
     return res.data?.data || res.data;
   } catch (error: any) {
     console.error(`[API] executeAssignmentRule error:`, error.response?.data || error.message);

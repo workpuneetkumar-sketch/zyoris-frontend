@@ -18,6 +18,12 @@ import {
 import type { CreateNotificationPayload } from "@/lib/api/notificationsApi";
 import type { Notification, NotificationCategory } from "@/types/notifications";
 import { backendToTab, tabToBackend } from "@/utils/notificationCategories";
+import {
+  normalizeNotificationId,
+  deduplicateNotifications,
+  mergeNotifications,
+  prependNotification,
+} from "@/utils/notificationDeduplication";
 
 export type NotificationConnectionStatus = "connecting" | "connected" | "offline";
 type NotificationListener = (notification: Notification) => void;
@@ -60,9 +66,14 @@ function countsFromServer(total: number, byCategory: Record<string, number>): Co
 function isNotificationDto(value: unknown): value is NotificationDto {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<NotificationDto>;
-  return typeof candidate.id === "string" && typeof candidate.userId === "string" &&
-    typeof candidate.title === "string" && typeof candidate.message === "string" &&
-    typeof candidate.createdAt === "string" && typeof candidate.read === "boolean";
+  return (
+    (typeof candidate.id === "string" || typeof candidate.id === "number") &&
+    typeof candidate.userId === "string" &&
+    typeof candidate.title === "string" &&
+    typeof candidate.message === "string" &&
+    typeof candidate.createdAt === "string" &&
+    typeof candidate.read === "boolean"
+  );
 }
 
 function getEventNotification(value: unknown): Notification | null {
@@ -116,9 +127,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (notificationCount.current === 0) setError(null);
     try {
       const result = await getNotifications({ limit: 20 });
-      setNotifications(result.notifications);
-      notificationCount.current = result.notifications.length;
-      knownIds.current = new Set(result.notifications.map((notification) => notification.id));
+      setNotifications((current) => {
+        const merged = mergeNotifications(result.notifications, current);
+        notificationCount.current = merged.length;
+        knownIds.current = new Set(merged.map((notification) => normalizeNotificationId(notification.id)));
+        return merged;
+      });
       setNextCursor(result.nextCursor);
       setHasMore(result.hasMore);
       firstPageLoaded.current = true;
@@ -140,10 +154,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     try {
       const result = await getNotifications({ cursor: nextCursor, limit: 20 });
       setNotifications((current) => {
-        const existing = new Set(current.map((notification) => notification.id));
-        const additions = result.notifications.filter((notification) => !existing.has(notification.id));
-        additions.forEach((notification) => knownIds.current.add(notification.id));
-        return [...current, ...additions];
+        const existingIds = new Set(current.map((notification) => normalizeNotificationId(notification.id)));
+        const additions = result.notifications.filter(
+          (notification) => !existingIds.has(normalizeNotificationId(notification.id))
+        );
+        const nextList = [...current, ...additions];
+        knownIds.current = new Set(nextList.map((notification) => normalizeNotificationId(notification.id)));
+        return nextList;
       });
       setNextCursor(result.nextCursor);
       setHasMore(result.hasMore);
@@ -183,23 +200,38 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     socket.on("connect_error", () => setRealtimeStatus("offline"));
     socket.on("notification.created", (payload: unknown) => {
       const notification = getEventNotification(payload);
-      if (!notification || !isMine(notification) || knownIds.current.has(notification.id)) return;
-      knownIds.current.add(notification.id);
-      setNotifications((current) => [notification, ...current.filter((item) => item.id !== notification.id)]);
+      if (!notification || !isMine(notification)) return;
+
+      const normId = normalizeNotificationId(notification.id);
+      if (!normId || knownIds.current.has(normId)) return;
+
+      // Synchronously record ID before inserting to guard against concurrent socket bursts
+      knownIds.current.add(normId);
+
+      setNotifications((current) => {
+        // Also check current React state before inserting
+        if (current.some((item) => normalizeNotificationId(item.id) === normId)) {
+          return current;
+        }
+        return [notification, ...current];
+      });
+
       if (!notification.read) listeners.current.forEach((listener) => listener(notification));
       scheduleCountRefresh();
     });
     socket.on("notification.read", (payload: unknown) => {
       const notification = getEventNotification(payload);
       if (!notification || !isMine(notification)) return;
-      setNotifications((current) => current.map((item) => item.id === notification.id ? notification : item));
+      const normId = normalizeNotificationId(notification.id);
+      setNotifications((current) => current.map((item) => normalizeNotificationId(item.id) === normId ? notification : item));
       scheduleCountRefresh();
     });
     socket.on("notification.archived", (payload: unknown) => {
       const notification = getEventNotification(payload);
       if (!notification || !isMine(notification)) return;
-      setNotifications((current) => current.filter((item) => item.id !== notification.id));
-      knownIds.current.delete(notification.id);
+      const normId = normalizeNotificationId(notification.id);
+      setNotifications((current) => current.filter((item) => normalizeNotificationId(item.id) !== normId));
+      knownIds.current.delete(normId);
       scheduleCountRefresh();
     });
     socket.on("notification.count.updated", (payload: unknown) => {
@@ -231,13 +263,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const markRead = useCallback(async (id: string) => {
-    const target = notifications.find((notification) => notification.id === id);
+    const normId = normalizeNotificationId(id);
+    const target = notifications.find((notification) => normalizeNotificationId(notification.id) === normId);
     if (!target || target.read) return;
-    setNotifications((current) => current.map((notification) => notification.id === id ? { ...notification, read: true } : notification));
+    setNotifications((current) => current.map((notification) => normalizeNotificationId(notification.id) === normId ? { ...notification, read: true } : notification));
     updateUnreadLocally(target, -1);
     try { await markAsRead(id); void refreshUnreadCounts(); }
     catch (cause: unknown) {
-      setNotifications((current) => current.map((notification) => notification.id === id ? target : notification));
+      setNotifications((current) => current.map((notification) => normalizeNotificationId(notification.id) === normId ? target : notification));
       updateUnreadLocally(target, 1);
       throw cause;
     }
@@ -248,47 +281,51 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const backendCategories = tabToBackend(normalizedCategory || "all");
     const affected = notifications.filter((notification) => !notification.read && (!normalizedCategory || normalizedCategory === "all" || normalizedCategory === "unread" || backendCategories.length > 0 && backendToTab(notification.category) === normalizedCategory));
     if (affected.length === 0) return;
-    setNotifications((current) => current.map((notification) => affected.some((item) => item.id === notification.id) ? { ...notification, read: true } : notification));
+    const affectedIds = new Set(affected.map((n) => normalizeNotificationId(n.id)));
+    setNotifications((current) => current.map((notification) => affectedIds.has(normalizeNotificationId(notification.id)) ? { ...notification, read: true } : notification));
     affected.forEach((notification) => updateUnreadLocally(notification, -1));
     try { await markAllReadAdapter(category); void refreshUnreadCounts(); }
     catch (cause: unknown) {
-      setNotifications((current) => current.map((notification) => affected.some((item) => item.id === notification.id) ? { ...notification, read: false } : notification));
+      setNotifications((current) => current.map((notification) => affectedIds.has(normalizeNotificationId(notification.id)) ? { ...notification, read: false } : notification));
       affected.forEach((notification) => updateUnreadLocally(notification, 1));
       throw cause;
     }
   }, [notifications, updateUnreadLocally, refreshUnreadCounts]);
 
   const removeNotification = useCallback(async (id: string) => {
-    const target = notifications.find((notification) => notification.id === id);
+    const normId = normalizeNotificationId(id);
+    const target = notifications.find((notification) => normalizeNotificationId(notification.id) === normId);
     if (!target) return;
-    setNotifications((current) => current.filter((notification) => notification.id !== id));
-    knownIds.current.delete(id);
+    setNotifications((current) => current.filter((notification) => normalizeNotificationId(notification.id) !== normId));
+    knownIds.current.delete(normId);
     updateUnreadLocally(target, -1);
     try { await archiveNotification(id); void refreshUnreadCounts(); }
     catch (cause: unknown) {
       setNotifications((current) => [target, ...current]);
-      knownIds.current.add(id);
+      knownIds.current.add(normId);
       updateUnreadLocally(target, 1);
       throw cause;
     }
   }, [notifications, updateUnreadLocally, refreshUnreadCounts]);
 
   const hardDelete = useCallback(async (id: string) => {
+    const normId = normalizeNotificationId(id);
     await hardDeleteNotification(id);
-    setNotifications((current) => current.filter((notification) => notification.id !== id));
-    knownIds.current.delete(id);
+    setNotifications((current) => current.filter((notification) => normalizeNotificationId(notification.id) !== normId));
+    knownIds.current.delete(normId);
     void refreshUnreadCounts();
   }, [refreshUnreadCounts]);
 
   const bulkArchiveByIds = useCallback(async (ids: string[]) => {
     const snapshot = notifications;
-    const removed = snapshot.filter((notification) => ids.includes(notification.id));
-    setNotifications((current) => current.filter((notification) => !ids.includes(notification.id)));
-    removed.forEach((notification) => { knownIds.current.delete(notification.id); updateUnreadLocally(notification, -1); });
+    const normIds = new Set(ids.map(normalizeNotificationId));
+    const removed = snapshot.filter((notification) => normIds.has(normalizeNotificationId(notification.id)));
+    setNotifications((current) => current.filter((notification) => !normIds.has(normalizeNotificationId(notification.id))));
+    removed.forEach((notification) => { knownIds.current.delete(normalizeNotificationId(notification.id)); updateUnreadLocally(notification, -1); });
     try { await bulkArchive({ ids }); void refreshUnreadCounts(); }
     catch (cause: unknown) {
       setNotifications(snapshot);
-      removed.forEach((notification) => { knownIds.current.add(notification.id); updateUnreadLocally(notification, 1); });
+      removed.forEach((notification) => { knownIds.current.add(normalizeNotificationId(notification.id)); updateUnreadLocally(notification, 1); });
       throw cause;
     }
   }, [notifications, updateUnreadLocally, refreshUnreadCounts]);
@@ -297,20 +334,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const snapshot = notifications;
     const removed = snapshot.filter((notification) => notification.read);
     setNotifications((current) => current.filter((notification) => !notification.read));
-    removed.forEach((notification) => knownIds.current.delete(notification.id));
+    removed.forEach((notification) => knownIds.current.delete(normalizeNotificationId(notification.id)));
     try { await bulkArchive(); void refreshUnreadCounts(); }
     catch (cause: unknown) {
       setNotifications(snapshot);
-      removed.forEach((notification) => knownIds.current.add(notification.id));
+      removed.forEach((notification) => knownIds.current.add(normalizeNotificationId(notification.id)));
       throw cause;
     }
   }, [notifications, refreshUnreadCounts]);
 
   const createNotification = useCallback(async (payload: CreateNotificationPayload) => {
     const notification = await createNotificationAdapter(payload);
-    if (!knownIds.current.has(notification.id)) {
-      knownIds.current.add(notification.id);
-      setNotifications((current) => [notification, ...current]);
+    const normId = normalizeNotificationId(notification.id);
+    if (!knownIds.current.has(normId)) {
+      knownIds.current.add(normId);
+      setNotifications((current) => {
+        if (current.some((item) => normalizeNotificationId(item.id) === normId)) return current;
+        return [notification, ...current];
+      });
     }
     void refreshUnreadCounts();
   }, [refreshUnreadCounts]);
