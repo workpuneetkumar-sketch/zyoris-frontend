@@ -33,6 +33,7 @@ import {
   Award
 } from "lucide-react";
 import { useLeadLifecycleActions } from "@/hooks/useLeadLifecycleActions";
+import { mapToStatusEnum, mapSourceTypeEnum } from "@/lib/api/leadsApi";
 
 interface LeadApiActionsToolbarProps {
   leadId: string;
@@ -89,15 +90,15 @@ export function LeadApiActionsToolbar({
     onLeadUpdated,
   });
 
-  // Section 1: Transition State
-  const [toStatus, setToStatus] = useState<string>(lead?.status || "QUALIFIED");
+  // Section 1: Transition State (Database Enum: NEW | WARM | HOT | WON | LOST | DEAD)
+  const [toStatus, setToStatus] = useState<string>(mapToStatusEnum(lead?.status || "NEW"));
   const [transitionReason, setTransitionReason] = useState<string>("Updated stage after sales discovery call");
 
   // Section 2: Nurture State
   const [nurtureReason, setNurtureReason] = useState<string>("Cold lead re-engagement campaign");
   const [automationTemplateId, setAutomationTemplateId] = useState<string>("tpl-cold-re-engage");
 
-  // Section 3: Signal State
+  // Section 3: Signal State (Database Enum: WEBSITE | EMAIL_OPEN | PRODUCT_CLICK | OTHER)
   const [sourceText, setSourceText] = useState<string>("Visited pricing page & calculated enterprise ROI");
   const [sourceType, setSourceType] = useState<string>("WEBSITE");
   const [signalScore, setSignalScore] = useState<number>(85);
@@ -140,63 +141,108 @@ export function LeadApiActionsToolbar({
   // Handlers
   const handleTransitionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeTransition({
-      toStatus,
-      status: toStatus,
-      toStage: toStatus,
-      stage: toStatus,
-      reason: transitionReason,
-    });
+    try {
+      await executeTransition({
+        toStatus: mapToStatusEnum(toStatus),
+        reason: transitionReason,
+      });
+    } catch {
+      // Error handled by hook toast & result state clearing
+    }
   };
 
   const handleNurtureSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeStartNurture({ reason: nurtureReason, automationTemplateId });
+    try {
+      await executeStartNurture({ reason: nurtureReason, automationTemplateId });
+    } catch {
+      // Error handled by hook toast & result state clearing
+    }
   };
 
   const handleSignalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeIngestSignal({ sourceText, sourceType, score: signalScore });
+    try {
+      await executeIngestSignal({
+        sourceText,
+        sourceType: mapSourceTypeEnum(sourceType),
+        score: signalScore,
+      });
+    } catch {
+      // Error handled by hook toast & result state clearing
+    }
   };
 
   const handleSessionSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeLinkSession({ sessionId, leadId, consentGranted });
+    try {
+      await executeLinkSession({ sessionId, leadId, consentGranted });
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleSlaSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeCheckSla({ maxResponseTimeMinutes, escalationRule, escalateToId });
+    try {
+      await executeCheckSla({ maxResponseTimeMinutes, escalationRule, escalateToId });
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleFeedbackSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeSubmitFeedback({ outcome, reason: feedbackReason, feedbackScore });
+    try {
+      await executeSubmitFeedback({ outcome, reason: feedbackReason, feedbackScore });
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleConvertSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeConvertToDeal();
+    try {
+      await executeConvertToDeal();
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleEnrichSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeEnrich();
+    try {
+      await executeEnrich();
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleQualifySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeQualify();
+    try {
+      await executeQualify();
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleRouteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeRoute();
+    try {
+      await executeRoute();
+    } catch {
+      // Error handled by hook
+    }
   };
 
   const handleRuleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await executeSaveRule({ strategy: ruleStrategy });
+    try {
+      await executeSaveRule({ strategy: ruleStrategy });
+    } catch {
+      // Error handled by hook
+    }
   };
 
   // Section definitions
@@ -210,7 +256,7 @@ export function LeadApiActionsToolbar({
       color: "bg-indigo-600",
       accentBorder: "border-indigo-100",
       badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200",
-      whatItDoes: "Controls the progression of the lead through defined sales lifecycle states (NEW → CONTACTED → QUALIFIED → PROPOSAL → NEGOTIATION → CLOSED / DEAD). Executing a transition updates system stage triggers, recalculates win probability, and logs status audits.",
+      whatItDoes: "Controls the progression of the lead through defined sales lifecycle states (NEW → WARM → HOT → WON → LOST → DEAD). Executing a transition updates system stage triggers, recalculates win probability, and logs status audits.",
       loading: loadingTransition,
       onSubmit: handleTransitionSubmit,
       controls: (
@@ -223,13 +269,11 @@ export function LeadApiActionsToolbar({
               className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
             >
               <option value="NEW">🆕 NEW</option>
-              <option value="CONTACTED">📞 CONTACTED</option>
               <option value="WARM">🔥 WARM</option>
-              <option value="QUALIFIED">✅ QUALIFIED</option>
-              <option value="PROPOSAL">📄 PROPOSAL</option>
-              <option value="NEGOTIATION">🤝 NEGOTIATION</option>
-              <option value="CLOSED">🎉 CLOSED (WON)</option>
-              <option value="DEAD">💀 DEAD (LOST)</option>
+              <option value="HOT">🌶️ HOT</option>
+              <option value="WON">🏆 WON</option>
+              <option value="LOST">❌ LOST</option>
+              <option value="DEAD">💀 DEAD</option>
             </select>
           </div>
           <div>
@@ -245,12 +289,7 @@ export function LeadApiActionsToolbar({
         </div>
       ),
       submitText: "Execute Stage Transition",
-      result: transitionResult || (lead?.status ? {
-        success: true,
-        toStatus: lead.status,
-        message: `Current registered status: ${lead.status}`,
-        updatedAt: lead.updatedAt || new Date().toISOString()
-      } : null),
+      result: transitionResult,
       changedProps: [
         { label: "Status State", value: `${lead?.status || "NEW"} ➔ ${toStatus}` },
         { label: "Rationale Note", value: transitionReason || "Updated" },
@@ -336,10 +375,10 @@ export function LeadApiActionsToolbar({
                 onChange={(e) => setSourceType(e.target.value)}
                 className="w-full text-xs font-semibold px-3 py-2.5 rounded-xl border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="WEBSITE">🌐 Website Page Visit / ROI Calculator</option>
-                <option value="EMAIL_CLICK">✉️ Email Link Click / Content Download</option>
-                <option value="PRODUCT_CLICK">⚡ Product Feature Interaction</option>
-                <option value="FORM_SUBMIT">📝 High-Intent Form Inquiry</option>
+                <option value="WEBSITE">🌐 Website Page Visit / ROI Calculator (WEBSITE)</option>
+                <option value="EMAIL_OPEN">✉️ Email Open / Link Interaction (EMAIL_OPEN)</option>
+                <option value="PRODUCT_CLICK">⚡ Product Feature Interaction (PRODUCT_CLICK)</option>
+                <option value="OTHER">📝 Other Buying Intent Signal (OTHER)</option>
               </select>
             </div>
             <div>

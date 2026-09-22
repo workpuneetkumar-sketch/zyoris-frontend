@@ -3,6 +3,7 @@
 // Strictly aligned with Swagger API spec at POST /api/contact/create
 
 import api from "@/lib/api/api";
+import { normalizeContacts } from "@/lib/contactNormalization";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -30,6 +31,8 @@ export interface Contact {
     updatedAt?: string;
     [key: string]: unknown;
 }
+
+export { normalizeContact, normalizeContacts } from "@/lib/contactNormalization";
 
 export interface ContactsFilters {
     status: string;
@@ -70,19 +73,19 @@ export async function fetchContacts(
         const res = await api.get("/api/contact/get-contacts", { params });
         const raw = res.data;
         if (Array.isArray(raw)) {
-            return { contacts: raw, total: raw.length };
+            return { contacts: normalizeContacts(raw) as unknown as Contact[], total: raw.length };
         }
         if (Array.isArray(raw?.data)) {
             return {
-                contacts: raw.data,
+                contacts: normalizeContacts(raw.data) as unknown as Contact[],
                 total: raw.pagination?.total ?? raw.total ?? raw.data.length,
             };
         }
         if (Array.isArray(raw?.contacts)) {
-            return { contacts: raw.contacts, total: raw.total ?? raw.contacts.length };
+            return { contacts: normalizeContacts(raw.contacts) as unknown as Contact[], total: raw.total ?? raw.contacts.length };
         }
         if (Array.isArray(raw?.items)) {
-            return { contacts: raw.items, total: raw.total ?? raw.items.length };
+            return { contacts: normalizeContacts(raw.items) as unknown as Contact[], total: raw.total ?? raw.items.length };
         }
         return { contacts: [], total: 0 };
     } catch (err: any) {

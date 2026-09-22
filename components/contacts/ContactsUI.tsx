@@ -28,6 +28,10 @@ import {
     updateContact,
 } from "@/lib/api/contactsApi";
 import {
+    fetchCompanies,
+    DEFAULT_COMPANIES_FILTERS,
+} from "@/lib/api/companiesApi";
+import {
     bulkUpdateContacts,
     bulkDeleteContacts,
 } from "@/lib/api/bulkOperationsApi";
@@ -39,6 +43,7 @@ import {
     BulkUpdateDialog,
     BulkDeleteDialog,
 } from "@/components/ui/BulkActionsBar";
+import { useEffect } from "react";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -55,9 +60,10 @@ const STATUS_STYLES: Record<string, string> = {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Avatar({ name }: { name: string }) {
-    const initials = name
-        .split(" ")
+function Avatar({ name }: { name?: string | null }) {
+    const safeName = typeof name === "string" && name.trim() ? name.trim() : "Unnamed Contact";
+    const initials = safeName
+        .split(/\s+/)
         .map((p) => p[0]?.toUpperCase() ?? "")
         .join("")
         .slice(0, 2) || "CT";
@@ -84,6 +90,7 @@ interface ContactFormData {
     name: string;
     email: string;
     phone: string;
+    companyId: string;
     company: string;
     position: string;
     city: string;
@@ -96,6 +103,7 @@ const EMPTY_FORM: ContactFormData = {
     name: "",
     email: "",
     phone: "",
+    companyId: "",
     company: "",
     position: "",
     city: "",
@@ -115,17 +123,54 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
     const [form, setForm] = useState<ContactFormData>(initial ?? EMPTY_FORM);
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<Partial<ContactFormData>>({});
+    const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
+    const [loadingCompanies, setLoadingCompanies] = useState(false);
+
+    useEffect(() => {
+        let active = true;
+        setLoadingCompanies(true);
+        fetchCompanies(1, DEFAULT_COMPANIES_FILTERS, 50)
+            .then((res) => {
+                if (!active) return;
+                const list = (res.companies || []).map((c: any) => ({
+                    id: String(c.id || c._id || c.companyId || ""),
+                    name: String(c.name || c.companyName || c.title || "Unnamed Company"),
+                })).filter((c) => Boolean(c.id));
+                setCompanies(list);
+                if (list.length > 0 && !form.companyId) {
+                    setForm((prev) => ({
+                        ...prev,
+                        companyId: list[0].id,
+                        company: prev.company || list[0].name,
+                    }));
+                }
+            })
+            .catch((err) => {
+                console.error("Failed to load companies:", err);
+            })
+            .finally(() => {
+                if (active) setLoadingCompanies(false);
+            });
+        return () => {
+            active = false;
+        };
+    }, []);
 
     const handleChange = (
         e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
     ) => {
-        setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+        const { name, value } = e.target;
+        setForm((prev) => ({ ...prev, [name]: value }));
+        if (errors[name as keyof ContactFormData]) {
+            setErrors((prev) => ({ ...prev, [name]: undefined }));
+        }
     };
 
     const handleSubmit = async () => {
         const newErrors: Partial<ContactFormData> = {};
         if (!form.name.trim()) newErrors.name = "Name is required";
         if (!form.email.trim()) newErrors.email = "Email is required";
+        if (!form.companyId.trim()) newErrors.companyId = "Company is required";
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             return;
@@ -206,14 +251,33 @@ function ContactModal({ mode, initial, onClose, onSave }: ContactModalProps) {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Company</label>
-                                <input
-                                    name="company"
-                                    value={form.company}
-                                    onChange={handleChange}
-                                    placeholder="Acme Corp"
-                                    className="w-full h-10 rounded-xl border border-slate-200 dark:border-slate-700 px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
-                                />
+                                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Company *</label>
+                                <select
+                                    name="companyId"
+                                    value={form.companyId}
+                                    onChange={(e) => {
+                                        const selectedId = e.target.value;
+                                        const matched = companies.find((c) => c.id === selectedId);
+                                        setForm((prev) => ({
+                                            ...prev,
+                                            companyId: selectedId,
+                                            company: matched ? matched.name : prev.company,
+                                        }));
+                                        if (errors.companyId) {
+                                            setErrors((prev) => ({ ...prev, companyId: undefined }));
+                                        }
+                                    }}
+                                    disabled={loadingCompanies}
+                                    className={`w-full h-10 rounded-xl border px-3 text-xs text-slate-900 dark:text-white bg-white dark:bg-slate-900 outline-none focus:ring-2 focus:ring-blue-500/20 ${errors.companyId ? "border-rose-400" : "border-slate-200 dark:border-slate-700 focus:border-blue-500"}`}
+                                >
+                                    <option value="">{loadingCompanies ? "Loading companies..." : "Select Company *"}</option>
+                                    {companies.map((c) => (
+                                        <option key={c.id} value={c.id}>
+                                            🏢 {c.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                {errors.companyId && <p className="text-[11px] text-rose-500 mt-1 font-medium">{errors.companyId}</p>}
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Position</label>
@@ -307,7 +371,7 @@ function ViewContactModal({ contact, onClose }: { contact: Contact; onClose: () 
                     <div className="flex items-center gap-3">
                         <Avatar name={contact.name} />
                         <div>
-                            <h2 className="text-base font-bold text-slate-900 dark:text-white">{contact.name}</h2>
+                            <h2 className="text-base font-bold text-slate-900 dark:text-white">{contact.name || "Unnamed Contact"}</h2>
                             <p className="text-xs text-slate-500">{contact.position || contact.company || "Contact Record"}</p>
                         </div>
                     </div>
@@ -636,7 +700,7 @@ export function ContactsUI({
                                             <div className="flex items-center gap-3">
                                                 <Avatar name={contact.name} />
                                                 <div>
-                                                    <span className="font-bold text-slate-900 dark:text-slate-100 block">{contact.name}</span>
+                                                    <span className="font-bold text-slate-900 dark:text-slate-100 block">{contact.name || "Unnamed Contact"}</span>
                                                     {contact.position && <span className="text-[11px] text-slate-400 font-medium">{contact.position}</span>}
                                                 </div>
                                             </div>
@@ -779,6 +843,7 @@ export function ContactsUI({
                         name: editingContact.name ?? "",
                         email: editingContact.email ?? "",
                         phone: (editingContact.phone as string) ?? "",
+                        companyId: (editingContact.companyId as string) ?? (editingContact.company as string) ?? "",
                         company: (editingContact.company as string) ?? "",
                         position: (editingContact.position as string) ?? "",
                         city: (editingContact.city as string) ?? "",

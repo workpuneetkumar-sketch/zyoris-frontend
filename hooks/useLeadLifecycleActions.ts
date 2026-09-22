@@ -74,6 +74,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingTransition(true);
+    setTransitionResult(null);
     try {
       const res = await transitionLeadLifecycle(leadId, payload);
       setTransitionResult(res);
@@ -81,6 +82,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setTransitionResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to transition stage";
       toast.error(`Transition Error: ${msg}`);
       throw err;
@@ -96,6 +98,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingNurture(true);
+    setNurtureResult(null);
     try {
       const res = await startLeadNurture(leadId, payload);
       setNurtureResult(res);
@@ -103,6 +106,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setNurtureResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to start nurture workflow";
       toast.error(`Nurture Error: ${msg}`);
       throw err;
@@ -118,6 +122,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingSignal(true);
+    setSignalResult(null);
     try {
       const res = await ingestLeadSignal(leadId, payload);
       setSignalResult(res);
@@ -125,6 +130,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setSignalResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to record intent signal";
       toast.error(`Signal Error: ${msg}`);
       throw err;
@@ -136,6 +142,7 @@ export function useLeadLifecycleActions({
   // 4. Link Session
   const executeLinkSession = async (payload: LinkSessionPayload) => {
     setLoadingSession(true);
+    setSessionResult(null);
     try {
       const res = await linkLeadSession(payload);
       setSessionResult(res);
@@ -143,6 +150,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setSessionResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to link session";
       toast.error(`Session Link Error: ${msg}`);
       throw err;
@@ -158,6 +166,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingSla(true);
+    setSlaResult(null);
     try {
       const res = await checkLeadSla(leadId, payload);
       setSlaResult(res);
@@ -169,6 +178,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setSlaResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to execute SLA check";
       toast.error(`SLA Error: ${msg}`);
       throw err;
@@ -184,6 +194,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingFeedback(true);
+    setFeedbackResult(null);
     try {
       const res = await submitLeadFeedback(leadId, payload);
       setFeedbackResult(res);
@@ -191,6 +202,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setFeedbackResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to submit lead feedback";
       toast.error(`Feedback Error: ${msg}`);
       throw err;
@@ -206,6 +218,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingConvert(true);
+    setConvertResult(null);
     try {
       const res = await convertLeadToDeal(leadId);
       setConvertResult(res);
@@ -213,6 +226,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setConvertResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to convert lead to deal";
       toast.error(`Conversion Error: ${msg}`);
       throw err;
@@ -228,6 +242,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingEnrich(true);
+    setEnrichResult(null);
     try {
       const res = await enrichLead(leadId, { provider: "clearbit", force: true });
       setEnrichResult(res);
@@ -235,6 +250,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setEnrichResult(null);
       const msg = err.response?.data?.message || err.message || "Enrichment failed";
       toast.error(`Enrichment Error: ${msg}`);
       throw err;
@@ -250,6 +266,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingQualify(true);
+    setQualifyResult(null);
     try {
       const res = await qualifyLead(leadId, { forceRecalculate: true });
       setQualifyResult(res);
@@ -257,6 +274,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setQualifyResult(null);
       const msg = err.response?.data?.message || err.message || "Qualification failed";
       toast.error(`Qualification Error: ${msg}`);
       throw err;
@@ -272,6 +290,7 @@ export function useLeadLifecycleActions({
       return null;
     }
     setLoadingRoute(true);
+    setRouteResult(null);
     try {
       const res = await routeLead(leadId, { reassign: true });
       setRouteResult(res);
@@ -279,6 +298,7 @@ export function useLeadLifecycleActions({
       onLeadUpdated?.();
       return res;
     } catch (err: any) {
+      setRouteResult(null);
       const msg = err.response?.data?.message || err.message || "Routing failed";
       toast.error(`Routing Error: ${msg}`);
       throw err;
@@ -290,12 +310,14 @@ export function useLeadLifecycleActions({
   // 11. Save Assignment Rule Config
   const executeSaveRule = async (config: AssignmentRuleConfig) => {
     setLoadingRule(true);
+    setRuleResult(null);
     try {
       const res = await saveAssignmentRule(config);
       setRuleResult(res);
       toast.success("Assignment rule configuration saved!");
       return res;
     } catch (err: any) {
+      setRuleResult(null);
       const msg = err.response?.data?.message || err.message || "Failed to save rule";
       toast.error(`Rule Error: ${msg}`);
       throw err;

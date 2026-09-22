@@ -878,7 +878,7 @@ function NoCodeConnectorSetupModal({
   onClose: () => void;
   onTestConnection: () => void;
 }) {
-  const conf = NO_CODE_CHANNEL_CONFIG[channelKey];
+  const conf = (NO_CODE_CHANNEL_CONFIG as any)[channelKey] || NO_CODE_CHANNEL_CONFIG.WEBSITE;
   const Icon = conf.icon;
   const webhookUrl = `https://api.zyoris.com/leads/ingest/${channelKey.toLowerCase()}?orgId=org_demo`;
   const embedSnippet = `<script src="https://cdn.zyoris.com/v1/lead-tracker.js" data-org="org_demo" data-channel="${channelKey}"></script>`;
@@ -918,7 +918,7 @@ function NoCodeConnectorSetupModal({
           <div className="space-y-3">
             <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Step-by-Step Setup Guide</h3>
             <div className="space-y-2">
-              {conf.guideSteps.map((step, idx) => (
+              {conf.guideSteps.map((step: any, idx: number) => (
                 <div key={idx} className="flex items-start gap-3 p-3 rounded-xl bg-gray-50 border border-gray-200/70 text-xs text-gray-800">
                   <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold flex items-center justify-center text-[11px] shrink-0 mt-0.5">
                     {idx + 1}

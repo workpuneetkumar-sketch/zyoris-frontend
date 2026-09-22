@@ -75,6 +75,15 @@ export const isPathAllowed = (
     "/approvals",
     "/executions",
     "/memory",
+    // Day 6 — Operational Agent surfaces
+    "/support",
+    "/data-quality",
+    "/revops",
+    "/workflows/drafts",
+    // Day 7 — Enterprise Agent Config, Observability, Version Promotion
+    "/admin/agents/config",
+    "/admin/agents/observability",
+    "/admin/agents/versions",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",
@@ -131,6 +140,10 @@ export const isPathAllowed = (
       "/admin/roles",
       "/admin/user-roles",
       "/admin/audit",
+      // Day 7
+      "/admin/agents/config",
+      "/admin/agents/observability",
+      "/admin/agents/versions",
     ];
     if (ADMIN_SUBROUTES.some((p) => normalizedPath === p || normalizedPath.startsWith(`${p}/`))) {
       return true;

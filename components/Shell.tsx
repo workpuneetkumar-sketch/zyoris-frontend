@@ -50,6 +50,10 @@ import {
   Wrench,
   ClipboardList,
   ScrollText,
+  // Day 7 — Enterprise Agent Config icons
+  Settings2,
+  Activity,
+  GitBranch,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -376,6 +380,25 @@ const NAV_GROUPS: NavGroup[] = [
         icon: Brain,
         roles: ["ADMIN"],
       },
+      // Day 7 — Enterprise Agent Config, Observability, Versions
+      {
+        href: "/admin/agents/config",
+        label: "Agent Config",
+        icon: Settings2,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/admin/agents/observability",
+        label: "Observability",
+        icon: Activity,
+        roles: ["ADMIN"],
+      },
+      {
+        href: "/admin/agents/versions",
+        label: "Model Versions",
+        icon: GitBranch,
+        roles: ["ADMIN"],
+      },
     ],
   },
 ];
@@ -561,16 +584,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const ADMIN_TOOL_ITEMS = [
-    { href: "/admin",                label: "Admin",             icon: Shield         },
-    { href: "/admin/roles",          label: "Roles",             icon: KeyRound       },
-    { href: "/admin/permission-matrix", label: "Permission Matrix", icon: Grid3X3     },
-    { href: "/admin/user-roles",     label: "User Roles",        icon: UserCog        },
-    { href: "/admin/audit",          label: "Audit Logs",        icon: FileSearch     },
-    { href: "/agents",               label: "Agent Registry",    icon: BotMessageSquare },
-    { href: "/tools",                label: "Tool Registry",     icon: Wrench         },
-    { href: "/approvals",            label: "Approval Queue",    icon: ClipboardList  },
-    { href: "/executions",           label: "Execution Ledger",  icon: ScrollText     },
-    { href: "/memory",               label: "Memory Settings",   icon: Brain          },
+    { href: "/admin",                      label: "Admin",             icon: Shield          },
+    { href: "/admin/roles",                label: "Roles",             icon: KeyRound        },
+    { href: "/admin/permission-matrix",    label: "Permission Matrix", icon: Grid3X3         },
+    { href: "/admin/user-roles",           label: "User Roles",        icon: UserCog         },
+    { href: "/admin/audit",                label: "Audit Logs",        icon: FileSearch      },
+    { href: "/agents",                     label: "Agent Registry",    icon: BotMessageSquare},
+    { href: "/tools",                      label: "Tool Registry",     icon: Wrench          },
+    { href: "/approvals",                  label: "Approval Queue",    icon: ClipboardList   },
+    { href: "/executions",                 label: "Execution Ledger",  icon: ScrollText      },
+    { href: "/memory",                     label: "Memory Settings",   icon: Brain           },
+    // Day 7 — Enterprise Agent Config, Observability, Versions
+    { href: "/admin/agents/config",        label: "Agent Config",      icon: Settings2       },
+    { href: "/admin/agents/observability", label: "Observability",     icon: Activity        },
+    { href: "/admin/agents/versions",      label: "Model Versions",    icon: GitBranch       },
   ];
 
   const ROLE_DASHBOARD_LABELS: Record<string, string> = {
