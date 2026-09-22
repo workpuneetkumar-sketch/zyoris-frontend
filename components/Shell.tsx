@@ -54,6 +54,10 @@ import {
   Settings2,
   Activity,
   GitBranch,
+  // Day 6 — Operational Agent surfaces (nav entries)
+  Headphones,
+  ShieldAlert,
+  BarChart3,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -263,6 +267,31 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Automation",
         icon: Zap,
         roles: ["ADMIN", "CEO"],
+      },
+      // Day 6 — Operational Agent surfaces
+      {
+        href: "/support",
+        label: "Support Agent",
+        icon: Headphones,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/data-quality",
+        label: "Data Quality",
+        icon: ShieldAlert,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/revops",
+        label: "RevOps Insights",
+        icon: BarChart3,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/workflows/drafts",
+        label: "Workflow Drafts",
+        icon: GitBranch,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
     ],
   },
@@ -659,6 +688,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         approvals: ClipboardList, "approval-queue": ClipboardList, "clipboard-list": ClipboardList,
         executions: ScrollText, "execution-ledger": ScrollText, "scroll-text": ScrollText,
         memory: Brain, "memory-settings": Brain, "agent-memory": Brain,
+        // Day 6 — Operational Agent surfaces
+        support: Headphones, "support-agent": Headphones, headphones: Headphones,
+        "data-quality": ShieldAlert, "shield-alert": ShieldAlert,
+        revops: BarChart3, "revops-insights": BarChart3, "bar-chart-3": BarChart3,
+        "workflows": GitBranch, "workflow-drafts": GitBranch, "git-branch": GitBranch,
       };
 
       // ── Route normalization: API route → real Next.js page route ──────
@@ -727,6 +761,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         projects: "Business", documents: "Business",
         "knowledge-base": "Business", knowledge: "Business", notes: "Business",
         analytics: "Platform", reports: "Platform", automation: "Platform",
+        // Day 6 — Operational Agent surfaces
+        support: "Platform", "support-agent": "Platform",
+        "data-quality": "Platform",
+        revops: "Platform", "revops-insights": "Platform",
+        workflows: "Platform", "workflow-drafts": "Platform",
         settings: "Management",
         ceo: "Role Dashboards", cfo: "Role Dashboards",
         sales: "Role Dashboards", operations: "Role Dashboards", admin: "Role Dashboards",
@@ -754,6 +793,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         "/marketing": "Business", "/projects": "Business",
         "/documents": "Business", "/knowledge-base": "Business", "/notes": "Business",
         "/analytics": "Platform", "/reports": "Platform", "/automation": "Platform",
+        // Day 6 — Operational Agent surfaces
+        "/support": "Platform",
+        "/data-quality": "Platform",
+        "/revops": "Platform",
+        "/workflows/drafts": "Platform",
         "/settings": "Management",
         "/ceo": "Role Dashboards", "/cfo": "Role Dashboards",
         "/sales": "Role Dashboards", "/operations": "Role Dashboards", "/admin": "Role Dashboards",
@@ -849,6 +893,23 @@ export function AppShell({ children }: { children: ReactNode }) {
       itemsByGroup["Integration"] = [
         { href: "/integrations", label: "Integration", icon: Layers },
       ];
+
+      // ── Always force-inject Day 6 operational agent surfaces into Platform ──
+      const DAY6_PLATFORM_ITEMS = [
+        { href: "/support",          label: "Support Agent",   icon: Headphones },
+        { href: "/data-quality",     label: "Data Quality",    icon: ShieldAlert },
+        { href: "/revops",           label: "RevOps Insights", icon: BarChart3   },
+        { href: "/workflows/drafts", label: "Workflow Drafts", icon: GitBranch   },
+      ];
+      if (!itemsByGroup["Platform"]) {
+        itemsByGroup["Platform"] = DAY6_PLATFORM_ITEMS;
+      } else {
+        DAY6_PLATFORM_ITEMS.forEach(({ href, label, icon }) => {
+          if (!itemsByGroup["Platform"].some((x) => x.href === href)) {
+            itemsByGroup["Platform"].push({ href, label, icon });
+          }
+        });
+      }
 
       // ── Always ensure Workspace is present in CRM group ──
       if (!itemsByGroup["CRM"]) {
