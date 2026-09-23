@@ -2,13 +2,21 @@
 
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import Link from "next/link";
-import { WorkspacePage, WorkspaceBlock, WorkspacePageNode } from "@/types/workspace";
+import { WorkspacePage, WorkspaceBlock, WorkspacePageNode, PageLayoutWidth } from "@/types/workspace";
 import { getWorkspacePage, updateWorkspacePage } from "@/lib/api/workspaceApi";
 import { saveStoredLocalPage, useWorkspace } from "@/hooks/useWorkspace";
 import { BlockEditor } from "./BlockEditor";
 import { DatabaseView } from "./DatabaseView";
 import { AttachmentSection } from "./AttachmentSection";
 import { ExportModal } from "./ExportModal";
+import { CustomizePagePanel } from "./CustomizePagePanel";
+import { UseWithAIButton } from "./UseWithAIButton";
+import { PageCommentsPanel } from "./PageCommentsPanel";
+import { TranslatePageModal } from "./TranslatePageModal";
+import { TurnIntoWikiModal, WikiBadge } from "./TurnIntoWikiModal";
+import { PageAnalyticsPanel } from "./PageAnalyticsPanel";
+import { VersionHistoryPanel } from "./VersionHistoryPanel";
+import { PageImportModal } from "./PageImportModal";
 import {
   FileText,
   AlertCircle,
@@ -24,11 +32,33 @@ import {
   ChevronRight,
   Download,
   Paperclip,
+  Settings2,
+  MessageSquare,
+  Globe,
+  BookOpen,
+  BarChart2,
+  History,
+  Upload,
+  MoreHorizontal,
 } from "lucide-react";
 
 interface WorkspacePageViewProps {
   pageId: string;
 }
+
+// ── Toolbar action menu items ──────────────────────────────────────────────────
+const TOOLBAR_ACTIONS = [
+  { key: "customize",  label: "Customize",       icon: Settings2,     color: "text-blue-500"   },
+  { key: "ai",         label: "Use with AI",      icon: Sparkles,      color: "text-indigo-500" },
+  { key: "comments",   label: "Suggest Edits",    icon: MessageSquare, color: "text-violet-500" },
+  { key: "translate",  label: "Translate",        icon: Globe,         color: "text-sky-500"    },
+  { key: "wiki",       label: "Turn into Wiki",   icon: BookOpen,      color: "text-violet-500" },
+  { key: "analytics",  label: "Analytics",        icon: BarChart2,     color: "text-emerald-500"},
+  { key: "history",    label: "Version History",  icon: History,       color: "text-orange-500" },
+  { key: "import",     label: "Import",           icon: Upload,        color: "text-teal-500"   },
+] as const;
+
+type ToolbarAction = typeof TOOLBAR_ACTIONS[number]["key"];
 
 const EMOJI_LIST = ["📄", "📝", "🚀", "💡", "📊", "⚡", "📁", "🧠", "🔍", "🎯", "📌", "✨", "🛠️", "⚙️", "🌟"];
 const COVER_PRESETS = [
@@ -50,6 +80,16 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
   const [isCoverPickerOpen, setIsCoverPickerOpen] = useState<boolean>(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState<boolean>(false);
   const [isAttachmentsExpanded, setIsAttachmentsExpanded] = useState<boolean>(true);
+
+  // ── FE2 feature panel state ────────────────────────────────────────────────
+  const [activePanel, setActivePanel] = useState<ToolbarAction | null>(null);
+  const [isWiki, setIsWiki] = useState<boolean>(false);
+  const [layoutWidth, setLayoutWidth] = useState<PageLayoutWidth>("default");
+  const [smallText, setSmallText] = useState<boolean>(false);
+
+  // Toolbar overflow menu
+  const [isToolbarMenuOpen, setIsToolbarMenuOpen] = useState(false);
+  const toolbarMenuRef = useRef<HTMLDivElement>(null);
 
   const [titleSaveStatus, setTitleSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const titleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -85,6 +125,9 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       setTitle(data?.title || "Untitled Page");
       setIcon(data?.icon || "📄");
       setCoverImage(data?.coverImage || null);
+      setIsWiki(data?.isWiki ?? false);
+      setLayoutWidth(data?.layoutWidth ?? "default");
+      setSmallText(data?.smallText ?? false);
     } catch (err: any) {
       console.error(`Failed to load page ${pageId}:`, err);
       const msg =
@@ -100,6 +143,17 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
   useEffect(() => {
     fetchPageData();
   }, [fetchPageData]);
+
+  // Close toolbar overflow menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (toolbarMenuRef.current && !toolbarMenuRef.current.contains(e.target as Node)) {
+        setIsToolbarMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   /* Debounced Title Persistence */
   const handleTitleChange = (newTitle: string) => {
@@ -178,9 +232,14 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
   if (!page) return null;
 
   const canEdit = page?.userPermissions?.canEdit ?? true;
+  const isLocked = page?.isLocked ?? false;
+
+  // Dynamic max-width based on layout setting
+  const contentWidth = layoutWidth === "full" ? "max-w-full" : "max-w-4xl";
+  const textSize = smallText ? "text-sm" : "";
 
   return (
-    <div className="max-w-4xl mx-auto px-6 md:px-12 py-8 md:py-12">
+    <div className={`${contentWidth} mx-auto px-6 md:px-12 py-8 md:py-12 ${textSize}`}>
       {!canEdit && (
         <div className="mb-4 px-4 py-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/50 rounded-xl text-amber-700 dark:text-amber-400 text-xs font-semibold flex items-center space-x-2">
           <Sparkles className="w-4 h-4 flex-shrink-0" />
@@ -203,7 +262,7 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
         </div>
       )}
       {/* Page Header Actions Toolbar */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         {!coverImage && canEdit && (
           <button
             onClick={() => setIsCoverPickerOpen(!isCoverPickerOpen)}
@@ -213,7 +272,17 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
             <span>Add Cover Image</span>
           </button>
         )}
-        <div className="flex items-center space-x-2 ml-auto">
+
+        {/* Right-side toolbar */}
+        <div className="flex items-center space-x-2 ml-auto flex-wrap gap-1.5">
+
+          {/* Wiki badge */}
+          {isWiki && <WikiBadge />}
+
+          {/* Use with AI — always visible */}
+          <UseWithAIButton pageId={pageId} pageTitle={title} />
+
+          {/* Attachments toggle */}
           <button
             onClick={() => setIsAttachmentsExpanded(!isAttachmentsExpanded)}
             className={`inline-flex items-center space-x-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg border transition ${
@@ -223,15 +292,101 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
             }`}
           >
             <Paperclip className="w-3.5 h-3.5" />
-            <span>Attachments</span>
+            <span className="hidden sm:inline">Attachments</span>
           </button>
+
+          {/* Export */}
           <button
             onClick={() => setIsExportModalOpen(true)}
             className="inline-flex items-center space-x-1.5 text-xs font-semibold px-3 py-1.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg transition"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Export Page</span>
+            <span className="hidden sm:inline">Export</span>
           </button>
+
+          {/* ··· Overflow menu for remaining FE2 actions */}
+          <div className="relative" ref={toolbarMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsToolbarMenuOpen((v) => !v)}
+              className="inline-flex items-center space-x-1 text-xs font-semibold px-2.5 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition"
+              aria-label="More page actions"
+              aria-expanded={isToolbarMenuOpen}
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </button>
+
+            {isToolbarMenuOpen && (
+              <div className="absolute right-0 top-9 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 py-1 animate-in fade-in duration-100">
+                {/* Customize */}
+                <button
+                  onClick={() => { setActivePanel("customize"); setIsToolbarMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <Settings2 className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Customize Page</span>
+                </button>
+
+                {/* Suggest Edits */}
+                <button
+                  onClick={() => { setActivePanel("comments"); setIsToolbarMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-violet-500" />
+                  <span>Suggest Edits</span>
+                </button>
+
+                {/* Translate */}
+                <button
+                  onClick={() => { setActivePanel("translate"); setIsToolbarMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <Globe className="w-3.5 h-3.5 text-sky-500" />
+                  <span>Translate</span>
+                </button>
+
+                {/* Import */}
+                {canEdit && (
+                  <button
+                    onClick={() => { setActivePanel("import"); setIsToolbarMenuOpen(false); }}
+                    className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-teal-500" />
+                    <span>Import</span>
+                  </button>
+                )}
+
+                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
+
+                {/* Turn into Wiki */}
+                <button
+                  onClick={() => { setActivePanel("wiki"); setIsToolbarMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <BookOpen className="w-3.5 h-3.5 text-violet-500" />
+                  <span>{isWiki ? "Revert from Wiki" : "Turn into Wiki"}</span>
+                </button>
+
+                {/* Analytics */}
+                <button
+                  onClick={() => { setActivePanel("analytics"); setIsToolbarMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <BarChart2 className="w-3.5 h-3.5 text-emerald-500" />
+                  <span>Analytics</span>
+                </button>
+
+                {/* Version History */}
+                <button
+                  onClick={() => { setActivePanel("history"); setIsToolbarMenuOpen(false); }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <History className="w-3.5 h-3.5 text-orange-500" />
+                  <span>Version History</span>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -284,15 +439,16 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
         </div>
 
         {/* Editable Title Header */}
-        <div className="relative flex items-center">
+        <div className="relative flex items-center gap-3">
           <input
             type="text"
             value={title}
             disabled={!canEdit}
             onChange={(e) => canEdit && handleTitleChange(e.target.value)}
             placeholder="Untitled Page..."
-            className="w-full text-4xl font-extrabold text-slate-900 dark:text-white bg-transparent focus:outline-none tracking-tight placeholder-slate-300 dark:placeholder-slate-700 disabled:opacity-90"
+            className="flex-1 text-4xl font-extrabold text-slate-900 dark:text-white bg-transparent focus:outline-none tracking-tight placeholder-slate-300 dark:placeholder-slate-700 disabled:opacity-90"
           />
+          {isWiki && <WikiBadge className="flex-shrink-0" />}
         </div>
 
         {/* Meta details */}
@@ -380,6 +536,70 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
         entityType="PAGE"
         entityId={page.id}
         entityName={title}
+      />
+
+      {/* ── FE2-01 · Customize Page ───────────────────────────────────────── */}
+      <CustomizePagePanel
+        isOpen={activePanel === "customize"}
+        onClose={() => setActivePanel(null)}
+        page={page}
+        onSaved={(updated) => {
+          if (updated.icon !== undefined) setIcon(updated.icon ?? "📄");
+          if (updated.coverImage !== undefined) setCoverImage(updated.coverImage);
+          if (updated.layoutWidth !== undefined) setLayoutWidth(updated.layoutWidth ?? "default");
+          if (updated.smallText !== undefined) setSmallText(updated.smallText ?? false);
+        }}
+      />
+
+      {/* ── FE2-03 · Suggest Edits / Comments ───────────────────────────────── */}
+      <PageCommentsPanel
+        isOpen={activePanel === "comments"}
+        onClose={() => setActivePanel(null)}
+        pageId={pageId}
+      />
+
+      {/* ── FE2-04 · Translate ───────────────────────────────────────────────── */}
+      <TranslatePageModal
+        isOpen={activePanel === "translate"}
+        onClose={() => setActivePanel(null)}
+        pageId={pageId}
+        currentBlocks={page.blocks ?? []}
+        onApplied={fetchPageData}
+      />
+
+      {/* ── FE2-05 · Turn into Wiki ──────────────────────────────────────────── */}
+      <TurnIntoWikiModal
+        isOpen={activePanel === "wiki"}
+        onClose={() => setActivePanel(null)}
+        pageId={pageId}
+        pageTitle={title}
+        isWiki={isWiki}
+        isLocked={isLocked}
+        onConverted={(newIsWiki) => setIsWiki(newIsWiki)}
+      />
+
+      {/* ── FE2-06 · Analytics ───────────────────────────────────────────────── */}
+      <PageAnalyticsPanel
+        isOpen={activePanel === "analytics"}
+        onClose={() => setActivePanel(null)}
+        pageId={pageId}
+      />
+
+      {/* ── FE2-07 · Version History ─────────────────────────────────────────── */}
+      <VersionHistoryPanel
+        isOpen={activePanel === "history"}
+        onClose={() => setActivePanel(null)}
+        pageId={pageId}
+        isLocked={isLocked}
+        onRestored={fetchPageData}
+      />
+
+      {/* ── FE2-08 · Page Import ─────────────────────────────────────────────── */}
+      <PageImportModal
+        isOpen={activePanel === "import"}
+        onClose={() => setActivePanel(null)}
+        pageId={pageId}
+        onImported={fetchPageData}
       />
     </div>
   );

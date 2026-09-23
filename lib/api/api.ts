@@ -218,15 +218,145 @@ let isRedirecting = false;
 // Helper function to delay retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+const SUB_ACTION_KEYWORDS = new Set([
+    "execute-assignment-rule",
+    "execute-rule",
+    "execute",
+    "assignment-rule",
+    "assign-lead",
+    "assign-role",
+    "assign",
+    "qualify",
+    "score",
+    "enrich",
+    "enrichment",
+    "route",
+    "convert",
+    "convert-to-deal",
+    "signals",
+    "feedback",
+    "follow-up",
+    "bulk",
+    "bulk-update",
+    "bulk-assign",
+    "bulk-archive",
+    "reorder",
+    "sync",
+    "test",
+    "retry",
+    "export",
+    "import",
+    "upload",
+    "verify",
+    "comments",
+    "subtasks",
+    "dependencies",
+    "milestones",
+    "members",
+    "stages",
+    "permissions",
+    "ai-summary",
+    "ai-sentiment",
+    "ai-suggestions",
+    "broadcast",
+    "webhook",
+    "send",
+    "send-template",
+    "media",
+    "sla",
+    "check",
+    "share",
+]);
+
+export function shouldTriggerAutoNotification(
+    method: string,
+    url: string,
+    headers?: Record<string, any>
+): { shouldTrigger: boolean; entityName: string; action: string } {
+    const defaultRes = { shouldTrigger: false, entityName: "Item", action: "Updated" };
+
+    if (!["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        return defaultRes;
+    }
+
+    if (url.includes("/api/notifications") || url.includes("/auth")) {
+        return defaultRes;
+    }
+
+    // Check explicit skip header
+    if (headers) {
+        const skip =
+            (typeof headers.get === "function" && headers.get("x-skip-auto-notification")) ||
+            headers["x-skip-auto-notification"] ||
+            headers["X-Skip-Auto-Notification"];
+        if (skip === "true" || skip === true) {
+            return defaultRes;
+        }
+    }
+
+    let path = url.replace(/^https?:\/\/[^\/]+/, "");
+    if (path.startsWith("/api/")) path = path.substring(4);
+    if (path.startsWith("/")) path = path.substring(1);
+    path = path.split("?")[0];
+
+    const segments = path.split("/").filter(Boolean);
+    if (segments.length === 0) return defaultRes;
+
+    const firstSegment = segments[0].toLowerCase();
+
+    // Check if any segment is a known sub-action keyword
+    const hasSubAction = segments.some((s) => SUB_ACTION_KEYWORDS.has(s.toLowerCase()));
+    if (hasSubAction) {
+        return defaultRes;
+    }
+
+    // For POST (creations), only primary resource creations should trigger.
+    // Examples: /leads, /leads/create, /leads/create-leads, /deals/create-deal.
+    // Sub-resources like /leads/:id/execute-... or /projects/:id/tasks have length > 2 or non-create subpaths.
+    if (method === "POST") {
+        if (segments.length > 2) {
+            return defaultRes;
+        }
+        if (segments.length === 2) {
+            const second = segments[1].toLowerCase();
+            const isValidCreateSubpath =
+                second === "create" ||
+                second === "new" ||
+                second === `create-${firstSegment}` ||
+                second === `create-${firstSegment.replace(/s$/, "")}` ||
+                second.startsWith("create-");
+            if (!isValidCreateSubpath) {
+                return defaultRes;
+            }
+        }
+    }
+
+    let str = firstSegment;
+    if (str.endsWith("ies")) {
+        str = str.slice(0, -3) + "y";
+    } else if (str.endsWith("s")) {
+        str = str.slice(0, -1);
+    }
+    const entityName = str.charAt(0).toUpperCase() + str.slice(1);
+
+    let action = "Updated";
+    if (method === "POST") action = "Created";
+    if (method === "DELETE") action = "Deleted";
+
+    return { shouldTrigger: true, entityName, action };
+}
+
 api.interceptors.response.use(
     (response) => {
         // --- Auto Notification Generation for Mutations ---
         if (typeof window !== "undefined" && response.config && response.status >= 200 && response.status < 300) {
             const method = response.config.method?.toUpperCase() || "";
             const url = response.config.url || "";
+            const headers = response.config.headers as Record<string, any> | undefined;
 
-            // Only act on state-changing methods, exclude notifications API and auth endpoints
-            if (["POST", "PUT", "PATCH", "DELETE"].includes(method) && !url.includes("/api/notifications") && !url.includes("/auth")) {
+            const { shouldTrigger, entityName, action } = shouldTriggerAutoNotification(method, url, headers);
+
+            if (shouldTrigger) {
                 try {
                     const raw = localStorage.getItem("zyoris-auth");
                     if (raw) {
@@ -239,25 +369,6 @@ api.interceptors.response.use(
                             const userId = decoded?.userId || decoded?.id;
 
                             if (userId) {
-                                let action = "Updated";
-                                if (method === "POST") action = "Created";
-                                if (method === "DELETE") action = "Deleted";
-
-                                let entityName = "Item";
-                                let path = url.replace(/^https?:\/\/[^\/]+/, '');
-                                if (path.startsWith('/api/')) path = path.substring(4);
-                                if (path.startsWith('/')) path = path.substring(1);
-                                const segment = path.split('/')[0];
-                                if (segment) {
-                                    let str = segment;
-                                    if (str.endsWith("ies")) {
-                                        str = str.slice(0, -3) + "y";
-                                    } else if (str.endsWith("s")) {
-                                        str = str.slice(0, -1);
-                                    }
-                                    entityName = str.charAt(0).toUpperCase() + str.slice(1);
-                                }
-
                                 // Fire and forget
                                 axios.post(`${BASE_URL}/api/notifications`, {
                                     userId,

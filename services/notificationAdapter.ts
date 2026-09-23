@@ -18,6 +18,8 @@ import {
 } from "@/lib/api/notificationsApi";
 import { backendToTab, tabToBackend } from "@/utils/notificationCategories";
 
+import { deduplicateNotifications } from "@/utils/notificationDeduplication";
+
 function mapCategory(dto: NotificationDto): NotificationCategory {
   return dto.category !== null && dto.category !== undefined
     ? backendToTab(dto.category)
@@ -30,7 +32,7 @@ function mapPriority(dto: NotificationDto): string {
 
 export function dtoToNotification(dto: NotificationDto): Notification {
   return {
-    id: dto.id,
+    id: String(dto.id),
     organizationId: dto.organizationId,
     userId: dto.userId,
     title: dto.title,
@@ -86,6 +88,7 @@ export async function getNotifications(params?: {
     priority: params?.priority,
     includeArchived: params?.includeArchived,
   });
+<<<<<<< HEAD
   const notifications = response.data
     .map(dtoToNotification)
     .filter((notification) => params?.includeArchived !== true || (
@@ -94,6 +97,13 @@ export async function getNotifications(params?: {
     .sort(
       (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
+=======
+  const notifications = deduplicateNotifications(
+    response.data.map(dtoToNotification).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+  );
+>>>>>>> origin/dev
 
   return {
     notifications,
