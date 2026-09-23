@@ -423,7 +423,8 @@ api.interceptors.response.use(
         const isUnauthenticatedEndpoint =
             reqUrl.includes("/auth/login") ||
             reqUrl.includes("/auth/register") ||
-            reqUrl.includes("/auth/refresh");
+            reqUrl.includes("/auth/refresh") ||
+            reqUrl.includes("/auth/logout");
 
         if (
             !isUnauthenticatedEndpoint &&

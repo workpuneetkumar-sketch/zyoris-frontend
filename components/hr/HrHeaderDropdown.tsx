@@ -51,7 +51,6 @@ export default function HrHeaderDropdown({
   const handleLogout = async (): Promise<void> => {
     if (logout) {
       await logout();
-      router.push('/login');
     }
   };
 
