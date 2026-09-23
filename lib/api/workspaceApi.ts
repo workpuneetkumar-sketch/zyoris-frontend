@@ -13,6 +13,11 @@ import {
   WorkspaceDatabaseRow,
   WorkspaceDatabaseView,
 } from "@/types/workspace";
+import {
+  AssignableScopesResponse,
+  AssignPageAsTaskPayload,
+  AssignmentResult,
+} from "@/types/workspaceAssignment";
 
 /**
  * Fetch the real page tree hierarchy for the workspace sidebar.
@@ -1012,6 +1017,37 @@ export async function getPageContent(
     return res.data?.data ?? res.data;
   } catch (error) {
     console.error(`Error fetching page content for ${pageId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch assignable departments and employees for the current organization.
+ * GET /workspace/assignable-scopes
+ */
+export async function getAssignableScopes(): Promise<AssignableScopesResponse> {
+  try {
+    const res = await api.get("/workspace/assignable-scopes");
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error("Error fetching assignable scopes:", error);
+    throw error;
+  }
+}
+
+/**
+ * Assign a workspace page as a task.
+ * POST /workspace/pages/:id/assign-as-task
+ */
+export async function assignPageAsTask(
+  pageId: string,
+  payload: AssignPageAsTaskPayload
+): Promise<AssignmentResult> {
+  try {
+    const res = await api.post(`/workspace/pages/${pageId}/assign-as-task`, payload);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error assigning page ${pageId} as task:`, error);
     throw error;
   }
 }
