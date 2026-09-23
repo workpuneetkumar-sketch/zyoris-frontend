@@ -7,9 +7,10 @@ import ProgressStepper from "../ui/ProgressStepper";
 interface AdminLoginStep3Props {
   onBack: () => void;
   onNext: () => void;
+  isLoading?: boolean;
 }
 
-export default function AdminLoginStep3({ onBack, onNext }: AdminLoginStep3Props) {
+export default function AdminLoginStep3({ onBack, onNext, isLoading }: AdminLoginStep3Props) {
   const [timeLeft, setTimeLeft] = useState(45);
   const [otp, setOtp] = useState("");
 
@@ -29,7 +30,6 @@ export default function AdminLoginStep3({ onBack, onNext }: AdminLoginStep3Props
 
   const handleResend = () => {
     setTimeLeft(45);
-    // Add resend logic here
   };
 
   return (
@@ -38,10 +38,10 @@ export default function AdminLoginStep3({ onBack, onNext }: AdminLoginStep3Props
       
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">Admin Login</h2>
-        <p className="text-gray-500 text-sm">Step 3 of 4</p>
+        <p className="text-gray-500 text-sm">Step 3 of 3</p>
       </div>
 
-      <ProgressStepper currentStep={3} totalSteps={4} />
+      <ProgressStepper currentStep={3} totalSteps={3} />
 
       <form className="flex flex-col gap-6 mt-6" onSubmit={(e) => { e.preventDefault(); onNext(); }}>
         <div className="flex flex-col gap-3">
@@ -65,8 +65,8 @@ export default function AdminLoginStep3({ onBack, onNext }: AdminLoginStep3Props
           </div>
         </div>
         
-        <PrimaryButton type="submit" disabled={otp.length !== 6}>
-          Continue
+        <PrimaryButton type="submit" disabled={otp.length !== 6 || isLoading}>
+          {isLoading ? "Signing in..." : "Complete Sign In"}
         </PrimaryButton>
       </form>
     </div>

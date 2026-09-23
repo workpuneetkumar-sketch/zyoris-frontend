@@ -58,6 +58,7 @@ import {
   Headphones,
   ShieldAlert,
   BarChart3,
+  LogOut,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -667,7 +668,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         documents: FileText, "file-text": FileText,
         "knowledge-base": BookOpen, knowledge: BookOpen, "book-open": BookOpen,
         notes: StickyNote, "sticky-note": StickyNote,
-        analytics: BarChart2, "bar-chart-2": BarChart2, "bar-chart-3": BarChart2, "line-chart": TrendingUp,
+        analytics: BarChart2, "bar-chart-2": BarChart2, "line-chart": TrendingUp,
         reports: FileText, "file-search": FileSearch,
         settings: Settings,
         automation: Zap, bot: Zap, zap: Zap,
@@ -1180,12 +1181,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={openLogoutModal}
-              className="p-1 rounded-lg hover:bg-error-light/20 transition-colors group"
+              className="p-1.5 rounded-lg hover:bg-error-light/20 transition-colors group text-text-muted hover:text-error"
               title="Logout"
             >
-              <ChevronRight
-                size={15}
-                className="text-text-muted group-hover:text-error transition-colors"
+              <LogOut
+                size={16}
+                className="transition-colors"
               />
             </button>
           </div>

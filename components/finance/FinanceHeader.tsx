@@ -112,7 +112,6 @@ export default function FinanceHeader() {
   const handleLogout = async () => {
     if (logout) {
       await logout();
-      router.push('/login');
     }
   };
 
