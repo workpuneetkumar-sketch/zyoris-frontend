@@ -713,3 +713,305 @@ export async function commitDatabaseImport(
   }
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FE2 — Workspace Page Feature APIs
+// ─────────────────────────────────────────────────────────────────────────────
+
+import type {
+  WorkspacePageSettings,
+  WorkspaceComment,
+  CreateCommentDto,
+  WorkspaceRevision,
+  WorkspaceAnalytics,
+  PageImportPreviewResult,
+  TranslatePageResult,
+} from "@/types/workspace";
+
+// ── FE2-01 · Customize Page Settings ──────────────────────────────────────────
+
+/**
+ * Save page appearance settings (icon, cover, layout, smallText, fullWidth).
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: PATCH /workspace/pages/:id/settings
+ * Request:  { icon?, coverImage?, layoutWidth?, smallText?, fullWidth? }
+ * Response: { id, icon, coverImage, layoutWidth, smallText, fullWidth, updatedAt }
+ */
+export async function savePageSettings(
+  pageId: string,
+  settings: Partial<WorkspacePageSettings>
+): Promise<WorkspacePageSettings> {
+  try {
+    const res = await api.patch(`/workspace/pages/${pageId}/settings`, settings);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error saving page settings for ${pageId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-02 · Use with AI ──────────────────────────────────────────────────────
+
+/**
+ * Fetch clean Markdown context for the Zii AI assistant.
+ * GET /workspace/pages/:id/ai-context
+ * Response: { markdown: string, title: string }
+ */
+export async function getPageAIContext(
+  pageId: string
+): Promise<{ markdown: string; title: string }> {
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}/ai-context`);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error fetching AI context for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-03 · Comments / Suggest Edits ────────────────────────────────────────
+
+/**
+ * List all comments on a page.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: GET /workspace/pages/:id/comments
+ * Response: WorkspaceComment[]
+ */
+export async function getPageComments(pageId: string): Promise<WorkspaceComment[]> {
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}/comments`);
+    const data = res.data?.data ?? res.data;
+    return Array.isArray(data) ? data : data?.items ?? [];
+  } catch (error) {
+    console.error(`Error fetching comments for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Create a comment on a page.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: POST /workspace/pages/:id/comments
+ * Request:  { content: string, blockId?: string }
+ * Response: WorkspaceComment
+ */
+export async function createPageComment(
+  pageId: string,
+  dto: CreateCommentDto
+): Promise<WorkspaceComment> {
+  try {
+    const res = await api.post(`/workspace/pages/${pageId}/comments`, dto);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error creating comment on page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Resolve (or re-open) a comment.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: PATCH /workspace/pages/:pageId/comments/:commentId
+ * Request:  { resolved: boolean }
+ * Response: WorkspaceComment
+ */
+export async function updatePageComment(
+  pageId: string,
+  commentId: string,
+  patch: { resolved?: boolean; content?: string }
+): Promise<WorkspaceComment> {
+  try {
+    const res = await api.patch(
+      `/workspace/pages/${pageId}/comments/${commentId}`,
+      patch
+    );
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error updating comment ${commentId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a comment.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: DELETE /workspace/pages/:pageId/comments/:commentId
+ */
+export async function deletePageComment(
+  pageId: string,
+  commentId: string
+): Promise<void> {
+  try {
+    await api.delete(`/workspace/pages/${pageId}/comments/${commentId}`);
+  } catch (error) {
+    console.error(`Error deleting comment ${commentId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-04 · Translate ────────────────────────────────────────────────────────
+
+/**
+ * Translate page text while preserving layout, URLs, and code blocks.
+ * POST /workspace/pages/:id/translate
+ * Request:  { targetLanguage: string }
+ * Response: { translatedBlocks: WorkspaceBlock[], targetLanguage: string }
+ */
+export async function translatePage(
+  pageId: string,
+  targetLanguage: string
+): Promise<TranslatePageResult> {
+  try {
+    const res = await api.post(`/workspace/pages/${pageId}/translate`, {
+      targetLanguage,
+    });
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error translating page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-05 · Turn into Wiki ───────────────────────────────────────────────────
+
+/**
+ * Toggle a page into Wiki mode.
+ * POST /workspace/pages/:id/wiki
+ * Response: { id, isWiki: boolean, updatedAt: string }
+ */
+export async function togglePageWiki(
+  pageId: string
+): Promise<{ id: string; isWiki: boolean; updatedAt: string }> {
+  try {
+    const res = await api.post(`/workspace/pages/${pageId}/wiki`);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error toggling wiki mode for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-06 · Analytics ───────────────────────────────────────────────────────
+
+/**
+ * Fetch usage analytics and activity data for a page.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: GET /workspace/pages/:id/analytics
+ * Response: WorkspaceAnalytics
+ */
+export async function getPageAnalytics(pageId: string): Promise<WorkspaceAnalytics> {
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}/analytics`);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error fetching analytics for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-07 · Version History ──────────────────────────────────────────────────
+
+/**
+ * List revisions for a page.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: GET /workspace/pages/:id/revisions
+ * Response: WorkspaceRevision[]
+ */
+export async function getPageRevisions(pageId: string): Promise<WorkspaceRevision[]> {
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}/revisions`);
+    const data = res.data?.data ?? res.data;
+    return Array.isArray(data) ? data : data?.items ?? [];
+  } catch (error) {
+    console.error(`Error fetching revisions for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Restore a specific revision.
+ * TODO: Confirm exact endpoint with backend (Ayush).
+ * Expected: POST /workspace/pages/:id/revisions/:revisionId/restore
+ * Response: WorkspacePage (the restored state)
+ */
+export async function restorePageRevision(
+  pageId: string,
+  revisionId: string
+): Promise<WorkspacePage> {
+  try {
+    const res = await api.post(
+      `/workspace/pages/${pageId}/revisions/${revisionId}/restore`
+    );
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error restoring revision ${revisionId} for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+// ── FE2-08 · Page Import ──────────────────────────────────────────────────────
+
+/**
+ * Preview an uploaded document as native blocks before committing.
+ * POST /workspace/pages/:id/import/preview
+ * Request:  FormData with { file: File }
+ * Response: PageImportPreviewResult
+ */
+export async function previewPageImport(
+  pageId: string,
+  file: File
+): Promise<PageImportPreviewResult> {
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await api.post(
+      `/workspace/pages/${pageId}/import/preview`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } }
+    );
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error previewing import for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Commit the previewed blocks into the current page.
+ * POST /workspace/pages/:id/import/commit
+ * Request:  { blocks: WorkspaceBlock[], mode: 'append' | 'replace' }
+ * Response: { success: boolean, blocksInserted: number }
+ */
+export async function commitPageImport(
+  pageId: string,
+  blocks: WorkspaceBlock[],
+  mode: "append" | "replace" = "append"
+): Promise<{ success: boolean; blocksInserted: number }> {
+  try {
+    const res = await api.post(`/workspace/pages/${pageId}/import/commit`, {
+      blocks,
+      mode,
+    });
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error committing import for page ${pageId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Export page content as Markdown (for copy / download actions).
+ * GET /workspace/pages/:id/content
+ * Response: { markdown: string, title: string }
+ */
+export async function getPageContent(
+  pageId: string
+): Promise<{ markdown: string; title: string }> {
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}/content`);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error fetching page content for ${pageId}:`, error);
+    throw error;
+  }
+}

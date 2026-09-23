@@ -28,6 +28,31 @@ export function ZiiBot() {
   const darkMode = useDarkMode();
   const chat = useZiiBotChat();
 
+  // FE2-02 — Listen for page "Use with AI" trigger
+  // Dispatched by UseWithAIButton after fetching /workspace/pages/:id/ai-context
+  useEffect(() => {
+    const handleOpenWithContext = (e: Event) => {
+      const detail = (e as CustomEvent<{
+        pageId: string;
+        pageTitle: string;
+        contextMarkdown: string;
+        seedMessage: string;
+      }>).detail;
+      // Open the panel first, then seed the message so the user sees context land
+      setClosing(false);
+      setPanelOpen(true);
+      setFullscreen(false);
+      if (detail?.seedMessage) {
+        // Small delay so the panel animation starts before the message appears
+        setTimeout(() => {
+          chat.sendMessage(detail.seedMessage);
+        }, 150);
+      }
+    };
+    window.addEventListener("zii:open-with-context", handleOpenWithContext);
+    return () => window.removeEventListener("zii:open-with-context", handleOpenWithContext);
+  }, [chat]);
+
   useEffect(() => {
     if (fullscreen) {
       document.body.style.overflow = "hidden";
