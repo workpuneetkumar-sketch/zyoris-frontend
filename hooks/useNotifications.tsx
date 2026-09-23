@@ -25,6 +25,12 @@ type Counts = Record<string, number>;
 
 interface NotificationContextValue {
   notifications: Notification[];
+  archivedNotifications: Notification[];
+  archivedLoading: boolean;
+  archivedLoadingMore: boolean;
+  archivedError: string | null;
+  archivedHasMore: boolean;
+  archivedUnavailable: boolean;
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
@@ -41,6 +47,8 @@ interface NotificationContextValue {
   bulkArchiveAllRead: () => Promise<void>;
   refresh: () => Promise<void>;
   fetchNextPage: () => Promise<void>;
+  loadArchived: () => Promise<void>;
+  fetchNextArchivedPage: () => Promise<void>;
   refreshUnreadCounts: () => Promise<void>;
   subscribeToNewNotifications: (listener: NotificationListener) => () => void;
 }
@@ -73,6 +81,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const { user, isAuthenticated } = useAuth();
   const userId = user?.id;
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [archivedNotifications, setArchivedNotifications] = useState<Notification[]>([]);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [archivedLoadingMore, setArchivedLoadingMore] = useState(false);
+  const [archivedError, setArchivedError] = useState<string | null>(null);
+  const [archivedHasMore, setArchivedHasMore] = useState(false);
+  const [archivedNextCursor, setArchivedNextCursor] = useState<string | null>(null);
+  const [archivedUnavailable, setArchivedUnavailable] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
@@ -87,6 +102,46 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const firstPageLoaded = useRef(false);
   const lastFirstPageLoadAt = useRef(0);
   const notificationCount = useRef(0);
+
+  const loadArchived = useCallback(async () => {
+    if (!isAuthenticated || !userId) {
+      setArchivedNotifications([]);
+      setArchivedHasMore(false);
+      setArchivedNextCursor(null);
+      return;
+    }
+    setArchivedLoading(true);
+    setArchivedError(null);
+    setArchivedUnavailable(false);
+    try {
+      const result = await getNotifications({ limit: 20, includeArchived: true });
+      setArchivedNotifications(result.notifications);
+      setArchivedNextCursor(result.nextCursor);
+      setArchivedHasMore(result.hasMore);
+    } catch (cause: unknown) {
+      setArchivedError(cause instanceof Error ? cause.message : "Failed to load archived notifications");
+    } finally {
+      setArchivedLoading(false);
+    }
+  }, [isAuthenticated, userId]);
+
+  const fetchNextArchivedPage = useCallback(async () => {
+    if (!isAuthenticated || !userId || archivedUnavailable || !archivedHasMore || archivedLoadingMore || !archivedNextCursor) return;
+    setArchivedLoadingMore(true);
+    try {
+      const result = await getNotifications({ cursor: archivedNextCursor, limit: 20, includeArchived: true });
+      setArchivedNotifications((current) => {
+        const existing = new Set(current.map((notification) => notification.id));
+        return [...current, ...result.notifications.filter((notification) => !existing.has(notification.id))];
+      });
+      setArchivedNextCursor(result.nextCursor);
+      setArchivedHasMore(result.hasMore);
+    } catch {
+      setArchivedError("Failed to load more archived notifications");
+    } finally {
+      setArchivedLoadingMore(false);
+    }
+  }, [archivedHasMore, archivedLoadingMore, archivedNextCursor, archivedUnavailable, isAuthenticated, userId]);
 
   const refreshUnreadCounts = useCallback(async () => {
     if (!isAuthenticated || !userId) return;
@@ -321,11 +376,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const value: NotificationContextValue = {
-    notifications, loading, loadingMore, hasMore, error,
+    notifications, archivedNotifications, archivedLoading, archivedLoadingMore, archivedError, archivedHasMore, archivedUnavailable,
+    loading, loadingMore, hasMore, error,
     unreadCount: categoryUnreadCounts.all, categoryUnreadCounts, realtimeStatus,
     markRead, markAllRead, removeNotification, hardDeleteNotification: hardDelete,
     createNotification, bulkArchiveByIds, bulkArchiveAllRead,
-    refresh: () => loadFirstPage(true), fetchNextPage, refreshUnreadCounts, subscribeToNewNotifications,
+    refresh: () => loadFirstPage(true), fetchNextPage, loadArchived, fetchNextArchivedPage, refreshUnreadCounts, subscribeToNewNotifications,
   };
   return <NotificationContext.Provider value={value}>{children}</NotificationContext.Provider>;
 }

@@ -7,6 +7,8 @@ import {
   markNotificationAsRead,
   markAllNotificationsAsRead,
   archiveNotification as archiveNotificationApi,
+  dismissNotification as dismissNotificationApi,
+  snoozeNotification as snoozeNotificationApi,
   deleteNotification as deleteNotificationApi,
   bulkArchiveNotifications,
   createNotification as createNotificationApi,
@@ -48,6 +50,8 @@ export function dtoToNotification(dto: NotificationDto): Notification {
     read: dto.read,
     readAt: dto.readAt,
     archivedAt: dto.archivedAt,
+      dismissedAt: dto.dismissedAt,
+      snoozedUntil: dto.snoozedUntil,
     deepLink: dto.deepLink,
     actor: dto.actor
       ? {
@@ -72,15 +76,24 @@ export async function getNotifications(params?: {
   cursor?: string;
   limit?: number;
   unreadOnly?: boolean;
+  priority?: string;
+  includeArchived?: boolean;
 }): Promise<GetNotificationsResult> {
   const response = await fetchNotifications({
     limit: params?.limit ?? 20,
     unreadOnly: params?.unreadOnly ?? params?.category === "unread",
     cursor: params?.cursor,
+    priority: params?.priority,
+    includeArchived: params?.includeArchived,
   });
-  const notifications = response.data.map(dtoToNotification).sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  );
+  const notifications = response.data
+    .map(dtoToNotification)
+    .filter((notification) => params?.includeArchived !== true || (
+      notification.archivedAt !== null && notification.archivedAt !== undefined
+    ))
+    .sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
 
   return {
     notifications,
@@ -105,6 +118,17 @@ export async function markAllRead(category?: string): Promise<void> {
 
 export async function archiveNotification(id: string): Promise<void> {
   await archiveNotificationApi(id);
+}
+
+// TODO: enable once backend confirms PATCH /:id/dismiss exists.
+export async function dismissNotification(id: string): Promise<void> {
+  await dismissNotificationApi(id);
+}
+
+// TODO: enable once backend confirms PATCH /:id/snooze exists. This only changes
+// notification visibility and must never reschedule the linked business record.
+export async function snoozeNotification(id: string, until: string): Promise<void> {
+  await snoozeNotificationApi(id, until);
 }
 
 /** Permanently hard-deletes a notification via DELETE /api/notifications/{id}. */
