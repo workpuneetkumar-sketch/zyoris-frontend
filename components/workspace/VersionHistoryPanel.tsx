@@ -92,8 +92,17 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
     setLoadStatus("loading");
     setLoadError(null);
     try {
-      const data = await getPageRevisions(pageId);
-      setRevisions(data);
+      const raw = await getPageRevisions(pageId);
+      // Normalise: ensure snapshot.blocks is always an array
+      const safe: WorkspaceRevision[] = (Array.isArray(raw) ? raw : []).map((rev) => ({
+        ...rev,
+        snapshot: {
+          title: rev.snapshot?.title ?? "",
+          icon: rev.snapshot?.icon ?? null,
+          blocks: Array.isArray(rev.snapshot?.blocks) ? rev.snapshot.blocks : [],
+        },
+      }));
+      setRevisions(safe);
       setLoadStatus("idle");
     } catch (err: any) {
       setLoadStatus("error");
@@ -329,13 +338,15 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
                       </p>
                     </div>
                     <div className="space-y-1.5 max-h-[180px] overflow-y-auto pr-1">
-                      {selectedRevision.snapshot.blocks.length === 0 ? (
+                      {(selectedRevision.snapshot?.blocks?.length ?? 0) === 0 ? (
                         <p className="text-xs text-slate-400 italic">Empty snapshot</p>
                       ) : (
-                        selectedRevision.snapshot.blocks.slice(0, 12).map((block, i) => {
+                        (selectedRevision.snapshot.blocks ?? []).slice(0, 12).map((block, i) => {
                           const text =
-                            typeof block.text === "string"
+                            typeof block.text === "string" && block.text
                               ? block.text
+                              : typeof block.content === "object" && block.content?.text
+                              ? block.content.text
                               : typeof block.content === "string"
                               ? block.content
                               : "";
@@ -356,7 +367,7 @@ export const VersionHistoryPanel: React.FC<VersionHistoryPanelProps> = ({
                           );
                         })
                       )}
-                      {selectedRevision.snapshot.blocks.length > 12 && (
+                      {(selectedRevision.snapshot?.blocks?.length ?? 0) > 12 && (
                         <p className="text-[11px] text-slate-400 italic pl-1">
                           + {selectedRevision.snapshot.blocks.length - 12} more blocks…
                         </p>
