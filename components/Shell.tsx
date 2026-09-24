@@ -667,7 +667,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         documents: FileText, "file-text": FileText,
         "knowledge-base": BookOpen, knowledge: BookOpen, "book-open": BookOpen,
         notes: StickyNote, "sticky-note": StickyNote,
-        analytics: BarChart2, "bar-chart-2": BarChart2, "bar-chart-3": BarChart2, "line-chart": TrendingUp,
+        analytics: BarChart2, "bar-chart-2": BarChart2, "line-chart": TrendingUp,
         reports: FileText, "file-search": FileSearch,
         settings: Settings,
         automation: Zap, bot: Zap, zap: Zap,

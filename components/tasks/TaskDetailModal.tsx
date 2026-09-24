@@ -1,7 +1,7 @@
 // components/tasks/TaskDetailModal.tsx
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     X,
     Calendar,
@@ -29,9 +29,15 @@ import {
     FolderKanban,
     Paperclip,
     Download,
+    Building2,
+    Users,
+    UserCheck,
+    ArrowRightLeft,
 } from "lucide-react";
 import { AttachmentSection } from "@/components/workspace/AttachmentSection";
 import { ExportModal } from "@/components/workspace/ExportModal";
+import { ReassignTaskModal } from "@/components/tasks/ReassignTaskModal";
+import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 import {
     Task,
     TaskStatus,
@@ -102,6 +108,8 @@ export interface TaskDetailModalProps {
     onClose: () => void;
     onUpdate: (id: string, data: UpdateTaskPayload) => Promise<boolean>;
     onDelete?: (id: string) => Promise<boolean>;
+    onReassigned?: (assignment: EffectiveAssignmentResponse) => void;
+    onRefresh?: () => void | Promise<void>;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -114,12 +122,34 @@ export function TaskDetailModal({
     onClose,
     onUpdate,
     onDelete,
+    onReassigned,
+    onRefresh,
 }: TaskDetailModalProps) {
     const [activeTab, setActiveTab] = useState<TabType>("details");
     const [isEditing, setIsEditing] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+
+    // Canonical assignment state from authoritative backend response
+    const [canonicalAssignment, setCanonicalAssignment] = useState<EffectiveAssignmentResponse | null>(() => {
+        if (task.effectiveAssignment) {
+            return task.effectiveAssignment;
+        }
+        return null;
+    });
+
+    const prevTaskIdRef = useRef(task.id);
+    const incomingEffectiveAssignment = task.effectiveAssignment;
+    useEffect(() => {
+        if (prevTaskIdRef.current !== task.id) {
+            prevTaskIdRef.current = task.id;
+            setCanonicalAssignment(incomingEffectiveAssignment ?? null);
+        } else if (incomingEffectiveAssignment) {
+            setCanonicalAssignment(incomingEffectiveAssignment);
+        }
+    }, [task.id, incomingEffectiveAssignment]);
 
     // Form state
     const [form, setForm] = useState<UpdateTaskPayload>(() => {
@@ -270,9 +300,8 @@ export function TaskDetailModal({
         if ((form.description ?? "") !== (task.description ?? "")) {
             payload.description = form.description ?? "";
         }
-        if ((form.assignedToId ?? "") !== (task.assignedToId ?? "")) {
-            payload.assignedToId = form.assignedToId ? form.assignedToId : null;
-        }
+        // NOTE: Assignment mutation is removed from generic Edit flow (Step 2).
+        // Task reassignment is handled authoritatively via POST /workspace/tasks/:id/reassign
         const initialDueDate = task.dueDate ? task.dueDate.split("T")[0] : "";
         if ((form.dueDate ?? "") !== initialDueDate) {
             payload.dueDate = form.dueDate ? form.dueDate : null;
@@ -291,6 +320,31 @@ export function TaskDetailModal({
         const ok = await onUpdate(task.id, payload);
         if (ok) {
             setIsEditing(false);
+        }
+    };
+
+    const handleReassignSuccess = (updatedAssignment: EffectiveAssignmentResponse) => {
+        // Update local canonical assignment state directly with returned canonical data
+        setCanonicalAssignment(updatedAssignment);
+
+        // Keep local form in sync if assignedTo changed
+        if (updatedAssignment.assignedTo) {
+            setForm((prev) => ({ ...prev, assignedToId: updatedAssignment.assignedTo?.id ?? "" }));
+        } else {
+            setForm((prev) => ({ ...prev, assignedToId: "" }));
+        }
+
+        // Refresh activity timeline if on activity tab or reload activity
+        fetchTaskActivity(task.id, 1, 30, activityFilter === "ALL" ? undefined : activityFilter)
+            .then(setActivities)
+            .catch(() => {});
+
+        // Invoke optional parent callbacks if provided
+        if (onReassigned) {
+            onReassigned(updatedAssignment);
+        }
+        if (onRefresh) {
+            onRefresh();
         }
     };
 
@@ -734,37 +788,124 @@ export function TaskDetailModal({
 
                             {/* Attributes Grid */}
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                                {/* Assignee */}
-                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                                        Assignee
-                                    </p>
-                                    {isEditing ? (
-                                        <select
-                                            name="assignedToId"
-                                            value={form.assignedToId ?? ""}
-                                            onChange={handleChange}
-                                            className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
+                                {/* Assignment Section (formerly Assignee) */}
+                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+                                    <div className="flex items-center justify-between">
+                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
+                                            Assignment
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReassignModalOpen(true)}
+                                            className="inline-flex items-center space-x-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/60 rounded-lg transition"
                                         >
-                                            <option value="">Unassigned</option>
-                                            {members.map((m) => (
-                                                <option key={m.id} value={m.id}>
-                                                    {m.name} ({m.role})
-                                                </option>
-                                            ))}
-                                        </select>
-                                    ) : (
-                                        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                                            <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold">
-                                                {task.assignedTo?.name ? (
-                                                    task.assignedTo.name.slice(0, 2).toUpperCase()
-                                                ) : (
-                                                    <User size={12} />
+                                            <ArrowRightLeft size={11} />
+                                            <span>Reassign</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Assignee display */}
+                                    {(() => {
+                                        const department = canonicalAssignment?.department ?? task.department ?? null;
+                                        const effectiveAssigneeType =
+                                            canonicalAssignment?.assigneeType ??
+                                            task.assigneeType ??
+                                            (department && !task.assignedTo ? "DEPARTMENT" : (task.assignedTo ? "USER" : null));
+                                        const hasIndividualAssignee = Boolean(canonicalAssignment?.assignedTo || task.assignedTo);
+                                        const isDeptQueue = effectiveAssigneeType === "DEPARTMENT" && !hasIndividualAssignee;
+                                        let displayAssigneeName = "Unassigned";
+                                        if (isDeptQueue) {
+                                            displayAssigneeName = department ? `${department} Queue` : "Department Queue";
+                                        } else if (canonicalAssignment?.assignedTo?.name) {
+                                            displayAssigneeName = canonicalAssignment.assignedTo.name;
+                                        } else if (task.assignedTo?.name) {
+                                            displayAssigneeName = task.assignedTo.name;
+                                        }
+
+                                        const assignmentTypeLabel =
+                                            effectiveAssigneeType === "DEPARTMENT"
+                                                ? "Department"
+                                                : effectiveAssigneeType === "USER"
+                                                ? "Individual"
+                                                : null;
+
+                                        const assignedByName =
+                                            canonicalAssignment?.assignedBy?.name ??
+                                            task.assignedBy?.name ??
+                                            null;
+
+                                        const rawAssignedAt =
+                                            canonicalAssignment?.assignedAt ??
+                                            task.assignedAt ??
+                                            null;
+
+                                        const assignedAtFormatted = rawAssignedAt
+                                            ? new Date(rawAssignedAt).toLocaleDateString("en-US", {
+                                                  month: "short",
+                                                  day: "numeric",
+                                                  year: "numeric",
+                                              })
+                                            : null;
+
+                                        return (
+                                            <>
+                                                <div className="flex items-center space-x-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                                        {displayAssigneeName && displayAssigneeName !== "Unassigned" ? (
+                                                            displayAssigneeName.slice(0, 2).toUpperCase()
+                                                        ) : (
+                                                            <User size={12} />
+                                                        )}
+                                                    </div>
+                                                    <span className="truncate">{displayAssigneeName}</span>
+                                                </div>
+
+                                                {/* Department (if available) */}
+                                                {department && (
+                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                                        <Building2 size={12} className="text-slate-400 shrink-0" />
+                                                        <span className="text-slate-400">Department:</span>
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                                            {department}
+                                                        </span>
+                                                    </div>
                                                 )}
-                                            </div>
-                                            <span>{task.assignedTo?.name ?? "Unassigned"}</span>
-                                        </div>
-                                    )}
+
+                                                {/* Assignment Type (if available) */}
+                                                {assignmentTypeLabel && (
+                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                                        <Users size={12} className="text-slate-400 shrink-0" />
+                                                        <span className="text-slate-400">Type:</span>
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                            {assignmentTypeLabel}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Assigned by (only from canonical assignment) */}
+                                                {assignedByName && (
+                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                                        <UserCheck size={12} className="text-slate-400 shrink-0" />
+                                                        <span className="text-slate-400">Assigned by:</span>
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
+                                                            {assignedByName}
+                                                        </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Assigned at (only from canonical assignment) */}
+                                                {assignedAtFormatted && (
+                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                                        <Clock size={12} className="text-slate-400 shrink-0" />
+                                                        <span className="text-slate-400">Assigned:</span>
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                            {assignedAtFormatted}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </div>
 
                                 {/* Due Date */}
@@ -1315,6 +1456,25 @@ export function TaskDetailModal({
                 entityId={task.id}
                 entityName={task.title}
             />
+
+            {/* Reassign Task Modal */}
+            {isReassignModalOpen && (
+                <ReassignTaskModal
+                    isOpen={isReassignModalOpen}
+                    taskId={task.id}
+                    currentAssignment={
+                        canonicalAssignment || {
+                            department: task.department ?? null,
+                            assignedTo: task.assignedTo ?? null,
+                            assigneeType:
+                                task.assigneeType ??
+                                (task.assignedTo ? "USER" : (task.department ? "DEPARTMENT" : undefined)),
+                        }
+                    }
+                    onClose={() => setIsReassignModalOpen(false)}
+                    onSuccess={handleReassignSuccess}
+                />
+            )}
         </div>
     );
 }

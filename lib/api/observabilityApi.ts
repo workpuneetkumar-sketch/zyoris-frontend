@@ -301,8 +301,10 @@ export async function getAuditEvents(
     await new Promise((r) => setTimeout(r, 500));
     let events = [...MOCK_EVENTS];
     if (filters.agentId)   events = events.filter((e) => e.agentId  === filters.agentId);
-    if (filters.category)  events = events.filter((e) => e.category === filters.category.toUpperCase());
-    if (filters.outcome)   events = events.filter((e) => e.outcome  === filters.outcome.toUpperCase());
+    const categoryFilter = filters.category;
+    if (categoryFilter) events = events.filter((e) => e.category === categoryFilter.toUpperCase());
+    const outcomeFilter = filters.outcome;
+    if (outcomeFilter) events = events.filter((e) => e.outcome === outcomeFilter.toUpperCase());
     if (filters.search) {
       const q = filters.search.toLowerCase();
       events = events.filter(
