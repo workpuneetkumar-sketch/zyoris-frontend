@@ -969,10 +969,12 @@ export async function previewPageImport(
   try {
     const formData = new FormData();
     formData.append("file", file);
+    // Do NOT set Content-Type manually — Axios auto-sets multipart/form-data
+    // with the correct boundary when it detects a FormData body.
+    // Manually setting it omits the boundary and breaks multipart parsing.
     const res = await api.post(
       `/workspace/pages/${pageId}/import/preview`,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
+      formData
     );
     return res.data?.data ?? res.data;
   } catch (error) {
