@@ -5,15 +5,21 @@ import {
   Activity,
   CalendarCheck,
   Brain,
-  Layers,
-  Sparkles,
-  Zap,
+  ListTree,
+  FileCheck2,
 } from "lucide-react";
 import ActivityCaptureWorkspace from "./ActivityCaptureWorkspace";
 import MeetingPrepInterface from "./MeetingPrepInterface";
 import MeetingIntelligenceInterface from "./MeetingIntelligenceInterface";
+import SequencesPlaybooksWorkspace from "./SequencesPlaybooksWorkspace";
+import QuotesEsignWorkspace from "./QuotesEsignWorkspace";
 
-export type SalesExecutionTab = "activities" | "prep" | "intelligence";
+export type SalesExecutionTab =
+  | "activities"
+  | "prep"
+  | "intelligence"
+  | "sequences"
+  | "quotes";
 
 interface SalesExecutionWorkspaceProps {
   initialTab?: SalesExecutionTab;
@@ -38,15 +44,8 @@ export const SalesExecutionWorkspace: React.FC<SalesExecutionWorkspaceProps> = (
           <div className="sales-exec-title-wrap">
             <h1 className="sales-exec-title">Sales Execution Workspace</h1>
             <p className="sales-exec-subtitle">
-              Automated multi-channel activity capture, AI-driven pre-meeting preparation, and structured meeting intelligence.
+              Unified CRM hub integrating Activity Capture, AI Meeting Prep, Transcript Extraction, Sequences, Playbooks, Quotes & E-Signature.
             </p>
-          </div>
-
-          <div className="sales-exec-header-actions">
-            <span className="sales-context-chip sales-context-chip-customer">
-              <Zap size={12} />
-              <span>FE-1 Production Deliverables</span>
-            </span>
           </div>
         </div>
 
@@ -61,7 +60,6 @@ export const SalesExecutionWorkspace: React.FC<SalesExecutionWorkspaceProps> = (
           >
             <Activity size={16} />
             <span>Activity Capture Timeline</span>
-            <span className="sales-exec-tab-badge">Email, Calls, WA, Meetings</span>
           </button>
 
           <button
@@ -72,8 +70,7 @@ export const SalesExecutionWorkspace: React.FC<SalesExecutionWorkspaceProps> = (
             onClick={() => setActiveTab("prep")}
           >
             <CalendarCheck size={16} />
-            <span>AI Meeting Preparation</span>
-            <span className="sales-exec-tab-badge">Grounded Brief</span>
+            <span>AI Meeting Prep</span>
           </button>
 
           <button
@@ -84,8 +81,29 @@ export const SalesExecutionWorkspace: React.FC<SalesExecutionWorkspaceProps> = (
             onClick={() => setActiveTab("intelligence")}
           >
             <Brain size={16} />
-            <span>Meeting Transcript & Intelligence</span>
-            <span className="sales-exec-tab-badge">Actions & Commitments</span>
+            <span>Meeting Intelligence</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sales-exec-tab-btn ${
+              activeTab === "sequences" ? "sales-exec-tab-btn-active" : ""
+            }`}
+            onClick={() => setActiveTab("sequences")}
+          >
+            <ListTree size={16} />
+            <span>Sequences & Playbooks</span>
+          </button>
+
+          <button
+            type="button"
+            className={`sales-exec-tab-btn ${
+              activeTab === "quotes" ? "sales-exec-tab-btn-active" : ""
+            }`}
+            onClick={() => setActiveTab("quotes")}
+          >
+            <FileCheck2 size={16} />
+            <span>Quotes & E-Sign</span>
           </button>
         </div>
       </div>
@@ -93,10 +111,7 @@ export const SalesExecutionWorkspace: React.FC<SalesExecutionWorkspaceProps> = (
       {/* Tab Panels */}
       <div>
         {activeTab === "activities" && (
-          <ActivityCaptureWorkspace
-            customerId={customerId}
-            dealId={dealId}
-          />
+          <ActivityCaptureWorkspace customerId={customerId} dealId={dealId} />
         )}
 
         {activeTab === "prep" && (
@@ -109,6 +124,14 @@ export const SalesExecutionWorkspace: React.FC<SalesExecutionWorkspaceProps> = (
             initialDealId={dealId}
             initialCustomerId={customerId}
           />
+        )}
+
+        {activeTab === "sequences" && (
+          <SequencesPlaybooksWorkspace customerId={customerId} dealId={dealId} />
+        )}
+
+        {activeTab === "quotes" && (
+          <QuotesEsignWorkspace customerId={customerId} dealId={dealId} />
         )}
       </div>
     </div>

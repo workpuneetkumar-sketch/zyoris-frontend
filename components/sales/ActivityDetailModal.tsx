@@ -19,41 +19,52 @@ import SourceBadge from "./SourceBadge";
 
 interface ActivityDetailModalProps {
   activityId: string | null;
+  initialActivity?: CapturedActivity | null;
   onClose: () => void;
 }
 
 export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
   activityId,
+  initialActivity = null,
   onClose,
 }) => {
-  const [activity, setActivity] = useState<CapturedActivity | null>(null);
+  const [activity, setActivity] = useState<CapturedActivity | null>(initialActivity);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activityId) {
       setActivity(null);
+      setError(null);
       return;
+    }
+
+    if (initialActivity && initialActivity.id === activityId) {
+      setActivity(initialActivity);
     }
 
     let isMounted = true;
     const fetchDetail = async () => {
-      setLoading(true);
+      // Only set loading spinner if we don't have initialActivity data to render
+      if (!initialActivity) {
+        setLoading(true);
+      }
       setError(null);
       try {
         const res = await getSalesActivityById(activityId);
         if (isMounted) {
           if (res.data) {
             setActivity(res.data);
-          } else {
-            setError("No activity data found.");
           }
         }
       } catch (err: unknown) {
         if (isMounted) {
-          const msg =
-            err instanceof Error ? err.message : "Failed to load activity details.";
-          setError(msg);
+          // If we already have initialActivity data, ignore the 500 backend error
+          if (!initialActivity && !activity) {
+            const msg =
+              err instanceof Error ? err.message : "Failed to load activity details.";
+            setError(msg);
+          }
         }
       } finally {
         if (isMounted) {
@@ -67,7 +78,7 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [activityId]);
+  }, [activityId, initialActivity]);
 
   if (!activityId) return null;
 

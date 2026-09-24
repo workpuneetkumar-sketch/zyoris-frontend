@@ -329,3 +329,191 @@ export interface SubmitTranscriptPayload {
   customerId?: string;
   contactId?: string;
 }
+
+// ── Day 1 — Ingest & Timeline Types ─────────────────────────────────────────
+
+export interface IngestActivityPayload {
+  idempotencyKey?: string;
+  eventType?: string;
+  entityType?: string;
+  entityId?: string;
+  channel?: SalesChannel | string;
+  source?: string;
+  payload?: Record<string, unknown>;
+  occurredAt?: string;
+  customerId?: string;
+  dealId?: string;
+  contactId?: string;
+  leadId?: string;
+}
+
+export interface TimelineFilter {
+  entityType?: string;
+  entityId?: string;
+  channel?: string;
+  page?: number;
+  limit?: number;
+}
+
+// ── Day 2 — Sequences & Playbooks Types ─────────────────────────────────────
+
+export interface SequenceStep {
+  stepOrder: number;
+  stepType: "EMAIL" | "CALL" | "TASK" | "WHATSAPP" | string;
+  delayDays?: number;
+  subject?: string;
+  body?: string;
+}
+
+export interface CreateSequencePayload {
+  name: string;
+  description?: string;
+  steps: SequenceStep[];
+}
+
+export interface SequenceRecord {
+  id: string;
+  name: string;
+  description?: string;
+  steps: SequenceStep[];
+  status?: string;
+  createdAt?: string;
+}
+
+export interface SequenceEnrollmentPayload {
+  contactId?: string;
+  leadId?: string;
+  customerId?: string;
+  dealId?: string;
+}
+
+export interface SequenceEnrollment {
+  id: string;
+  sequenceId: string;
+  contactId?: string;
+  leadId?: string;
+  customerId?: string;
+  dealId?: string;
+  currentStep: number;
+  status: "ACTIVE" | "PAUSED" | "COMPLETED" | string;
+  pauseReason?: string;
+  enrolledAt: string;
+}
+
+export interface AdvanceSequenceStepPayload {
+  stepNumber?: number;
+  action?: string;
+}
+
+export interface PauseSequencePayload {
+  pauseReason?: string;
+  status?: string;
+}
+
+export interface PlaybookStep {
+  order: number;
+  title: string;
+  description: string;
+  actionType: "DISCOVERY" | "DEMO" | "PROPOSAL" | "CLOSING" | "FOLLOW_UP" | string;
+}
+
+export interface CreatePlaybookPayload {
+  name: string;
+  description?: string;
+  steps: PlaybookStep[];
+}
+
+export interface PlaybookRecord {
+  id: string;
+  name: string;
+  description?: string;
+  steps: PlaybookStep[];
+  createdAt?: string;
+}
+
+export interface EvaluatePlaybookPayload {
+  playbookId?: string;
+  dealId?: string;
+  leadId?: string;
+  customerId?: string;
+  context?: Record<string, unknown>;
+}
+
+export interface PlaybookEvaluationResult {
+  playbookId?: string;
+  score: number;
+  recommendations: string[];
+  nextBestActions: string[];
+  status: string;
+  evaluatedAt: string;
+}
+
+// ── Day 3 — Quotes & E-Sign Types ──────────────────────────────────────────
+
+export interface QuoteItem {
+  name?: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  total?: number;
+}
+
+export interface CreateQuotePayload {
+  title?: string;
+  dealId?: string;
+  customerId?: string;
+  validUntil?: string;
+  currency?: string;
+  taxRate?: number;
+  discount?: number;
+  items: QuoteItem[];
+}
+
+export interface QuoteRecord {
+  id: string;
+  title: string;
+  dealId?: string;
+  customerId?: string;
+  totalAmount: number;
+  currency: string;
+  status: "DRAFT" | "APPROVED" | "PDF_GENERATED" | "SENT_FOR_ESIGN" | "SIGNED" | string;
+  items: QuoteItem[];
+  validUntil?: string;
+  pdfUrl?: string;
+  envelopeId?: string;
+  createdAt: string;
+  approvedBy?: string;
+  approvedAt?: string;
+}
+
+export interface ApproveQuotePayload {
+  comment?: string;
+  approvedBy?: string;
+}
+
+export interface GenerateQuotePdfPayload {
+  theme?: string;
+  headerText?: string;
+}
+
+export interface EsignSigner {
+  name: string;
+  email: string;
+  role?: string;
+}
+
+export interface QuoteEsignPayload {
+  signers?: EsignSigner[];
+  signerEmail?: string;
+  message?: string;
+}
+
+export interface EsignWebhookPayload {
+  eventId: string;
+  envelopeId: string;
+  eventType: "ENVELOPE_SENT" | "ENVELOPE_DELIVERED" | "ENVELOPE_SIGNED" | "ENVELOPE_DECLINED" | "ENVELOPE_EXPIRED" | string;
+  status?: string;
+  signerEmail?: string;
+  payload?: Record<string, unknown>;
+}
+

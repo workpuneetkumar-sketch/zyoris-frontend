@@ -50,6 +50,7 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
 
   // Selected Activity for Detail Modal
   const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<CapturedActivity | null>(null);
 
   // Quick Ingest Activity Modal
   const [isIngestOpen, setIsIngestOpen] = useState(false);
@@ -314,7 +315,10 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
               <ActivityTimelineItem
                 key={act.id}
                 activity={act}
-                onClick={(item) => setSelectedActivityId(item.id)}
+                onClick={(item) => {
+                  setSelectedActivity(item);
+                  setSelectedActivityId(item.id);
+                }}
               />
             ))}
           </div>
@@ -353,7 +357,11 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
       {/* Activity Detail Modal */}
       <ActivityDetailModal
         activityId={selectedActivityId}
-        onClose={() => setSelectedActivityId(null)}
+        initialActivity={selectedActivity}
+        onClose={() => {
+          setSelectedActivityId(null);
+          setSelectedActivity(null);
+        }}
       />
 
       {/* Capture Activity Modal */}
