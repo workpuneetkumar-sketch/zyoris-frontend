@@ -17,7 +17,7 @@ import { TurnIntoWikiModal, WikiBadge } from "./TurnIntoWikiModal";
 import { PageAnalyticsPanel } from "./PageAnalyticsPanel";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
 import { PageImportModal } from "./PageImportModal";
-import { AssignmentTaskModal } from "./AssignmentTaskModal";
+import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import {
   FileText,
   AlertCircle,
@@ -41,7 +41,6 @@ import {
   History,
   Upload,
   MoreHorizontal,
-  CheckSquare,
 } from "lucide-react";
 
 interface WorkspacePageViewProps {
@@ -92,7 +91,6 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
   // Toolbar overflow menu
   const [isToolbarMenuOpen, setIsToolbarMenuOpen] = useState(false);
   const toolbarMenuRef = useRef<HTMLDivElement>(null);
-  const [isAssignModalOpen, setIsAssignModalOpen] = useState<boolean>(false);
 
   const [titleSaveStatus, setTitleSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const titleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -387,21 +385,6 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
                   <History className="w-3.5 h-3.5 text-orange-500" />
                   <span>Version History</span>
                 </button>
-
-                <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
-
-                {/* Assign this page as task */}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsAssignModalOpen(true);
-                    setIsToolbarMenuOpen(false);
-                  }}
-                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
-                >
-                  <CheckSquare className="w-3.5 h-3.5 text-indigo-500" />
-                  <span>Assign this page as task</span>
-                </button>
               </div>
             )}
           </div>
@@ -557,79 +540,82 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       />
 
       {/* ── FE2-01 · Customize Page ───────────────────────────────────────── */}
-      <CustomizePagePanel
-        isOpen={activePanel === "customize"}
-        onClose={() => setActivePanel(null)}
-        page={page}
-        onSaved={(updated) => {
-          if (updated.icon !== undefined) setIcon(updated.icon ?? "📄");
-          if (updated.coverImage !== undefined) setCoverImage(updated.coverImage);
-          if (updated.layoutWidth !== undefined) setLayoutWidth(updated.layoutWidth ?? "default");
-          if (updated.smallText !== undefined) setSmallText(updated.smallText ?? false);
-        }}
-      />
+      <PanelErrorBoundary label="Customize Page" onClose={() => setActivePanel(null)}>
+        <CustomizePagePanel
+          isOpen={activePanel === "customize"}
+          onClose={() => setActivePanel(null)}
+          page={page}
+          onSaved={(updated) => {
+            if (updated.icon !== undefined) setIcon(updated.icon ?? "📄");
+            if (updated.coverImage !== undefined) setCoverImage(updated.coverImage);
+            if (updated.layoutWidth !== undefined) setLayoutWidth(updated.layoutWidth ?? "default");
+            if (updated.smallText !== undefined) setSmallText(updated.smallText ?? false);
+          }}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-03 · Suggest Edits / Comments ───────────────────────────────── */}
-      <PageCommentsPanel
-        isOpen={activePanel === "comments"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-      />
+      <PanelErrorBoundary label="Suggest Edits" onClose={() => setActivePanel(null)}>
+        <PageCommentsPanel
+          isOpen={activePanel === "comments"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-04 · Translate ───────────────────────────────────────────────── */}
-      <TranslatePageModal
-        isOpen={activePanel === "translate"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        currentBlocks={page.blocks ?? []}
-        onApplied={fetchPageData}
-      />
+      <PanelErrorBoundary label="Translate" onClose={() => setActivePanel(null)}>
+        <TranslatePageModal
+          isOpen={activePanel === "translate"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          currentBlocks={page.blocks ?? []}
+          onApplied={fetchPageData}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-05 · Turn into Wiki ──────────────────────────────────────────── */}
-      <TurnIntoWikiModal
-        isOpen={activePanel === "wiki"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        pageTitle={title}
-        isWiki={isWiki}
-        isLocked={isLocked}
-        onConverted={(newIsWiki) => setIsWiki(newIsWiki)}
-      />
+      <PanelErrorBoundary label="Turn into Wiki" onClose={() => setActivePanel(null)}>
+        <TurnIntoWikiModal
+          isOpen={activePanel === "wiki"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          pageTitle={title}
+          isWiki={isWiki}
+          isLocked={isLocked}
+          onConverted={(newIsWiki) => setIsWiki(newIsWiki)}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-06 · Analytics ───────────────────────────────────────────────── */}
-      <PageAnalyticsPanel
-        isOpen={activePanel === "analytics"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-      />
+      <PanelErrorBoundary label="Analytics" onClose={() => setActivePanel(null)}>
+        <PageAnalyticsPanel
+          isOpen={activePanel === "analytics"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-07 · Version History ─────────────────────────────────────────── */}
-      <VersionHistoryPanel
-        isOpen={activePanel === "history"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        isLocked={isLocked}
-        onRestored={fetchPageData}
-      />
+      <PanelErrorBoundary label="Version History" onClose={() => setActivePanel(null)}>
+        <VersionHistoryPanel
+          isOpen={activePanel === "history"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          isLocked={isLocked}
+          onRestored={fetchPageData}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-08 · Page Import ─────────────────────────────────────────────── */}
-      <PageImportModal
-        isOpen={activePanel === "import"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        onImported={fetchPageData}
-      />
-
-      {/* ── RBAC-FE1-D1 · Assign this page as task Modal ─────────────────── */}
-      <AssignmentTaskModal
-        isOpen={isAssignModalOpen}
-        onClose={() => setIsAssignModalOpen(false)}
-        pageId={pageId}
-        pageTitle={title || page?.title || "Untitled"}
-        onSuccess={() => {
-          fetchPageData();
-        }}
-      />
+      <PanelErrorBoundary label="Import" onClose={() => setActivePanel(null)}>
+        <PageImportModal
+          isOpen={activePanel === "import"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          onImported={fetchPageData}
+        />
+      </PanelErrorBoundary>
     </div>
   );
 };
