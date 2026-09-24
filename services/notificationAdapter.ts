@@ -88,22 +88,16 @@ export async function getNotifications(params?: {
     priority: params?.priority,
     includeArchived: params?.includeArchived,
   });
-<<<<<<< HEAD
-  const notifications = response.data
-    .map(dtoToNotification)
-    .filter((notification) => params?.includeArchived !== true || (
-      notification.archivedAt !== null && notification.archivedAt !== undefined
-    ))
-    .sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-=======
-  const notifications = deduplicateNotifications(
-    response.data.map(dtoToNotification).sort(
-      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
+    const notifications = deduplicateNotifications(
+    response.data
+      .map(dtoToNotification)
+      .filter((notification) => params?.includeArchived !== true || (
+        notification.archivedAt !== null && notification.archivedAt !== undefined
+      ))
+      .sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
   );
->>>>>>> origin/dev
 
   return {
     notifications,
