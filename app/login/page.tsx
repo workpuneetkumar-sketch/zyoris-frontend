@@ -50,6 +50,8 @@ function getLoginErrorMessage(error: any) {
 export default function LoginPage() {
   const [authState, setAuthState] = useState<AuthState>("landing");
   const [isLoading, setIsLoading] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
   const router = useRouter();
   const { login, isAuthenticated, isInitializing } = useAuth();
 
@@ -79,8 +81,24 @@ export default function LoginPage() {
   };
 
   // Handlers for Admin flow
-  const handleAdminLoginComplete = () => {
-    // We stop at Step 3 (skip 2FA)
+  const handleAdminStep2Next = async () => {
+    if (!adminEmail || !adminPassword) {
+      toast.error("Please enter admin email and password");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await login(adminEmail, adminPassword);
+      setAuthState("admin-3");
+    } catch (error: any) {
+      toast.error(getLoginErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleAdminLoginComplete = async () => {
     toast.success("Admin signed in successfully!");
     router.push("/dashboard");
   };
@@ -107,13 +125,18 @@ export default function LoginPage() {
           <AdminLoginStep1 
             onBack={() => setAuthState("landing")}
             onNext={() => setAuthState("admin-2")}
+            email={adminEmail}
+            setEmail={setAdminEmail}
           />
         );
       case "admin-2":
         return (
           <AdminLoginStep2 
             onBack={() => setAuthState("admin-1")}
-            onNext={() => setAuthState("admin-3")}
+            onNext={handleAdminStep2Next}
+            password={adminPassword}
+            setPassword={setAdminPassword}
+            isLoading={isLoading}
           />
         );
       case "admin-3":
@@ -121,6 +144,7 @@ export default function LoginPage() {
           <AdminLoginStep3 
             onBack={() => setAuthState("admin-2")}
             onNext={handleAdminLoginComplete}
+            isLoading={isLoading}
           />
         );
       default:

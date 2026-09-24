@@ -14,9 +14,12 @@ import {
   ShieldAlert,
   Loader2,
   Archive,
+  X,
+  ExternalLink,
+  UserRound,
 } from "lucide-react";
 import classNames from "classnames";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -88,11 +91,13 @@ function NotificationPageItem({
   onMarkRead,
   onDelete,
   onOpen,
+  archived = false,
 }: {
   notification: Notification;
   onMarkRead: (id: string) => void;
   onDelete: (id: string) => void;
   onOpen: (notification: Notification) => void;
+  archived?: boolean;
 }) {
   return (
     <div
@@ -106,7 +111,7 @@ function NotificationPageItem({
       onClick={() => onOpen(notification)}
     >
       {/* Unread indicator */}
-      {!notification.read && (
+      {!archived && !notification.read && (
         <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary rounded-r-full" />
       )}
 
@@ -143,7 +148,7 @@ function NotificationPageItem({
             >
               {notification.title}
             </h3>
-            {!notification.read && (
+            {!archived && !notification.read && (
               <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
             )}
           </div>
@@ -161,7 +166,7 @@ function NotificationPageItem({
                   <Check size={16} />
                 </button>
               )}
-              <button
+              {!archived && <button
                 onClick={(event) => {
                   event.stopPropagation();
                   onDelete(notification.id);
@@ -170,7 +175,7 @@ function NotificationPageItem({
                 title="Archive"
               >
                 <Archive size={16} />
-              </button>
+              </button>}
             </div>
           </div>
         </div>
@@ -199,6 +204,12 @@ export default function NotificationsPage() {
   const router = useRouter();
   const {
     notifications,
+    archivedNotifications,
+    archivedLoading,
+    archivedLoadingMore,
+    archivedError,
+    archivedHasMore,
+    archivedUnavailable,
     loading,
     loadingMore,
     hasMore,
@@ -210,6 +221,8 @@ export default function NotificationsPage() {
     removeNotification,
     bulkArchiveAllRead,
     fetchNextPage,
+    loadArchived,
+    fetchNextArchivedPage,
     realtimeStatus,
     refresh,
   } = useNotifications();
@@ -219,6 +232,12 @@ export default function NotificationsPage() {
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [isArchivingAllRead, setIsArchivingAllRead] = useState(false);
   const [priority, setPriority] = useState("all");
+  const [view, setView] = useState<"active" | "archived">("active");
+  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
+
+  useEffect(() => {
+    if (view === "archived") void loadArchived();
+  }, [loadArchived, view]);
 
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
@@ -249,6 +268,11 @@ export default function NotificationsPage() {
 
     return result;
   }, [notifications, searchQuery, filter, priority]);
+
+  const filteredArchivedNotifications = useMemo(() => archivedNotifications.filter((notification) =>
+    notification.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    notification.message.toLowerCase().includes(searchQuery.toLowerCase())
+  ), [archivedNotifications, searchQuery]);
 
   // Group by date
   const groupedNotifications = useMemo(() => {
@@ -330,8 +354,13 @@ export default function NotificationsPage() {
   };
 
   const handleNotificationOpen = async (notification: Notification) => {
+    setSelectedNotification(notification);
     if (!notification.read) await handleMarkRead(notification.id);
-    const path = getNotificationPath(notification);
+  };
+
+  const handleOpenLinkedRecord = () => {
+    if (!selectedNotification) return;
+    const path = getNotificationPath(selectedNotification);
     if (path) router.push(path);
   };
 
@@ -406,6 +435,16 @@ export default function NotificationsPage() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setView("active")}
+            className={classNames("px-4 py-2 rounded-full text-sm font-medium transition-all", view === "active" ? "bg-primary text-primary-foreground font-semibold" : "bg-background-secondary text-text-muted hover:bg-surface-hover")}
+          >All notifications</button>
+          <button
+            onClick={() => setView("archived")}
+            className={classNames("px-4 py-2 rounded-full text-sm font-medium transition-all", view === "archived" ? "bg-primary text-primary-foreground font-semibold" : "bg-background-secondary text-text-muted hover:bg-surface-hover")}
+          >Archived</button>
+        </div>
+        {view === "active" && <div className="flex flex-wrap gap-2">
           {CATEGORY_TABS.map((tab) => {
             const count = categoryUnreadCounts[tab.id] || 0;
             return (
@@ -435,8 +474,8 @@ export default function NotificationsPage() {
               </button>
             );
           })}
-        </div>
-        <select
+        </div>}
+        {view === "active" && <select
           value={priority}
           onChange={(event) => setPriority(event.target.value)}
           className="rounded-xl bg-background-secondary border border-border px-3 py-2 text-sm text-text"
@@ -447,18 +486,26 @@ export default function NotificationsPage() {
           <option value="reminder">Reminder</option>
           <option value="high">High</option>
           <option value="critical">Critical</option>
-        </select>
+        </select>}
       </div>
 
       {/* Notifications List */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden">
-        {loading && notifications.length === 0 ? (
+        {view === "archived" && archivedUnavailable ? (
+          <div className="p-8 text-center text-text-secondary">Archived notifications aren&apos;t retrievable yet &mdash; ask backend to add an <code className="text-sm">archived</code> filter to GET /api/notifications</div>
+        ) : view === "archived" && archivedLoading && archivedNotifications.length === 0 ? (
+          <div className="p-6 space-y-4"><Skeleton variant="notification" count={4} /></div>
+        ) : view === "archived" && archivedError ? (
+          <div className="p-8 text-center"><p className="text-error">{archivedError}</p><button onClick={() => void loadArchived()} className="mt-2 text-primary font-semibold hover:underline">Retry</button></div>
+        ) : view === "active" && loading && notifications.length === 0 ? (
           <div className="p-6 space-y-4">
             <Skeleton variant="notification" count={4} />
           </div>
-        ) : error ? (
+        ) : view === "active" && error ? (
           <div className="p-8 text-center"><p className="text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-primary font-semibold hover:underline">Retry</button></div>
-        ) : groupedNotifications.length === 0 ? (
+        ) : view === "archived" && filteredArchivedNotifications.length === 0 ? (
+          <EmptyState icon={Archive} title="No archived notifications" description="Archived notifications will appear here when the backend supports retrieving them." />
+        ) : view === "active" && groupedNotifications.length === 0 ? (
           <EmptyState
             icon={Bell}
             title="All caught up!"
@@ -470,7 +517,10 @@ export default function NotificationsPage() {
           />
         ) : (
           <div className="divide-y divide-border">
-            {groupedNotifications.map((group) => (
+            {view === "archived" && filteredArchivedNotifications.map((notification) => (
+              <NotificationPageItem key={notification.id} notification={notification} archived onMarkRead={handleMarkRead} onDelete={handleArchive} onOpen={handleNotificationOpen} />
+            ))}
+            {view === "active" && groupedNotifications.map((group) => (
               <div key={group.label}>
                 <div className="px-6 py-3 bg-background-secondary border-b border-border">
                   <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider">
@@ -489,7 +539,7 @@ export default function NotificationsPage() {
               </div>
             ))}
 
-            {hasMore && (
+            {view === "active" && hasMore && (
               <div className="p-4 text-center">
                 <button
                   onClick={() => fetchNextPage()}
@@ -501,9 +551,39 @@ export default function NotificationsPage() {
                 </button>
               </div>
             )}
+            {view === "archived" && archivedHasMore && (
+              <div className="p-4 text-center"><button onClick={() => void fetchNextArchivedPage()} disabled={archivedLoadingMore} className="px-4 py-2 text-sm text-primary font-semibold hover:underline">{archivedLoadingMore ? "Loading more..." : "Load more"}</button></div>
+            )}
           </div>
         )}
       </div>
+
+      {selectedNotification && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedNotification(null)}>
+          <aside className="h-full w-full max-w-xl overflow-y-auto bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="sticky top-0 flex items-center justify-between border-b border-border bg-surface p-5">
+              <h2 className="text-lg font-bold text-text">Notification details</h2>
+              <button onClick={() => setSelectedNotification(null)} className="rounded-lg p-2 text-text-muted hover:bg-surface-hover" title="Close"><X size={20} /></button>
+            </div>
+            <div className="space-y-6 p-6">
+              <div><h3 className="text-xl font-bold text-text">{selectedNotification.title}</h3><p className="mt-3 whitespace-pre-wrap text-text-secondary">{selectedNotification.message}</p></div>
+              <dl className="grid grid-cols-2 gap-4 text-sm">
+                <div><dt className="text-text-muted">Actor</dt><dd className="mt-1 flex items-center gap-2 text-text"> <UserRound size={15} />{selectedNotification.actorName || selectedNotification.actor?.name || "System"}</dd></div>
+                <div><dt className="text-text-muted">Category</dt><dd className="mt-1 text-text">{selectedNotification.category || "Uncategorized"}</dd></div>
+                <div><dt className="text-text-muted">Priority</dt><dd className="mt-1 text-text">{selectedNotification.priority}</dd></div>
+                <div><dt className="text-text-muted">Created</dt><dd className="mt-1 text-text">{new Date(selectedNotification.createdAt).toLocaleString()}</dd></div>
+                <div><dt className="text-text-muted">Read</dt><dd className="mt-1 text-text">{selectedNotification.readAt ? new Date(selectedNotification.readAt).toLocaleString() : "Unread"}</dd></div>
+              </dl>
+              <div className="flex flex-wrap gap-2">
+                {!selectedNotification.read && <button onClick={() => void handleMarkRead(selectedNotification.id)} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">Mark as read</button>}
+                <button onClick={() => void handleArchive(selectedNotification.id)} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">Archive</button>
+                {getNotificationPath(selectedNotification) && <button onClick={handleOpenLinkedRecord} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">Open linked record <ExternalLink size={15} /></button>}
+              </div>
+              <p className="text-xs text-text-muted">Mark as unread, dismiss, snooze, and unarchive are unavailable until the backend exposes those notification routes.</p>
+            </div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }

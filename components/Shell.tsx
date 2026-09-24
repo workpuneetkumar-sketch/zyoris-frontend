@@ -58,6 +58,7 @@ import {
   Headphones,
   ShieldAlert,
   BarChart3,
+  LogOut,
 } from "lucide-react";
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
@@ -126,6 +127,12 @@ const NAV_GROUPS: NavGroup[] = [
         label: "Activities",
         icon: CheckSquare,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/sales/execution",
+        label: "Sales Execution",
+        icon: TrendingUp,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "USER", "EMPLOYEE"],
       },
       {
         href: "/dashboard/reminders",
@@ -691,7 +698,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         // Day 6 — Operational Agent surfaces
         support: Headphones, "support-agent": Headphones, headphones: Headphones,
         "data-quality": ShieldAlert, "shield-alert": ShieldAlert,
-        revops: BarChart3, "revops-insights": BarChart3, "bar-chart-3": BarChart3,
+        revops: BarChart3, "revops-insights": BarChart3,
         "workflows": GitBranch, "workflow-drafts": GitBranch, "git-branch": GitBranch,
       };
 
@@ -719,6 +726,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           { href: "/contacts",    label: "Contacts",    iconKey: "contacts"    },
           { href: "/companies",   label: "Companies",   iconKey: "companies"   },
           { href: "/activities",  label: "Activities",  iconKey: "activities"  },
+          { href: "/sales/execution", label: "Sales Execution", iconKey: "sales" },
           { href: "/ai-insights", label: "AI Insights", iconKey: "ai-insights" },
         ],
         communication: [
@@ -781,6 +789,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       const ROUTE_TO_GROUP: Record<string, string> = {
         "/leads": "CRM", "/deals": "CRM", "/customers": "CRM", "/ai-insights": "CRM",
         "/contacts": "CRM", "/companies": "CRM", "/activities": "CRM",
+        "/sales/execution": "CRM", "/sales/activities": "CRM",
         "/dashboard/reminders": "CRM", "/crm": "CRM",
         "/communications": "Communication", "/communication": "Communication",
         "/email": "Communication", "/whatsapp": "Communication", "/calls": "Communication",
@@ -911,11 +920,19 @@ export function AppShell({ children }: { children: ReactNode }) {
         });
       }
 
-      // ── Always ensure Workspace is present in CRM group ──
+      // ── Always ensure Workspace and Sales Execution are present in CRM group ──
       if (!itemsByGroup["CRM"]) {
-        itemsByGroup["CRM"] = [{ href: "/workspace", label: "Workspace", icon: FileText }];
-      } else if (!itemsByGroup["CRM"].some((x) => x.href === "/workspace")) {
-        itemsByGroup["CRM"].unshift({ href: "/workspace", label: "Workspace", icon: FileText });
+        itemsByGroup["CRM"] = [
+          { href: "/workspace", label: "Workspace", icon: FileText },
+          { href: "/sales/execution", label: "Sales Execution", icon: TrendingUp },
+        ];
+      } else {
+        if (!itemsByGroup["CRM"].some((x) => x.href === "/workspace")) {
+          itemsByGroup["CRM"].unshift({ href: "/workspace", label: "Workspace", icon: FileText });
+        }
+        if (!itemsByGroup["CRM"].some((x) => x.href === "/sales/execution")) {
+          itemsByGroup["CRM"].push({ href: "/sales/execution", label: "Sales Execution", icon: TrendingUp });
+        }
       }
 
       // ── Build groups in display order ─────────────────────────────────
@@ -1180,12 +1197,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={openLogoutModal}
-              className="p-1 rounded-lg hover:bg-error-light/20 transition-colors group"
+              className="p-1.5 rounded-lg hover:bg-error-light/20 transition-colors group text-text-muted hover:text-error"
               title="Logout"
             >
-              <ChevronRight
-                size={15}
-                className="text-text-muted group-hover:text-error transition-colors"
+              <LogOut
+                size={16}
+                className="transition-colors"
               />
             </button>
           </div>
