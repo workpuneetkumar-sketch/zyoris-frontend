@@ -17,6 +17,7 @@ import { TurnIntoWikiModal, WikiBadge } from "./TurnIntoWikiModal";
 import { PageAnalyticsPanel } from "./PageAnalyticsPanel";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
 import { PageImportModal } from "./PageImportModal";
+import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import {
   FileText,
   AlertCircle,
@@ -539,68 +540,82 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       />
 
       {/* ── FE2-01 · Customize Page ───────────────────────────────────────── */}
-      <CustomizePagePanel
-        isOpen={activePanel === "customize"}
-        onClose={() => setActivePanel(null)}
-        page={page}
-        onSaved={(updated) => {
-          if (updated.icon !== undefined) setIcon(updated.icon ?? "📄");
-          if (updated.coverImage !== undefined) setCoverImage(updated.coverImage);
-          if (updated.layoutWidth !== undefined) setLayoutWidth(updated.layoutWidth ?? "default");
-          if (updated.smallText !== undefined) setSmallText(updated.smallText ?? false);
-        }}
-      />
+      <PanelErrorBoundary label="Customize Page" onClose={() => setActivePanel(null)}>
+        <CustomizePagePanel
+          isOpen={activePanel === "customize"}
+          onClose={() => setActivePanel(null)}
+          page={page}
+          onSaved={(updated) => {
+            if (updated.icon !== undefined) setIcon(updated.icon ?? "📄");
+            if (updated.coverImage !== undefined) setCoverImage(updated.coverImage);
+            if (updated.layoutWidth !== undefined) setLayoutWidth(updated.layoutWidth ?? "default");
+            if (updated.smallText !== undefined) setSmallText(updated.smallText ?? false);
+          }}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-03 · Suggest Edits / Comments ───────────────────────────────── */}
-      <PageCommentsPanel
-        isOpen={activePanel === "comments"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-      />
+      <PanelErrorBoundary label="Suggest Edits" onClose={() => setActivePanel(null)}>
+        <PageCommentsPanel
+          isOpen={activePanel === "comments"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-04 · Translate ───────────────────────────────────────────────── */}
-      <TranslatePageModal
-        isOpen={activePanel === "translate"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        currentBlocks={page.blocks ?? []}
-        onApplied={fetchPageData}
-      />
+      <PanelErrorBoundary label="Translate" onClose={() => setActivePanel(null)}>
+        <TranslatePageModal
+          isOpen={activePanel === "translate"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          currentBlocks={page.blocks ?? []}
+          onApplied={fetchPageData}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-05 · Turn into Wiki ──────────────────────────────────────────── */}
-      <TurnIntoWikiModal
-        isOpen={activePanel === "wiki"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        pageTitle={title}
-        isWiki={isWiki}
-        isLocked={isLocked}
-        onConverted={(newIsWiki) => setIsWiki(newIsWiki)}
-      />
+      <PanelErrorBoundary label="Turn into Wiki" onClose={() => setActivePanel(null)}>
+        <TurnIntoWikiModal
+          isOpen={activePanel === "wiki"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          pageTitle={title}
+          isWiki={isWiki}
+          isLocked={isLocked}
+          onConverted={(newIsWiki) => setIsWiki(newIsWiki)}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-06 · Analytics ───────────────────────────────────────────────── */}
-      <PageAnalyticsPanel
-        isOpen={activePanel === "analytics"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-      />
+      <PanelErrorBoundary label="Analytics" onClose={() => setActivePanel(null)}>
+        <PageAnalyticsPanel
+          isOpen={activePanel === "analytics"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-07 · Version History ─────────────────────────────────────────── */}
-      <VersionHistoryPanel
-        isOpen={activePanel === "history"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        isLocked={isLocked}
-        onRestored={fetchPageData}
-      />
+      <PanelErrorBoundary label="Version History" onClose={() => setActivePanel(null)}>
+        <VersionHistoryPanel
+          isOpen={activePanel === "history"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          isLocked={isLocked}
+          onRestored={fetchPageData}
+        />
+      </PanelErrorBoundary>
 
       {/* ── FE2-08 · Page Import ─────────────────────────────────────────────── */}
-      <PageImportModal
-        isOpen={activePanel === "import"}
-        onClose={() => setActivePanel(null)}
-        pageId={pageId}
-        onImported={fetchPageData}
-      />
+      <PanelErrorBoundary label="Import" onClose={() => setActivePanel(null)}>
+        <PageImportModal
+          isOpen={activePanel === "import"}
+          onClose={() => setActivePanel(null)}
+          pageId={pageId}
+          onImported={fetchPageData}
+        />
+      </PanelErrorBoundary>
     </div>
   );
 };
