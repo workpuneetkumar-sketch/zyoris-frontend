@@ -15,7 +15,7 @@
  * - Pages heavy in code blocks (preview shows code blocks read-only, no diff)
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -27,7 +27,7 @@ import {
   Code,
   Link as LinkIcon,
 } from "lucide-react";
-import { translatePage } from "@/lib/api/workspaceApi";
+import { translatePage, getWorkspacePage } from "@/lib/api/workspaceApi";
 import type { WorkspaceBlock, TranslatePageResult } from "@/types/workspace";
 
 // ── Supported languages ───────────────────────────────────────────────────────
@@ -121,9 +121,30 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TranslatePageResult | null>(null);
 
-  // Guard: currentBlocks may be undefined if the parent hasn't loaded blocks yet
-  const safeBlocks: WorkspaceBlock[] = Array.isArray(currentBlocks) ? currentBlocks : [];
-  const isEmpty = safeBlocks.length === 0;
+  // Live blocks — fetched fresh when the modal opens so we always
+  // reflect content the user just typed (BlockEditor owns its own
+  // state and doesn't propagate changes back to WorkspacePageView).
+  const [liveBlocks, setLiveBlocks] = useState<WorkspaceBlock[]>([]);
+  const [blocksLoading, setBlocksLoading] = useState(false);
+
+  // Fetch live blocks every time the modal opens
+  useEffect(() => {
+    if (!isOpen || !pageId) return;
+    setBlocksLoading(true);
+    getWorkspacePage(pageId)
+      .then((data) => {
+        setLiveBlocks(Array.isArray(data?.blocks) ? data.blocks : []);
+      })
+      .catch(() => {
+        // Non-fatal: fall back to the prop passed in
+        setLiveBlocks(Array.isArray(currentBlocks) ? currentBlocks : []);
+      })
+      .finally(() => setBlocksLoading(false));
+  }, [isOpen, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Guard: use liveBlocks (fresh from API) not the stale prop
+  const safeBlocks: WorkspaceBlock[] = liveBlocks;
+  const isEmpty = !blocksLoading && safeBlocks.length === 0;
   const codeBlockCount = safeBlocks.filter((b) => b.type === "code").length;
   const isLargePage = safeBlocks.length > BLOCK_COUNT_WARNING;
 
@@ -132,6 +153,7 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
     setSelectedLang("");
     setError(null);
     setResult(null);
+    setLiveBlocks([]);
     onClose();
   };
 
@@ -249,8 +271,16 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
                 exactly as-is by the backend.
               </p>
 
-              {/* Empty page notice */}
-              {isEmpty && (
+              {/* Fetching live blocks spinner */}
+              {blocksLoading && (
+                <div className="flex items-center space-x-2 text-xs text-slate-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Checking page content…</span>
+                </div>
+              )}
+
+              {/* Empty page notice — only show once we know blocks are loaded */}
+              {!blocksLoading && isEmpty && (
                 <div className="flex items-start space-x-2 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-600 dark:text-slate-300">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-slate-400" />
                   <span>
