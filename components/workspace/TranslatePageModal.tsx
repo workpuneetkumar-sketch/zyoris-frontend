@@ -27,7 +27,7 @@ import {
   Code,
   Link as LinkIcon,
 } from "lucide-react";
-import { translatePage, getWorkspacePage } from "@/lib/api/workspaceApi";
+import { translatePage, getWorkspacePage, normalizeBackendBlock } from "@/lib/api/workspaceApi";
 import type { WorkspaceBlock, TranslatePageResult } from "@/types/workspace";
 
 // ── Supported languages ───────────────────────────────────────────────────────
@@ -69,16 +69,25 @@ type Step = "select" | "previewing" | "preview" | "applying" | "done";
 /** Render a single translated block for the preview (read-only, no diff) */
 const BlockPreviewItem: React.FC<{ block: WorkspaceBlock; index: number }> = ({
   block,
-  index,
 }) => {
   const isCode = block.type === "code";
   const isLink = block.type === "link";
+
+  // Extract readable text — handle all backend content shapes:
+  // 1. block.text (string) — set by normalizeBackendBlock
+  // 2. block.content.text (object with .text field)
+  // 3. block.content (plain string)
+  // Never fall through to JSON.stringify
+  const contentObj =
+    block.content && typeof block.content === "object" ? block.content : null;
   const text =
-    typeof block.text === "string"
+    typeof block.text === "string" && block.text.trim() !== ""
       ? block.text
-      : typeof block.content === "string"
+      : typeof contentObj?.text === "string" && contentObj.text.trim() !== ""
+      ? contentObj.text
+      : typeof block.content === "string" && block.content.trim() !== ""
       ? block.content
-      : JSON.stringify(block.content ?? "");
+      : "(empty block)";
 
   return (
     <div
@@ -172,11 +181,14 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
       const data = await translatePage(pageId, selectedLang);
 
       // Normalise: backend may return blocks under a different key or as undefined
-      const translatedBlocks: WorkspaceBlock[] = Array.isArray(data?.translatedBlocks)
+      // Also run normalizeBackendBlock so .text is always populated correctly
+      const rawBlocks: any[] = Array.isArray(data?.translatedBlocks)
         ? data.translatedBlocks
         : Array.isArray((data as any)?.blocks)
         ? (data as any).blocks
         : [];
+
+      const translatedBlocks: WorkspaceBlock[] = rawBlocks.map(normalizeBackendBlock);
 
       setResult({ ...data, translatedBlocks });
       setStep("preview");
@@ -208,8 +220,19 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
     setStep("applying");
     setError(null);
     try {
-      const { commitPageImport } = await import("@/lib/api/workspaceApi");
-      await commitPageImport(pageId, blocksToApply, "replace");
+      const { commitPageImport, buildBackendBlockPayload } = await import("@/lib/api/workspaceApi");
+      // Convert normalised frontend blocks back to the shape the backend expects
+      const blocksToSend = blocksToApply.map((b) =>
+        buildBackendBlockPayload({
+          type: b.type,
+          text: b.text ?? "",
+          content: b.content,
+          properties: b.properties,
+          position: b.position,
+          parentBlockId: b.parentBlockId ?? undefined,
+        })
+      );
+      await commitPageImport(pageId, blocksToSend as any, "replace");
       setStep("done");
       setTimeout(() => {
         onApplied();
