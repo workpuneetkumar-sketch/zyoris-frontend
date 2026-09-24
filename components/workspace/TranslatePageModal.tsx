@@ -27,7 +27,7 @@ import {
   Code,
   Link as LinkIcon,
 } from "lucide-react";
-import { translatePage, getWorkspacePage, normalizeBackendBlock } from "@/lib/api/workspaceApi";
+import { translatePage, getWorkspacePage, normalizeBackendBlock, updateWorkspacePage } from "@/lib/api/workspaceApi";
 import type { WorkspaceBlock, TranslatePageResult } from "@/types/workspace";
 
 // ── Supported languages ───────────────────────────────────────────────────────
@@ -220,19 +220,21 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
     setStep("applying");
     setError(null);
     try {
-      const { commitPageImport, buildBackendBlockPayload } = await import("@/lib/api/workspaceApi");
-      // Convert normalised frontend blocks back to the shape the backend expects
-      const blocksToSend = blocksToApply.map((b) =>
+      // Use confirmed PATCH /workspace/pages/:id with content field.
+      // POST /workspace/pages/:id/import/commit is not yet live on backend.
+      // Build proper backend-shaped block payloads before persisting.
+      const { buildBackendBlockPayload } = await import("@/lib/api/workspaceApi");
+      const backendBlocks = blocksToApply.map((b, idx) =>
         buildBackendBlockPayload({
           type: b.type,
           text: b.text ?? "",
           content: b.content,
           properties: b.properties,
-          position: b.position,
+          position: idx,
           parentBlockId: b.parentBlockId ?? undefined,
         })
       );
-      await commitPageImport(pageId, blocksToSend as any, "replace");
+      await updateWorkspacePage(pageId, { content: { blocks: backendBlocks } });
       setStep("done");
       setTimeout(() => {
         onApplied();
