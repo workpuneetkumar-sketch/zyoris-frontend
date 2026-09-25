@@ -165,7 +165,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
       };
 
       setSequences((prev) => [newSeq, ...prev]);
-      setSeqMessage({ type: "success", text: `Sequence "${seqName}" created successfully! (API /api/sales/sequences)` });
+      setSeqMessage({ type: "success", text: `Sequence "${seqName}" created successfully!` });
       setIsCreateSeqOpen(false);
       setSeqName("");
       setSeqDesc("");
@@ -210,7 +210,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
 
       setEnrollments((prev) => [newEnr, ...prev]);
       setIsEnrollOpen(false);
-      setSeqMessage({ type: "success", text: `Contact enrolled in sequence successfully! (API /api/sales/sequences/${selectedSeqId}/enroll)` });
+      setSeqMessage({ type: "success", text: `Contact enrolled in sequence successfully!` });
     } catch (err: any) {
       const fallbackEnr: SequenceEnrollment = {
         id: `enr_${Date.now()}`,
@@ -241,7 +241,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
             : item
         )
       );
-      setSeqMessage({ type: "success", text: `Advanced enrollment step to #${nextStep}! (API /api/sales/sequences/enrollments/${enrollmentId}/step)` });
+      setSeqMessage({ type: "success", text: `Advanced enrollment step to #${nextStep}!` });
     } catch (err: any) {
       setEnrollments((prev) =>
         prev.map((item) =>
@@ -264,7 +264,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
             : item
         )
       );
-      setSeqMessage({ type: "success", text: `Toggled enrollment pause state! (API /api/sales/sequences/enrollments/${enrollmentId}/pause)` });
+      setSeqMessage({ type: "success", text: `Toggled enrollment pause state!` });
     } catch (err: any) {
       setEnrollments((prev) =>
         prev.map((item) =>
@@ -591,7 +591,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
                             type="button"
                             className="sales-btn sales-btn-sm sales-btn-secondary"
                             onClick={() => handleAdvanceStep(enr.id)}
-                            title="Execute / Advance Step (POST /api/sales/sequences/enrollments/:id/step)"
+                            title="Execute Next Step"
                           >
                             <ArrowRight size={13} /> Next Step
                           </button>
@@ -599,7 +599,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
                             type="button"
                             className="sales-btn sales-btn-sm sales-btn-secondary"
                             onClick={() => handlePauseEnrollment(enr.id)}
-                            title="Pause Enrollment (PATCH /api/sales/sequences/enrollments/:id/pause)"
+                            title="Pause Enrollment"
                           >
                             {enr.status === "ACTIVE" ? <Pause size={13} /> : <Play size={13} />}
                           </button>
@@ -901,7 +901,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
                   Cancel
                 </button>
                 <button type="submit" className="sales-btn sales-btn-primary" disabled={seqSubmitting}>
-                  {seqSubmitting ? "Creating..." : "Save Sequence (POST /api/sales/sequences)"}
+                  {seqSubmitting ? "Creating..." : "Save Sequence"}
                 </button>
               </div>
             </form>
@@ -999,7 +999,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
                   Cancel
                 </button>
                 <button type="submit" className="sales-btn sales-btn-primary" disabled={pbSubmitting}>
-                  {pbSubmitting ? "Saving..." : "Save Playbook (POST /api/sales/playbooks)"}
+                  {pbSubmitting ? "Saving..." : "Save Playbook"}
                 </button>
               </div>
             </form>

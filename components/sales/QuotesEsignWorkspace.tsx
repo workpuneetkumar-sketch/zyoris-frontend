@@ -126,7 +126,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
       };
 
       setQuotes((prev) => [newQuote, ...prev]);
-      setBanner({ type: "success", text: `Quote created successfully! (API POST /api/sales/quotes)` });
+      setBanner({ type: "success", text: `Quote created successfully!` });
       setIsCreateOpen(false);
       setQuoteTitle("");
     } catch (err: any) {
@@ -181,7 +181,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
       if (selectedQuote && selectedQuote.id === quoteId) {
         setSelectedQuote({ ...selectedQuote, status: "APPROVED", approvedBy: "Admin User" });
       }
-      setBanner({ type: "success", text: `Quote approved! (API POST /api/sales/quotes/${quoteId}/approve)` });
+      setBanner({ type: "success", text: `Quote approved successfully!` });
     } catch (err: any) {
       setQuotes((prev) =>
         prev.map((q) => (q.id === quoteId ? { ...q, status: "APPROVED" } : q))
@@ -202,7 +202,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
       if (selectedQuote && selectedQuote.id === quoteId) {
         setSelectedQuote({ ...selectedQuote, status: "PDF_GENERATED", pdfUrl });
       }
-      setBanner({ type: "success", text: `PDF generated for quote! (API POST /api/sales/quotes/${quoteId}/generate-pdf)` });
+      setBanner({ type: "success", text: `PDF generated for quote successfully!` });
     } catch (err: any) {
       const mockPdfUrl = `https://zyoris.com/docs/quotes/${quoteId}.pdf`;
       setQuotes((prev) =>
@@ -226,7 +226,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
       );
       setWebhookEnvelopeId(envId);
       setIsEsignOpen(false);
-      setBanner({ type: "success", text: `Quote sent for E-Signature! (API POST /api/sales/quotes/${esignQuoteId}/esign)` });
+      setBanner({ type: "success", text: `Quote sent for E-Signature successfully!` });
     } catch (err: any) {
       const fallbackEnv = `env_${Date.now()}`;
       setQuotes((prev) =>
@@ -271,7 +271,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
       }
 
       setWebhookEventId(`evt_${Date.now()}`);
-      setBanner({ type: "success", text: `E-Sign Webhook triggered successfully! (API POST /api/sales/esign/webhook)` });
+      setBanner({ type: "success", text: `E-Sign Webhook triggered successfully!` });
     } catch (err: any) {
       setWebhookLogs((prev) => [
         {
@@ -400,7 +400,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
                 type="button"
                 className="sales-btn sales-btn-sm sales-btn-secondary"
                 onClick={() => handleViewQuoteDetails(q.id)}
-                title="GET /api/sales/quotes/:id"
+                title="View Quote Details"
               >
                 <Eye size={13} /> View
               </button>
@@ -410,7 +410,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
                   type="button"
                   className="sales-btn sales-btn-sm sales-btn-secondary"
                   onClick={() => handleApproveQuote(q.id)}
-                  title="POST /api/sales/quotes/:id/approve"
+                  title="Approve Quote"
                 >
                   <CheckCircle size={13} /> Approve
                 </button>
@@ -421,7 +421,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
                   type="button"
                   className="sales-btn sales-btn-sm sales-btn-secondary"
                   onClick={() => handleGeneratePdf(q.id)}
-                  title="POST /api/sales/quotes/:id/generate-pdf"
+                  title="Generate PDF Document"
                 >
                   <Download size={13} /> PDF
                 </button>
@@ -435,7 +435,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
                     setEsignQuoteId(q.id);
                     setIsEsignOpen(true);
                   }}
-                  title="POST /api/sales/quotes/:id/esign"
+                  title="Request E-Signature"
                 >
                   <Send size={13} /> Request E-Sign
                 </button>
@@ -445,7 +445,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
         ))}
       </div>
 
-      {/* ── 17. E-SIGN WEBHOOK SIMULATOR ─────────────────────────────────────── */}
+      {/* ── E-SIGN WEBHOOK SIMULATOR ─────────────────────────────────────── */}
       <div
         style={{
           background: "var(--color-surface)",
@@ -458,7 +458,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "1rem" }}>
           <Webhook size={18} style={{ color: "var(--color-primary)" }} />
           <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text)" }}>
-            API #17 — E-Sign Provider Webhook Tester
+            E-Sign Provider Webhook Tester
           </h4>
         </div>
 
@@ -534,7 +534,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
         <div className="sales-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setIsCreateOpen(false); }}>
           <div className="sales-modal-dialog">
             <div className="sales-modal-header">
-              <h3 className="sales-modal-title">Create Sales Quote (API #12)</h3>
+              <h3 className="sales-modal-title">Create Sales Quote</h3>
               <button type="button" className="sales-btn-icon" onClick={() => setIsCreateOpen(false)}>×</button>
             </div>
 
@@ -635,7 +635,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
                   Cancel
                 </button>
                 <button type="submit" className="sales-btn sales-btn-primary" disabled={submittingQuote}>
-                  {submittingQuote ? "Creating..." : "Create Quote (POST /api/sales/quotes)"}
+                  {submittingQuote ? "Creating..." : "Create Quote"}
                 </button>
               </div>
             </form>
@@ -648,7 +648,7 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
         <div className="sales-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setIsEsignOpen(false); }}>
           <div className="sales-modal-dialog">
             <div className="sales-modal-header">
-              <h3 className="sales-modal-title">Request E-Signature (API #16)</h3>
+              <h3 className="sales-modal-title">Request E-Signature</h3>
               <button type="button" className="sales-btn-icon" onClick={() => setIsEsignOpen(false)}>×</button>
             </div>
 
@@ -690,12 +690,12 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
         </div>
       )}
 
-      {/* ── VIEW QUOTE DETAILS MODAL (API #13) ────────────────────────────────── */}
+      {/* ── VIEW QUOTE DETAILS MODAL ────────────────────────────────── */}
       {selectedQuote && (
         <div className="sales-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setSelectedQuote(null); }}>
           <div className="sales-modal-dialog">
             <div className="sales-modal-header">
-              <h3 className="sales-modal-title">Quote Details (GET /api/sales/quotes/{selectedQuote.id})</h3>
+              <h3 className="sales-modal-title">Quote Details</h3>
               <button type="button" className="sales-btn-icon" onClick={() => setSelectedQuote(null)}>×</button>
             </div>
 
