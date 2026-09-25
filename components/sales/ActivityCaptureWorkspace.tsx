@@ -179,9 +179,26 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
         payload.text = ingestContent.trim() || ingestSubject.trim();
       }
 
+      const getStandardEventType = (ch: SalesChannel): string => {
+        switch (ch) {
+          case "EMAIL":
+            return "EMAIL_SENT";
+          case "CALLS":
+            return "CALL_COMPLETED";
+          case "MEETINGS":
+            return "MEETING_HELD";
+          case "CALENDAR":
+            return "CALENDAR_EVENT";
+          case "WHATSAPP":
+            return "WHATSAPP_SENT";
+          default:
+            return "ACTIVITY_LOGGED";
+        }
+      };
+
       await ingestActivity({
         idempotencyKey: `ik_${Date.now()}`,
-        eventType: ingestSubject.trim() || `${ingestChannel}_ACTIVITY`,
+        eventType: getStandardEventType(ingestChannel),
         entityType: dealId ? "DEAL" : customerId ? "CUSTOMER" : "LEAD",
         entityId: dealId || customerId || "lead_default",
         channel: ingestChannel,
