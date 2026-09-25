@@ -27,6 +27,7 @@ import {
 import ChannelFilterBar from "./ChannelFilterBar";
 import ActivityTimelineItem from "./ActivityTimelineItem";
 import ActivityDetailModal from "./ActivityDetailModal";
+import { useSalesEntities } from "@/hooks/useSalesEntities";
 
 interface ActivityCaptureWorkspaceProps {
   initialChannel?: ChannelFilterOption;
@@ -39,6 +40,7 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
   customerId,
   dealId,
 }) => {
+  const { leads, contacts } = useSalesEntities();
   const [activities, setActivities] = useState<CapturedActivity[]>([]);
   const [channel, setChannel] = useState<ChannelFilterOption>(initialChannel);
   const [search, setSearch] = useState("");
@@ -60,6 +62,7 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
   const [ingestSubject, setIngestSubject] = useState("");
   const [ingestContent, setIngestContent] = useState("");
   const [ingestParticipantEmail, setIngestParticipantEmail] = useState("");
+  const [selectedEntityId, setSelectedEntityId] = useState("");
   const [ingestSubmitting, setIngestSubmitting] = useState(false);
   const [ingestError, setIngestError] = useState<string | null>(null);
 
@@ -458,6 +461,38 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                     onChange={(e) => setIngestSubject(e.target.value)}
                     placeholder="e.g. Q4 Enterprise Architecture Review"
                   />
+                </div>
+
+                <div className="sales-form-group">
+                  <label className="sales-label">Select Target Lead or Contact (Optional)</label>
+                  <select
+                    className="sales-select"
+                    value={selectedEntityId}
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      setSelectedEntityId(id);
+                      const foundLead = leads.find((l) => l.id === id);
+                      const foundContact = contacts.find((c) => c.id === id);
+                      if (foundLead?.email) setIngestParticipantEmail(foundLead.email);
+                      else if (foundContact?.email) setIngestParticipantEmail(foundContact.email);
+                    }}
+                  >
+                    <option value="">-- Choose from Live Leads / Contacts --</option>
+                    <optgroup label="Leads">
+                      {leads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} ({l.email || l.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Contacts">
+                      {contacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.email || c.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
                 </div>
 
                 <div className="sales-form-group">

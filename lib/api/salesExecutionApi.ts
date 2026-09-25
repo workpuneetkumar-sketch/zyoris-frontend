@@ -123,7 +123,13 @@ export async function getActivitiesTimeline(
   try {
     const res = await api.get("/api/sales/activities/timeline", { params });
     if (res?.data && res.data.success !== false) {
-      const dataArr = Array.isArray(res.data.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
+      const dataArr = Array.isArray(res.data.items)
+        ? res.data.items
+        : Array.isArray(res.data.data)
+        ? res.data.data
+        : Array.isArray(res.data)
+        ? res.data
+        : [];
       return {
         success: true,
         data: dataArr,
@@ -609,7 +615,18 @@ export async function createPlaybook(
   payload: CreatePlaybookPayload
 ): Promise<{ success: boolean; data: PlaybookRecord; message?: string }> {
   try {
-    const res = await api.post("/api/sales/playbooks", payload);
+    const formattedSteps = (payload.steps || []).map((s: any, idx: number) => ({
+      order: s.order || s.stepOrder || idx + 1,
+      actionType: s.actionType || "DISCOVERY",
+      title: s.title || `Step ${idx + 1}`,
+      description: s.description || s.title || `Execute step ${idx + 1}`,
+      mandatory: Boolean(s.mandatory),
+    }));
+    const res = await api.post("/api/sales/playbooks", {
+      name: payload.name,
+      description: payload.description || payload.name,
+      steps: formattedSteps,
+    });
     if (res?.data) return normalizeResponse(res.data);
   } catch (err: any) {
     // fallback
@@ -635,7 +652,11 @@ export async function evaluatePlaybook(
   payload: EvaluatePlaybookPayload
 ): Promise<{ success: boolean; data: PlaybookEvaluationResult; message?: string }> {
   try {
-    const res = await api.post("/api/sales/playbooks/evaluate", payload);
+    const res = await api.post("/api/sales/playbooks/evaluate", {
+      playbookId: payload.playbookId,
+      dealId: payload.dealId || payload.customerId || "deal_default",
+      context: payload.context || {},
+    });
     if (res?.data) return normalizeResponse(res.data);
   } catch (err: any) {
     if (err.response?.status === 404 && payload.playbookId) {

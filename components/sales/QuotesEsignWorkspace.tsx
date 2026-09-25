@@ -30,6 +30,7 @@ import {
   sendQuoteEsign,
   triggerEsignWebhook,
 } from "@/lib/api/salesExecutionApi";
+import { useSalesEntities } from "@/hooks/useSalesEntities";
 
 interface QuotesEsignWorkspaceProps {
   dealId?: string;
@@ -40,6 +41,8 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
   dealId,
   customerId,
 }) => {
+  const { leads, contacts, deals } = useSalesEntities();
+  const [selectedDealId, setSelectedDealId] = useState(dealId || "");
   const [quotes, setQuotes] = useState<QuoteRecord[]>([
     {
       id: "quote_ent_99",
@@ -541,6 +544,31 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
             <form onSubmit={handleCreateQuote} className="sales-modal-form">
               <div className="sales-modal-body">
                 <div className="sales-form-group">
+                  <label className="sales-label">Select Deal / Customer (Optional)</label>
+                  <select
+                    className="sales-select"
+                    value={selectedDealId}
+                    onChange={(e) => setSelectedDealId(e.target.value)}
+                  >
+                    <option value="">-- Select Deal or Customer --</option>
+                    <optgroup label="Deals">
+                      {deals.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.details || d.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Leads">
+                      {leads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} ({l.email || l.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="sales-form-group">
                   <label className="sales-label">Quote Title</label>
                   <input
                     type="text"
@@ -654,6 +682,39 @@ export const QuotesEsignWorkspace: React.FC<QuotesEsignWorkspaceProps> = ({
 
             <form onSubmit={handleSendEsign} className="sales-modal-form">
               <div className="sales-modal-body">
+                <div className="sales-form-group">
+                  <label className="sales-label">Select Signer Contact / Lead (Optional)</label>
+                  <select
+                    className="sales-select"
+                    onChange={(e) => {
+                      const id = e.target.value;
+                      const foundContact = contacts.find((c) => c.id === id);
+                      const foundLead = leads.find((l) => l.id === id);
+                      if (foundContact) {
+                        setSigners([{ name: foundContact.name, email: foundContact.email || "", role: "SIGNER" }]);
+                      } else if (foundLead) {
+                        setSigners([{ name: foundLead.name, email: foundLead.email || "", role: "SIGNER" }]);
+                      }
+                    }}
+                  >
+                    <option value="">-- Choose from Contacts / Leads --</option>
+                    <optgroup label="Contacts">
+                      {contacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.email || c.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Leads">
+                      {leads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} ({l.email || l.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
                 <div className="sales-form-group">
                   <label className="sales-label">Signer Name</label>
                   <input

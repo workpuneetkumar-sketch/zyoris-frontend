@@ -34,6 +34,7 @@ import {
   createPlaybook,
   evaluatePlaybook,
 } from "@/lib/api/salesExecutionApi";
+import { useSalesEntities } from "@/hooks/useSalesEntities";
 
 interface SequencesPlaybooksWorkspaceProps {
   customerId?: string;
@@ -44,6 +45,7 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
   customerId,
   dealId,
 }) => {
+  const { leads, contacts, deals } = useSalesEntities();
   const [subTab, setSubTab] = useState<"sequences" | "playbooks">("sequences");
 
   // ── Sequences State ────────────────────────────────────────────────────────
@@ -744,7 +746,31 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
                 </div>
 
                 <div className="sales-form-group">
-                  <label className="sales-label">Target Deal ID / Lead ID</label>
+                  <label className="sales-label">Select Target Deal / Lead</label>
+                  <select
+                    className="sales-select"
+                    value={evalDealId}
+                    onChange={(e) => setEvalDealId(e.target.value)}
+                  >
+                    <optgroup label="Deals">
+                      {deals.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Leads">
+                      {leads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} ({l.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="sales-form-group">
+                  <label className="sales-label">Or Custom Deal/Lead ID</label>
                   <input
                     type="text"
                     className="sales-input"
@@ -934,7 +960,31 @@ export const SequencesPlaybooksWorkspace: React.FC<SequencesPlaybooksWorkspacePr
                 </div>
 
                 <div className="sales-form-group">
-                  <label className="sales-label">Contact / Lead ID</label>
+                  <label className="sales-label">Select Target Contact / Lead</label>
+                  <select
+                    className="sales-select"
+                    value={enrollContactId}
+                    onChange={(e) => setEnrollContactId(e.target.value)}
+                  >
+                    <optgroup label="Contacts">
+                      {contacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.email || c.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Leads">
+                      {leads.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} ({l.email || l.id})
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
+                </div>
+
+                <div className="sales-form-group">
+                  <label className="sales-label">Or Custom Contact / Lead ID</label>
                   <input
                     type="text"
                     className="sales-input"
