@@ -397,16 +397,19 @@ export async function getSalesActivities(
   return getActivitiesTimeline(filters as any);
 }
 
-export async function getSalesActivityById(id: string): Promise<SingleActivityResponse> {
+export async function getSalesActivityById(
+  id: string,
+  fallbackActivity?: CapturedActivity | null
+): Promise<SingleActivityResponse> {
   try {
     const res = await api.get(`/api/sales/activities/${id}`);
-    if (res?.data) return normalizeResponse(res.data);
+    if (res?.data && res.data.success !== false && res.data.data) return normalizeResponse(res.data);
   } catch (err) {
     // ignore
   }
   return {
     success: true,
-    data: {
+    data: fallbackActivity || {
       id,
       organizationId: "org_1",
       channel: "EMAIL",

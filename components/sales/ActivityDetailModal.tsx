@@ -51,10 +51,22 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
       }
       setError(null);
       try {
-        const res = await getSalesActivityById(activityId);
+        const res = await getSalesActivityById(activityId, initialActivity);
         if (isMounted) {
           if (res.data) {
-            setActivity(res.data);
+            setActivity((prev) => {
+              if (initialActivity) {
+                return {
+                  ...res.data,
+                  ...initialActivity,
+                  subject: initialActivity.subject || res.data.subject,
+                  content: initialActivity.content || res.data.content,
+                  channel: initialActivity.channel || res.data.channel,
+                  source: initialActivity.source || res.data.source,
+                };
+              }
+              return res.data;
+            });
           }
         }
       } catch (err: unknown) {
