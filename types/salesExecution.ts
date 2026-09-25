@@ -398,6 +398,7 @@ export interface SequenceEnrollment {
   status: "ACTIVE" | "PAUSED" | "COMPLETED" | string;
   pauseReason?: string;
   enrolledAt: string;
+  lastStepExecutedAt?: string;
 }
 
 export interface AdvanceSequenceStepPayload {

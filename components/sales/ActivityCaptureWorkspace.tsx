@@ -20,7 +20,8 @@ import {
   SalesActivitiesFilter,
 } from "@/types/salesExecution";
 import {
-  getSalesActivities,
+  getActivitiesTimeline,
+  ingestActivity,
   createSalesActivity,
 } from "@/lib/api/salesExecutionApi";
 import ChannelFilterBar from "./ChannelFilterBar";
@@ -78,7 +79,7 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
         filters.channel = channel;
       }
 
-      const res = await getSalesActivities(filters);
+      const res = await getActivitiesTimeline(filters);
       if (res.success && Array.isArray(res.data)) {
         setActivities(res.data);
         if (res.pagination) {
@@ -178,7 +179,11 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
         payload.text = ingestContent.trim() || ingestSubject.trim();
       }
 
-      await createSalesActivity({
+      await ingestActivity({
+        idempotencyKey: `ik_${Date.now()}`,
+        eventType: ingestSubject.trim() || `${ingestChannel}_ACTIVITY`,
+        entityType: dealId ? "DEAL" : customerId ? "CUSTOMER" : "LEAD",
+        entityId: dealId || customerId || "lead_default",
         channel: ingestChannel,
         source: ingestSource || "MANUAL",
         payload,
