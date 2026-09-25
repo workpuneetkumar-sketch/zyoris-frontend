@@ -9,6 +9,7 @@ import { useTasks } from "@/hooks/useTasks";
 import { useMyTasks } from "@/hooks/useMyTasks";
 import { useAuth } from "@/context/AuthContext";
 import { Inbox, KanbanSquare } from "lucide-react";
+import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 
 export function TasksPageContent({ defaultTab }: { defaultTab?: "my" | "all" }) {
     const { user } = useAuth();
@@ -93,6 +94,7 @@ export function TasksPageContent({ defaultTab }: { defaultTab?: "my" | "all" }) 
                     onUpdateStatus={myTasksState.handleUpdateStatus}
                     onRefresh={myTasksState.refresh}
                     onOpenTaskDetail={allTasksState.openDetail}
+                    onReassignedTask={myTasksState.handleReassign}
                 />
             ) : (
                 <TasksUI
@@ -146,6 +148,16 @@ export function TasksPageContent({ defaultTab }: { defaultTab?: "my" | "all" }) 
                     onClose={allTasksState.closeDetail}
                     onUpdate={allTasksState.handleUpdate}
                     onDelete={allTasksState.handleDelete}
+                    onReassigned={(updatedAssignment: EffectiveAssignmentResponse) => {
+                        allTasksState.handleReassign(updatedAssignment);
+                        myTasksState.handleReassign(updatedAssignment);
+                        myTasksState.refresh();
+                        allTasksState.retry();
+                    }}
+                    onRefresh={() => {
+                        myTasksState.refresh();
+                        allTasksState.retry();
+                    }}
                 />
             )}
         </>

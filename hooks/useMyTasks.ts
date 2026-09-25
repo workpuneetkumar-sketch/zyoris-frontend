@@ -13,6 +13,7 @@ import {
   TaskAssignmentEvent,
   UpdateTaskPayload,
 } from "@/lib/api/tasksApi";
+import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 
 export type MyTaskBucket = "all" | "overdue" | "dueToday" | "upcoming" | "completed";
 
@@ -180,6 +181,44 @@ export function useMyTasks(currentUserId?: string) {
     [tasks]
   );
 
+  // ── Reassignment synchronization ──────────────────────────────────────────
+  const handleReassign = useCallback(
+    (updatedAssignment: EffectiveAssignmentResponse) => {
+      const taskId = updatedAssignment.taskId;
+      // If task was reassigned away from current user (e.g. department queue or another user)
+      const isStillAssignedToMe =
+        updatedAssignment.assigneeType === "USER" &&
+        Boolean(currentUserId && updatedAssignment.assignedTo?.id === currentUserId);
+
+      if (!isStillAssignedToMe && currentUserId) {
+        // Immediately remove from My Tasks list
+        setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      } else {
+        // Update its assignment metadata
+        setTasks((prev) =>
+          prev.map((t) => {
+            if (t.id !== taskId) return t;
+            return {
+              ...t,
+              department: updatedAssignment.department,
+              assignedToId: updatedAssignment.assignedTo?.id ?? null,
+              assignedTo: updatedAssignment.assignedTo
+                ? {
+                    id: updatedAssignment.assignedTo.id,
+                    name: updatedAssignment.assignedTo.name ?? "",
+                    email: updatedAssignment.assignedTo.email ?? "",
+                  }
+                : null,
+              effectiveAssignment: updatedAssignment,
+              assigneeType: updatedAssignment.assigneeType,
+            };
+          })
+        );
+      }
+    },
+    [currentUserId]
+  );
+
   // ── Filtered tasks and counts ──────────────────────────────────────────────
   const counts = useMemo(() => computeTaskCounts(tasks), [tasks]);
 
@@ -234,6 +273,7 @@ export function useMyTasks(currentUserId?: string) {
     setIsEventsDrawerOpen,
     dismissNotificationBanner,
     handleUpdateStatus,
+    handleReassign,
     refresh: loadMyTasks,
   };
 }

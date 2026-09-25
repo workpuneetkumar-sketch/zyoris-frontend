@@ -20,6 +20,7 @@ import {
     BulkUpdateResponse,
     getTaskLabelsMap,
 } from "@/lib/api/tasksApi";
+import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 
 export type TaskFilter = "all" | "my" | "overdue";
 
@@ -365,6 +366,31 @@ export function useTasks(currentUserId?: string) {
         setSaveError(null);
     }
 
+    // ── Reassignment synchronization ──────────────────────────────────────────
+    const handleReassign = useCallback((updatedAssignment: EffectiveAssignmentResponse) => {
+        const taskId = updatedAssignment.taskId;
+        const updateTaskFields = (t: Task): Task => {
+            if (t.id !== taskId) return t;
+            return {
+                ...t,
+                department: updatedAssignment.department,
+                assignedToId: updatedAssignment.assignedTo?.id ?? null,
+                assignedTo: updatedAssignment.assignedTo
+                    ? {
+                          id: updatedAssignment.assignedTo.id,
+                          name: updatedAssignment.assignedTo.name ?? "",
+                          email: updatedAssignment.assignedTo.email ?? "",
+                      }
+                    : null,
+                effectiveAssignment: updatedAssignment,
+                assigneeType: updatedAssignment.assigneeType,
+            };
+        };
+
+        setTasks((prev) => prev.map(updateTaskFields));
+        setSelectedTask((prev) => (prev ? updateTaskFields(prev) : prev));
+    }, []);
+
     return {
         tasks,
         filteredTasks,
@@ -406,6 +432,7 @@ export function useTasks(currentUserId?: string) {
         handleDelete,
         handleBulkUpdate,
         cycleStatus,
+        handleReassign,
         retry: loadTasks,
     };
 }

@@ -38,6 +38,7 @@ import {
     Network,
     Download,
     ChevronDown,
+    Users,
 } from "lucide-react";
 import {
     Task,
@@ -1184,6 +1185,11 @@ export function TasksUI({
                                                                                     {task.assignedTo.name}
                                                                                 </span>
                                                                             </>
+                                                                        ) : (task.assigneeType === "DEPARTMENT" || task.department) ? (
+                                                                            <span className="text-indigo-600 dark:text-indigo-400 flex items-center space-x-1 font-medium truncate max-w-[110px]">
+                                                                                <Users size={12} className="text-indigo-500 shrink-0" />
+                                                                                <span className="truncate">{task.department ? `${task.department} Queue` : "Team Queue"}</span>
+                                                                            </span>
                                                                         ) : (
                                                                             <span className="text-slate-400 flex items-center space-x-1">
                                                                                 <User size={12} />
@@ -1354,8 +1360,13 @@ export function TasksUI({
                                                                         {task.assignedTo.name}
                                                                     </span>
                                                                 </div>
+                                                            ) : (task.assigneeType === "DEPARTMENT" || task.department) ? (
+                                                                <span className="inline-flex items-center space-x-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                                                                    <Users size={13} className="text-indigo-500 shrink-0" />
+                                                                    <span>{task.department ? `${task.department} Queue` : "Team Queue"}</span>
+                                                                </span>
                                                             ) : (
-                                                                <span className="text-slate-400 flex items-center space-x-1">
+                                                                <span className="text-slate-400 flex items-center space-x-1 text-xs">
                                                                     <User size={13} />
                                                                     <span>Unassigned</span>
                                                                 </span>

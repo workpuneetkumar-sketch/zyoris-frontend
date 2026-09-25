@@ -30,6 +30,16 @@ export interface AssignPageAsTaskPayload {
   metadata?: Record<string, any>;
 }
 
+export interface ReassignTaskPayload {
+  assigneeType: AssigneeType;
+  targetDepartment?: string;
+  targetUserId?: string;
+  reason?: string;
+  metadata?: Record<string, any>;
+}
+
+export type EffectiveAssignmentResponse = AssignmentEffectiveAssignment;
+
 export interface AssignmentEffectiveAssignment {
   taskId: string;
   organizationId: string;
@@ -74,3 +84,27 @@ export interface AssignmentResult {
   createdAt: string | Date;
   effectiveAssignment?: AssignmentEffectiveAssignment;
 }
+
+export interface CsvTaskRow {
+  title: string;
+  description?: string;
+  assigneeType?: AssigneeType;
+  targetDepartment?: string;
+  targetUserId?: string;
+  dueDate?: string;
+  priority?: "LOW" | "MEDIUM" | "HIGH";
+}
+
+export interface ImportTasksCsvPayload {
+  rows: CsvTaskRow[];
+  defaultProjectId?: string;
+}
+
+export interface BulkTaskAssignmentResult {
+  successful: EffectiveAssignmentResponse[];
+  failed: { index: number; title: string; error: string }[];
+  total: number;
+  successCount: number;
+  failureCount: number;
+}
+

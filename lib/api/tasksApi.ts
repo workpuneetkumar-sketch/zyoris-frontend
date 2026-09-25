@@ -17,6 +17,7 @@
 
 import api from "@/lib/api/api";
 import axios from "axios";
+import type { EffectiveAssignmentResponse, AssigneeType } from "@/types/workspaceAssignment";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -142,8 +143,14 @@ export interface Task {
     updatedAt?: string;
     subtasks?: TaskSubtask[];
     dependencies?: TaskDependency[];
+    department?: string | null;
+    assigneeType?: AssigneeType | "DEPARTMENT" | "USER" | null;
+    assignedBy?: { id: string; name?: string | null } | null;
+    assignedAt?: string | Date | null;
+    effectiveAssignment?: EffectiveAssignmentResponse | null;
     [key: string]: unknown;
 }
+
 
 export interface TasksResponse {
     tasks: Task[];
