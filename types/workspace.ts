@@ -168,3 +168,111 @@ export interface WorkspaceDatabase {
   updatedAt?: string;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FE2 — Extended types for Workspace Page features
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── FE2-01 · Page Settings ────────────────────────────────────────────────────
+
+export type PageLayoutWidth = "default" | "full";
+
+export interface WorkspacePageSettings {
+  id: string;
+  icon?: string | null;
+  coverImage?: string | null;
+  layoutWidth?: PageLayoutWidth;
+  smallText?: boolean;
+  fullWidth?: boolean;
+  updatedAt?: string;
+}
+
+// ── FE2-03 · Comments ─────────────────────────────────────────────────────────
+
+export interface WorkspaceComment {
+  id: string;
+  pageId: string;
+  blockId?: string | null;       // Optional target block
+  content: string;
+  resolved: boolean;
+  authorId: string;
+  authorName: string;
+  authorAvatarUrl?: string | null;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateCommentDto {
+  content: string;
+  blockId?: string | null;
+}
+
+// ── FE2-04 · Translation ──────────────────────────────────────────────────────
+
+export interface TranslatePageResult {
+  translatedBlocks: WorkspaceBlock[];
+  targetLanguage: string;
+  /** ISO language code of the detected source language, if provided by backend */
+  sourceLanguage?: string;
+}
+
+// ── FE2-05 · Wiki ─────────────────────────────────────────────────────────────
+
+// Extends WorkspacePage — add isWiki at the interface level
+declare module "@/types/workspace" {
+  interface WorkspacePage {
+    isWiki?: boolean;
+    isLocked?: boolean;
+    layoutWidth?: PageLayoutWidth;
+    smallText?: boolean;
+  }
+}
+
+// ── FE2-06 · Analytics ───────────────────────────────────────────────────────
+
+export interface WorkspaceAnalyticsActivity {
+  userId: string;
+  userName: string;
+  action: "view" | "edit" | "comment" | "restore";
+  timestamp: string;
+}
+
+export interface WorkspaceAnalytics {
+  pageId: string;
+  totalViews: number;
+  totalEdits: number;
+  totalComments: number;
+  uniqueViewers: number;
+  lastViewedAt?: string | null;
+  lastEditedAt?: string | null;
+  lastEditedBy?: string | null;
+  recentActivity: WorkspaceAnalyticsActivity[];
+}
+
+// ── FE2-07 · Revisions ────────────────────────────────────────────────────────
+
+export interface WorkspaceRevision {
+  id: string;
+  pageId: string;
+  editorId: string;
+  editorName: string;
+  editorAvatarUrl?: string | null;
+  snapshot: {
+    title: string;
+    icon?: string | null;
+    blocks: WorkspaceBlock[];
+  };
+  createdAt: string;
+}
+
+// ── FE2-08 · Page Import ──────────────────────────────────────────────────────
+
+export type SupportedImportFormat = "docx" | "md" | "txt" | "html";
+
+export interface PageImportPreviewResult {
+  blocks: WorkspaceBlock[];
+  detectedFormat: SupportedImportFormat;
+  /** Estimated block count; useful for large-file warnings */
+  blockCount: number;
+  warnings?: string[];
+}

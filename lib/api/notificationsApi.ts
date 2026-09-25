@@ -20,6 +20,8 @@ export interface NotificationDto {
   actorName?: string | null;
   actorAvatar?: string | null;
   archivedAt?: string | null;
+  dismissedAt?: string | null;
+  snoozedUntil?: string | null;
   actor?: { id: string; name: string; avatarUrl?: string } | null;
   read: boolean;
   readAt?: string | null;
@@ -38,7 +40,14 @@ export interface CreateNotificationPayload {
 
 export interface FetchNotificationsResponse {
   data: NotificationDto[];
-  pagination: { limit: number; nextCursor: string | null; hasNext: boolean };
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    nextCursor: string | null;
+    hasNext: boolean;
+  };
+  total: number;
   unreadCount: number;
 }
 
@@ -47,6 +56,7 @@ export const fetchNotifications = async (params?: {
   unreadOnly?: boolean;
   priority?: string;
   category?: string | string[];
+  includeArchived?: boolean;
   cursor?: string;
   limit?: number;
 }): Promise<FetchNotificationsResponse> => {
@@ -57,6 +67,7 @@ export const fetchNotifications = async (params?: {
   if (params?.unreadOnly === true) query.unreadOnly = true;
   if (params?.priority) query.priority = params.priority;
   if (params?.category) query.category = params.category;
+  if (params?.includeArchived !== undefined) query.includeArchived = params.includeArchived;
   if (params?.cursor) query.cursor = params.cursor;
   const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
   return response.data;
@@ -83,6 +94,21 @@ export const markAllNotificationsAsRead = async (category?: string) => {
 
 export const archiveNotification = async (id: string): Promise<NotificationDto> => {
   const response = await api.patch<NotificationDto>(`/api/notifications/${id}/archive`);
+  return response.data;
+};
+
+// TODO: enable once backend confirms PATCH /:id/dismiss exists.
+export const dismissNotification = async (id: string): Promise<NotificationDto> => {
+  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/dismiss`);
+  return response.data;
+};
+
+// TODO: enable once backend confirms PATCH /:id/snooze exists. This only changes
+// notification visibility and must never reschedule the linked business record.
+export const snoozeNotification = async (id: string, until: string): Promise<NotificationDto> => {
+  const response = await api.patch<NotificationDto>(`/api/notifications/${id}/snooze`, {
+    snoozedUntil: until,
+  });
   return response.data;
 };
 

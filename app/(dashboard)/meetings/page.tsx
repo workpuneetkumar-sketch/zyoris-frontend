@@ -26,6 +26,8 @@ import {
     ExternalLink,
     RefreshCw,
     CheckCircle2,
+    Sparkles,
+    Brain,
 } from "lucide-react";
 
 export default function MeetingsPage() {
@@ -387,11 +389,19 @@ export default function MeetingsPage() {
                                                 {syncingId === meeting.id ? "Syncing..." : "Sync to Calendar"}
                                             </button>
 
-                                            {syncMessage?.id === meeting.id && (
-                                                <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200">
-                                                    <CheckCircle2 size={13} /> {syncMessage.text}
-                                                </span>
-                                            )}
+                                            <a
+                                                href={`/meetings/${meeting.id}/prep`}
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded-xl text-xs font-semibold transition"
+                                            >
+                                                <Sparkles size={13} /> AI Prep
+                                            </a>
+
+                                            <a
+                                                href={`/meetings/${meeting.id}/intelligence`}
+                                                className="inline-flex items-center gap-1.5 px-3 py-2 bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 rounded-xl text-xs font-semibold transition"
+                                            >
+                                                <Brain size={13} /> Intelligence
+                                            </a>
                                         </div>
 
                                         {meeting.description && (

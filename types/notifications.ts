@@ -52,6 +52,8 @@ export interface Notification {
   read: boolean;
   readAt?: string | null;
   archivedAt?: string | null;
+  dismissedAt?: string | null;
+  snoozedUntil?: string | null;
   deepLink?: string | null;
   actor?: NotificationActor | null;
   icon?: string | null;

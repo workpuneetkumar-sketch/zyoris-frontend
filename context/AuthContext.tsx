@@ -71,12 +71,33 @@ function setTokenCookie(token: string) {
 }
 
 function clearTokenCookie() {
-  document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  if (typeof document === "undefined") return;
+  const keys = [TOKEN_COOKIE, "token", "accessToken"];
+  keys.forEach((k) => {
+    document.cookie = `${k}=; path=/; max-age=0; SameSite=Lax`;
+    document.cookie = `${k}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  });
 }
 
 function clearAuthState() {
   setAuthToken(null);
-  localStorage.removeItem(STORAGE_KEY);
+  const keys = [
+    STORAGE_KEY,
+    "zyoris-token",
+    "token",
+    "accessToken",
+    "zyoris-refresh-token",
+    "refreshToken",
+    "zyoris-register-userId"
+  ];
+  keys.forEach((key) => {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+    try {
+      sessionStorage.removeItem(key);
+    } catch {}
+  });
   clearTokenCookie();
 }
 
@@ -315,27 +336,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
+    let refreshToken: string | null = null;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      const refreshToken = raw ? JSON.parse(raw).refreshToken : null;
-
-      if (refreshToken) {
-        await logoutApi(refreshToken);
+      const raw = typeof window !== "undefined" ? localStorage.getItem(STORAGE_KEY) : null;
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        refreshToken = parsed?.refreshToken || parsed?.data?.refreshToken || null;
       }
-    } catch (err) {
-      console.error("Logout API failed:", err);
-    } finally {
-      setUser(null);
-      setToken(null);
-      setAuthToken(null);
-      setUserPermissions({});
-      setSidebarItems([]);
-      setVisibleDashboards([]);
-      setVisibleModules([]);
-      setIsAuthenticated(false);
-      setPermissionsLoaded(false);
-      clearAuthState();
-      router.push("/login");
+    } catch {}
+
+    // Immediately wipe state & storage to avoid UI freezing or latency
+    setUser(null);
+    setToken(null);
+    setAuthToken(null);
+    setUserPermissions({});
+    setSidebarItems([]);
+    setVisibleDashboards([]);
+    setVisibleModules([]);
+    setIsAuthenticated(false);
+    setPermissionsLoaded(false);
+    clearAuthState();
+
+    // Fire background logout request if refresh token exists
+    if (refreshToken) {
+      logoutApi(refreshToken).catch((err) => {
+        console.warn("Background logout request failed (safely ignored):", err?.message || err);
+      });
+    }
+
+    if (typeof window !== "undefined") {
+      window.location.href = "/login";
+    } else {
+      router.replace("/login");
     }
   }, [router]);
 
