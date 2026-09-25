@@ -74,7 +74,7 @@ export async function ingestActivity(
       contactId: payload.contactId,
       leadId: payload.leadId,
     });
-    if (res?.data) return normalizeResponse(res.data);
+    if (res?.data && res.data.success !== false) return normalizeResponse(res.data);
   } catch (err: any) {
     try {
       const legacyRes = await api.post("/api/sales/activities", {
@@ -84,7 +84,7 @@ export async function ingestActivity(
         customerId: payload.customerId,
         dealId: payload.dealId,
       });
-      if (legacyRes?.data) return normalizeResponse(legacyRes.data);
+      if (legacyRes?.data && legacyRes.data.success !== false) return normalizeResponse(legacyRes.data);
     } catch (legacyErr) {
       // ignore
     }
@@ -122,7 +122,7 @@ export async function getActivitiesTimeline(
 
   try {
     const res = await api.get("/api/sales/activities/timeline", { params });
-    if (res?.data) {
+    if (res?.data && res.data.success !== false) {
       const dataArr = Array.isArray(res.data.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
       return {
         success: true,
@@ -138,7 +138,7 @@ export async function getActivitiesTimeline(
   } catch (err: any) {
     try {
       const legacyRes = await api.get("/api/sales/activities", { params });
-      if (legacyRes?.data) {
+      if (legacyRes?.data && legacyRes.data.success !== false) {
         const dataArr = Array.isArray(legacyRes.data.data) ? legacyRes.data.data : Array.isArray(legacyRes.data) ? legacyRes.data : [];
         return {
           success: true,
