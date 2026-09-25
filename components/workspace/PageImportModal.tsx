@@ -54,6 +54,28 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// ── Extract actionable error message from backend response ───────────────────
+function extractApiError(err: any, fallback: string): string {
+  const res = err?.response?.data;
+  if (!res) return err?.message ?? fallback;
+
+  // Backend NestJS validation returns errors[] array with field + message
+  if (Array.isArray(res.errors) && res.errors.length > 0) {
+    return res.errors
+      .map((e: any) =>
+        typeof e === "string" ? e : `${e.field ? e.field + ": " : ""}${e.message ?? e.error ?? ""}`
+      )
+      .filter(Boolean)
+      .join(" · ");
+  }
+  // Array of message strings
+  if (Array.isArray(res.message) && res.message.length > 0) {
+    return res.message.join(" · ");
+  }
+  // Single message string
+  if (typeof res.message === "string") return res.message;
+  return fallback;
+}
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface PageImportModalProps {
   isOpen: boolean;
@@ -69,10 +91,18 @@ type Step = "pick" | "previewing" | "preview" | "committing" | "done";
 const ImportBlockItem: React.FC<{ block: WorkspaceBlock; index: number }> = ({ block, index }) => {
   const isCode = block.type === "code";
   const isLink = block.type === "link";
+
+  // Extract readable text — never JSON.stringify (same fix as TranslatePageModal)
+  const contentObj =
+    block.content && typeof block.content === "object" ? block.content : null;
   const text =
-    typeof block.text === "string" ? block.text
-    : typeof block.content === "string" ? block.content
-    : JSON.stringify(block.content ?? "");
+    typeof block.text === "string" && block.text.trim()
+      ? block.text
+      : typeof contentObj?.text === "string" && contentObj.text.trim()
+      ? contentObj.text
+      : typeof block.content === "string" && block.content.trim()
+      ? block.content
+      : "(empty block)";
 
   return (
     <div
@@ -89,7 +119,7 @@ const ImportBlockItem: React.FC<{ block: WorkspaceBlock; index: number }> = ({ b
         {isLink && <LinkIcon className="w-3 h-3" />}
         <span className="text-[9px] uppercase tracking-wider font-semibold">{block.type}</span>
       </div>
-      <p className="whitespace-pre-wrap leading-relaxed line-clamp-3">{text || "(empty)"}</p>
+      <p className="whitespace-pre-wrap leading-relaxed line-clamp-3">{text}</p>
     </div>
   );
 };
@@ -158,17 +188,32 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
     setApiError(null);
     try {
       const data = await previewPageImport(pageId, file);
-      setPreview(data);
+
+      // Normalise preview response defensively
+      const safe: PageImportPreviewResult = {
+        blocks: Array.isArray(data?.blocks) ? data.blocks : [],
+        detectedFormat: data?.detectedFormat ?? (getFileExtension(file.name) as SupportedImportFormat),
+        blockCount: typeof data?.blockCount === "number"
+          ? data.blockCount
+          : Array.isArray(data?.blocks) ? data.blocks.length : 0,
+        warnings: Array.isArray(data?.warnings) ? data.warnings : [],
+      };
+
+      setPreview(safe);
       setStep("preview");
     } catch (err: any) {
       setStep("pick");
-      setApiError(
-        err?.response?.status === 422
-          ? "The backend could not parse this file. Please check the format and try again."
-          : err?.response?.data?.message ??
-            err?.message ??
-            "Preview failed. Please try again."
-      );
+      const status = err?.response?.status;
+      if (status === 422) {
+        setApiError("The backend could not parse this file. Please check the format and try again.");
+      } else if (status === 415) {
+        setApiError(
+          `Unsupported file type. The server rejected "${file.name}". ` +
+          `Try saving it as .txt or .md first.`
+        );
+      } else {
+        setApiError(extractApiError(err, "Preview failed. Please try again."));
+      }
     }
   };
 
@@ -185,11 +230,7 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
       }, 1200);
     } catch (err: any) {
       setStep("preview");
-      setApiError(
-        err?.response?.data?.message ??
-          err?.message ??
-          "Import failed during commit. Please try again."
-      );
+      setApiError(extractApiError(err, "Import failed during commit. Please try again."));
     }
   };
 

@@ -15,7 +15,7 @@
  * - Pages heavy in code blocks (preview shows code blocks read-only, no diff)
  */
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
@@ -27,7 +27,7 @@ import {
   Code,
   Link as LinkIcon,
 } from "lucide-react";
-import { translatePage } from "@/lib/api/workspaceApi";
+import { translatePage, getWorkspacePage, normalizeBackendBlock, updateWorkspacePage } from "@/lib/api/workspaceApi";
 import type { WorkspaceBlock, TranslatePageResult } from "@/types/workspace";
 
 // ── Supported languages ───────────────────────────────────────────────────────
@@ -69,16 +69,25 @@ type Step = "select" | "previewing" | "preview" | "applying" | "done";
 /** Render a single translated block for the preview (read-only, no diff) */
 const BlockPreviewItem: React.FC<{ block: WorkspaceBlock; index: number }> = ({
   block,
-  index,
 }) => {
   const isCode = block.type === "code";
   const isLink = block.type === "link";
+
+  // Extract readable text — handle all backend content shapes:
+  // 1. block.text (string) — set by normalizeBackendBlock
+  // 2. block.content.text (object with .text field)
+  // 3. block.content (plain string)
+  // Never fall through to JSON.stringify
+  const contentObj =
+    block.content && typeof block.content === "object" ? block.content : null;
   const text =
-    typeof block.text === "string"
+    typeof block.text === "string" && block.text.trim() !== ""
       ? block.text
-      : typeof block.content === "string"
+      : typeof contentObj?.text === "string" && contentObj.text.trim() !== ""
+      ? contentObj.text
+      : typeof block.content === "string" && block.content.trim() !== ""
       ? block.content
-      : JSON.stringify(block.content ?? "");
+      : "(empty block)";
 
   return (
     <div
@@ -121,24 +130,67 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<TranslatePageResult | null>(null);
 
-  const codeBlockCount = currentBlocks.filter((b) => b.type === "code").length;
-  const isLargePage = currentBlocks.length > BLOCK_COUNT_WARNING;
+  // Live blocks — fetched fresh when the modal opens so we always
+  // reflect content the user just typed (BlockEditor owns its own
+  // state and doesn't propagate changes back to WorkspacePageView).
+  const [liveBlocks, setLiveBlocks] = useState<WorkspaceBlock[]>([]);
+  const [blocksLoading, setBlocksLoading] = useState(false);
+
+  // Fetch live blocks every time the modal opens
+  useEffect(() => {
+    if (!isOpen || !pageId) return;
+    setBlocksLoading(true);
+    getWorkspacePage(pageId)
+      .then((data) => {
+        setLiveBlocks(Array.isArray(data?.blocks) ? data.blocks : []);
+      })
+      .catch(() => {
+        // Non-fatal: fall back to the prop passed in
+        setLiveBlocks(Array.isArray(currentBlocks) ? currentBlocks : []);
+      })
+      .finally(() => setBlocksLoading(false));
+  }, [isOpen, pageId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Guard: use liveBlocks (fresh from API) not the stale prop
+  const safeBlocks: WorkspaceBlock[] = liveBlocks;
+  const isEmpty = !blocksLoading && safeBlocks.length === 0;
+  const codeBlockCount = safeBlocks.filter((b) => b.type === "code").length;
+  const isLargePage = safeBlocks.length > BLOCK_COUNT_WARNING;
 
   const resetAndClose = () => {
     setStep("select");
     setSelectedLang("");
     setError(null);
     setResult(null);
+    setLiveBlocks([]);
     onClose();
   };
 
   const handlePreview = async () => {
     if (!selectedLang) return;
+
+    // Guard: empty page — nothing to translate
+    if (isEmpty) {
+      setError("This page has no content to translate yet. Add some text blocks first.");
+      return;
+    }
+
     setStep("previewing");
     setError(null);
     try {
       const data = await translatePage(pageId, selectedLang);
-      setResult(data);
+
+      // Normalise: backend may return blocks under a different key or as undefined
+      // Also run normalizeBackendBlock so .text is always populated correctly
+      const rawBlocks: any[] = Array.isArray(data?.translatedBlocks)
+        ? data.translatedBlocks
+        : Array.isArray((data as any)?.blocks)
+        ? (data as any).blocks
+        : [];
+
+      const translatedBlocks: WorkspaceBlock[] = rawBlocks.map(normalizeBackendBlock);
+
+      setResult({ ...data, translatedBlocks });
       setStep("preview");
     } catch (err: any) {
       setStep("select");
@@ -157,12 +209,32 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
 
   const handleApply = async () => {
     if (!result) return;
+    // Guard: nothing to apply if translatedBlocks is empty
+    const blocksToApply = Array.isArray(result.translatedBlocks)
+      ? result.translatedBlocks
+      : [];
+    if (blocksToApply.length === 0) {
+      setError("No translated blocks to apply. The translation result was empty.");
+      return;
+    }
     setStep("applying");
     setError(null);
     try {
-      // Import the commit function lazily to keep the modal self-contained
-      const { commitPageImport } = await import("@/lib/api/workspaceApi");
-      await commitPageImport(pageId, result.translatedBlocks, "replace");
+      // Use confirmed PATCH /workspace/pages/:id with content field.
+      // POST /workspace/pages/:id/import/commit is not yet live on backend.
+      // Build proper backend-shaped block payloads before persisting.
+      const { buildBackendBlockPayload } = await import("@/lib/api/workspaceApi");
+      const backendBlocks = blocksToApply.map((b, idx) =>
+        buildBackendBlockPayload({
+          type: b.type,
+          text: b.text ?? "",
+          content: b.content,
+          properties: b.properties,
+          position: idx,
+          parentBlockId: b.parentBlockId ?? undefined,
+        })
+      );
+      await updateWorkspacePage(pageId, { content: { blocks: backendBlocks } });
       setStep("done");
       setTimeout(() => {
         onApplied();
@@ -224,12 +296,31 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
                 exactly as-is by the backend.
               </p>
 
+              {/* Fetching live blocks spinner */}
+              {blocksLoading && (
+                <div className="flex items-center space-x-2 text-xs text-slate-400">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Checking page content…</span>
+                </div>
+              )}
+
+              {/* Empty page notice — only show once we know blocks are loaded */}
+              {!blocksLoading && isEmpty && (
+                <div className="flex items-start space-x-2 p-3 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-600 dark:text-slate-300">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-slate-400" />
+                  <span>
+                    This page has no content yet. Add some text blocks before
+                    translating.
+                  </span>
+                </div>
+              )}
+
               {/* Warnings */}
               {isLargePage && (
                 <div className="flex items-start space-x-2 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-700 dark:text-amber-300">
                   <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                   <span>
-                    This page has {currentBlocks.length} blocks, which may cause
+                    This page has {safeBlocks.length} blocks, which may cause
                     translation to take longer than usual.
                   </span>
                 </div>
@@ -290,7 +381,7 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
                   Preview — {selectedLangLabel}
                 </p>
                 <span className="text-[11px] text-slate-400">
-                  {result.translatedBlocks.length} blocks
+                  {result.translatedBlocks?.length ?? 0} blocks
                 </span>
               </div>
               <p className="text-xs text-slate-400">
@@ -303,11 +394,24 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
                   <span>{error}</span>
                 </div>
               )}
-              <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
-                {result.translatedBlocks.map((block, i) => (
-                  <BlockPreviewItem key={block.id ?? i} block={block} index={i} />
-                ))}
-              </div>
+
+              {/* Empty translated result — backend returned no blocks */}
+              {(!result.translatedBlocks || result.translatedBlocks.length === 0) ? (
+                <div className="flex flex-col items-center py-8 space-y-2 text-slate-400">
+                  <Globe className="w-8 h-8 opacity-30" />
+                  <p className="text-sm font-medium">No translated content returned</p>
+                  <p className="text-xs text-center opacity-70">
+                    The page may have no translatable text, or the service returned an
+                    empty result. Try again or check with backend.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
+                  {result.translatedBlocks.map((block, i) => (
+                    <BlockPreviewItem key={block.id ?? i} block={block} index={i} />
+                  ))}
+                </div>
+              )}
             </>
           )}
 
@@ -345,7 +449,7 @@ export const TranslatePageModal: React.FC<TranslatePageModalProps> = ({
               <button
                 type="button"
                 onClick={handlePreview}
-                disabled={!selectedLang || step === "previewing"}
+                disabled={!selectedLang || step === "previewing" || isEmpty}
                 className="inline-flex items-center space-x-1.5 px-4 py-2 text-sm font-semibold bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl transition"
               >
                 {step === "previewing" ? (
