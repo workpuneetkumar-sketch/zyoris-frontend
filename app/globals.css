@@ -2486,4 +2486,496 @@ a {
   border: 1px solid rgba(37, 99, 235, 0.2);
 }
 
+/* ==========================================================================
+   Tasks 1, 2, 3: Sales Execution Workspaces (Proposals, Reviews, Outreach, Scoring)
+   ========================================================================== */
+
+/* Sub-View Switcher */
+.sales-view-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem;
+  background: var(--color-background-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  width: fit-content;
+}
+
+.sales-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sales-view-btn:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+}
+
+.sales-view-btn-active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.sales-badge-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: #f59e0b;
+  color: #ffffff;
+}
+
+.sales-tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  background: rgba(140, 150, 170, 0.16);
+  color: var(--color-foreground);
+  margin-left: 0.35rem;
+}
+
+.sales-channel-tab-active .sales-tab-badge {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+/* Toast Success / Action Banner */
+.sales-toast-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  color: #059669;
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: fadeIn 0.2s ease-in-out;
+}
+
+/* General Badges */
+.sales-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.sales-badge-success {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.sales-badge-warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.sales-badge-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #dc2626;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.sales-badge-info {
+  background: rgba(37, 99, 235, 0.08);
+  color: #2563eb;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.sales-badge-muted {
+  background: var(--color-background-secondary);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.sales-btn-danger {
+  background: #dc2626;
+  color: #ffffff;
+  border: 1px solid #b91c1c;
+}
+
+.sales-btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+/* Task 1: Reviews Queue */
+.sales-reviews-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sales-reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.sales-review-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.125rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.sales-review-card:hover {
+  border-color: rgba(59, 130, 246, 0.35);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+.sales-review-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.sales-review-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+}
+
+.sales-review-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sales-review-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.sales-review-reason {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--color-text-secondary);
+}
+
+.sales-suggested-matches {
+  margin-top: 0.25rem;
+}
+
+.sales-review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+}
+
+/* Task 2: Proposals Grid & Cards */
+.sales-proposals-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sales-proposals-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.sales-proposal-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 1.125rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  cursor: pointer;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  text-align: left;
+}
+
+.sales-proposal-card:hover {
+  border-color: rgba(59, 130, 246, 0.45);
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.08);
+  transform: translateY(-1px);
+}
+
+.sales-proposal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sales-proposal-card-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+
+.sales-proposal-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+}
+
+.sales-proposal-card-footer {
+  margin-top: auto;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Task 2: Governance Rules */
+.sales-rules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sales-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sales-rule-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 0.875rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.sales-rule-name {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.sales-rule-condition {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+}
+
+.sales-rule-condition code {
+  font-family: monospace;
+  background: var(--color-background-secondary);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+/* Task 2: Outreach Workspace */
+.sales-outreach-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sales-outreach-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  padding: 1.25rem;
+}
+
+.sales-card-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Task 2: Sequences Workspace */
+.sales-sequences-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sales-enrollments-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Task 3: Lead AI Scoring & Routing */
+.sales-lead-scoring-routing-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.sales-score-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border: 3px solid transparent;
+}
+
+.sales-score-number {
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.sales-score-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.sales-score-badge-high {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.sales-score-badge-medium {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.sales-score-badge-low {
+  background: rgba(100, 116, 139, 0.1);
+  color: #64748b;
+  border-color: rgba(100, 116, 139, 0.3);
+}
+
+/* ── Mobile-Responsive Sales Workspace Shell Styles ───────────────────────── */
+@media (max-width: 900px) {
+  .sales-exec-page {
+    padding: 1rem;
+    gap: 1rem;
+  }
+
+  .sales-exec-header {
+    padding: 1.15rem;
+    gap: 0.85rem;
+  }
+
+  .sales-exec-title {
+    font-size: 1.25rem;
+  }
+
+  .sales-exec-subtitle {
+    font-size: 0.8125rem;
+  }
+
+  .sales-exec-tabs {
+    gap: 0.35rem;
+    padding-bottom: 0.5rem;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .sales-exec-tab-btn {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    flex-shrink: 0;
+  }
+
+  .sales-modal-dialog {
+    max-width: calc(100vw - 1.5rem) !important;
+    margin: 0.75rem auto !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .sales-exec-page {
+    padding: 0.65rem;
+    gap: 0.85rem;
+  }
+
+  .sales-exec-header {
+    padding: 0.875rem;
+    border-radius: 10px;
+  }
+
+  .sales-exec-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .sales-exec-header-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .sales-exec-tabs {
+    padding-bottom: 0.6rem;
+  }
+
+  .sales-exec-tab-btn {
+    padding: 0.45rem 0.65rem;
+    font-size: 0.775rem;
+  }
+
+  .sales-filter-toolbar {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.75rem !important;
+  }
+
+  .sales-modal-dialog {
+    max-width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+}
+
 

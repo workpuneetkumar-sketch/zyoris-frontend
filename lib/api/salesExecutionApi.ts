@@ -1,8 +1,6 @@
 // lib/api/salesExecutionApi.ts
-// Sales Execution API Client for 17 Verified Backend Endpoints (Days 1, 2, and 3)
-// Connected to Prisma Models: NormalizedActivityEvent, SalesSequence, SalesSequenceStep,
-// SalesSequenceEnrollment, SalesSequenceStepExecution, SalesPlaybook, SalesPlaybookVersion,
-// SalesPlaybookRecommendation, Quote, QuoteItem, QuoteESignEnvelope
+// Sales Execution API Client for Task 1, Task 2, and Task 3
+// Strictly consumes real backend APIs with ZERO mock data
 
 import api from "@/lib/api/api";
 import {
@@ -15,864 +13,663 @@ import {
   SubmitTranscriptPayload,
   MeetingIntelligenceResponse,
   SalesChannel,
-  IngestActivityPayload,
-  TimelineFilter,
-  CreateSequencePayload,
+  ActivityReviewsResponse,
+  ResolveReviewPayload,
+  DismissReviewPayload,
+  SalesProposal,
+  CreateProposalPayload,
+  ProposalRule,
+  CreateProposalRulePayload,
+  OutreachGeneratePayload,
+  OutreachDraft,
   SequenceRecord,
-  SequenceEnrollmentPayload,
+  CreateSequencePayload,
   SequenceEnrollment,
+  SequenceEnrollmentPayload,
+  SequenceExecution,
   AdvanceSequenceStepPayload,
-  PauseSequencePayload,
-  CreatePlaybookPayload,
-  PlaybookRecord,
-  EvaluatePlaybookPayload,
-  PlaybookEvaluationResult,
-  CreateQuotePayload,
-  QuoteRecord,
-  ApproveQuotePayload,
-  GenerateQuotePdfPayload,
-  QuoteEsignPayload,
-  EsignWebhookPayload,
 } from "@/types/salesExecution";
 
-/**
- * Standardize API responses so frontend components consistently receive { success: true, data: T }
- */
-function normalizeResponse<T>(resData: any, fallbackData?: T): { success: boolean; data: T; message?: string } {
-  if (!resData) {
-    return { success: true, data: fallbackData as T };
-  }
-  if (typeof resData.success === "boolean" && resData.data !== undefined) {
-    return resData;
-  }
-  if (resData.data !== undefined) {
-    return { success: true, data: resData.data, message: resData.message };
-  }
-  return { success: true, data: resData, message: resData.message };
-}
-
-// ── Day 1 — Activity Capture & AI Intelligence (NormalizedActivityEvent) ──
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// TASK 1 APIs ΓÇö Activity Capture, Reviews, Meeting Prep & Intelligence
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 /**
- * 1. POST /api/sales/activities/ingest
- * Ingest raw activity into NormalizedActivityEvent model with idempotency key.
+ * POST /api/sales/activities
+ * Ingest a sales activity across any supported channel.
  */
-export async function ingestActivity(
-  payload: IngestActivityPayload
-): Promise<{ success: boolean; data: Record<string, unknown>; message?: string }> {
-  try {
-    const res = await api.post("/api/sales/activities/ingest", {
-      idempotencyKey: payload.idempotencyKey || `ik_${Date.now()}`,
-      eventType: payload.eventType || "EMAIL_SENT",
-      entityType: payload.entityType || (payload.dealId ? "DEAL" : payload.customerId ? "CUSTOMER" : "LEAD"),
-      entityId: payload.entityId || payload.dealId || payload.customerId || "lead_default",
-      channel: payload.channel || "EMAIL",
-      source: payload.source || "GMAIL",
-      payload: payload.payload || { subject: payload.eventType || "Activity Logged" },
-      customerId: payload.customerId,
-      dealId: payload.dealId,
-      contactId: payload.contactId,
-      leadId: payload.leadId,
-    });
-    if (res?.data && res.data.success !== false) return normalizeResponse(res.data);
-  } catch (err: any) {
-    try {
-      const legacyRes = await api.post("/api/sales/activities", {
-        channel: payload.channel || "EMAIL",
-        source: payload.source || "GMAIL",
-        payload: payload.payload || { subject: payload.eventType },
-        customerId: payload.customerId,
-        dealId: payload.dealId,
-      });
-      if (legacyRes?.data && legacyRes.data.success !== false) return normalizeResponse(legacyRes.data);
-    } catch (legacyErr) {
-      // ignore
-    }
-  }
-
-  return {
-    success: true,
-    data: {
-      id: `act_${Date.now()}`,
-      idempotencyKey: payload.idempotencyKey || `ik_${Date.now()}`,
-      eventType: payload.eventType || "EMAIL_SENT",
-      entityType: payload.entityType || "LEAD",
-      entityId: payload.entityId || "lead_default",
-      occurredAt: new Date().toISOString(),
-      channel: payload.channel || "EMAIL",
-      ...payload,
-    },
-    message: "Activity ingested successfully",
-  };
-}
-
-/**
- * 2. GET /api/sales/activities/timeline
- * Fetch activity timeline for NormalizedActivityEvent model with filters.
- */
-export async function getActivitiesTimeline(
-  filters?: TimelineFilter
-): Promise<SalesActivitiesResponse> {
-  const params: Record<string, string | number> = {};
-  if (filters?.entityType) params.entityType = filters.entityType;
-  if (filters?.entityId) params.entityId = filters.entityId;
-  if (filters?.channel && filters.channel !== "ALL") params.channel = filters.channel;
-  if (filters?.page) params.page = filters.page;
-  if (filters?.limit) params.limit = filters.limit;
-
-  try {
-    const res = await api.get("/api/sales/activities/timeline", { params });
-    if (res?.data && res.data.success !== false) {
-      const dataArr = Array.isArray(res.data.items)
-        ? res.data.items
-        : Array.isArray(res.data.data)
-        ? res.data.data
-        : Array.isArray(res.data)
-        ? res.data
-        : [];
-      return {
-        success: true,
-        data: dataArr,
-        pagination: res.data.pagination || {
-          page: filters?.page || 1,
-          limit: filters?.limit || 20,
-          total: dataArr.length,
-          totalPages: 1,
-        },
-      };
-    }
-  } catch (err: any) {
-    try {
-      const legacyRes = await api.get("/api/sales/activities", { params });
-      if (legacyRes?.data && legacyRes.data.success !== false) {
-        const dataArr = Array.isArray(legacyRes.data.data) ? legacyRes.data.data : Array.isArray(legacyRes.data) ? legacyRes.data : [];
-        return {
-          success: true,
-          data: dataArr,
-          pagination: legacyRes.data.pagination || {
-            page: filters?.page || 1,
-            limit: filters?.limit || 20,
-            total: dataArr.length,
-            totalPages: 1,
-          },
-        };
-      }
-    } catch (legacyErr) {
-      // ignore
-    }
-  }
-
-  return {
-    success: true,
-    data: [],
-    pagination: {
-      page: filters?.page || 1,
-      limit: filters?.limit || 20,
-      total: 0,
-      totalPages: 1,
+export async function createSalesActivity(
+  payload: CreateSalesActivityPayload
+): Promise<{ success: boolean; data: { activity: CapturedActivity; [key: string]: unknown }; message?: string }> {
+  const body = {
+    channel: payload.channel,
+    source: payload.source || "MANUAL",
+    ...(payload.externalId ? { externalId: payload.externalId } : {}),
+    ...(payload.customerId ? { customerId: payload.customerId } : {}),
+    ...(payload.dealId ? { dealId: payload.dealId } : {}),
+    ...(payload.contactId ? { contactId: payload.contactId } : {}),
+    ...(payload.leadId ? { leadId: payload.leadId } : {}),
+    payload: payload.payload || {
+      subject: (payload as unknown as Record<string, unknown>).subject,
+      content: (payload as unknown as Record<string, unknown>).content,
+      body: (payload as unknown as Record<string, unknown>).body,
+      ...(payload as unknown as Record<string, unknown>).metadata as Record<string, unknown>,
     },
   };
-}
-
-// ── Resilient Fallback Generators for Meeting Prep & Intelligence ──────────
-
-function getFallbackMeetingPrepResponse(meetingId: string): MeetingPrepResponse {
-  return {
-    success: true,
-    data: {
-      meetingContext: {
-        title: `Executive Strategy Discussion (${meetingId || "meet_default"})`,
-        scheduledStartTime: new Date().toISOString(),
-        account: {
-          id: "acc_ent_101",
-          name: "Acme Enterprise Solutions",
-          domain: "acme.corp",
-          industry: "Cloud Infrastructure & SaaS",
-        },
-        customer: {
-          id: "cust_777",
-          name: "Sarah Jenkins",
-          email: "sarah.j@acme.corp",
-          company: "Acme Enterprise Solutions",
-        },
-        deal: {
-          id: "deal_500",
-          title: "Enterprise Annual Contract - 100 Seats",
-          name: "Enterprise Annual Contract",
-          stage: "DISCOVERY_DEMO",
-          amount: 45000,
-          probability: 75,
-        },
-        stakeholders: [
-          { name: "Sarah Jenkins", role: "VP Procurement", email: "sarah.j@acme.corp", title: "Budget Owner", influence: "HIGH" },
-          { name: "David Chen", role: "Chief Security Officer", email: "david.c@acme.corp", title: "Security Decision Maker", influence: "HIGH" },
-        ],
-      },
-      observedFacts: {
-        recentActivities: [
-          { type: "EMAIL", channel: "EMAIL", summary: "Requested SOC2 type II compliance package", timestamp: new Date(Date.now() - 86400000).toISOString() },
-          { type: "CALL", channel: "CALLS", summary: "Confirmed interest in multi-region data residency", timestamp: new Date(Date.now() - 172800000).toISOString() },
-        ],
-        previousCommitments: [
-          { description: "Share updated security audit report by Thursday 5pm", owner: "Sales Rep", status: "PENDING", confidence: 0.95 },
-          { description: "Provide custom seat tier pricing for 100+ seats", owner: "Account Executive", status: "COMPLETED", confidence: 0.98 },
-        ],
-        openActionItems: [
-          { task: "Send multi-region deployment whitepaper to David Chen", assignee: "Sales Engineer", dueDate: "Tomorrow", confidence: 0.9 },
-          { task: "Draft tailored SLA agreement for 99.9% uptime guarantee", assignee: "Legal / AE", dueDate: "Friday", confidence: 0.85 },
-        ],
-        knownRisks: [
-          { risk: "Security Audit Delay", description: "Infosec approval pending SOC2 report delivery", severity: "HIGH", evidence: "Customer requested compliance package prior to contract signing" },
-          { risk: "Competitor Evaluation", description: "Evaluating alternative vendor for seat pricing", severity: "MEDIUM", evidence: "Mentioned comparing multi-tenant tier costs" },
-        ],
-      },
-      derivedContext: {
-        dealHealth: "HEALTHY",
-        engagementVelocity: "HIGH",
-        talkingPoints: [
-          "Highlight guaranteed EU/US data residency compliance.",
-          "Emphasize 24/7 dedicated enterprise support SLA.",
-          "Review seat tier volume discount pricing options.",
-        ],
-      },
-      recommendations: {
-        suggestedAgenda: [
-          { topic: "Executive Introductions & Objectives", durationMins: 5, rationale: "Align on meeting goals and decision timeline" },
-          { topic: "Security & Data Residency Architecture Review", durationMins: 15, rationale: "Address David Chen's SOC2 and compliance questions" },
-          { topic: "Commercial Terms & Implementation Roadmap", durationMins: 10, rationale: "Confirm seat licensing tier and target start date" },
-        ],
-        openQuestions: [
-          "What is your target go-live date for the initial 100 seats?",
-          "Are there any additional vendor security reviews required by legal?",
-        ],
-      },
-    },
-  };
-}
-
-function getFallbackMeetingIntelligenceResponse(
-  meetingId: string,
-  transcript?: string
-): MeetingIntelligenceResponse {
-  return {
-    success: true,
-    data: {
-      id: `intel_${Date.now()}`,
-      meetingId: meetingId || "meet_default",
-      status: "COMPLETED",
-      summary: transcript
-        ? "Extracted key commercial requirements, security audit action items, and data residency commitments from transcript."
-        : "Automated AI intelligence extraction completed for meeting session.",
-      actionItems: [
-        {
-          task: "Send complete security audit report to client team by Thursday 5pm",
-          assignee: "Sales AE",
-          dueDate: "Thursday 5:00 PM",
-          confidence: 0.96,
-          evidence: "Sales: I will send the complete security audit report to your team by Thursday 5pm.",
-        },
-        {
-          task: "Prepare pilot onboarding package for 100 seats",
-          assignee: "Solutions Engineer",
-          dueDate: "October 15",
-          confidence: 0.92,
-          evidence: "Client: We need a pilot of 100 seats starting October 15.",
-        },
-      ],
-      commitments: [
-        {
-          owner: "Sales Rep",
-          status: "COMMITTED",
-          description: "Deliver EU data residency compliance guarantee and SOC2 audit package",
-          confidence: 0.95,
-          evidence: "Sales: We can guarantee EU data residency with full SOC2 compliance.",
-        },
-      ],
-      objections: [
-        {
-          objection: "Security team requires full audit package prior to pilot sign-off",
-          objectionType: "SECURITY_COMPLIANCE",
-          resolved: true,
-          response: "Guaranteed delivery of SOC2 audit package by Thursday 5pm",
-          confidence: 0.9,
-          evidence: "Client: Our security team requires the audit package by Friday.",
-        },
-      ],
-      requirements: [
-        {
-          requirement: "Multi-region data residency (EU/US options)",
-          status: "VALIDATED",
-          confidence: 0.98,
-          evidence: "Client: We need multi-region data residency",
-        },
-        {
-          requirement: "100-seat pilot phase starting October 15",
-          status: "IN_PROGRESS",
-          confidence: 0.95,
-          evidence: "Client: pilot of 100 seats starting October 15",
-        },
-      ],
-      importantTopics: ["SOC2 Compliance", "Data Residency", "100 Seat Pilot", "Security Audit"],
-      risks: [
-        {
-          type: "COMPLIANCE_TIMELINE",
-          severity: "MEDIUM",
-          description: "Infosec review deadline requires report delivery by Thursday",
-          evidence: "Client: Our security team requires the audit package by Friday.",
-        },
-      ],
-      participants: [
-        { name: "Client Lead", role: "Decision Maker", sentiment: "POSITIVE" },
-        { name: "Sales AE", role: "Account Executive", sentiment: "POSITIVE" },
-      ],
-      processedAt: new Date().toISOString(),
-    },
-  };
+  const res = await api.post("/api/sales/activities", body);
+  return res.data;
 }
 
 /**
- * 3. POST /api/sales/meetings/:id/prep
- * Generate meeting prep brief for specific meeting ID.
+ * POST /api/sales/activities/:channel
+ * Ingest an activity via channel-specific endpoint.
  */
-export async function generateMeetingPrep(
-  meetingId: string,
-  payload?: Record<string, unknown>
-): Promise<MeetingPrepResponse> {
-  try {
-    const res = await api.post(`/api/sales/meetings/${meetingId}/prep`, payload || {});
-    if (res?.data) return normalizeResponse(res.data, getFallbackMeetingPrepResponse(meetingId).data);
-  } catch (err: any) {
-    try {
-      const getRes = await api.get(`/api/sales/meetings/${meetingId}/prep`);
-      if (getRes?.data) return normalizeResponse(getRes.data, getFallbackMeetingPrepResponse(meetingId).data);
-    } catch (getErr) {
-      // ignore
-    }
-  }
-  return getFallbackMeetingPrepResponse(meetingId);
+export async function createSalesActivityByChannel(
+  channel: SalesChannel | string,
+  payload: Record<string, unknown>
+): Promise<{ success: boolean; data: unknown; message?: string }> {
+  const ch = typeof channel === "string" ? channel.toLowerCase() : String(channel).toLowerCase();
+  const body = payload.payload ? payload : { payload, source: payload.source || "API" };
+  const res = await api.post(`/api/sales/activities/${ch}`, body);
+  return res.data;
 }
 
 /**
- * 4. POST /api/sales/meetings/:id/extract
- * Submit transcript & extract intelligence for specific meeting ID.
+ * GET /api/sales/activities
+ * Fetch captured sales activities with optional filtering and pagination.
  */
-export async function extractMeetingIntelligence(
-  meetingId: string,
-  payload: { transcript: string; speakers?: string[]; dealId?: string; customerId?: string }
-): Promise<MeetingIntelligenceResponse> {
-  try {
-    const res = await api.post(`/api/sales/meetings/${meetingId}/extract`, payload);
-    if (res?.data) return normalizeResponse(res.data, getFallbackMeetingIntelligenceResponse(meetingId, payload.transcript).data);
-  } catch (err: any) {
-    try {
-      const legacyRes = await api.post("/api/sales/meetings/transcript", {
-        meetingId,
-        transcript: payload.transcript,
-        dealId: payload.dealId,
-        customerId: payload.customerId,
-      });
-      if (legacyRes?.data) return normalizeResponse(legacyRes.data, getFallbackMeetingIntelligenceResponse(meetingId, payload.transcript).data);
-    } catch (legacyErr) {
-      // ignore
-    }
-  }
-  return getFallbackMeetingIntelligenceResponse(meetingId, payload.transcript);
-}
-
-/**
- * 5. GET /api/sales/meetings/:id/intelligence
- * Retrieve meeting intelligence for specific meeting ID.
- */
-export async function getMeetingIntelligenceData(
-  meetingId: string
-): Promise<MeetingIntelligenceResponse> {
-  try {
-    const res = await api.get(`/api/sales/meetings/${meetingId}/intelligence`);
-    if (res?.data) return normalizeResponse(res.data, getFallbackMeetingIntelligenceResponse(meetingId).data);
-  } catch (err: any) {
-    // fallback
-  }
-  return getFallbackMeetingIntelligenceResponse(meetingId);
-}
-
-// ── Legacy Day 1 API helpers ────────────────────────────────────────────────
-
 export async function getSalesActivities(
   filters?: SalesActivitiesFilter
 ): Promise<SalesActivitiesResponse> {
-  return getActivitiesTimeline(filters as any);
+  const params: Record<string, string | number> = {};
+
+  if (filters?.channel && filters.channel !== "ALL") {
+    params.channel = filters.channel;
+  }
+  if (filters?.customerId) {
+    params.customerId = filters.customerId;
+  }
+  if (filters?.dealId) {
+    params.dealId = filters.dealId;
+  }
+  if (filters?.contactId) {
+    params.contactId = filters.contactId;
+  }
+  if (filters?.identityStatus) {
+    params.identityStatus = filters.identityStatus;
+  }
+  if (filters?.page) {
+    params.page = filters.page;
+  }
+  if (filters?.limit) {
+    params.limit = filters.limit;
+  }
+
+  const res = await api.get("/api/sales/activities", { params });
+  return res.data;
 }
 
+/**
+ * GET /api/sales/activities/:id
+ * Fetch details of a single captured activity by ID.
+ */
 export async function getSalesActivityById(
   id: string,
   fallbackActivity?: CapturedActivity | null
 ): Promise<SingleActivityResponse> {
-  try {
-    const res = await api.get(`/api/sales/activities/${id}`);
-    if (res?.data && res.data.success !== false && res.data.data) return normalizeResponse(res.data);
-  } catch (err) {
-    // ignore
-  }
-  return {
-    success: true,
-    data: fallbackActivity || {
-      id,
-      organizationId: "org_1",
-      channel: "EMAIL",
-      activityType: "EMAIL.RECEIVED",
-      source: "GMAIL",
-      duplicateStatus: "UNIQUE",
-      identityStatus: "RESOLVED",
-      subject: "Customer Inquiry",
-      content: "Thank you for reaching out.",
-      occurredAt: new Date().toISOString(),
-      receivedAt: new Date().toISOString(),
-    },
-  };
+  const res = await api.get(`/api/sales/activities/${id}`);
+  return res.data;
 }
 
-export async function createSalesActivity(
-  payload: CreateSalesActivityPayload
-): Promise<{ success: boolean; data: { activity: CapturedActivity; [key: string]: unknown } }> {
-  return ingestActivity({
-    channel: payload.channel,
-    source: payload.source,
-    payload: payload.payload,
-    customerId: payload.customerId,
-    dealId: payload.dealId,
-    contactId: payload.contactId,
-    leadId: payload.leadId,
-  }) as any;
+/**
+ * GET /api/sales/activities/reviews
+ * Fetch pending activity duplicate or identity reviews.
+ */
+export async function getActivityReviews(params?: {
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<ActivityReviewsResponse> {
+  const res = await api.get("/api/sales/activities/reviews", { params });
+  return res.data;
 }
 
-export async function createSalesActivityByChannel(
-  channel: SalesChannel,
-  payload: Record<string, unknown>
-): Promise<{ success: boolean; data: unknown }> {
-  return ingestActivity({
-    channel,
-    payload,
-  });
+/**
+ * POST /api/sales/activities/reviews/:id/resolve
+ * Resolve an activity review (e.g. merge duplicate, confirm match).
+ */
+export async function resolveActivityReview(
+  id: string,
+  payload?: ResolveReviewPayload
+): Promise<{ success: boolean; data: unknown; message?: string }> {
+  const res = await api.post(`/api/sales/activities/reviews/${id}/resolve`, payload || {});
+  return res.data;
 }
 
-export async function getMeetingPrep(meetingId: string): Promise<MeetingPrepResponse> {
-  return generateMeetingPrep(meetingId);
+/**
+ * POST /api/sales/activities/reviews/:id/dismiss
+ * Dismiss an activity review (e.g. mark as false positive).
+ */
+export async function dismissActivityReview(
+  id: string,
+  payload?: DismissReviewPayload
+): Promise<{ success: boolean; data: unknown; message?: string }> {
+  const res = await api.post(`/api/sales/activities/reviews/${id}/dismiss`, payload || {});
+  return res.data;
 }
 
+/**
+ * GET /api/sales/meetings/:id/prep
+ * Generate/retrieve grounded meeting preparation context by meeting ID.
+ */
+export async function getMeetingPrep(
+  meetingId: string
+): Promise<MeetingPrepResponse> {
+  const res = await api.get(`/api/sales/meetings/${meetingId}/prep`);
+  return res.data;
+}
+
+/**
+ * POST /api/sales/meetings/transcript
+ * Ingest and process meeting transcript through AI intelligence pipeline.
+ */
 export async function submitMeetingTranscript(
   payload: SubmitTranscriptPayload
 ): Promise<MeetingIntelligenceResponse> {
-  const meetingId = payload.meetingId || `meet_${Date.now()}`;
-  return extractMeetingIntelligence(meetingId, {
-    transcript: payload.transcript,
-    dealId: payload.dealId,
-    customerId: payload.customerId,
-  });
+  const res = await api.post("/api/sales/meetings/transcript", payload);
+  return res.data;
 }
 
+/**
+ * GET /api/sales/meetings/:id/intelligence
+ * Retrieve structured meeting intelligence by intelligence ID or meeting ID.
+ */
 export async function getMeetingIntelligence(
   idOrMeetingId: string
 ): Promise<MeetingIntelligenceResponse> {
-  return getMeetingIntelligenceData(idOrMeetingId);
+  const res = await api.get(`/api/sales/meetings/${idOrMeetingId}/intelligence`);
+  return res.data;
 }
 
-// ── Day 2 — Sequences + Playbooks (SalesSequence, SalesPlaybook) ────────────
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// TASK 2 APIs ΓÇö Proposals & Rules
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 /**
- * 6. POST /api/sales/sequences
- * Create a new automated outreach sequence in SalesSequence model.
+ * POST /api/sales/proposals
+ * Create a new proposal for review and approval.
+ */
+export async function createProposal(
+  payload: CreateProposalPayload
+): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+  const res = await api.post("/api/sales/proposals", payload);
+  return res.data;
+}
+
+/**
+ * GET /api/sales/proposals
+ * List sales proposals with optional filtering by status or deal.
+ */
+export async function getProposals(params?: {
+  status?: string;
+  targetEntityType?: string;
+  targetEntityId?: string;
+  dealId?: string;
+  customerId?: string;
+  page?: number;
+  limit?: number;
+  offset?: number;
+}): Promise<{ success: boolean; data: SalesProposal[]; total?: number; message?: string }> {
+  const queryParams: Record<string, unknown> = {};
+  if (params?.status && params.status !== "ALL") {
+    queryParams.status = params.status === "PENDING_APPROVAL" ? "PENDING" : params.status;
+  }
+  if (params?.targetEntityType) queryParams.targetEntityType = params.targetEntityType;
+  if (params?.targetEntityId) queryParams.targetEntityId = params.targetEntityId;
+  else if (params?.dealId) queryParams.targetEntityId = params.dealId;
+  else if (params?.customerId) queryParams.targetEntityId = params.customerId;
+
+  if (params?.limit) queryParams.limit = params.limit;
+  if (params?.offset !== undefined) queryParams.offset = params.offset;
+  else if (params?.page && params?.limit) queryParams.offset = (params.page - 1) * params.limit;
+
+  const res = await api.get("/api/sales/proposals", { params: queryParams });
+  return res.data;
+}
+
+/**
+ * GET /api/sales/proposals/:id
+ * Retrieve single proposal with proposed changes and audit trail.
+ */
+export async function getProposalById(
+  id: string
+): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+  const res = await api.get(`/api/sales/proposals/${id}`);
+  return res.data;
+}
+
+/**
+ * POST /api/sales/proposals/:id/approve
+ * Approve proposed changes or discounts.
+ */
+export async function approveProposal(
+  id: string,
+  payload?: { comment?: string; notes?: string }
+): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+  const notes = payload?.notes || payload?.comment || "Approved via CRM Proposals Workspace";
+  const res = await api.post(`/api/sales/proposals/${id}/approve`, { notes });
+  return res.data;
+}
+
+/**
+ * POST /api/sales/proposals/:id/reject
+ * Reject proposal with reason.
+ */
+export async function rejectProposal(
+  id: string,
+  payload?: { reason?: string }
+): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+  const reason = payload?.reason || "Rejected by reviewer";
+  const res = await api.post(`/api/sales/proposals/${id}/reject`, { reason });
+  return res.data;
+}
+
+/**
+ * POST /api/sales/proposals/:id/apply
+ * Apply approved proposal changes to live CRM deal/account records.
+ */
+export async function applyProposal(
+  id: string,
+  payload?: { force?: boolean }
+): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+  const res = await api.post(`/api/sales/proposals/${id}/apply`, payload || {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/proposals/:id/cancel
+ * Cancel an open proposal.
+ */
+export async function cancelProposal(
+  id: string,
+  payload?: { reason?: string }
+): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+  const res = await api.post(`/api/sales/proposals/${id}/cancel`, payload || {});
+  return res.data;
+}
+
+/**
+ * GET /api/sales/proposals/rules
+ * Fetch automated proposal approval & governance rules.
+ */
+export async function getProposalRules(): Promise<{
+  success: boolean;
+  data: ProposalRule[];
+  message?: string;
+}> {
+  const res = await api.get("/api/sales/proposals/rules");
+  return res.data;
+}
+
+/**
+ * POST /api/sales/proposals/rules
+ * Create a new governance / auto-approval rule for proposals.
+ */
+export async function createProposalRule(
+  payload: CreateProposalRulePayload
+): Promise<{ success: boolean; data: ProposalRule; message?: string }> {
+  const targetEntityType = payload.targetEntityType || "DEAL";
+  const fieldName = payload.fieldName || (payload.discountThreshold !== undefined ? "discount" : "amount");
+  const riskLevel = payload.riskLevel || (payload.discountThreshold && payload.discountThreshold > 20 ? "HIGH" : "MEDIUM");
+  const approvalRequirement =
+    payload.approvalRequirement ||
+    (payload.autoApprove ? "AUTO_APPLY" : "REQUIRES_APPROVAL");
+
+  const body = {
+    targetEntityType,
+    fieldName,
+    riskLevel,
+    approvalRequirement,
+    minConfidenceAutoApply: payload.minConfidenceAutoApply ?? 0.85,
+    isActive: payload.isActive ?? true,
+    description: payload.description || payload.name || payload.condition || "Approval Governance Rule",
+  };
+
+  const res = await api.post("/api/sales/proposals/rules", body);
+  return res.data;
+}
+
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// TASK 2 APIs ΓÇö Outreach Generation & Drafts
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+/**
+ * POST /api/sales/outreach/generate
+ * Generate grounded, personalized outreach via AI with citations and context.
+ */
+export async function generateOutreach(
+  payload: OutreachGeneratePayload
+): Promise<{ success: boolean; data: OutreachDraft; message?: string }> {
+  const targetEntityType =
+    payload.targetEntityType ||
+    (payload.leadId ? "LEAD" : payload.dealId ? "DEAL" : payload.customerId ? "CUSTOMER" : "LEAD");
+  const targetEntityId =
+    payload.targetEntityId || payload.leadId || payload.dealId || payload.customerId || "";
+
+  // Normalize tone and channel to upper case for Swagger enum compliance
+  const channel = String(payload.channel || "EMAIL").toUpperCase();
+  const rawTone = String(payload.tone || "PROFESSIONAL").toUpperCase();
+  const validTones = ["PROFESSIONAL", "CASUAL", "PERSUASIVE", "URGENT"];
+  const tone = validTones.includes(rawTone) ? rawTone : "PROFESSIONAL";
+
+  const body = {
+    targetEntityType,
+    targetEntityId,
+    channel,
+    tone,
+    objective: payload.objective || payload.goal || "Follow-up",
+    ...(payload.templateId ? { templateId: payload.templateId } : {}),
+    ...(payload.customPromptInstructions
+      ? { customPromptInstructions: payload.customPromptInstructions }
+      : payload.context?.notes
+      ? { customPromptInstructions: String(payload.context.notes) }
+      : {}),
+  };
+
+  const res = await api.post("/api/sales/outreach/generate", body);
+  return res.data;
+}
+
+/**
+ * GET /api/sales/outreach/drafts
+ * List generated outreach drafts.
+ */
+export async function getOutreachDrafts(params?: {
+  channel?: string;
+  status?: string;
+  leadId?: string;
+  dealId?: string;
+  targetEntityType?: string;
+  targetEntityId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ success: boolean; data: OutreachDraft[]; message?: string }> {
+  const queryParams: Record<string, unknown> = {};
+  if (params?.channel && params.channel !== "ALL") queryParams.channel = params.channel;
+  if (params?.status && params.status !== "ALL") queryParams.status = params.status;
+  if (params?.targetEntityType) queryParams.targetEntityType = params.targetEntityType;
+  if (params?.targetEntityId) queryParams.targetEntityId = params.targetEntityId;
+  else if (params?.leadId) {
+    queryParams.targetEntityType = "LEAD";
+    queryParams.targetEntityId = params.leadId;
+  } else if (params?.dealId) {
+    queryParams.targetEntityType = "DEAL";
+    queryParams.targetEntityId = params.dealId;
+  }
+  if (params?.limit) queryParams.limit = params.limit;
+  if (params?.offset !== undefined) queryParams.offset = params.offset;
+
+  const res = await api.get("/api/sales/outreach/drafts", { params: queryParams });
+  return res.data;
+}
+
+/**
+ * GET /api/sales/outreach/drafts/:id
+ * Retrieve single outreach draft with grounded context.
+ */
+export async function getOutreachDraftById(
+  id: string
+): Promise<{ success: boolean; data: OutreachDraft; message?: string }> {
+  const res = await api.get(`/api/sales/outreach/drafts/${id}`);
+  return res.data;
+}
+
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+// TASK 2 APIs ΓÇö Sequences & Cadence Management
+// ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+/**
+ * POST /api/sales/sequences
+ * Create a new automated outreach sequence.
  */
 export async function createSequence(
   payload: CreateSequencePayload
 ): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
-  try {
-    const res = await api.post("/api/sales/sequences", payload);
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      id: `seq_${Date.now()}`,
-      name: payload.name,
-      description: payload.description,
-      status: "ACTIVE",
-      createdAt: new Date().toISOString(),
-      steps: (payload.steps || []).map((s, idx) => ({
-        id: `step_${Date.now()}_${idx}`,
-        stepOrder: s.stepOrder || idx + 1,
-        stepType: s.stepType || "EMAIL",
-        delayDays: s.delayDays || 0,
-        subject: s.subject,
-        body: s.body,
-      })),
-    },
-    message: "Sequence created successfully",
+  // Normalize steps to Swagger schema: stepOrder, stepType, name, config
+  const normalizedSteps = (payload.steps || []).map((s, idx) => {
+    let stepType = s.stepType || "SEND_EMAIL";
+    if (stepType === "EMAIL") stepType = "SEND_EMAIL";
+    if (stepType === "CALL" || stepType === "TASK") stepType = "CALL_TASK";
+    if (stepType === "WHATSAPP") stepType = "SEND_WHATSAPP";
+
+    const config = s.config || {
+      subject: s.subject || "",
+      body: s.body || "",
+      delayDays: s.delayDays ?? 0,
+    };
+
+    return {
+      stepOrder: s.stepOrder || idx + 1,
+      stepType,
+      name: s.name || s.subject || `Step ${idx + 1}`,
+      config,
+    };
+  });
+
+  const body = {
+    name: payload.name,
+    description: payload.description || "",
+    steps: normalizedSteps,
   };
+
+  const res = await api.post("/api/sales/sequences", body);
+  return res.data;
 }
 
 /**
- * 7. POST /api/sales/sequences/:id/enroll
- * Enroll contact/lead in sequence (SalesSequenceEnrollment model).
+ * GET /api/sales/sequences
+ * List all automated sales sequences.
+ */
+export async function getSequences(params?: {
+  status?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ success: boolean; data: SequenceRecord[]; total?: number; message?: string }> {
+  const res = await api.get("/api/sales/sequences", { params });
+  return res.data;
+}
+
+/**
+ * GET /api/sales/sequences/:id
+ * Retrieve sequence by ID with its configured steps.
+ */
+export async function getSequenceById(
+  id: string
+): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+  const res = await api.get(`/api/sales/sequences/${id}`);
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/:id/activate
+ * Activate a sequence for new enrollments and step processing.
+ */
+export async function activateSequence(
+  id: string
+): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/${id}/activate`, {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/:id/pause
+ * Pause an active sequence.
+ */
+export async function pauseSequence(
+  id: string
+): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/${id}/pause`, {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/:id/deactivate
+ * Deactivate a sequence.
+ */
+export async function deactivateSequence(
+  id: string
+): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/${id}/deactivate`, {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/:id/archive
+ * Archive an inactive sequence.
+ */
+export async function archiveSequence(
+  id: string
+): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/${id}/archive`, {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/:id/enroll
+ * Enroll a contact or lead into a sequence.
  */
 export async function enrollInSequence(
   sequenceId: string,
   payload: SequenceEnrollmentPayload
 ): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
-  try {
-    const res = await api.post(`/api/sales/sequences/${sequenceId}/enroll`, payload);
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      id: `enr_${Date.now()}`,
-      sequenceId,
-      contactId: payload.contactId,
-      leadId: payload.leadId,
-      customerId: payload.customerId,
-      dealId: payload.dealId,
-      currentStep: 1,
-      status: "ACTIVE",
-      enrolledAt: new Date().toISOString(),
-    },
-    message: "Enrolled in sequence successfully",
+  const targetEntityType =
+    payload.targetEntityType ||
+    (payload.leadId ? "LEAD" : payload.contactId ? "CONTACT" : payload.customerId ? "CUSTOMER" : payload.dealId ? "DEAL" : "LEAD");
+  const targetEntityId =
+    payload.targetEntityId || payload.leadId || payload.contactId || payload.customerId || payload.dealId || "";
+
+  const body = {
+    targetEntityType,
+    targetEntityId,
+    metadata: payload.metadata || {},
   };
+
+  const res = await api.post(`/api/sales/sequences/${sequenceId}/enroll`, body);
+  return res.data;
 }
 
 /**
- * 8. POST /api/sales/sequences/enrollments/:id/step
- * Execute / advance step for enrollment (SalesSequenceStepExecution model).
+ * GET /api/sales/sequences/:id/executions
+ * Fetch step execution history for a sequence.
  */
+export async function getSequenceExecutions(
+  sequenceId: string,
+  params?: {
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }
+): Promise<{ success: boolean; data: SequenceExecution[]; message?: string }> {
+  const res = await api.get(`/api/sales/sequences/${sequenceId}/executions`, { params });
+  return res.data;
+}
+
+/**
+ * GET /api/sales/sequences/enrollments
+ * List all sequence enrollments.
+ */
+export async function getSequenceEnrollments(params?: {
+  sequenceId?: string;
+  targetEntityType?: string;
+  targetEntityId?: string;
+  status?: string;
+  contactId?: string;
+  leadId?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ success: boolean; data: SequenceEnrollment[]; message?: string }> {
+  const queryParams: Record<string, unknown> = {};
+  if (params?.sequenceId) queryParams.sequenceId = params.sequenceId;
+  if (params?.status && params.status !== "ALL") queryParams.status = params.status;
+  if (params?.targetEntityType) queryParams.targetEntityType = params.targetEntityType;
+  if (params?.targetEntityId) queryParams.targetEntityId = params.targetEntityId;
+  else if (params?.leadId) {
+    queryParams.targetEntityType = "LEAD";
+    queryParams.targetEntityId = params.leadId;
+  } else if (params?.contactId) {
+    queryParams.targetEntityType = "CONTACT";
+    queryParams.targetEntityId = params.contactId;
+  }
+  if (params?.limit) queryParams.limit = params.limit;
+  if (params?.offset !== undefined) queryParams.offset = params.offset;
+
+  const res = await api.get("/api/sales/sequences/enrollments", { params: queryParams });
+  return res.data;
+}
+
+/**
+ * GET /api/sales/sequences/enrollments/:id
+ * Retrieve enrollment details by ID.
+ */
+export async function getSequenceEnrollmentById(
+  id: string
+): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
+  const res = await api.get(`/api/sales/sequences/enrollments/${id}`);
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/enrollments/:id/pause
+ * Pause an individual enrollment.
+ */
+export async function pauseSequenceEnrollment(
+  id: string,
+  payload?: { pauseReason?: string }
+): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/enrollments/${id}/pause`, payload || {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/enrollments/:id/resume
+ * Resume a paused enrollment.
+ */
+export async function resumeSequenceEnrollment(
+  id: string
+): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/enrollments/${id}/resume`, {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/enrollments/:id/stop
+ * Stop an enrollment completely.
+ */
+export async function stopSequenceEnrollment(
+  id: string,
+  payload?: { reason?: string }
+): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
+  const res = await api.post(`/api/sales/sequences/enrollments/${id}/stop`, payload || {});
+  return res.data;
+}
+
+/**
+ * POST /api/sales/sequences/tick
+ * Trigger immediate background worker tick to process ready cadence steps.
+ */
+export async function tickSequence(): Promise<{
+  success: boolean;
+  data: { processedCount?: number; executionIds?: string[]; [key: string]: unknown };
+  message?: string;
+}> {
+  const res = await api.post("/api/sales/sequences/tick", {});
+  return res.data;
+}
+
 export async function advanceSequenceStep(
   enrollmentId: string,
   payload?: AdvanceSequenceStepPayload
 ): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
-  try {
-    const res = await api.post(`/api/sales/sequences/enrollments/${enrollmentId}/step`, payload || {});
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    try {
-      const fb = await api.post(`/api/sales/sequences/enrollments/${enrollmentId}/advance`, payload || {});
-      if (fb?.data) return normalizeResponse(fb.data);
-    } catch (fbErr) {
-      // ignore
-    }
-  }
-  return {
-    success: true,
-    data: {
-      id: enrollmentId,
-      sequenceId: "seq_default",
-      currentStep: (payload?.stepNumber || 1) + 1,
-      status: payload?.action === "COMPLETE" ? "COMPLETED" : "ACTIVE",
-      enrolledAt: new Date().toISOString(),
-      lastStepExecutedAt: new Date().toISOString(),
-    },
-    message: "Sequence step executed successfully",
-  };
-}
-
-/**
- * 9. PATCH /api/sales/sequences/enrollments/:id/pause
- * Pause active sequence enrollment.
- */
-export async function pauseSequenceEnrollment(
-  enrollmentId: string,
-  payload?: PauseSequencePayload
-): Promise<{ success: boolean; data: SequenceEnrollment; message?: string }> {
-  try {
-    const res = await api.patch(`/api/sales/sequences/enrollments/${enrollmentId}/pause`, payload || {});
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    if (err.response?.status === 404) {
-      const fb = await api.post(`/api/sales/sequences/enrollments/${enrollmentId}/pause`, payload || {}).catch(() => null);
-      if (fb?.data) return normalizeResponse(fb.data);
-    }
-  }
-  return {
-    success: true,
-    data: {
-      id: enrollmentId,
-      sequenceId: "seq_default",
-      currentStep: 1,
-      status: "PAUSED",
-      pauseReason: payload?.pauseReason || "Manual Pause",
-      enrolledAt: new Date().toISOString(),
-    },
-    message: "Sequence enrollment paused successfully",
-  };
-}
-
-/**
- * 10. POST /api/sales/playbooks
- * Create sales playbook with structured rules/steps (SalesPlaybook & SalesPlaybookVersion models).
- */
-export async function createPlaybook(
-  payload: CreatePlaybookPayload
-): Promise<{ success: boolean; data: PlaybookRecord; message?: string }> {
-  try {
-    const formattedSteps = (payload.steps || []).map((s: any, idx: number) => ({
-      order: s.order || s.stepOrder || idx + 1,
-      actionType: s.actionType || "DISCOVERY",
-      title: s.title || `Step ${idx + 1}`,
-      description: s.description || s.title || `Execute step ${idx + 1}`,
-      mandatory: Boolean(s.mandatory),
-    }));
-    const res = await api.post("/api/sales/playbooks", {
-      name: payload.name,
-      description: payload.description || payload.name,
-      steps: formattedSteps,
-    });
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      id: `pb_${Date.now()}`,
-      name: payload.name,
-      description: payload.description,
-      steps: payload.steps || [],
-      createdAt: new Date().toISOString(),
-    },
-    message: "Playbook created successfully",
-  };
-}
-
-/**
- * 11. POST /api/sales/playbooks/evaluate
- * Evaluate playbook against deal / lead context (SalesPlaybookRecommendation model).
- */
-export async function evaluatePlaybook(
-  payload: EvaluatePlaybookPayload
-): Promise<{ success: boolean; data: PlaybookEvaluationResult; message?: string }> {
-  try {
-    const res = await api.post("/api/sales/playbooks/evaluate", {
-      playbookId: payload.playbookId,
-      dealId: payload.dealId || payload.customerId || "deal_default",
-      context: payload.context || {},
-    });
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    if (err.response?.status === 404 && payload.playbookId) {
-      const fb = await api.post(`/api/sales/playbooks/${payload.playbookId}/evaluate`, payload).catch(() => null);
-      if (fb?.data) return normalizeResponse(fb.data);
-    }
-  }
-  return {
-    success: true,
-    data: {
-      playbookId: payload.playbookId || "pb_default",
-      score: 88,
-      status: "COMPLIANT",
-      recommendations: [
-        "Schedule technical architect Q&A before contract finalization.",
-        "Verify SOC2 compliance requirements with client infosec team.",
-      ],
-      nextBestActions: [
-        "Send PDF quote to primary stakeholder.",
-        "Initiate E-Sign envelope with signers.",
-      ],
-      evaluatedAt: new Date().toISOString(),
-    },
-    message: "Playbook evaluated successfully",
-  };
-}
-
-// ── Day 3 — Quotes + E-Sign (Quote, QuoteItem, QuoteESignEnvelope) ─────────
-
-/**
- * 12. POST /api/sales/quotes
- * Create a new deal quote with line items (Quote & QuoteItem models).
- */
-export async function createQuote(
-  payload: CreateQuotePayload
-): Promise<{ success: boolean; data: QuoteRecord; message?: string }> {
-  try {
-    const res = await api.post("/api/sales/quotes", payload);
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  const calculatedTotal = (payload.items || []).reduce((acc, curr) => acc + (curr.quantity || 1) * (curr.unitPrice || 0), 0);
-  return {
-    success: true,
-    data: {
-      id: `quote_${Date.now()}`,
-      title: payload.title || "Sales Quote",
-      dealId: payload.dealId,
-      customerId: payload.customerId,
-      totalAmount: calculatedTotal,
-      currency: payload.currency || "USD",
-      status: "DRAFT",
-      items: payload.items || [],
-      validUntil: payload.validUntil || "2026-12-31",
-      createdAt: new Date().toISOString(),
-    },
-    message: "Quote created successfully",
-  };
-}
-
-/**
- * 13. GET /api/sales/quotes/:id
- * Retrieve quote details by ID (Quote & QuoteItem models).
- */
-export async function getQuoteById(
-  id: string
-): Promise<{ success: boolean; data: QuoteRecord; message?: string }> {
-  try {
-    const res = await api.get(`/api/sales/quotes/${id}`);
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      id,
-      title: "Enterprise Annual Contract",
-      totalAmount: 18500,
-      currency: "USD",
-      status: "DRAFT",
-      items: [
-        { name: "Enterprise Seat License (50 Units)", quantity: 50, unitPrice: 300, total: 15000 },
-        { name: "Dedicated Onboarding Support", quantity: 1, unitPrice: 3500, total: 3500 },
-      ],
-      createdAt: new Date().toISOString(),
-    },
-    message: "Quote retrieved successfully",
-  };
-}
-
-/**
- * 14. POST /api/sales/quotes/:id/approve
- * Manager approval for sales quote (Quote model status transition to APPROVED).
- */
-export async function approveQuote(
-  id: string,
-  payload?: ApproveQuotePayload
-): Promise<{ success: boolean; data: QuoteRecord; message?: string }> {
-  try {
-    const res = await api.post(`/api/sales/quotes/${id}/approve`, payload || {});
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      id,
-      title: "Enterprise Annual Contract",
-      totalAmount: 18500,
-      currency: "USD",
-      status: "APPROVED",
-      approvedBy: payload?.approvedBy || "VP Sales",
-      approvedAt: new Date().toISOString(),
-      items: [],
-      createdAt: new Date().toISOString(),
-    },
-    message: "Quote approved successfully",
-  };
-}
-
-/**
- * 15. POST /api/sales/quotes/:id/generate-pdf
- * Render PDF document for quote (Quote model pdfUrl update).
- */
-export async function generateQuotePdf(
-  id: string,
-  payload?: GenerateQuotePdfPayload
-): Promise<{ success: boolean; data: { pdfUrl: string; quote: QuoteRecord }; message?: string }> {
-  try {
-    const res = await api.post(`/api/sales/quotes/${id}/generate-pdf`, payload || {});
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      pdfUrl: `https://zyoris.com/docs/quotes/${id}.pdf`,
-      quote: {
-        id,
-        title: "Enterprise Annual Contract",
-        totalAmount: 18500,
-        currency: "USD",
-        status: "PDF_GENERATED",
-        pdfUrl: `https://zyoris.com/docs/quotes/${id}.pdf`,
-        items: [],
-        createdAt: new Date().toISOString(),
-      },
-    },
-    message: "PDF generated successfully",
-  };
-}
-
-/**
- * 16. POST /api/sales/quotes/:id/esign
- * Send quote for e-signature (QuoteESignEnvelope model creation).
- */
-export async function sendQuoteEsign(
-  id: string,
-  payload: QuoteEsignPayload
-): Promise<{ success: boolean; data: { envelopeId: string; status: string; quote: QuoteRecord }; message?: string }> {
-  try {
-    const res = await api.post(`/api/sales/quotes/${id}/esign`, payload);
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    if (err.response?.status === 404) {
-      const fb = await api.post(`/api/sales/quotes/${id}/send-esign`, payload).catch(() => null);
-      if (fb?.data) return normalizeResponse(fb.data);
-    }
-  }
-  const envId = `env_${Date.now()}`;
-  return {
-    success: true,
-    data: {
-      envelopeId: envId,
-      status: "SENT",
-      quote: {
-        id,
-        title: "Enterprise Annual Contract",
-        totalAmount: 18500,
-        currency: "USD",
-        status: "SENT_FOR_ESIGN",
-        envelopeId: envId,
-        items: [],
-        createdAt: new Date().toISOString(),
-      },
-    },
-    message: "E-Sign request sent successfully",
-  };
-}
-
-/**
- * 17. POST /api/sales/esign/webhook
- * Receive e-sign provider status webhook updates (QuoteESignEnvelope status transition to SIGNED).
- */
-export async function triggerEsignWebhook(
-  payload: EsignWebhookPayload
-): Promise<{ success: boolean; data: Record<string, unknown>; message?: string }> {
-  try {
-    const res = await api.post("/api/sales/esign/webhook", payload);
-    if (res?.data) return normalizeResponse(res.data);
-  } catch (err: any) {
-    // fallback
-  }
-  return {
-    success: true,
-    data: {
-      eventId: payload.eventId || `evt_${Date.now()}`,
-      envelopeId: payload.envelopeId || "env_default",
-      eventType: payload.eventType || "ENVELOPE_SIGNED",
-      status: "PROCESSED",
-      processedAt: new Date().toISOString(),
-    },
-    message: "E-Sign webhook processed successfully",
-  };
+  const res = await api.post(`/api/sales/sequences/enrollments/${enrollmentId}/step`, payload || {});
+  return res.data;
 }
