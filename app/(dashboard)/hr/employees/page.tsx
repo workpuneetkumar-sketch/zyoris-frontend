@@ -32,8 +32,27 @@ import {
   type CreateEmployeeData,
   type UpdateEmployeeData 
 } from '@/lib/api/hrApi';
+import { getRoles } from '@/lib/api/rolesApi';
+import type { RbacRoleMatrixItem } from '@/lib/api/rbacApi';
 
 const DEPARTMENTS = ['Engineering', 'HR', 'Sales', 'Marketing', 'Design', 'Finance', 'Operations'];
+
+function formatRoleName(name?: string | null): string {
+  if (!name) return "";
+  const trimmed = name.trim();
+  const upper = trimmed.toUpperCase();
+  if (["CEO", "CFO", "CTO", "COO", "HR"].includes(upper)) {
+    return upper;
+  }
+  return trimmed
+    .replace(/^role[_\-\.]+/i, "")
+    .replace(/[_\-\.]+/g, " ")
+    .toLowerCase()
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
 
 const INITIAL_FORM_DATA: CreateEmployeeData = {
   name: '',
@@ -59,6 +78,11 @@ export default function EmployeesPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [createSuccess, setCreateSuccess] = useState(false);
   const [formData, setFormData] = useState<CreateEmployeeData>(INITIAL_FORM_DATA);
+  
+  // Roles State
+  const [roles, setRoles] = useState<RbacRoleMatrixItem[]>([]);
+  const [loadingRoles, setLoadingRoles] = useState<boolean>(false);
+  const [rolesError, setRolesError] = useState<string | null>(null);
   
   // Edit Modal State
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -104,6 +128,30 @@ export default function EmployeesPage() {
     fetchEmployees();
   }, [fetchEmployees]);
 
+  const fetchRoles = useCallback(async () => {
+    try {
+      setLoadingRoles(true);
+      setRolesError(null);
+      const data = await getRoles();
+      setRoles(Array.isArray(data) ? data : []);
+    } catch (err: any) {
+      console.error('Error fetching roles:', err);
+      setRolesError(err.message || 'Failed to load roles. Please try again.');
+    } finally {
+      setLoadingRoles(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchRoles();
+  }, [fetchRoles]);
+
+  useEffect(() => {
+    if (isAddModalOpen && roles.length === 0 && !loadingRoles) {
+      fetchRoles();
+    }
+  }, [isAddModalOpen, roles.length, loadingRoles, fetchRoles]);
+
   // Close action menu on outside click
   useEffect(() => {
     const handleClickOutside = () => setOpenActionMenu(null);
@@ -140,8 +188,12 @@ export default function EmployeesPage() {
       setCreateError('Password is required');
       return;
     }
+    if (rolesError && roles.length === 0) {
+      setCreateError('Failed to load roles. Please refresh or try again.');
+      return;
+    }
     if (!formData.roleId) {
-      setCreateError('Role ID is required');
+      setCreateError('Role is required');
       return;
     }
     if (!formData.designation.trim()) {
@@ -687,15 +739,27 @@ export default function EmployeesPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Role ID <span className="text-red-500">*</span>
+                      Role <span className="text-red-500">*</span>
                     </label>
-                    <input 
-                      type="text" 
+                    <select 
                       value={formData.roleId}
                       onChange={(e) => setFormData(prev => ({ ...prev, roleId: e.target.value }))}
-                      className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 transition-all" 
-                      placeholder="Enter role ID"
-                    />
+                      disabled={loadingRoles}
+                      className="w-full px-4 py-2.5 border border-gray-200 text-gray-900 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <option value="">{loadingRoles ? "Loading roles..." : "Select Role"}</option>
+                      {roles.map(role => (
+                        <option key={role.id} value={role.id}>
+                          {formatRoleName(role.name || role.id)}
+                        </option>
+                      ))}
+                    </select>
+                    {rolesError && (
+                      <p className="mt-1 text-xs text-red-500 flex items-center gap-1">
+                        <AlertCircle size={12} className="shrink-0" />
+                        <span>{rolesError}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 

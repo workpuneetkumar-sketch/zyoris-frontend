@@ -55,6 +55,7 @@ import {
     exportTasksToClientFile,
     FORMAT_EXTENSIONS,
 } from "@/lib/api/exportApi";
+import { getProjects, Project } from "@/lib/api/projectsApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -180,11 +181,16 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
     const [tagInput, setTagInput] = useState("");
     const [errors, setErrors] = useState<{ title?: string }>({});
     const [members, setMembers] = useState<TeamMember[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
 
     useEffect(() => {
         fetchTeamMembers()
             .then((data) => setMembers(data.members ?? data ?? []))
             .catch(() => setMembers([]));
+
+        getProjects()
+            .then((data) => setProjects(Array.isArray(data) ? data : []))
+            .catch(() => setProjects([]));
     }, []);
 
     const handleChange = (
@@ -352,13 +358,19 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
                             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                                 Project
                             </label>
-                            <input
+                            <select
                                 name="projectId"
                                 value={form.projectId ?? ""}
                                 onChange={handleChange}
-                                placeholder="e.g. CORE-ENGINE, WEB-APP"
                                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs outline-none"
-                            />
+                            >
+                                <option value="">No Project</option>
+                                {projects.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         <div>
