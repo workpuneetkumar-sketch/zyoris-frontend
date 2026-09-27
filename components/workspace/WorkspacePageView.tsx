@@ -18,6 +18,7 @@ import { PageAnalyticsPanel } from "./PageAnalyticsPanel";
 import { VersionHistoryPanel } from "./VersionHistoryPanel";
 import { PageImportModal } from "./PageImportModal";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
+import { AssignmentTaskModal } from "./AssignmentTaskModal";
 import {
   FileText,
   AlertCircle,
@@ -41,6 +42,7 @@ import {
   History,
   Upload,
   MoreHorizontal,
+  CheckSquare,
 } from "lucide-react";
 
 interface WorkspacePageViewProps {
@@ -91,6 +93,7 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
   // Toolbar overflow menu
   const [isToolbarMenuOpen, setIsToolbarMenuOpen] = useState(false);
   const toolbarMenuRef = useRef<HTMLDivElement>(null);
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState<boolean>(false);
 
   const [titleSaveStatus, setTitleSaveStatus] = useState<"saved" | "saving" | "error">("saved");
   const titleTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -357,6 +360,19 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
                   </button>
                 )}
 
+                {/* Assign this page as task */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsAssignModalOpen(true);
+                    setIsToolbarMenuOpen(false);
+                  }}
+                  className="w-full flex items-center space-x-2.5 px-3 py-2 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+                >
+                  <CheckSquare className="w-3.5 h-3.5 text-indigo-500" />
+                  <span>Assign this page as task</span>
+                </button>
+
                 <div className="my-1 border-t border-slate-100 dark:border-slate-800" />
 
                 {/* Turn into Wiki */}
@@ -616,6 +632,17 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
           onImported={fetchPageData}
         />
       </PanelErrorBoundary>
+
+      {/* ── RBAC-FE1-D1 · Assign this page as task Modal ─────────────────── */}
+      <AssignmentTaskModal
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        pageId={pageId}
+        pageTitle={title || page?.title || "Untitled"}
+        onSuccess={() => {
+          fetchPageData();
+        }}
+      />
     </div>
   );
 };

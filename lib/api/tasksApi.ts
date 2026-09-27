@@ -543,7 +543,7 @@ export async function createTask(data: CreateTaskPayload): Promise<Task> {
     if (data.assignedToId) payload.assignedToId = data.assignedToId;
     if (data.leadId) payload.leadId = data.leadId;
     if (data.dealId) payload.dealId = data.dealId;
-    if (data.projectId) payload.projectId = data.projectId;
+    if (data.projectId && data.projectId.trim()) payload.projectId = data.projectId.trim();
     if (data.parentTaskId) payload.parentTaskId = data.parentTaskId;
     if (data.reminderMinutes !== undefined) payload.reminderMinutes = data.reminderMinutes;
     if (data.reminderType) payload.reminderType = data.reminderType;
