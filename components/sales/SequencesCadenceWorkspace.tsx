@@ -82,8 +82,8 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
   const [newSeqName, setNewSeqName] = useState("");
   const [newSeqDesc, setNewSeqDesc] = useState("");
   const [newSteps, setNewSteps] = useState<SequenceStep[]>([
-    { stepOrder: 1, stepType: "SEND_EMAIL", delayDays: 0, subject: "Introduction", body: "Hi {{firstName}}, thanks for connecting." },
-    { stepOrder: 2, stepType: "CALL_TASK", delayDays: 2, subject: "Discovery Call", body: "Check availability for product demo." },
+    { stepOrder: 1, stepType: "EMAIL", delayDays: 0, subject: "Introduction", body: "Hi {{firstName}}, thanks for connecting." },
+    { stepOrder: 2, stepType: "CALL", delayDays: 2, subject: "Discovery Call", body: "Check availability for product demo." },
   ]);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -224,8 +224,15 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
       setNewSeqDesc("");
       fetchSequences();
       setTimeout(() => setActionSuccess(null), 4000);
-    } catch (err: unknown) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create sequence.");
+    } catch (err: any) {
+      let msg = err?.response?.data?.message || err?.message || "Failed to create sequence.";
+      if (err?.response?.data?.details && Array.isArray(err.response.data.details)) {
+        const detailsStr = err.response.data.details
+          .map((d: any) => `${d.field}: ${d.message}`)
+          .join(", ");
+        msg = `${msg} (${detailsStr})`;
+      }
+      setCreateError(msg);
     } finally {
       setCreateSubmitting(false);
     }
@@ -1062,13 +1069,11 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                               value={st.stepType}
                               onChange={(e) => handleUpdateStep(idx, "stepType", e.target.value)}
                             >
-                              <option value="SEND_EMAIL">Send Email (SEND_EMAIL)</option>
-                              <option value="CALL_TASK">Phone Call / Task (CALL_TASK)</option>
-                              <option value="SEND_WHATSAPP">WhatsApp (SEND_WHATSAPP)</option>
-                              <option value="WAIT_DELAY">Wait Delay (WAIT_DELAY)</option>
-                              <option value="WAIT_CONDITION">Wait for Condition (WAIT_CONDITION)</option>
-                              <option value="BRANCH_CONDITION">Branch on Condition (BRANCH_CONDITION)</option>
-                              <option value="CUSTOM_ACTION">Custom Action (CUSTOM_ACTION)</option>
+                              <option value="EMAIL">Send Email (EMAIL)</option>
+                              <option value="CALL">Phone Call (CALL)</option>
+                              <option value="TASK">Task / Action (TASK)</option>
+                              <option value="WAIT">Wait Delay (WAIT)</option>
+                              <option value="LINKEDIN">LinkedIn Touchpoint (LINKEDIN)</option>
                             </select>
                           </div>
                           <div>

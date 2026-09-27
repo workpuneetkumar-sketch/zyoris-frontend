@@ -201,9 +201,11 @@ export async function getMeetingIntelligence(
  */
 export async function createProposal(
   payload: CreateProposalPayload
-): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+): Promise<{ success: boolean; data: SalesProposal; proposal?: SalesProposal; message?: string }> {
   const res = await api.post("/api/sales/proposals", payload);
-  return res.data;
+  const raw = res.data;
+  const proposal = raw?.proposal || raw?.data || raw;
+  return { ...raw, data: proposal, proposal };
 }
 
 /**
@@ -219,7 +221,7 @@ export async function getProposals(params?: {
   page?: number;
   limit?: number;
   offset?: number;
-}): Promise<{ success: boolean; data: SalesProposal[]; total?: number; message?: string }> {
+}): Promise<{ success: boolean; data: SalesProposal[]; items?: SalesProposal[]; total?: number; message?: string }> {
   const queryParams: Record<string, unknown> = {};
   if (params?.status && params.status !== "ALL") {
     queryParams.status = params.status === "PENDING_APPROVAL" ? "PENDING" : params.status;
@@ -234,7 +236,15 @@ export async function getProposals(params?: {
   else if (params?.page && params?.limit) queryParams.offset = (params.page - 1) * params.limit;
 
   const res = await api.get("/api/sales/proposals", { params: queryParams });
-  return res.data;
+  const raw = res.data;
+  const items = Array.isArray(raw?.items)
+    ? raw.items
+    : Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw)
+    ? raw
+    : [];
+  return { ...raw, data: items, items };
 }
 
 /**
@@ -243,9 +253,11 @@ export async function getProposals(params?: {
  */
 export async function getProposalById(
   id: string
-): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+): Promise<{ success: boolean; data: SalesProposal; proposal?: SalesProposal; message?: string }> {
   const res = await api.get(`/api/sales/proposals/${id}`);
-  return res.data;
+  const raw = res.data;
+  const proposal = raw?.proposal || raw?.data || raw;
+  return { ...raw, data: proposal, proposal };
 }
 
 /**
@@ -255,10 +267,12 @@ export async function getProposalById(
 export async function approveProposal(
   id: string,
   payload?: { comment?: string; notes?: string }
-): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+): Promise<{ success: boolean; data: SalesProposal; proposal?: SalesProposal; message?: string }> {
   const notes = payload?.notes || payload?.comment || "Approved via CRM Proposals Workspace";
   const res = await api.post(`/api/sales/proposals/${id}/approve`, { notes });
-  return res.data;
+  const raw = res.data;
+  const proposal = raw?.proposal || raw?.data || raw;
+  return { ...raw, data: proposal, proposal };
 }
 
 /**
@@ -268,10 +282,12 @@ export async function approveProposal(
 export async function rejectProposal(
   id: string,
   payload?: { reason?: string }
-): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+): Promise<{ success: boolean; data: SalesProposal; proposal?: SalesProposal; message?: string }> {
   const reason = payload?.reason || "Rejected by reviewer";
   const res = await api.post(`/api/sales/proposals/${id}/reject`, { reason });
-  return res.data;
+  const raw = res.data;
+  const proposal = raw?.proposal || raw?.data || raw;
+  return { ...raw, data: proposal, proposal };
 }
 
 /**
@@ -281,9 +297,11 @@ export async function rejectProposal(
 export async function applyProposal(
   id: string,
   payload?: { force?: boolean }
-): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+): Promise<{ success: boolean; data: SalesProposal; proposal?: SalesProposal; message?: string }> {
   const res = await api.post(`/api/sales/proposals/${id}/apply`, payload || {});
-  return res.data;
+  const raw = res.data;
+  const proposal = raw?.proposal || raw?.data || raw;
+  return { ...raw, data: proposal, proposal };
 }
 
 /**
@@ -293,9 +311,11 @@ export async function applyProposal(
 export async function cancelProposal(
   id: string,
   payload?: { reason?: string }
-): Promise<{ success: boolean; data: SalesProposal; message?: string }> {
+): Promise<{ success: boolean; data: SalesProposal; proposal?: SalesProposal; message?: string }> {
   const res = await api.post(`/api/sales/proposals/${id}/cancel`, payload || {});
-  return res.data;
+  const raw = res.data;
+  const proposal = raw?.proposal || raw?.data || raw;
+  return { ...raw, data: proposal, proposal };
 }
 
 /**
@@ -305,10 +325,19 @@ export async function cancelProposal(
 export async function getProposalRules(): Promise<{
   success: boolean;
   data: ProposalRule[];
+  rules?: ProposalRule[];
   message?: string;
 }> {
   const res = await api.get("/api/sales/proposals/rules");
-  return res.data;
+  const raw = res.data;
+  const rules = Array.isArray(raw?.rules)
+    ? raw.rules
+    : Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw)
+    ? raw
+    : [];
+  return { ...raw, data: rules, rules };
 }
 
 /**
@@ -317,7 +346,7 @@ export async function getProposalRules(): Promise<{
  */
 export async function createProposalRule(
   payload: CreateProposalRulePayload
-): Promise<{ success: boolean; data: ProposalRule; message?: string }> {
+): Promise<{ success: boolean; data: ProposalRule; rule?: ProposalRule; message?: string }> {
   const targetEntityType = payload.targetEntityType || "DEAL";
   const fieldName = payload.fieldName || (payload.discountThreshold !== undefined ? "discount" : "amount");
   const riskLevel = payload.riskLevel || (payload.discountThreshold && payload.discountThreshold > 20 ? "HIGH" : "MEDIUM");
@@ -336,7 +365,9 @@ export async function createProposalRule(
   };
 
   const res = await api.post("/api/sales/proposals/rules", body);
-  return res.data;
+  const raw = res.data;
+  const rule = raw?.rule || raw?.data || raw;
+  return { ...raw, data: rule, rule };
 }
 
 // ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -434,13 +465,26 @@ export async function getOutreachDraftById(
  */
 export async function createSequence(
   payload: CreateSequencePayload
-): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
-  // Normalize steps to Swagger schema: stepOrder, stepType, name, config
+): Promise<{ success: boolean; data: SequenceRecord; sequence?: SequenceRecord; message?: string }> {
+  // Normalize steps to backend schema:
+  // Backend Zod validator expects stepType enum: 'EMAIL' | 'TASK' | 'CALL' | 'WAIT' | 'LINKEDIN'
   const normalizedSteps = (payload.steps || []).map((s, idx) => {
-    let stepType = s.stepType || "SEND_EMAIL";
-    if (stepType === "EMAIL") stepType = "SEND_EMAIL";
-    if (stepType === "CALL" || stepType === "TASK") stepType = "CALL_TASK";
-    if (stepType === "WHATSAPP") stepType = "SEND_WHATSAPP";
+    const rawType = (s.stepType || "EMAIL").toUpperCase();
+    let stepType: "EMAIL" | "TASK" | "CALL" | "WAIT" | "LINKEDIN" = "EMAIL";
+
+    if (rawType.includes("EMAIL")) {
+      stepType = "EMAIL";
+    } else if (rawType.includes("CALL")) {
+      stepType = "CALL";
+    } else if (rawType.includes("TASK")) {
+      stepType = "TASK";
+    } else if (rawType.includes("WAIT")) {
+      stepType = "WAIT";
+    } else if (rawType.includes("LINKEDIN")) {
+      stepType = "LINKEDIN";
+    } else {
+      stepType = "TASK";
+    }
 
     const config = s.config || {
       subject: s.subject || "",
@@ -451,7 +495,9 @@ export async function createSequence(
     return {
       stepOrder: s.stepOrder || idx + 1,
       stepType,
-      name: s.name || s.subject || `Step ${idx + 1}`,
+      delayDays: s.delayDays ?? 0,
+      subject: s.subject || "",
+      body: s.body || "",
       config,
     };
   });
@@ -463,7 +509,9 @@ export async function createSequence(
   };
 
   const res = await api.post("/api/sales/sequences", body);
-  return res.data;
+  const raw = res.data;
+  const sequence = raw?.sequence || raw?.data || raw;
+  return { ...raw, data: sequence, sequence };
 }
 
 /**
@@ -474,9 +522,19 @@ export async function getSequences(params?: {
   status?: string;
   page?: number;
   limit?: number;
-}): Promise<{ success: boolean; data: SequenceRecord[]; total?: number; message?: string }> {
+}): Promise<{ success: boolean; data: SequenceRecord[]; sequences?: SequenceRecord[]; total?: number; message?: string }> {
   const res = await api.get("/api/sales/sequences", { params });
-  return res.data;
+  const raw = res.data;
+  const list = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.data)
+    ? raw.data
+    : Array.isArray(raw?.items)
+    ? raw.items
+    : Array.isArray(raw?.sequences)
+    ? raw.sequences
+    : [];
+  return { ...raw, data: list, sequences: list };
 }
 
 /**
@@ -485,9 +543,11 @@ export async function getSequences(params?: {
  */
 export async function getSequenceById(
   id: string
-): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+): Promise<{ success: boolean; data: SequenceRecord; sequence?: SequenceRecord; message?: string }> {
   const res = await api.get(`/api/sales/sequences/${id}`);
-  return res.data;
+  const raw = res.data;
+  const sequence = raw?.sequence || raw?.data || raw;
+  return { ...raw, data: sequence, sequence };
 }
 
 /**
@@ -496,9 +556,11 @@ export async function getSequenceById(
  */
 export async function activateSequence(
   id: string
-): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+): Promise<{ success: boolean; data: SequenceRecord; sequence?: SequenceRecord; message?: string }> {
   const res = await api.post(`/api/sales/sequences/${id}/activate`, {});
-  return res.data;
+  const raw = res.data;
+  const sequence = raw?.sequence || raw?.data || raw;
+  return { ...raw, data: sequence, sequence };
 }
 
 /**
@@ -507,9 +569,11 @@ export async function activateSequence(
  */
 export async function pauseSequence(
   id: string
-): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+): Promise<{ success: boolean; data: SequenceRecord; sequence?: SequenceRecord; message?: string }> {
   const res = await api.post(`/api/sales/sequences/${id}/pause`, {});
-  return res.data;
+  const raw = res.data;
+  const sequence = raw?.sequence || raw?.data || raw;
+  return { ...raw, data: sequence, sequence };
 }
 
 /**
@@ -518,9 +582,11 @@ export async function pauseSequence(
  */
 export async function deactivateSequence(
   id: string
-): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+): Promise<{ success: boolean; data: SequenceRecord; sequence?: SequenceRecord; message?: string }> {
   const res = await api.post(`/api/sales/sequences/${id}/deactivate`, {});
-  return res.data;
+  const raw = res.data;
+  const sequence = raw?.sequence || raw?.data || raw;
+  return { ...raw, data: sequence, sequence };
 }
 
 /**
@@ -529,9 +595,11 @@ export async function deactivateSequence(
  */
 export async function archiveSequence(
   id: string
-): Promise<{ success: boolean; data: SequenceRecord; message?: string }> {
+): Promise<{ success: boolean; data: SequenceRecord; sequence?: SequenceRecord; message?: string }> {
   const res = await api.post(`/api/sales/sequences/${id}/archive`, {});
-  return res.data;
+  const raw = res.data;
+  const sequence = raw?.sequence || raw?.data || raw;
+  return { ...raw, data: sequence, sequence };
 }
 
 /**

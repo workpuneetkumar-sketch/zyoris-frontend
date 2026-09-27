@@ -153,21 +153,19 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
       if (customerId) params.customerId = customerId;
 
       const res = await getProposals(params);
-      const serverProposals: SalesProposal[] = res && Array.isArray(res.data) ? res.data : [];
+      const serverProposals: SalesProposal[] =
+        res && Array.isArray(res.data)
+          ? res.data
+          : res && Array.isArray((res as any).items)
+          ? (res as any).items
+          : [];
 
-      setProposals((prev) => {
-        const localCached = loadCachedProposals();
-        const map = new Map<string, SalesProposal>();
-        localCached.forEach((p) => map.set(p.id, p));
-        prev.forEach((p) => map.set(p.id, p));
-        serverProposals.forEach((p) => map.set(p.id, p));
-
-        const merged = Array.from(map.values()).sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-        );
-        saveCachedProposals(merged);
-        return merged;
-      });
+      if (serverProposals.length > 0) {
+        setProposals(serverProposals);
+        saveCachedProposals(serverProposals);
+      } else {
+        setProposals((prev) => (prev.length > 0 ? prev : loadCachedProposals()));
+      }
     } catch {
       // Server error or unauthenticated: preserve existing and cached proposals
       setProposals((prev) => {
@@ -224,11 +222,13 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
     setLoadingRules(true);
     try {
       const res = await getProposalRules();
-      if (res && Array.isArray(res.data)) {
-        setRules(res.data);
-      } else {
-        setRules([]);
-      }
+      const rulesList: ProposalRule[] =
+        res && Array.isArray(res.data)
+          ? res.data
+          : res && Array.isArray((res as any).rules)
+          ? (res as any).rules
+          : [];
+      setRules(rulesList);
     } catch (err: unknown) {
       // ignore
     } finally {
@@ -292,38 +292,11 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
         notes: newNotes.trim() || undefined,
       };
 
-      let createdProposal: SalesProposal;
-      try {
-        const res = await createProposal(payload);
-        createdProposal = res?.data || {
-          id: `prop_${Date.now()}`,
-          ...payload,
-          status: "PENDING_APPROVAL",
-          createdAt: new Date().toISOString(),
-          changes: [
-            {
-              field: resolvedField,
-              currentValue: resolvedField === "amount" ? "$50,000" : resolvedField === "discount" ? "0%" : "DISCOVERY",
-              proposedValue: typeof resolvedProposedValue === "number" && resolvedField === "amount" ? `$${resolvedProposedValue.toLocaleString()}` : String(resolvedProposedValue),
-            },
-          ],
-        };
-      } catch {
-        // Fallback optimistic proposal so the user can immediately review and test proposal workflow
-        createdProposal = {
-          id: `prop_${Date.now()}`,
-          ...payload,
-          status: "PENDING_APPROVAL",
-          createdAt: new Date().toISOString(),
-          changes: [
-            {
-              field: resolvedField,
-              currentValue: resolvedField === "amount" ? "$50,000" : resolvedField === "discount" ? "0%" : "DISCOVERY",
-              proposedValue: typeof resolvedProposedValue === "number" && resolvedField === "amount" ? `$${resolvedProposedValue.toLocaleString()}` : String(resolvedProposedValue),
-            },
-          ],
-        };
+      const res = await createProposal(payload);
+      if (!res?.data) {
+        throw new Error(res?.message || "Backend did not return proposal data.");
       }
+      const createdProposal: SalesProposal = res.data;
 
       setProposals((prev) => {
         const next = [createdProposal, ...prev.filter((p) => p.id !== createdProposal.id)];
@@ -343,7 +316,8 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
       setCustomProposedValue("");
       setTimeout(() => setActionSuccess(null), 4000);
     } catch (err: any) {
-      setCreateError(err instanceof Error ? err.message : "Failed to create proposal.");
+      const msg = err?.response?.data?.message || err?.message || "Failed to create proposal.";
+      setCreateError(msg);
     } finally {
       setCreateSubmitting(false);
     }
@@ -354,16 +328,7 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
     e.preventDefault();
     if (!ruleName.trim() || !ruleCondition.trim()) return;
     setRuleSubmitting(true);
-    const newRule: ProposalRule = {
-      id: `rule_${Date.now()}`,
-      name: ruleName.trim(),
-      condition: ruleCondition.trim(),
-      action: ruleAction,
-      discountThreshold: ruleDiscountThreshold,
-      autoApprove: ruleAutoApprove,
-      isActive: true,
-      createdAt: new Date().toISOString(),
-    };
+    setError(null);
     try {
       const res = await createProposalRule({
         name: ruleName.trim(),
@@ -372,20 +337,20 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
         discountThreshold: ruleDiscountThreshold,
         autoApprove: ruleAutoApprove,
       });
-      if (res?.data) {
-        setRules((prev) => [res.data, ...prev]);
-      } else {
-        setRules((prev) => [newRule, ...prev]);
+      if (!res?.data) {
+        throw new Error(res?.message || "Backend did not return rule data.");
       }
-    } catch {
-      setRules((prev) => [newRule, ...prev]);
-    } finally {
+      setRules((prev) => [res.data, ...prev]);
       setIsCreateRuleOpen(false);
       setRuleName("");
       setRuleCondition("");
       setActionSuccess("Governance rule registered!");
-      setRuleSubmitting(false);
       setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to create governance rule.");
+      setError(msg);
+    } finally {
+      setRuleSubmitting(false);
     }
   };
 
@@ -393,28 +358,30 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
   const handleApprove = async (id: string) => {
     setActionSubmitting(true);
     setError(null);
-    const now = new Date().toISOString();
     try {
-      await approveProposal(id, { comment: "Approved via CRM Proposals Workspace" });
-    } catch (err: unknown) {
-      console.warn("Backend approve returned error, applying optimistic transition:", err);
-    } finally {
+      const res = await approveProposal(id, { comment: "Approved via CRM Proposals Workspace" });
+      const now = new Date().toISOString();
+      const updatedProposal = res?.data;
       setProposals((prev) =>
         prev.map((p) =>
           p.id === id
-            ? { ...p, status: "APPROVED", approvedBy: "Sales Manager", approvedAt: now }
+            ? { ...p, ...updatedProposal, status: updatedProposal?.status || "APPROVED", approvedBy: updatedProposal?.approvedBy || "Sales Manager", approvedAt: updatedProposal?.approvedAt || now }
             : p
         )
       );
       if (selectedProposal?.id === id) {
         setSelectedProposal((prev) =>
-          prev ? { ...prev, status: "APPROVED", approvedBy: "Sales Manager", approvedAt: now } : null
+          prev ? { ...prev, ...updatedProposal, status: updatedProposal?.status || "APPROVED", approvedBy: updatedProposal?.approvedBy || "Sales Manager", approvedAt: updatedProposal?.approvedAt || now } : null
         );
       }
       setSelectedIds((prev) => prev.filter((item) => item !== id));
       setActionSuccess("Proposal approved successfully!");
-      setActionSubmitting(false);
       setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to approve proposal.");
+      setError(msg);
+    } finally {
+      setActionSubmitting(false);
     }
   };
 
@@ -424,24 +391,44 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
     setError(null);
     const now = new Date().toISOString();
     try {
-      await Promise.allSettled(
+      const results = await Promise.allSettled(
         selectedIds.map((id) => approveProposal(id, { comment: "Bulk approved via Proposals Workspace" }))
       );
-    } catch (err: unknown) {
-      console.warn("Bulk approve error:", err);
-    } finally {
-      const approvedSet = new Set(selectedIds);
-      setProposals((prev) =>
-        prev.map((p) =>
-          approvedSet.has(p.id)
-            ? { ...p, status: "APPROVED", approvedBy: "Sales Manager", approvedAt: now }
-            : p
-        )
-      );
-      setActionSuccess(`Bulk approved ${selectedIds.length} proposals successfully!`);
-      setSelectedIds([]);
-      setBulkApproving(false);
+      const succeededIds: string[] = [];
+      const failedIds: string[] = [];
+      results.forEach((result, idx) => {
+        if (result.status === "fulfilled") {
+          succeededIds.push(selectedIds[idx]);
+        } else {
+          failedIds.push(selectedIds[idx]);
+        }
+      });
+
+      if (succeededIds.length > 0) {
+        const approvedSet = new Set(succeededIds);
+        setProposals((prev) =>
+          prev.map((p) =>
+            approvedSet.has(p.id)
+              ? { ...p, status: "APPROVED", approvedBy: "Sales Manager", approvedAt: now }
+              : p
+          )
+        );
+      }
+
+      if (failedIds.length > 0 && succeededIds.length > 0) {
+        setActionSuccess(`Approved ${succeededIds.length} proposals. ${failedIds.length} failed.`);
+      } else if (failedIds.length > 0 && succeededIds.length === 0) {
+        setError(`Failed to approve all ${failedIds.length} proposals. Please try again.`);
+      } else {
+        setActionSuccess(`Bulk approved ${succeededIds.length} proposals successfully!`);
+      }
+      setSelectedIds(failedIds);
       setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Bulk approve failed.");
+      setError(msg);
+    } finally {
+      setBulkApproving(false);
     }
   };
 
@@ -468,55 +455,60 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
     setError(null);
     const reasonText = rejectReason.trim() || "Pricing or terms outside standard parameters";
     try {
-      await rejectProposal(id, { reason: reasonText });
-    } catch (err: unknown) {
-      console.warn("Backend reject returned error, applying optimistic rejection:", err);
-    } finally {
+      const res = await rejectProposal(id, { reason: reasonText });
+      const updatedProposal = res?.data;
       setProposals((prev) =>
         prev.map((p) =>
           p.id === id
-            ? { ...p, status: "REJECTED", rejectionReason: reasonText }
+            ? { ...p, ...updatedProposal, status: updatedProposal?.status || "REJECTED", rejectionReason: reasonText }
             : p
         )
       );
       if (selectedProposal?.id === id) {
         setSelectedProposal((prev) =>
-          prev ? { ...prev, status: "REJECTED", rejectionReason: reasonText } : null
+          prev ? { ...prev, ...updatedProposal, status: updatedProposal?.status || "REJECTED", rejectionReason: reasonText } : null
         );
       }
       setIsRejectOpen(false);
       setRejectReason("");
       setSelectedIds((prev) => prev.filter((item) => item !== id));
       setActionSuccess("Proposal rejected.");
-      setActionSubmitting(false);
       setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to reject proposal.");
+      setError(msg);
+      setIsRejectOpen(false);
+    } finally {
+      setActionSubmitting(false);
     }
   };
 
   const handleApply = async (id: string) => {
     setActionSubmitting(true);
     setError(null);
-    const now = new Date().toISOString();
     try {
-      await applyProposal(id);
-    } catch (err: unknown) {
-      console.warn("Backend apply returned error, applying optimistic transition:", err);
-    } finally {
+      const res = await applyProposal(id);
+      const now = new Date().toISOString();
+      const updatedProposal = res?.data;
       setProposals((prev) =>
         prev.map((p) =>
           p.id === id
-            ? { ...p, status: "APPLIED", appliedAt: now }
+            ? { ...p, ...updatedProposal, status: updatedProposal?.status || "APPLIED", appliedAt: updatedProposal?.appliedAt || now }
             : p
         )
       );
       if (selectedProposal?.id === id) {
         setSelectedProposal((prev) =>
-          prev ? { ...prev, status: "APPLIED", appliedAt: now } : null
+          prev ? { ...prev, ...updatedProposal, status: updatedProposal?.status || "APPLIED", appliedAt: updatedProposal?.appliedAt || now } : null
         );
       }
       setActionSuccess("Proposal changes applied to live CRM records!");
-      setActionSubmitting(false);
       setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to apply proposal.");
+      setError(msg);
+    } finally {
+      setActionSubmitting(false);
     }
   };
 
@@ -524,25 +516,27 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
     setActionSubmitting(true);
     setError(null);
     try {
-      await cancelProposal(id, { reason: "Cancelled by owner" });
-    } catch (err: unknown) {
-      console.warn("Backend cancel returned error, applying optimistic transition:", err);
-    } finally {
+      const res = await cancelProposal(id, { reason: "Cancelled by owner" });
+      const updatedProposal = res?.data;
       setProposals((prev) =>
         prev.map((p) =>
           p.id === id
-            ? { ...p, status: "CANCELLED" }
+            ? { ...p, ...updatedProposal, status: updatedProposal?.status || "CANCELLED" }
             : p
         )
       );
       if (selectedProposal?.id === id) {
         setSelectedProposal((prev) =>
-          prev ? { ...prev, status: "CANCELLED" } : null
+          prev ? { ...prev, ...updatedProposal, status: updatedProposal?.status || "CANCELLED" } : null
         );
       }
       setActionSuccess("Proposal cancelled.");
-      setActionSubmitting(false);
       setTimeout(() => setActionSuccess(null), 4000);
+    } catch (err: unknown) {
+      const msg = (err as any)?.response?.data?.message || (err instanceof Error ? err.message : "Failed to cancel proposal.");
+      setError(msg);
+    } finally {
+      setActionSubmitting(false);
     }
   };
 
@@ -757,13 +751,22 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                       </span>
                     </div>
 
-                    <h3 className="sales-proposal-card-title">{prop.title}</h3>
+                    <h3 className="sales-proposal-card-title">
+                      {prop.title || prop.rationale || `${prop.targetEntityType || "Proposal"} Update: ${prop.field || ""}`}
+                    </h3>
 
                     <div className="sales-proposal-card-meta">
-                      {prop.proposedPrice !== undefined && (
+                      {(prop.proposedPrice !== undefined || prop.proposedValue !== undefined) && (
                         <span className="sales-pill sales-pill-deal">
                           <DollarSign size={12} />
-                          <span>Proposed: ${prop.proposedPrice.toLocaleString()}</span>
+                          <span>
+                            Proposed:{" "}
+                            {prop.proposedPrice !== undefined
+                              ? `$${prop.proposedPrice.toLocaleString()}`
+                              : typeof prop.proposedValue === "number"
+                              ? `$${prop.proposedValue.toLocaleString()}`
+                              : String(prop.proposedValue)}
+                          </span>
                         </span>
                       )}
 
@@ -920,7 +923,7 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                 <>
                   <div>
                     <h2 style={{ fontSize: "1.25rem", fontWeight: 700, margin: "0 0 0.25rem 0", color: "var(--color-text)" }}>
-                      {selectedProposal.title}
+                      {selectedProposal.title || selectedProposal.rationale || `${selectedProposal.targetEntityType || "Proposal"} Update: ${selectedProposal.field || ""}`}
                     </h2>
                     <p style={{ margin: 0, fontSize: "0.75rem", color: "var(--color-text-muted)" }}>
                       ID: {selectedProposal.id} • Created: {new Date(selectedProposal.createdAt).toLocaleString()}
@@ -976,9 +979,15 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                   {/* Pricing Overview */}
                   <div className="sales-meta-grid">
                     <div className="sales-meta-card">
-                      <div className="sales-meta-card-label">Proposed Price</div>
+                      <div className="sales-meta-card-label">Proposed Price / Value</div>
                       <div className="sales-meta-card-value">
-                        {selectedProposal.proposedPrice !== undefined ? `$${selectedProposal.proposedPrice.toLocaleString()}` : "—"}
+                        {selectedProposal.proposedPrice !== undefined
+                          ? `$${selectedProposal.proposedPrice.toLocaleString()}`
+                          : selectedProposal.proposedValue !== undefined
+                          ? typeof selectedProposal.proposedValue === "number"
+                            ? `$${selectedProposal.proposedValue.toLocaleString()}`
+                            : String(selectedProposal.proposedValue)
+                          : "—"}
                       </div>
                     </div>
 
@@ -1111,7 +1120,7 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
             {/* Actions Footer */}
             {selectedProposal && (
               <div className="sales-modal-footer">
-                {selectedProposal.status === "PENDING_APPROVAL" && (
+                {(selectedProposal.status === "PENDING_APPROVAL" || selectedProposal.status === "PENDING") && (
                   <>
                     <button
                       type="button"

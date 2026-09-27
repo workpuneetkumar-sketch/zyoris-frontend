@@ -193,11 +193,25 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
     setIngestError(null);
 
     try {
+      const subject = ingestSubject.trim() || "Sales Activity";
+      const body = ingestContent.trim() || ingestSubject.trim() || "Activity record";
+      const participantEmail = ingestParticipantEmail.trim() || "buyer@enterprise.corp";
+
       const payload: Record<string, unknown> = {
-        subject: ingestSubject.trim() || undefined,
-        body: ingestContent.trim() || undefined,
-        content: ingestContent.trim() || undefined,
+        subject,
+        body,
+        content: body,
         source: ingestSource || "MANUAL",
+        from: "sales@zyoris.com",
+        to: [participantEmail],
+        caller: "+15551234567",
+        callee: participantEmail.includes("@") ? participantEmail : "+15559876543",
+        title: subject,
+        organizer: "sales@zyoris.com",
+        startTime: new Date().toISOString(),
+        endTime: new Date(Date.now() + 3600000).toISOString(),
+        text: body,
+        summary: body,
       };
 
       if (ingestParticipantEmail.trim()) {
@@ -222,9 +236,14 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
       setActionSuccess("Activity captured successfully!");
       setTimeout(() => setActionSuccess(null), 4000);
       fetchActivities();
-    } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to capture activity.";
+    } catch (err: any) {
+      let msg = err?.response?.data?.message || err?.message || "Failed to capture activity.";
+      if (err?.response?.data?.details && Array.isArray(err.response.data.details)) {
+        const detailsStr = err.response.data.details
+          .map((d: any) => `${d.field}: ${d.message}`)
+          .join(", ");
+        msg = `${msg} (${detailsStr})`;
+      }
       setIngestError(msg);
     } finally {
       setIngestSubmitting(false);
