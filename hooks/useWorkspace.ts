@@ -26,9 +26,11 @@ export function saveStoredLocalPage(page: Partial<WorkspacePage> & { id: string;
       title: page.title || "Untitled",
       icon: page.icon || "📄",
       parentId: page.parentId || null,
+      isFolder: page.isFolder || false,
       isDatabase: page.isDatabase || false,
       children: [],
       createdAt: page.createdAt || new Date().toISOString(),
+      updatedAt: page.updatedAt || new Date().toISOString(),
     };
     const updated = [newNode, ...filtered];
     localStorage.setItem(LOCAL_PAGES_KEY, JSON.stringify(updated));
@@ -72,6 +74,13 @@ function buildTreeFromFlatNodes(flatNodes: WorkspacePageNode[]): WorkspacePageNo
     }
   });
 
+  // Sort roots by most recent first so new and duplicated pages appear at the top
+  roots.sort((a, b) => {
+    const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return timeB - timeA;
+  });
+
   return roots;
 }
 
@@ -87,15 +96,30 @@ export function useWorkspace() {
       const remoteTree = await getWorkspacePageTree();
       const localPages = getStoredLocalPages();
 
-      // Merge remote tree & local pages
-      const allFlatNodes: WorkspacePageNode[] = [];
-      const seenIds = new Set<string>();
+      // Merge remote tree & local pages: retain latest metadata & timestamps
+      const nodeMap = new Map<string, WorkspacePageNode>();
+
+      localPages.forEach((lp) => {
+        if (lp.id) {
+          nodeMap.set(lp.id, {
+            ...lp,
+            createdAt: lp.createdAt || new Date().toISOString(),
+            updatedAt: lp.updatedAt || new Date().toISOString(),
+          });
+        }
+      });
 
       const addRecursively = (nodes: WorkspacePageNode[]) => {
         nodes.forEach((n) => {
-          if (n.id && !seenIds.has(n.id)) {
-            seenIds.add(n.id);
-            allFlatNodes.push(n);
+          if (n.id) {
+            const existing = nodeMap.get(n.id);
+            nodeMap.set(n.id, {
+              ...existing,
+              ...n,
+              icon: n.icon || existing?.icon || "📄",
+              createdAt: n.createdAt || existing?.createdAt || new Date().toISOString(),
+              updatedAt: n.updatedAt || existing?.updatedAt || n.createdAt || new Date().toISOString(),
+            });
             if (n.children && n.children.length > 0) {
               addRecursively(n.children);
             }
@@ -104,14 +128,7 @@ export function useWorkspace() {
       };
 
       addRecursively(remoteTree);
-
-      localPages.forEach((lp) => {
-        if (lp.id && !seenIds.has(lp.id)) {
-          seenIds.add(lp.id);
-          allFlatNodes.push(lp);
-        }
-      });
-
+      const allFlatNodes = Array.from(nodeMap.values());
       const mergedTree = buildTreeFromFlatNodes(allFlatNodes);
       setPageTree(mergedTree);
     } catch (err: any) {
@@ -143,15 +160,34 @@ export function useWorkspace() {
   useEffect(() => {
     fetchPageTree();
 
-    const handlePageEvent = () => {
+    const handlePageCreated = (e?: any) => {
+      if (e?.detail && e.detail.id) {
+        const d = e.detail;
+        const currentLocal = getStoredLocalPages();
+        if (!currentLocal.some((p) => p.id === d.id)) {
+          saveStoredLocalPage({
+            id: d.id,
+            title: d.title || "Untitled",
+            icon: d.icon || "📄",
+            parentId: d.parentId || null,
+            isFolder: !!d.isFolder,
+            isDatabase: !!d.isDatabase,
+          });
+          return;
+        }
+      }
       fetchPageTree();
     };
 
-    window.addEventListener("zyoris:page-created", handlePageEvent);
-    window.addEventListener("zyoris:page-deleted", handlePageEvent);
+    const handlePageDeleted = () => {
+      fetchPageTree();
+    };
+
+    window.addEventListener("zyoris:page-created", handlePageCreated);
+    window.addEventListener("zyoris:page-deleted", handlePageDeleted);
     return () => {
-      window.removeEventListener("zyoris:page-created", handlePageEvent);
-      window.removeEventListener("zyoris:page-deleted", handlePageEvent);
+      window.removeEventListener("zyoris:page-created", handlePageCreated);
+      window.removeEventListener("zyoris:page-deleted", handlePageDeleted);
     };
   }, [fetchPageTree]);
 

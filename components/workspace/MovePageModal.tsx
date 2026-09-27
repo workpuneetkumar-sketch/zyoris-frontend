@@ -38,14 +38,35 @@ export const MovePageModal: React.FC<MovePageModalProps> = ({
 
   if (!isOpen || !mounted || typeof document === "undefined") return null;
 
+  // Find all descendant IDs of pageId to strictly prevent moving a page into any of its descendants
+  const getDescendantIds = (targetId: string, nodes: WorkspacePageNode[]): Set<string> => {
+    const descendants = new Set<string>();
+    const findAndCollect = (list: WorkspacePageNode[], collecting: boolean) => {
+      for (const item of list) {
+        const isTarget = item.id === targetId;
+        if (collecting || isTarget) {
+          descendants.add(item.id);
+        }
+        if (item.children && item.children.length > 0) {
+          findAndCollect(item.children, collecting || isTarget);
+        }
+      }
+    };
+    findAndCollect(nodes, false);
+    return descendants;
+  };
+
+  const disallowedIds = getDescendantIds(pageId, pageTree);
+  disallowedIds.add(pageId);
+
   const flattenTree = (
     nodes: WorkspacePageNode[],
     depth = 0
   ): { id: string; title: string; depth: number }[] => {
     let result: { id: string; title: string; depth: number }[] = [];
     nodes.forEach((node) => {
-      // Exclude moving page into itself
-      if (node.id !== pageId) {
+      // Exclude moving page into itself or any descendant
+      if (!disallowedIds.has(node.id)) {
         result.push({ id: node.id, title: node.title, depth });
         if (node.children && node.children.length > 0) {
           result = result.concat(flattenTree(node.children, depth + 1));
@@ -59,18 +80,26 @@ export const MovePageModal: React.FC<MovePageModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (selectedParentId && disallowedIds.has(selectedParentId)) {
+      setError("Cannot move a page inside itself or one of its subpages.");
+      return;
+    }
     setIsSubmitting(true);
     setError(null);
 
     try {
       await updateWorkspacePage(pageId, {
-        parentId: selectedParentId,
+        parentId: selectedParentId || null,
       });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("zyoris:page-created"));
+      }
       onSuccess();
       onClose();
     } catch (err: any) {
       console.error("Failed to move page:", err);
-      setError(err?.response?.data?.message || "Failed to move page location.");
+      const msg = err?.response?.data?.message || err?.message || "Failed to move page location.";
+      setError(msg);
     } finally {
       setIsSubmitting(false);
     }
