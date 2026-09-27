@@ -307,7 +307,7 @@ export async function getAuditEvents(
     }
     if (filters.outcome) {
       const out = filters.outcome;
-      events = events.filter((e) => e.outcome  === out.toUpperCase());
+      events = events.filter((e) => e.outcome === out.toUpperCase());
     }
     if (filters.search) {
       const q = filters.search.toLowerCase();

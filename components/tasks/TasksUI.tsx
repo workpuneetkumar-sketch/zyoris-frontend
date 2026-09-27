@@ -38,6 +38,7 @@ import {
     Network,
     Download,
     ChevronDown,
+    Users,
 } from "lucide-react";
 import {
     Task,
@@ -54,6 +55,7 @@ import {
     exportTasksToClientFile,
     FORMAT_EXTENSIONS,
 } from "@/lib/api/exportApi";
+import { getProjects, Project } from "@/lib/api/projectsApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -179,11 +181,16 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
     const [tagInput, setTagInput] = useState("");
     const [errors, setErrors] = useState<{ title?: string }>({});
     const [members, setMembers] = useState<TeamMember[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
 
     useEffect(() => {
         fetchTeamMembers()
             .then((data) => setMembers(data.members ?? data ?? []))
             .catch(() => setMembers([]));
+
+        getProjects()
+            .then((data) => setProjects(Array.isArray(data) ? data : []))
+            .catch(() => setProjects([]));
     }, []);
 
     const handleChange = (
@@ -351,13 +358,19 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
                             <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
                                 Project
                             </label>
-                            <input
+                            <select
                                 name="projectId"
                                 value={form.projectId ?? ""}
                                 onChange={handleChange}
-                                placeholder="e.g. CORE-ENGINE, WEB-APP"
                                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs outline-none"
-                            />
+                            >
+                                <option value="">No Project</option>
+                                {projects.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
 
                         <div>
@@ -1184,6 +1197,11 @@ export function TasksUI({
                                                                                     {task.assignedTo.name}
                                                                                 </span>
                                                                             </>
+                                                                        ) : (task.assigneeType === "DEPARTMENT" || task.department) ? (
+                                                                            <span className="text-indigo-600 dark:text-indigo-400 flex items-center space-x-1 font-medium truncate max-w-[110px]">
+                                                                                <Users size={12} className="text-indigo-500 shrink-0" />
+                                                                                <span className="truncate">{task.department ? `${task.department} Queue` : "Team Queue"}</span>
+                                                                            </span>
                                                                         ) : (
                                                                             <span className="text-slate-400 flex items-center space-x-1">
                                                                                 <User size={12} />
@@ -1354,8 +1372,13 @@ export function TasksUI({
                                                                         {task.assignedTo.name}
                                                                     </span>
                                                                 </div>
+                                                            ) : (task.assigneeType === "DEPARTMENT" || task.department) ? (
+                                                                <span className="inline-flex items-center space-x-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                                                                    <Users size={13} className="text-indigo-500 shrink-0" />
+                                                                    <span>{task.department ? `${task.department} Queue` : "Team Queue"}</span>
+                                                                </span>
                                                             ) : (
-                                                                <span className="text-slate-400 flex items-center space-x-1">
+                                                                <span className="text-slate-400 flex items-center space-x-1 text-xs">
                                                                     <User size={13} />
                                                                     <span>Unassigned</span>
                                                                 </span>

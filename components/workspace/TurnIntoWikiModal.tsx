@@ -49,10 +49,14 @@ export const TurnIntoWikiModal: React.FC<TurnIntoWikiModalProps> = ({
 
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  // Track the action we just completed so success copy is always correct
+  // regardless of when the parent re-renders with the new isWiki value.
+  const [completedAction, setCompletedAction] = useState<"converted" | "reverted" | null>(null);
 
   const reset = () => {
     setStatus("idle");
     setError(null);
+    setCompletedAction(null);
   };
 
   const handleClose = () => {
@@ -67,18 +71,28 @@ export const TurnIntoWikiModal: React.FC<TurnIntoWikiModalProps> = ({
     setError(null);
     try {
       const result = await togglePageWiki(pageId);
+
+      // Normalise: backend must return isWiki boolean.
+      // If it doesn't (field missing / undefined), derive from the current prop:
+      // converting: !isWiki → true  |  reverting: !isWiki → false
+      const newIsWiki: boolean =
+        typeof result?.isWiki === "boolean" ? result.isWiki : !isWiki;
+
+      setCompletedAction(newIsWiki ? "converted" : "reverted");
       setStatus("success");
+      // Fire onConverted immediately so the badge appears right away,
+      // then close after the success animation.
+      onConverted(newIsWiki);
       setTimeout(() => {
-        onConverted(result.isWiki);
         handleClose();
       }, 900);
     } catch (err: any) {
       setStatus("error");
-      const status = err?.response?.status;
+      const httpStatus = err?.response?.status;
       setError(
-        status === 409
+        httpStatus === 409
           ? "This page is already in the requested state."
-          : status === 403
+          : httpStatus === 403
           ? "You don't have permission to change this page's wiki mode."
           : err?.response?.data?.message ??
             err?.message ??
@@ -141,7 +155,9 @@ export const TurnIntoWikiModal: React.FC<TurnIntoWikiModalProps> = ({
             <div className="flex flex-col items-center py-6 space-y-2 text-green-600 dark:text-green-400">
               <CheckCircle2 className="w-10 h-10" />
               <p className="text-sm font-semibold">
-                {isWiki ? "Reverted from Wiki mode!" : "Page is now a Wiki!"}
+                {completedAction === "reverted"
+                  ? "Reverted from Wiki mode!"
+                  : "Page is now a Wiki!"}
               </p>
             </div>
           )}

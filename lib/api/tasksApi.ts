@@ -17,6 +17,7 @@
 
 import api from "@/lib/api/api";
 import axios from "axios";
+import type { EffectiveAssignmentResponse, AssigneeType } from "@/types/workspaceAssignment";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -142,8 +143,14 @@ export interface Task {
     updatedAt?: string;
     subtasks?: TaskSubtask[];
     dependencies?: TaskDependency[];
+    department?: string | null;
+    assigneeType?: AssigneeType | "DEPARTMENT" | "USER" | null;
+    assignedBy?: { id: string; name?: string | null } | null;
+    assignedAt?: string | Date | null;
+    effectiveAssignment?: EffectiveAssignmentResponse | null;
     [key: string]: unknown;
 }
+
 
 export interface TasksResponse {
     tasks: Task[];
@@ -536,7 +543,7 @@ export async function createTask(data: CreateTaskPayload): Promise<Task> {
     if (data.assignedToId) payload.assignedToId = data.assignedToId;
     if (data.leadId) payload.leadId = data.leadId;
     if (data.dealId) payload.dealId = data.dealId;
-    if (data.projectId) payload.projectId = data.projectId;
+    if (data.projectId && data.projectId.trim()) payload.projectId = data.projectId.trim();
     if (data.parentTaskId) payload.parentTaskId = data.parentTaskId;
     if (data.reminderMinutes !== undefined) payload.reminderMinutes = data.reminderMinutes;
     if (data.reminderType) payload.reminderType = data.reminderType;

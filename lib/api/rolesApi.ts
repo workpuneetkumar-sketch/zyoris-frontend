@@ -26,9 +26,51 @@ export interface GetRolesPaginatedResponse {
   };
 }
 
-export const getRoles = async (): Promise<RbacRoleMatrixItem[]> => {
-  const res = await api.get<RbacRoleMatrixItem[]>("/roles");
+// Excluded CEO/CFO listing for org management
+export const getRolesPaginated = async (page = 1, limit = 20): Promise<any> => {
+  const res = await api.get("/roles/get-roles", { params: { page, limit } });
   return res.data;
+};
+
+export const getOrgOwnerRoles = async (): Promise<any> => {
+  const res = await api.get("/roles/get-org-owner-roles");
+  return res.data;
+};
+
+export const getRoles = async (): Promise<RbacRoleMatrixItem[]> => {
+  try {
+    const res = await api.get<any>("/roles");
+    const data = res.data?.data || res.data;
+    if (Array.isArray(data) && data.length > 0) return data;
+  } catch (err: any) {
+    // If /roles is forbidden (403) or fails, fallback to get-roles + get-org-owner-roles
+    try {
+      const [regular, owner] = await Promise.all([
+        getRolesPaginated(1, 100),
+        getOrgOwnerRoles(),
+      ]);
+      const regularRoles = Array.isArray(regular?.data)
+        ? regular.data
+        : Array.isArray(regular)
+        ? regular
+        : [];
+      const ownerRoles = Array.isArray(owner?.data)
+        ? owner.data
+        : Array.isArray(owner)
+        ? owner
+        : [];
+      const combined = [...regularRoles, ...ownerRoles];
+      if (combined.length > 0) {
+        const map = new Map<string, RbacRoleMatrixItem>();
+        combined.forEach((r: any) => map.set(r.id, r));
+        return Array.from(map.values());
+      }
+    } catch {
+      // Fallback failed
+    }
+    throw err;
+  }
+  return [];
 };
 
 export const getRole = async (roleId: string): Promise<RbacRoleMatrixItem> => {
@@ -66,13 +108,3 @@ export const removeRolePermissions = async (roleId: string, permissions: string[
   return res.data;
 };
 
-// Excluded CEO/CFO listing for org management
-export const getRolesPaginated = async (page = 1, limit = 20): Promise<any> => {
-  const res = await api.get("/roles/get-roles", { params: { page, limit } });
-  return res.data;
-};
-
-export const getOrgOwnerRoles = async (): Promise<any> => {
-  const res = await api.get("/roles/get-org-owner-roles");
-  return res.data;
-};

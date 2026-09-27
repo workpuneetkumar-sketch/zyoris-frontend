@@ -97,7 +97,23 @@ export const PageAnalyticsPanel: React.FC<PageAnalyticsPanelProps> = ({
     setStatus("loading");
     setError(null);
     try {
-      const data = await getPageAnalytics(pageId);
+      const raw = await getPageAnalytics(pageId);
+
+      // Normalise: backend may return a partial object or missing array fields.
+      // Guard every field so nothing downstream can crash on .length / .map.
+      const data: WorkspaceAnalytics = {
+        pageId: raw?.pageId ?? pageId,
+        totalViews:     typeof raw?.totalViews    === "number" ? raw.totalViews    : 0,
+        totalEdits:     typeof raw?.totalEdits    === "number" ? raw.totalEdits    : 0,
+        totalComments:  typeof raw?.totalComments === "number" ? raw.totalComments : 0,
+        uniqueViewers:  typeof raw?.uniqueViewers === "number" ? raw.uniqueViewers : 0,
+        lastViewedAt:   raw?.lastViewedAt  ?? null,
+        lastEditedAt:   raw?.lastEditedAt  ?? null,
+        lastEditedBy:   raw?.lastEditedBy  ?? null,
+        // Always an array — never undefined
+        recentActivity: Array.isArray(raw?.recentActivity) ? raw.recentActivity : [],
+      };
+
       setAnalytics(data);
       setStatus("idle");
     } catch (err: any) {
@@ -122,11 +138,11 @@ export const PageAnalyticsPanel: React.FC<PageAnalyticsPanelProps> = ({
 
   const isEmpty =
     status === "idle" &&
-    analytics &&
+    analytics !== null &&
     analytics.totalViews === 0 &&
     analytics.totalEdits === 0 &&
     analytics.totalComments === 0 &&
-    analytics.recentActivity.length === 0;
+    (analytics.recentActivity?.length ?? 0) === 0;
 
   return createPortal(
     <>
@@ -289,13 +305,13 @@ export const PageAnalyticsPanel: React.FC<PageAnalyticsPanelProps> = ({
               </section>
 
               {/* Recent activity feed */}
-              {analytics.recentActivity.length > 0 && (
+              {(analytics.recentActivity?.length ?? 0) > 0 && (
                 <section>
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">
                     Recent Activity
                   </h3>
                   <div className="space-y-2">
-                    {analytics.recentActivity.map((item, i) => (
+                    {(analytics.recentActivity ?? []).map((item, i) => (
                       <div
                         key={i}
                         className="flex items-center space-x-2.5 py-1.5 border-b border-slate-100 dark:border-slate-800 last:border-0"

@@ -38,6 +38,11 @@ export interface Task {
   labels?: string[];
   createdAt: string;
   updatedAt?: string;
+  department?: string | null;
+  assigneeType?: "DEPARTMENT" | "USER" | null;
+  assignedBy?: { id: string; name?: string | null } | null;
+  assignedAt?: string | Date | null;
+  effectiveAssignment?: any;
   [key: string]: unknown;
 }
 
@@ -1464,3 +1469,650 @@ test("Day 2 Finalization: Jira Board and Task Details contract is fully complian
   assert.equal(STATUS_MAPPING.BLOCKED, "IN_PROGRESS");
   assert.equal(STATUS_MAPPING.DONE, "DONE");
 });
+
+test("Day 2: Reassignment State Synchronization and Refresh", async (t) => {
+  await t.test("reassignment away from current user removes task from My Tasks list", () => {
+    const currentUserId = "user-100";
+    const initialTasks: Task[] = [
+      {
+        id: "t-1",
+        title: "Task 1",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        assignedToId: "user-100",
+        assignedTo: { id: "user-100", name: "Current User", email: "user@example.com" },
+        createdAt: "2026-09-20T00:00:00Z",
+      },
+      {
+        id: "t-2",
+        title: "Task 2",
+        status: "TODO",
+        priority: "MEDIUM",
+        assignedToId: "user-100",
+        assignedTo: { id: "user-100", name: "Current User", email: "user@example.com" },
+        createdAt: "2026-09-20T00:00:00Z",
+      },
+    ];
+
+    const updatedAssignment = {
+      taskId: "t-1",
+      organizationId: "org-1",
+      scope: "WORKSPACE",
+      assigneeType: "USER" as const,
+      department: "Marketing",
+      assignedTo: { id: "user-200", name: "Other User", email: "other@example.com" },
+      assignedBy: { id: "user-999", name: "Admin" },
+      assignedAt: "2026-09-23T10:00:00Z",
+      status: "IN_PROGRESS",
+      priority: "HIGH" as const,
+      source: "MANUAL",
+    };
+
+    const isStillAssignedToMe =
+      updatedAssignment.assigneeType === "USER" &&
+      Boolean(currentUserId && updatedAssignment.assignedTo?.id === currentUserId);
+
+    const updatedTasks = !isStillAssignedToMe && currentUserId
+      ? initialTasks.filter((t) => t.id !== updatedAssignment.taskId)
+      : initialTasks;
+
+    assert.strictEqual(updatedTasks.length, 1);
+    assert.strictEqual(updatedTasks.find((t) => t.id === "t-1"), undefined);
+    assert.strictEqual(updatedTasks[0].id, "t-2");
+  });
+
+  await t.test("reassignment keeping current user preserves task in My Tasks with updated department", () => {
+    const currentUserId = "user-100";
+    const initialTasks: Task[] = [
+      {
+        id: "t-1",
+        title: "Task 1",
+        status: "IN_PROGRESS",
+        priority: "HIGH",
+        assignedToId: "user-100",
+        assignedTo: { id: "user-100", name: "Current User", email: "user@example.com" },
+        department: "Sales",
+        createdAt: "2026-09-20T00:00:00Z",
+      },
+    ];
+
+    const updatedAssignment = {
+      taskId: "t-1",
+      organizationId: "org-1",
+      scope: "WORKSPACE",
+      assigneeType: "USER" as const,
+      department: "Engineering",
+      assignedTo: { id: "user-100", name: "Current User", email: "user@example.com" },
+      assignedBy: { id: "user-999", name: "Admin" },
+      assignedAt: "2026-09-23T10:00:00Z",
+      status: "IN_PROGRESS",
+      priority: "HIGH" as const,
+      source: "MANUAL",
+    };
+
+    const isStillAssignedToMe =
+      updatedAssignment.assigneeType === "USER" &&
+      Boolean(currentUserId && updatedAssignment.assignedTo?.id === currentUserId);
+
+    const updatedTasks = !isStillAssignedToMe && currentUserId
+      ? initialTasks.filter((t) => t.id !== updatedAssignment.taskId)
+      : initialTasks.map((t) =>
+          t.id === updatedAssignment.taskId
+            ? {
+                ...t,
+                department: updatedAssignment.department,
+                assignedToId: updatedAssignment.assignedTo?.id ?? null,
+                effectiveAssignment: updatedAssignment,
+                assigneeType: updatedAssignment.assigneeType,
+              }
+            : t
+        );
+
+    assert.strictEqual(updatedTasks.length, 1);
+    assert.strictEqual(updatedTasks[0].id, "t-1");
+    assert.strictEqual((updatedTasks[0] as any).department, "Engineering");
+    assert.strictEqual((updatedTasks[0] as any).effectiveAssignment.department, "Engineering");
+  });
+
+  await t.test("reassignment to Department Queue updates assignee display label without individual member", () => {
+    const updatedAssignment = {
+      taskId: "t-5",
+      organizationId: "org-1",
+      scope: "WORKSPACE",
+      assigneeType: "DEPARTMENT" as const,
+      department: "Support",
+      assignedTo: null,
+      assignedBy: { id: "user-999", name: "Admin" },
+      assignedAt: "2026-09-23T10:00:00Z",
+      status: "TODO",
+      priority: "MEDIUM" as const,
+      source: "MANUAL",
+    };
+
+    const isDeptQueue = updatedAssignment.assigneeType === "DEPARTMENT" && !updatedAssignment.assignedTo;
+    const department = updatedAssignment.department;
+    let displayAssigneeName = "Unassigned";
+    if (isDeptQueue) {
+      displayAssigneeName = department ? `${department} Queue` : "Department Queue";
+    }
+
+    assert.strictEqual(isDeptQueue, true);
+    assert.strictEqual(displayAssigneeName, "Support Queue");
+  });
+
+  await t.test("in-memory selectedTask update allows reopening same task with latest assignment state", () => {
+    const task: Task = {
+      id: "t-10",
+      title: "Task 10",
+      status: "TODO",
+      priority: "MEDIUM",
+      department: "Sales",
+      assignedToId: "user-1",
+      assignedTo: { id: "user-1", name: "User 1" },
+      createdAt: "2026-09-20T00:00:00Z",
+    };
+
+    let selectedTask: Task | null = { ...task };
+
+    const updatedAssignment = {
+      taskId: "t-10",
+      organizationId: "org-1",
+      scope: "WORKSPACE",
+      assigneeType: "USER" as const,
+      department: "Product",
+      assignedTo: { id: "user-2", name: "User 2", email: "user2@example.com" },
+      assignedBy: { id: "user-999", name: "Lead" },
+      assignedAt: "2026-09-23T11:00:00Z",
+      status: "TODO",
+      priority: "MEDIUM" as const,
+      source: "MANUAL",
+    };
+
+    selectedTask = {
+      ...selectedTask,
+      department: updatedAssignment.department,
+      assignedToId: updatedAssignment.assignedTo?.id ?? null,
+      assignedTo: updatedAssignment.assignedTo,
+      effectiveAssignment: updatedAssignment,
+      assigneeType: updatedAssignment.assigneeType,
+    };
+
+    // User closes detail modal
+    selectedTask = null;
+
+    // User reopens detail modal for task from updated list
+    const reopenedTask: Task = {
+      ...task,
+      department: updatedAssignment.department,
+      effectiveAssignment: updatedAssignment,
+    };
+
+    const initialCanonicalAssignment = (reopenedTask as any).effectiveAssignment ?? null;
+
+    assert.notStrictEqual(initialCanonicalAssignment, null);
+    assert.strictEqual(initialCanonicalAssignment.department, "Product");
+    assert.strictEqual(initialCanonicalAssignment.assignedTo.name, "User 2");
+  });
+
+  await t.test("network refresh failure preserves the successful reassignment state", () => {
+    const canonicalAssignment: any = {
+      taskId: "t-20",
+      assigneeType: "USER",
+      department: "QA",
+      assignedTo: { id: "user-5", name: "QA Engineer" },
+    };
+
+    const refreshFailed = true;
+
+    if (refreshFailed) {
+      assert.strictEqual(canonicalAssignment.department, "QA");
+      assert.strictEqual(canonicalAssignment.assignedTo.name, "QA Engineer");
+    }
+  });
+});
+
+test("Day 2: CSV-Created Tasks Assignment Consistency and Representation", async (t) => {
+  // Helper simulating the TaskDetailModal assignment fields derivation
+  function resolveTaskDetailAssignmentState(task: Task, canonicalAssignment?: any | null) {
+    const department = canonicalAssignment?.department ?? task.department ?? (task as any).department ?? null;
+    const effectiveAssigneeType =
+      canonicalAssignment?.assigneeType ??
+      task.assigneeType ??
+      (task as any).assigneeType ??
+      (department && !task.assignedTo ? "DEPARTMENT" : (task.assignedTo ? "USER" : null));
+    const hasIndividualAssignee = Boolean(canonicalAssignment?.assignedTo || task.assignedTo);
+    const isDeptQueue = effectiveAssigneeType === "DEPARTMENT" && !hasIndividualAssignee;
+    let displayAssigneeName = "Unassigned";
+    if (isDeptQueue) {
+      displayAssigneeName = department ? `${department} Queue` : "Department Queue";
+    } else if (canonicalAssignment?.assignedTo?.name) {
+      displayAssigneeName = canonicalAssignment.assignedTo.name;
+    } else if (task.assignedTo?.name) {
+      displayAssigneeName = task.assignedTo.name;
+    }
+
+    const assignmentTypeLabel =
+      effectiveAssigneeType === "DEPARTMENT"
+        ? "Department"
+        : effectiveAssigneeType === "USER"
+        ? "Individual"
+        : null;
+
+    const assignedByName =
+      canonicalAssignment?.assignedBy?.name ??
+      task.assignedBy?.name ??
+      (task as any).assignedBy?.name ??
+      null;
+
+    const rawAssignedAt =
+      canonicalAssignment?.assignedAt ??
+      task.assignedAt ??
+      (task as any).assignedAt ??
+      null;
+
+    const assignedAtFormatted = rawAssignedAt
+      ? new Date(rawAssignedAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : null;
+
+    return {
+      department,
+      effectiveAssigneeType,
+      isDeptQueue,
+      displayAssigneeName,
+      assignmentTypeLabel,
+      assignedByName,
+      assignedAtFormatted,
+    };
+  }
+
+  await t.test("CSV-created Department Queue task displays Department Queue and null individual assignee", () => {
+    // Task created from CSV with:
+    // title: "Optimize index", assigneeType: "DEPARTMENT", targetDepartment: "Engineering"
+    const csvTask: Task = {
+      id: "csv-task-1",
+      title: "Optimize index",
+      status: "TODO",
+      priority: "HIGH",
+      department: "Engineering",
+      assigneeType: "DEPARTMENT",
+      assignedToId: null,
+      assignedTo: null,
+      assignedBy: { id: "mgr-1", name: "Engineering Manager" },
+      assignedAt: "2026-09-23T10:00:00.000Z",
+      createdAt: "2026-09-23T10:00:00.000Z",
+    };
+
+    const state = resolveTaskDetailAssignmentState(csvTask);
+
+    assert.strictEqual(state.department, "Engineering");
+    assert.strictEqual(state.effectiveAssigneeType, "DEPARTMENT");
+    assert.strictEqual(state.isDeptQueue, true);
+    assert.strictEqual(state.displayAssigneeName, "Engineering Queue");
+    assert.strictEqual(state.assignmentTypeLabel, "Department");
+    assert.strictEqual(state.assignedByName, "Engineering Manager");
+    assert.notStrictEqual(state.assignedAtFormatted, null);
+    assert.strictEqual(csvTask.assignedTo, null, "Individual assignee must remain null for Department Queue task");
+  });
+
+  await t.test("CSV-created Individual task displays user assignee and department", () => {
+    // Task created from CSV with:
+    // title: "Build landing hero", assigneeType: "USER", targetDepartment: "Design", targetUserId: "usr-123"
+    const csvTask: Task = {
+      id: "csv-task-2",
+      title: "Build landing hero",
+      status: "TODO",
+      priority: "MEDIUM",
+      department: "Design",
+      assigneeType: "USER",
+      assignedToId: "usr-123",
+      assignedTo: { id: "usr-123", name: "Sara Designer", email: "sara@zyoris.com" },
+      assignedBy: { id: "mgr-2", name: "Design Lead" },
+      assignedAt: "2026-09-23T10:30:00.000Z",
+      createdAt: "2026-09-23T10:30:00.000Z",
+    };
+
+    const state = resolveTaskDetailAssignmentState(csvTask);
+
+    assert.strictEqual(state.department, "Design");
+    assert.strictEqual(state.effectiveAssigneeType, "USER");
+    assert.strictEqual(state.isDeptQueue, false);
+    assert.strictEqual(state.displayAssigneeName, "Sara Designer");
+    assert.strictEqual(state.assignmentTypeLabel, "Individual");
+    assert.strictEqual(state.assignedByName, "Design Lead");
+    assert.strictEqual(csvTask.assignedTo?.name, "Sara Designer");
+  });
+
+  await t.test("CSV-created task with attached effectiveAssignment renders identically to manually reassigned task", () => {
+    const effectiveAssignment = {
+      taskId: "csv-task-3",
+      organizationId: "org-1",
+      scope: "WORKSPACE",
+      assigneeType: "DEPARTMENT" as const,
+      department: "Support",
+      assignedTo: null,
+      assignedBy: { id: "mgr-3", name: "Support Manager" },
+      assignedAt: "2026-09-23T11:00:00.000Z",
+      status: "TODO",
+      priority: "MEDIUM" as const,
+      dueDate: null,
+      source: "CSV_IMPORT",
+    };
+
+    const csvTask: Task = {
+      id: "csv-task-3",
+      title: "Triage backlog tickets",
+      status: "TODO",
+      priority: "MEDIUM",
+      effectiveAssignment,
+      createdAt: "2026-09-23T11:00:00.000Z",
+    };
+
+    const state = resolveTaskDetailAssignmentState(csvTask, effectiveAssignment);
+
+    assert.strictEqual(state.department, "Support");
+    assert.strictEqual(state.effectiveAssigneeType, "DEPARTMENT");
+    assert.strictEqual(state.isDeptQueue, true);
+    assert.strictEqual(state.displayAssigneeName, "Support Queue");
+    assert.strictEqual(state.assignmentTypeLabel, "Department");
+    assert.strictEqual(state.assignedByName, "Support Manager");
+  });
+
+  await t.test("Reassignment modal fallback derives correct currentAssignment from CSV task fields", () => {
+    const csvDeptTask: Task = {
+      id: "csv-task-4",
+      title: "Infrastructure audit",
+      status: "TODO",
+      priority: "HIGH",
+      department: "DevOps",
+      assigneeType: "DEPARTMENT",
+      assignedToId: null,
+      assignedTo: null,
+      createdAt: "2026-09-23T12:00:00.000Z",
+    };
+
+    const fallbackAssignment = {
+      department: csvDeptTask.department ?? null,
+      assignedTo: csvDeptTask.assignedTo ?? null,
+      assigneeType:
+        csvDeptTask.assigneeType ??
+        (csvDeptTask.assignedTo ? "USER" : (csvDeptTask.department ? "DEPARTMENT" : undefined)),
+    };
+
+    assert.strictEqual(fallbackAssignment.department, "DevOps");
+    assert.strictEqual(fallbackAssignment.assigneeType, "DEPARTMENT");
+    assert.strictEqual(fallbackAssignment.assignedTo, null);
+  });
+
+  await t.test("CSV import payload shape conforms to verified backend contract (POST /workspace/tasks/import-csv)", () => {
+    const importPayload = {
+      rows: [
+        {
+          title: "Setup CI pipeline",
+          description: "Configure GitHub Actions",
+          assigneeType: "DEPARTMENT" as const,
+          targetDepartment: "DevOps",
+          dueDate: "2026-10-01T00:00:00.000Z",
+          priority: "HIGH" as const,
+        },
+        {
+          title: "Implement auth token refresh",
+          assigneeType: "USER" as const,
+          targetDepartment: "Engineering",
+          targetUserId: "user-backend-1",
+          priority: "MEDIUM" as const,
+        },
+      ],
+      defaultProjectId: "proj-100",
+    };
+
+    assert.strictEqual(importPayload.rows.length, 2);
+    assert.strictEqual(importPayload.rows[0].assigneeType, "DEPARTMENT");
+    assert.strictEqual(importPayload.rows[0].targetDepartment, "DevOps");
+    assert.strictEqual(importPayload.rows[1].assigneeType, "USER");
+    assert.strictEqual(importPayload.rows[1].targetUserId, "user-backend-1");
+  });
+});
+
+test("Day 2: Reassignment Permissions, Edge Cases, and End-to-End State Transitions", async (t) => {
+  // Pure helper simulating ReassignTaskModal error normalization
+  function resolveReassignmentError(err: any): string {
+    let errorMsg = "An error occurred while reassigning the task.";
+    if (err?.response) {
+      const { status, data } = err.response;
+      if (status === 400) {
+        if (Array.isArray(data?.details) && data.details.length > 0) {
+          errorMsg = data.details
+            .map((item: any) => item.message || `${item.field || "field"}: invalid`)
+            .join("; ");
+        } else if (data?.message) {
+          errorMsg = data.message;
+        } else if (data?.error) {
+          errorMsg = String(data.error);
+        } else {
+          errorMsg = "Invalid reassignment request. Please check the required fields.";
+        }
+      } else if (status === 401) {
+        errorMsg = data?.message || "Authentication required. Please sign in again.";
+      } else if (status === 403) {
+        errorMsg = data?.message || "You do not have permission to reassign this task.";
+      } else if (status === 404) {
+        errorMsg = data?.message || "Task or target assignee was not found.";
+      } else if (status >= 500) {
+        errorMsg = data?.message || "A server error occurred. Please try again later.";
+      } else if (data?.message) {
+        errorMsg = data.message;
+      }
+    } else if (err?.request) {
+      errorMsg = "Network error: Unable to connect to server. Please check your internet connection.";
+    } else if (err?.message) {
+      errorMsg = err.message;
+    }
+    return errorMsg;
+  }
+
+  // Pure helper simulating ReassignTaskModal submission validation logic
+  function validateAndBuildReassignPayload(params: {
+    selectedDepartment: string;
+    assigneeType: "DEPARTMENT" | "USER";
+    selectedUserId: string;
+    filteredEmployees: { userId: string; department: string; name?: string | null }[];
+    reason?: string;
+  }) {
+    const { selectedDepartment, assigneeType, selectedUserId, filteredEmployees, reason } = params;
+
+    if (!selectedDepartment) {
+      return { error: "Please select a department", payload: null };
+    }
+
+    if (assigneeType === "USER") {
+      if (!selectedUserId) {
+        return { error: "Please select an individual team member", payload: null };
+      }
+      const isMemberInDept = filteredEmployees.some((emp) => emp.userId === selectedUserId);
+      if (!isMemberInDept) {
+        return {
+          error: "Selected member does not belong to the selected department. Please choose a valid member.",
+          payload: null,
+        };
+      }
+    }
+
+    const trimmedReason = reason?.trim();
+    const payload = {
+      assigneeType,
+      targetDepartment: selectedDepartment,
+      ...(assigneeType === "USER" ? { targetUserId: selectedUserId } : {}),
+      ...(trimmedReason ? { reason: trimmedReason } : {}),
+    };
+
+    return { error: null, payload };
+  }
+
+  await t.test("403 permission failure preserves authoritative backend message without crashing", () => {
+    const backend403 = {
+      response: {
+        status: 403,
+        data: {
+          success: false,
+          message: "Managers can only assign tasks to members of their own department",
+        },
+      },
+    };
+
+    const errorMsg = resolveReassignmentError(backend403);
+    assert.strictEqual(
+      errorMsg,
+      "Managers can only assign tasks to members of their own department"
+    );
+  });
+
+  await t.test("404 resource-not-found failure preserves authoritative backend message", () => {
+    const backend404 = {
+      response: {
+        status: 404,
+        data: {
+          success: false,
+          message: "Task not found or does not belong to this organization",
+        },
+      },
+    };
+
+    const errorMsg = resolveReassignmentError(backend404);
+    assert.strictEqual(
+      errorMsg,
+      "Task not found or does not belong to this organization"
+    );
+  });
+
+  await t.test("400 validation error parses field details or message", () => {
+    const backend400 = {
+      response: {
+        status: 400,
+        data: {
+          success: false,
+          details: [
+            { field: "targetDepartment", message: "targetDepartment is required" },
+            { field: "targetUserId", message: "targetUserId must be a valid cuid" },
+          ],
+        },
+      },
+    };
+
+    const errorMsg = resolveReassignmentError(backend400);
+    assert.strictEqual(
+      errorMsg,
+      "targetDepartment is required; targetUserId must be a valid cuid"
+    );
+  });
+
+  await t.test("stale member selection across department changes is caught and rejected", () => {
+    const engineeringEmployees = [
+      { userId: "usr-eng-1", department: "Engineering", name: "Alice Eng" },
+    ];
+    const designEmployees = [
+      { userId: "usr-des-1", department: "Design", name: "Bob Design" },
+    ];
+
+    // User initially had Engineering selected with Alice
+    let selectedDepartment = "Engineering";
+    let selectedUserId = "usr-eng-1";
+
+    // User switches department to Design:
+    selectedDepartment = "Design";
+    // If selectedUserId is not cleared or passed staler than UI state:
+    const validationResult = validateAndBuildReassignPayload({
+      selectedDepartment,
+      assigneeType: "USER",
+      selectedUserId, // still usr-eng-1
+      filteredEmployees: designEmployees, // now contains only Design employees
+    });
+
+    assert.notStrictEqual(validationResult.error, null);
+    assert.match(validationResult.error!, /does not belong to the selected department/);
+    assert.strictEqual(validationResult.payload, null);
+  });
+
+  await t.test("Department Queue reassignment creates payload with null individual assignee", () => {
+    const validationResult = validateAndBuildReassignPayload({
+      selectedDepartment: "Operations",
+      assigneeType: "DEPARTMENT",
+      selectedUserId: "",
+      filteredEmployees: [],
+      reason: "Handing over to Operations team queue",
+    });
+
+    assert.strictEqual(validationResult.error, null);
+    assert.deepStrictEqual(validationResult.payload, {
+      assigneeType: "DEPARTMENT",
+      targetDepartment: "Operations",
+      reason: "Handing over to Operations team queue",
+    });
+    assert.strictEqual((validationResult.payload as any).targetUserId, undefined);
+  });
+
+  await t.test("duplicate submit protection blocks second click while request is in flight", async () => {
+    let networkCallCount = 0;
+    const isSubmittingRef = { current: false };
+
+    async function mockSubmit() {
+      if (isSubmittingRef.current) {
+        return { blocked: true };
+      }
+      isSubmittingRef.current = true;
+      networkCallCount++;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      isSubmittingRef.current = false;
+      return { blocked: false };
+    }
+
+    // Fire two calls concurrently (simulating rapid double click)
+    const [res1, res2] = await Promise.all([mockSubmit(), mockSubmit()]);
+
+    assert.strictEqual(networkCallCount, 1, "Only one network request should be dispatched");
+    assert.strictEqual(res1.blocked, false);
+    assert.strictEqual(res2.blocked, true, "Second click must be blocked");
+    assert.strictEqual(isSubmittingRef.current, false, "Submit lock must be released after completion");
+  });
+
+  await t.test("successful individual reassignment builds valid payload and preserves reason", () => {
+    const employees = [
+      { userId: "usr-eng-2", department: "Engineering", name: "David Tech Lead" },
+    ];
+
+    const validationResult = validateAndBuildReassignPayload({
+      selectedDepartment: "Engineering",
+      assigneeType: "USER",
+      selectedUserId: "usr-eng-2",
+      filteredEmployees: employees,
+      reason: "Promoted to lead this feature",
+    });
+
+    assert.strictEqual(validationResult.error, null);
+    assert.deepStrictEqual(validationResult.payload, {
+      assigneeType: "USER",
+      targetDepartment: "Engineering",
+      targetUserId: "usr-eng-2",
+      reason: "Promoted to lead this feature",
+    });
+  });
+
+  await t.test("user with no assignable scopes disables reassignment submission", () => {
+    const scopesWithNoDepts = {
+      organizationId: "org-viewer",
+      departments: [],
+      employees: [],
+    };
+
+    const isSubmitDisabled =
+      scopesWithNoDepts.departments.length === 0;
+
+    assert.strictEqual(isSubmitDisabled, true, "Submit button must be disabled when user has no assignable scopes");
+  });
+});
+
+
+

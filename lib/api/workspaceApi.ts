@@ -17,7 +17,12 @@ import {
   AssignableScopesResponse,
   AssignPageAsTaskPayload,
   AssignmentResult,
+  ReassignTaskPayload,
+  EffectiveAssignmentResponse,
+  ImportTasksCsvPayload,
+  BulkTaskAssignmentResult,
 } from "@/types/workspaceAssignment";
+
 
 /**
  * Fetch the real page tree hierarchy for the workspace sidebar.
@@ -1253,10 +1258,12 @@ export async function previewPageImport(
   try {
     const formData = new FormData();
     formData.append("file", file);
+    // Do NOT set Content-Type manually — Axios auto-sets multipart/form-data
+    // with the correct boundary when it detects a FormData body.
+    // Manually setting it omits the boundary and breaks multipart parsing.
     const res = await api.post(
       `/workspace/pages/${pageId}/import/preview`,
-      formData,
-      { headers: { "Content-Type": "multipart/form-data" } }
+      formData
     );
     return res.data?.data ?? res.data;
   } catch (error) {
@@ -1335,3 +1342,37 @@ export async function assignPageAsTask(
     throw error;
   }
 }
+
+/**
+ * Reassign an existing task preserving assignment history.
+ * POST /workspace/tasks/:taskId/reassign
+ */
+export async function reassignTask(
+  taskId: string,
+  payload: ReassignTaskPayload
+): Promise<EffectiveAssignmentResponse> {
+  try {
+    const res = await api.post(`/workspace/tasks/${taskId}/reassign`, payload);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error reassigning task ${taskId}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Import tasks from CSV rows with unified workspace assignment validation.
+ * POST /workspace/tasks/import-csv
+ */
+export async function importTasksCsv(
+  payload: ImportTasksCsvPayload
+): Promise<BulkTaskAssignmentResult> {
+  try {
+    const res = await api.post("/workspace/tasks/import-csv", payload);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error("Error importing tasks from CSV:", error);
+    throw error;
+  }
+}
+
