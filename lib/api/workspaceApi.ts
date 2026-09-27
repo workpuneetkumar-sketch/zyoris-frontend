@@ -30,8 +30,28 @@ import {
  */
 export async function getWorkspacePageTree(): Promise<WorkspacePageNode[]> {
   try {
-    const res = await api.get("/workspace/pages/tree");
-    const data = res.data?.data ?? res.data;
+    let res: any;
+    try {
+      // Backend returns empty array [] on default maxDepth (3) due to backend recursive query bug;
+      // passing maxDepth=1 returns root pages and their children reliably.
+      res = await api.get("/workspace/pages/tree", { params: { maxDepth: 1 } });
+    } catch {
+      res = await api.get("/workspace/pages/tree");
+    }
+
+    let data = res.data?.data ?? res.data;
+
+    // Fallback if maxDepth=1 produced no array
+    if (!Array.isArray(data) || data.length === 0) {
+      try {
+        const fallbackRes = await api.get("/workspace/pages/tree");
+        const fallbackData = fallbackRes.data?.data ?? fallbackRes.data;
+        if (Array.isArray(fallbackData) && fallbackData.length > 0) {
+          data = fallbackData;
+        }
+      } catch {}
+    }
+
     if (Array.isArray(data)) {
       return data;
     }
@@ -246,6 +266,11 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
           const list = JSON.parse(raw);
           const match = list.find((p: any) => p.id === id);
           if (match) {
+            let localSettings: any = {};
+            try {
+              const rawSettings = localStorage.getItem(`zyoris_page_settings_${id}`);
+              if (rawSettings) localSettings = JSON.parse(rawSettings);
+            } catch {}
             return {
               id: match.id,
               title: match.title || "Untitled Page",
@@ -254,6 +279,10 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
               isFolder: !!match.isFolder,
               isDatabase: !!match.isDatabase,
               blocks: getLocalBlocks(id),
+              settings: localSettings,
+              smallText: localSettings.smallText ?? false,
+              layoutWidth: localSettings.layoutWidth ?? (localSettings.fullWidth ? "full" : "default"),
+              isLocked: localSettings.isLocked ?? false,
               createdAt: match.createdAt || new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             };
@@ -263,11 +292,22 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
     } catch (e) {
       console.warn("Local page read notice:", e);
     }
+    let localSettings: any = {};
+    try {
+      if (typeof window !== "undefined") {
+        const rawSettings = localStorage.getItem(`zyoris_page_settings_${id}`);
+        if (rawSettings) localSettings = JSON.parse(rawSettings);
+      }
+    } catch {}
     return {
       id,
       title: "Untitled Page",
       icon: "📄",
       blocks: getLocalBlocks(id),
+      settings: localSettings,
+      smallText: localSettings.smallText ?? false,
+      layoutWidth: localSettings.layoutWidth ?? (localSettings.fullWidth ? "full" : "default"),
+      isLocked: localSettings.isLocked ?? false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -279,6 +319,24 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
     if (data && Array.isArray(data.blocks)) {
       data.blocks = data.blocks.map(normalizeBackendBlock);
     }
+
+    // Merge persistent backend settings with local cache
+    let localSettings: any = {};
+    if (typeof window !== "undefined") {
+      try {
+        const rawSettings = localStorage.getItem(`zyoris_page_settings_${id}`);
+        if (rawSettings) localSettings = JSON.parse(rawSettings);
+      } catch {}
+    }
+
+    const mergedSettings = { ...localSettings, ...(data?.settings || {}) };
+    if (data) {
+      data.settings = mergedSettings;
+      data.smallText = data.smallText ?? mergedSettings.smallText ?? false;
+      data.layoutWidth = data.layoutWidth ?? mergedSettings.layoutWidth ?? (mergedSettings.fullWidth ? "full" : "default");
+      data.isLocked = data.isLocked ?? mergedSettings.isLocked ?? false;
+    }
+
     return data;
   } catch (error: any) {
     console.error(`Error fetching workspace page ${id}:`, error);
@@ -291,6 +349,11 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
             const list = JSON.parse(raw);
             const match = list.find((p: any) => p.id === id);
             if (match) {
+              let localSettings: any = {};
+              try {
+                const rawSettings = localStorage.getItem(`zyoris_page_settings_${id}`);
+                if (rawSettings) localSettings = JSON.parse(rawSettings);
+              } catch {}
               return {
                 id: match.id,
                 title: match.title || "Untitled Page",
@@ -299,6 +362,10 @@ export async function getWorkspacePage(id: string): Promise<WorkspacePage> {
                 isFolder: !!match.isFolder,
                 isDatabase: !!match.isDatabase,
                 blocks: getLocalBlocks(id),
+                settings: localSettings,
+                smallText: localSettings.smallText ?? false,
+                layoutWidth: localSettings.layoutWidth ?? (localSettings.fullWidth ? "full" : "default"),
+                isLocked: localSettings.isLocked ?? false,
                 createdAt: match.createdAt || new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
               };
@@ -358,7 +425,7 @@ export async function updateWorkspacePage(
 }
 
 /**
- * Delete a workspace page.
+ * Delete a workspace page (moves to trash / soft delete).
  * DELETE /workspace/pages/:id
  */
 export async function deleteWorkspacePage(id: string): Promise<void> {
@@ -367,6 +434,178 @@ export async function deleteWorkspacePage(id: string): Promise<void> {
   }
   const res = await api.delete(`/workspace/pages/${id}`);
   return res.data;
+}
+
+/**
+ * Duplicate a workspace page with its blocks and sub-resources.
+ * POST /workspace/pages/:id/duplicate
+ */
+export async function duplicateWorkspacePage(id: string): Promise<WorkspacePage> {
+  // If page is local or client-generated
+  if (id.startsWith("local-") || id.startsWith("page-")) {
+    try {
+      if (typeof window !== "undefined") {
+        const raw = localStorage.getItem("zyoris_workspace_local_pages");
+        if (raw) {
+          const list = JSON.parse(raw);
+          const orig = list.find((p: any) => p.id === id);
+          if (orig) {
+            const newId = `page-${Date.now()}`;
+            const origBlocks = getLocalBlocks(id);
+            const newBlocks = origBlocks.map((b) => ({
+              ...b,
+              id: `block-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              pageId: newId,
+            }));
+            localStorage.setItem(`zyoris_page_blocks_${newId}`, JSON.stringify(newBlocks));
+
+            const newPage: WorkspacePage = {
+              id: newId,
+              title: `${orig.title || "Untitled"} (Copy)`,
+              icon: orig.icon || "📄",
+              parentId: orig.parentId || null,
+              isFolder: !!orig.isFolder,
+              isDatabase: !!orig.isDatabase,
+              blocks: newBlocks,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            const updatedList = [newPage, ...list];
+            localStorage.setItem("zyoris_workspace_local_pages", JSON.stringify(updatedList));
+            return newPage;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Local duplication fallback notice:", e);
+    }
+  }
+
+  try {
+    const res = await api.post(`/workspace/pages/${id}/duplicate`);
+    const data = res.data?.data ?? res.data;
+
+    // Cache the duplicated page into local pages storage so it immediately appears in all local-first views
+    if (typeof window !== "undefined" && data?.id) {
+      try {
+        const raw = localStorage.getItem("zyoris_workspace_local_pages");
+        const list = raw ? JSON.parse(raw) : [];
+        const filtered = list.filter((p: any) => p.id !== data.id);
+        const node: WorkspacePageNode = {
+          id: data.id,
+          title: data.title || "Untitled Page",
+          icon: data.icon || "📄",
+          parentId: data.parentId || null,
+          isFolder: !!data.isFolder,
+          isDatabase: !!data.isDatabase,
+          children: [],
+          createdAt: data.createdAt || new Date().toISOString(),
+          updatedAt: data.updatedAt || new Date().toISOString(),
+        };
+        localStorage.setItem("zyoris_workspace_local_pages", JSON.stringify([node, ...filtered]));
+      } catch (e) {
+        console.warn("Notice caching duplicated page locally:", e);
+      }
+    }
+
+    return data;
+  } catch (error) {
+    console.error(`Error duplicating workspace page ${id}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch all archived (soft-deleted) workspace pages.
+ * GET /workspace/pages/trash
+ */
+export async function getTrashPages(): Promise<WorkspacePage[]> {
+  try {
+    const res = await api.get("/workspace/pages/trash");
+    const data = res.data?.data ?? res.data;
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.items)) return data.items;
+    if (data && Array.isArray(data.pages)) return data.pages;
+    return [];
+  } catch (error) {
+    console.error("Error fetching trash pages:", error);
+    throw error;
+  }
+}
+
+/**
+ * Restore an archived (soft-deleted) workspace page.
+ * POST /workspace/pages/:id/restore
+ */
+export async function restoreWorkspacePage(id: string): Promise<WorkspacePage> {
+  try {
+    const res = await api.post(`/workspace/pages/${id}/restore`);
+    return res.data?.data ?? res.data;
+  } catch (error) {
+    console.error(`Error restoring workspace page ${id}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Permanently delete a workspace page from the database.
+ * DELETE /workspace/pages/:id/permanent
+ */
+export async function permanentDeleteWorkspacePage(id: string): Promise<void> {
+  try {
+    await api.delete(`/workspace/pages/${id}/permanent`);
+  } catch (error) {
+    console.error(`Error permanently deleting workspace page ${id}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Fetch page settings for layout, smallText, isLocked.
+ * GET /workspace/pages/:id/settings
+ */
+export async function getPageSettings(pageId: string): Promise<WorkspacePageSettings> {
+  let localSettings: any = {};
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(`zyoris_page_settings_${pageId}`);
+      if (raw) localSettings = JSON.parse(raw);
+    } catch {}
+  }
+
+  if (pageId.startsWith("page-") || pageId.startsWith("local-")) {
+    return {
+      layoutWidth: localSettings.layoutWidth ?? (localSettings.fullWidth ? "full" : "default"),
+      smallText: !!localSettings.smallText,
+      isLocked: !!localSettings.isLocked,
+      fullWidth: localSettings.layoutWidth === "full" || !!localSettings.fullWidth,
+      ...localSettings,
+    };
+  }
+
+  try {
+    const res = await api.get(`/workspace/pages/${pageId}`);
+    const data = res.data?.data ?? res.data;
+    const backendSettings = data?.settings || {};
+    return {
+      layoutWidth: data?.layoutWidth ?? backendSettings.layoutWidth ?? localSettings.layoutWidth ?? "default",
+      smallText: data?.smallText ?? backendSettings.smallText ?? localSettings.smallText ?? false,
+      isLocked: data?.isLocked ?? backendSettings.isLocked ?? localSettings.isLocked ?? false,
+      fullWidth: data?.layoutWidth === "full" || backendSettings.fullWidth || localSettings.fullWidth || false,
+      ...backendSettings,
+      ...localSettings,
+    };
+  } catch (error) {
+    console.warn(`Error getting settings for ${pageId}, using local fallback:`, error);
+    return {
+      layoutWidth: localSettings.layoutWidth ?? (localSettings.fullWidth ? "full" : "default"),
+      smallText: !!localSettings.smallText,
+      isLocked: !!localSettings.isLocked,
+      fullWidth: localSettings.layoutWidth === "full" || !!localSettings.fullWidth,
+      ...localSettings,
+    };
+  }
 }
 
 /* ============================================================================
@@ -751,12 +990,57 @@ export async function savePageSettings(
   pageId: string,
   settings: Partial<WorkspacePageSettings>
 ): Promise<WorkspacePageSettings> {
+  // Always update local cache immediately so settings are resilient across refreshes
+  let localMerged: any = {};
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem(`zyoris_page_settings_${pageId}`);
+      const existing = raw ? JSON.parse(raw) : {};
+      localMerged = { ...existing, ...settings };
+      localStorage.setItem(`zyoris_page_settings_${pageId}`, JSON.stringify(localMerged));
+    } catch {}
+  }
+
+  if (pageId.startsWith("page-") || pageId.startsWith("local-")) {
+    return {
+      layoutWidth: localMerged.layoutWidth ?? (localMerged.fullWidth ? "full" : "default"),
+      smallText: !!localMerged.smallText,
+      isLocked: !!localMerged.isLocked,
+      fullWidth: localMerged.layoutWidth === "full" || !!localMerged.fullWidth,
+      ...localMerged,
+    };
+  }
+
   try {
-    const res = await api.patch(`/workspace/pages/${pageId}/settings`, settings);
-    return res.data?.data ?? res.data;
+    // Send both top-level and nested `settings` payload so backend database schema is correctly written
+    const payload = {
+      ...settings,
+      settings: {
+        ...(settings as any).settings,
+        ...settings,
+      },
+    };
+    const res = await api.patch(`/workspace/pages/${pageId}/settings`, payload);
+    const data = res.data?.data ?? res.data;
+    const backendSettings = data?.settings || {};
+    const resultSettings = {
+      ...localMerged,
+      ...backendSettings,
+      ...(data || {}),
+      smallText: data?.smallText ?? backendSettings.smallText ?? localMerged.smallText ?? false,
+      layoutWidth: data?.layoutWidth ?? backendSettings.layoutWidth ?? localMerged.layoutWidth ?? "default",
+      isLocked: data?.isLocked ?? backendSettings.isLocked ?? localMerged.isLocked ?? false,
+    };
+    return resultSettings;
   } catch (error) {
-    console.error(`Error saving page settings for ${pageId}:`, error);
-    throw error;
+    console.warn(`Backend settings PATCH fallback for ${pageId}:`, error);
+    return {
+      layoutWidth: localMerged.layoutWidth ?? (localMerged.fullWidth ? "full" : "default"),
+      smallText: !!localMerged.smallText,
+      isLocked: !!localMerged.isLocked,
+      fullWidth: localMerged.layoutWidth === "full" || !!localMerged.fullWidth,
+      ...localMerged,
+    };
   }
 }
 

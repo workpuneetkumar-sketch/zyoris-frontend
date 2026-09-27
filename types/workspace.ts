@@ -56,6 +56,11 @@ export interface WorkspacePage {
     canShare?: boolean;
     canDelete?: boolean;
   };
+  isWiki?: boolean;
+  isLocked?: boolean;
+  layoutWidth?: PageLayoutWidth;
+  smallText?: boolean;
+  settings?: WorkspacePageSettings;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -178,11 +183,12 @@ export interface WorkspaceDatabase {
 export type PageLayoutWidth = "default" | "full";
 
 export interface WorkspacePageSettings {
-  id: string;
+  id?: string;
   icon?: string | null;
   coverImage?: string | null;
   layoutWidth?: PageLayoutWidth;
   smallText?: boolean;
+  isLocked?: boolean;
   fullWidth?: boolean;
   updatedAt?: string;
 }
