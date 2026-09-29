@@ -236,19 +236,6 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
     fetchPageData();
   }, [fetchPageData]);
 
-<<<<<<< HEAD
-  /* Debounced Title Persistence */
-=======
-  // Close toolbar overflow menu on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (toolbarMenuRef.current && !toolbarMenuRef.current.contains(e.target as Node)) {
-        setIsToolbarMenuOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   /* Immediate & Debounced Title Persistence */
   const flushTitleSave = async (titleToSave: string) => {
@@ -267,8 +254,6 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       setTitleSaveStatus("error");
     }
   };
-
->>>>>>> f568dd6 (fix(workspace & tasks): redesign suggest edits panel, fix import 400 error & client-side fallback, enforce future due dates, and resolve title input glitch)
   const handleTitleChange = (newTitle: string) => {
     if (isLocked) return;
     setTitle(newTitle);
