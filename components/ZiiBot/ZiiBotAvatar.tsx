@@ -136,7 +136,7 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
           animate={
             isTyping
               ? { d: ["M 24 42 Q 32 46 40 42", "M 24 43 Q 32 41 40 43", "M 24 42 Q 32 46 40 42"], transition: { repeat: Infinity, duration: 0.4 } }
-              : {}
+              : { d: "M 24 42 Q 32 44 40 42" }
           }
         />
         {/* Small highlight on head for 3D feel */}

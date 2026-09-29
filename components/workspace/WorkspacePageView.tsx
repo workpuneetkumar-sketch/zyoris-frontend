@@ -236,7 +236,39 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
     fetchPageData();
   }, [fetchPageData]);
 
+<<<<<<< HEAD
   /* Debounced Title Persistence */
+=======
+  // Close toolbar overflow menu on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (toolbarMenuRef.current && !toolbarMenuRef.current.contains(e.target as Node)) {
+        setIsToolbarMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  /* Immediate & Debounced Title Persistence */
+  const flushTitleSave = async (titleToSave: string) => {
+    if (titleTimerRef.current) {
+      clearTimeout(titleTimerRef.current);
+      titleTimerRef.current = null;
+    }
+    const cleanTitle = titleToSave.trim() || "Untitled Page";
+    setTitleSaveStatus("saving");
+    try {
+      await updateWorkspacePage(pageId, { title: cleanTitle });
+      saveStoredLocalPage({ id: pageId, title: cleanTitle, icon });
+      setTitleSaveStatus("saved");
+    } catch (err) {
+      console.error("Failed to update page title:", err);
+      setTitleSaveStatus("error");
+    }
+  };
+
+>>>>>>> f568dd6 (fix(workspace & tasks): redesign suggest edits panel, fix import 400 error & client-side fallback, enforce future due dates, and resolve title input glitch)
   const handleTitleChange = (newTitle: string) => {
     if (isLocked) return;
     setTitle(newTitle);
@@ -244,16 +276,17 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
 
     if (titleTimerRef.current) clearTimeout(titleTimerRef.current);
 
-    titleTimerRef.current = setTimeout(async () => {
-      try {
-        await updateWorkspacePage(pageId, { title: newTitle.trim() });
-        saveStoredLocalPage({ id: pageId, title: newTitle.trim(), icon });
-        setTitleSaveStatus("saved");
-      } catch (err) {
-        console.error("Failed to update page title:", err);
-        setTitleSaveStatus("error");
-      }
+    titleTimerRef.current = setTimeout(() => {
+      flushTitleSave(newTitle);
     }, 750);
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      (e.target as HTMLInputElement).blur();
+      flushTitleSave(title);
+    }
   };
 
   /* Icon Update */
@@ -657,6 +690,8 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
             value={title}
             disabled={!canEdit || isLocked}
             onChange={(e) => canEdit && !isLocked && handleTitleChange(e.target.value)}
+            onKeyDown={handleTitleKeyDown}
+            onBlur={() => flushTitleSave(title)}
             placeholder="Untitled Page..."
             className={`flex-1 ${
               smallText ? "text-2xl sm:text-3xl font-bold" : "text-4xl font-extrabold"

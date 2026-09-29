@@ -516,7 +516,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
   /* -------------------------------------------------------------------------- */
   const handleKeyDown = (e: React.KeyboardEvent, index: number) => {
     if (e.key === "Enter" && !e.shiftKey) {
-      if (activeSlashIndex === index) return;
+      if (activeSlashIndex === index || e.nativeEvent.isComposing) return;
       e.preventDefault();
       handleCreateBlock("paragraph", index + 1);
     } else if (e.key === "Backspace" && (blocks[index]?.text === "" || blocks[index]?.text === undefined)) {

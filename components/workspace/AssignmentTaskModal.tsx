@@ -158,6 +158,11 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
 
     let isoDueDate: string | undefined = undefined;
     if (dueDate) {
+      const todayStr = new Date().toISOString().split("T")[0];
+      if (dueDate < todayStr) {
+        setSubmitError("Due date cannot be in the past. Please select today or a future date.");
+        return;
+      }
       const parsedDate = new Date(dueDate);
       if (isNaN(parsedDate.getTime())) {
         setSubmitError("Please enter a valid due date");
@@ -438,6 +443,7 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
                   </label>
                   <input
                     type="date"
+                    min={new Date().toISOString().split("T")[0]}
                     value={dueDate}
                     onChange={(e) => {
                       setDueDate(e.target.value);

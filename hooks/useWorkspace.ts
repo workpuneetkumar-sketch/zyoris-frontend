@@ -20,21 +20,26 @@ export function saveStoredLocalPage(page: Partial<WorkspacePage> & { id: string;
   if (typeof window === "undefined") return;
   try {
     const existing = getStoredLocalPages();
+    const isNew = !existing.some((p) => p.id === page.id);
+    const existingNode = existing.find((p) => p.id === page.id);
     const filtered = existing.filter((p) => p.id !== page.id);
+    
     const newNode: WorkspacePageNode = {
       id: page.id,
       title: page.title || "Untitled",
-      icon: page.icon || "📄",
-      parentId: page.parentId || null,
-      isFolder: page.isFolder || false,
-      isDatabase: page.isDatabase || false,
-      children: [],
-      createdAt: page.createdAt || new Date().toISOString(),
+      icon: page.icon || existingNode?.icon || "📄",
+      parentId: page.parentId !== undefined ? page.parentId : (existingNode?.parentId || null),
+      isFolder: page.isFolder !== undefined ? page.isFolder : (existingNode?.isFolder || false),
+      isDatabase: page.isDatabase !== undefined ? page.isDatabase : (existingNode?.isDatabase || false),
+      children: existingNode?.children || [],
+      createdAt: page.createdAt || existingNode?.createdAt || new Date().toISOString(),
       updatedAt: page.updatedAt || new Date().toISOString(),
     };
-    const updated = [newNode, ...filtered];
+    const updated = isNew ? [newNode, ...filtered] : existing.map((p) => (p.id === page.id ? newNode : p));
     localStorage.setItem(LOCAL_PAGES_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent("zyoris:page-created", { detail: newNode }));
+
+    const eventName = isNew ? "zyoris:page-created" : "zyoris:page-updated";
+    window.dispatchEvent(new CustomEvent(eventName, { detail: newNode }));
   } catch (e) {
     console.error("Failed to save local page:", e);
   }
@@ -89,8 +94,10 @@ export function useWorkspace() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPageTree = useCallback(async () => {
-    setIsLoading(true);
+  const fetchPageTree = useCallback(async (isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const remoteTree = await getWorkspacePageTree();
@@ -153,41 +160,26 @@ export function useWorkspace() {
         setError(msg);
       }
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchPageTree();
+    fetchPageTree(true);
 
-    const handlePageCreated = (e?: any) => {
-      if (e?.detail && e.detail.id) {
-        const d = e.detail;
-        const currentLocal = getStoredLocalPages();
-        if (!currentLocal.some((p) => p.id === d.id)) {
-          saveStoredLocalPage({
-            id: d.id,
-            title: d.title || "Untitled",
-            icon: d.icon || "📄",
-            parentId: d.parentId || null,
-            isFolder: !!d.isFolder,
-            isDatabase: !!d.isDatabase,
-          });
-          return;
-        }
-      }
-      fetchPageTree();
+    const handlePageEvent = () => {
+      fetchPageTree(false);
     };
 
-    const handlePageDeleted = () => {
-      fetchPageTree();
-    };
-
-    window.addEventListener("zyoris:page-created", handlePageCreated);
-    window.addEventListener("zyoris:page-deleted", handlePageDeleted);
+    window.addEventListener("zyoris:page-created", handlePageEvent);
+    window.addEventListener("zyoris:page-updated", handlePageEvent);
+    window.addEventListener("zyoris:page-deleted", handlePageEvent);
     return () => {
-      window.removeEventListener("zyoris:page-created", handlePageCreated);
-      window.removeEventListener("zyoris:page-deleted", handlePageDeleted);
+      window.removeEventListener("zyoris:page-created", handlePageEvent);
+      window.removeEventListener("zyoris:page-updated", handlePageEvent);
+      window.removeEventListener("zyoris:page-deleted", handlePageEvent);
     };
   }, [fetchPageTree]);
 
@@ -195,6 +187,6 @@ export function useWorkspace() {
     pageTree,
     isLoading,
     error,
-    refetchTree: fetchPageTree,
+    refetchTree: () => fetchPageTree(false),
   };
 }

@@ -302,8 +302,13 @@ export function TaskDetailModal({
         }
         // NOTE: Assignment mutation is removed from generic Edit flow (Step 2).
         // Task reassignment is handled authoritatively via POST /workspace/tasks/:id/reassign
+        const todayStr = new Date().toISOString().split("T")[0];
         const initialDueDate = task.dueDate ? task.dueDate.split("T")[0] : "";
         if ((form.dueDate ?? "") !== initialDueDate) {
+            if (form.dueDate && form.dueDate < todayStr) {
+                setLocalSaveError("Due date cannot be in the past. Please select today or a future date.");
+                return;
+            }
             payload.dueDate = form.dueDate ? form.dueDate : null;
         }
         const initialProjectId = task.projectId ? String(task.projectId) : "";
@@ -917,6 +922,7 @@ export function TaskDetailModal({
                                         <input
                                             type="date"
                                             name="dueDate"
+                                            min={new Date().toISOString().split("T")[0]}
                                             value={form.dueDate ?? ""}
                                             onChange={handleChange}
                                             className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"

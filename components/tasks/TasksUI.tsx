@@ -179,7 +179,7 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
         labels: [],
     });
     const [tagInput, setTagInput] = useState("");
-    const [errors, setErrors] = useState<{ title?: string }>({});
+    const [errors, setErrors] = useState<{ title?: string; dueDate?: string }>({});
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [projects, setProjects] = useState<Project[]>([]);
 
@@ -214,9 +214,15 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
         }));
     };
 
+    const todayStr = new Date().toISOString().split("T")[0];
+
     const handleSubmit = async () => {
         if (!form.title.trim()) {
             setErrors({ title: "Title is required" });
+            return;
+        }
+        if (form.dueDate && form.dueDate < todayStr) {
+            setErrors({ dueDate: "Due date cannot be in the past. Please select today or a future date." });
             return;
         }
         setErrors({});
@@ -346,10 +352,14 @@ function CreateTaskModal({ saving, saveError, initialStatus = "TODO", onClose, o
                             <input
                                 type="date"
                                 name="dueDate"
+                                min={todayStr}
                                 value={form.dueDate ?? ""}
                                 onChange={handleChange}
                                 className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs outline-none"
                             />
+                            {errors.dueDate && (
+                                <p className="text-[11px] text-red-500 mt-1">{errors.dueDate}</p>
+                            )}
                         </div>
                     </div>
 
