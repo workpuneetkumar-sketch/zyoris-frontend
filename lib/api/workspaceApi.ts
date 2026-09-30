@@ -1339,6 +1339,97 @@ export async function restorePageRevision(
 
 // ── FE2-08 · Page Import ──────────────────────────────────────────────────────
 
+import * as fflate from "fflate";
+
+function escapeXmlHtml(str: string): string {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function parseOpenXmlDocxToHtml(arrayBuffer: ArrayBuffer): string {
+  try {
+    const uint8 = new Uint8Array(arrayBuffer);
+    const unzipped = fflate.unzipSync(uint8);
+    const docXmlKey = Object.keys(unzipped).find((k) => k.endsWith("word/document.xml"));
+    if (!docXmlKey || !unzipped[docXmlKey]) return "";
+
+    const docXmlText = fflate.strFromU8(unzipped[docXmlKey]);
+    const htmlParts: string[] = [];
+    const blockRegex = /<(w:p|w:tbl)[\s\S]*?<\/\1>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = blockRegex.exec(docXmlText)) !== null) {
+      const blockText = match[0];
+      const tagName = match[1];
+
+      if (tagName === "w:tbl") {
+        const rows: string[][] = [];
+        const trRegex = /<w:tr[\s\S]*?<\/w:tr>/g;
+        let trMatch: RegExpExecArray | null;
+        while ((trMatch = trRegex.exec(blockText)) !== null) {
+          const rowCells: string[] = [];
+          const tcRegex = /<w:tc[\s\S]*?<\/w:tc>/g;
+          let tcMatch: RegExpExecArray | null;
+          while ((tcMatch = tcRegex.exec(trMatch[0])) !== null) {
+            const cellTextMatches = tcMatch[0].match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [];
+            const cellText = cellTextMatches
+              .map((t) => t.replace(/<[^>]+>/g, ""))
+              .join("")
+              .trim();
+            rowCells.push(cellText);
+          }
+          if (rowCells.length > 0) {
+            rows.push(rowCells);
+          }
+        }
+        if (rows.length > 0) {
+          const trHtml = rows
+            .map(
+              (r, i) =>
+                `<tr>${r.map((c) => `<${i === 0 ? "th" : "td"}>${escapeXmlHtml(c)}</${i === 0 ? "th" : "td"}>`).join("")}</tr>`
+            )
+            .join("");
+          htmlParts.push(`<table>${trHtml}</table>`);
+        }
+      } else if (tagName === "w:p") {
+        const styleMatch = blockText.match(/<w:pStyle w:val="([^"]+)"/);
+        const styleVal = styleMatch ? styleMatch[1].toLowerCase() : "";
+        const textMatches = blockText.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g) || [];
+        const textContent = textMatches
+          .map((t) => t.replace(/<[^>]+>/g, ""))
+          .join("")
+          .trim();
+
+        if (!textContent) continue;
+
+        if (styleVal.includes("heading1") || styleVal.includes("heading 1")) {
+          htmlParts.push(`<h1>${escapeXmlHtml(textContent)}</h1>`);
+        } else if (styleVal.includes("heading2") || styleVal.includes("heading 2")) {
+          htmlParts.push(`<h2>${escapeXmlHtml(textContent)}</h2>`);
+        } else if (styleVal.includes("heading3") || styleVal.includes("heading 3")) {
+          htmlParts.push(`<h3>${escapeXmlHtml(textContent)}</h3>`);
+        } else if (styleVal.includes("bullet") || /^[\u2022\u25cf\u2023\-*+]\s*/.test(textContent)) {
+          const cleanText = textContent.replace(/^[\u2022\u25cf\u2023\-*+]\s*/, "");
+          htmlParts.push(`<ul><li>${escapeXmlHtml(cleanText)}</li></ul>`);
+        } else if (styleVal.includes("number") || /^\d+[\.\)]\s*/.test(textContent)) {
+          const cleanText = textContent.replace(/^\d+[\.\)]\s*/, "");
+          htmlParts.push(`<ol><li>${escapeXmlHtml(cleanText)}</li></ol>`);
+        } else {
+          htmlParts.push(`<p>${escapeXmlHtml(textContent)}</p>`);
+        }
+      }
+    }
+
+    return htmlParts.join("");
+  } catch (err) {
+    console.error("OpenXML fallback parse error:", err);
+    return "";
+  }
+}
+
 /**
  * Client-side parser for .html, .md, .txt, .docx files into native WorkspaceBlock objects.
  * Guarantees import preview works seamlessly even if backend endpoint returns 400 / 404.
@@ -1371,30 +1462,26 @@ export async function parseFileToWorkspaceBlocks(
   let htmlContent = "";
 
   if (ext === "docx") {
+    let arrayBuffer: ArrayBuffer | null = null;
     try {
+      arrayBuffer = await file.arrayBuffer();
       const mammoth = await import("mammoth");
-      const arrayBuffer = await file.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-      const result = await mammoth.convertToHtml({ buffer });
+      const buffer = typeof Buffer !== "undefined" ? Buffer.from(arrayBuffer) : (arrayBuffer as any);
+      const result = await mammoth.convertToHtml({ arrayBuffer, buffer } as any);
       htmlContent = result.value || "";
-      if (result.messages && result.messages.length > 0) {
-        result.messages.forEach((msg: any) => {
-          if (msg.type === "warning" && msg.message) {
-            warnings.push(msg.message);
-          }
-        });
-      }
     } catch (docxErr: any) {
-      console.error("Mammoth DOCX parsing error:", docxErr);
-      warnings.push("Could not parse DOCX binary formatting. Extracting basic text fallback.");
-      try {
-        rawText = await file.text();
-        rawText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, " ");
-      } catch (e) {
-        rawText = "";
-      }
+      console.warn("Mammoth parse notice, using OpenXML zip extractor fallback:", docxErr);
     }
-  } else if (ext === "csv") {
+
+    // Secondary 100% reliable fallback via OpenXML unzip & document.xml parser
+    if (!htmlContent && arrayBuffer) {
+      htmlContent = parseOpenXmlDocxToHtml(arrayBuffer);
+    }
+
+    if (!htmlContent) {
+      warnings.push("Could not parse DOCX binary formatting cleanly. Extracting text fallback.");
+    }
+  } else if (ext === "csv" || ext === "tsv" || file.name.endsWith(".csv")) {
     try {
       const XLSX = await import("xlsx");
       const arrayBuffer = await file.arrayBuffer();

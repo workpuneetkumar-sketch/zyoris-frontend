@@ -28,6 +28,40 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
     return "";
   };
 
+  const getGridFromBlock = (): string[][] => {
+    if (Array.isArray(block.properties?.grid) && block.properties.grid.length > 0) {
+      return block.properties.grid;
+    }
+    if (Array.isArray(block.properties?.formatting?.grid) && block.properties.formatting.grid.length > 0) {
+      return block.properties.formatting.grid;
+    }
+    if (Array.isArray(block.content?.grid) && block.content.grid.length > 0) {
+      return block.content.grid;
+    }
+
+    const rawText = getTextContent();
+    if (rawText && typeof rawText === "string" && rawText.includes("|")) {
+      const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const parsedRows: string[][] = [];
+      for (const line of lines) {
+        if (/^\|?\s*[-:]+\s*(\|\s*[-:]+\s*)+\|?$/.test(line)) continue;
+        if (line.includes("|")) {
+          const cells = line
+            .split("|")
+            .map((c) => c.trim())
+            .filter((_, idx, arr) => idx > 0 && idx < arr.length - (line.endsWith("|") ? 1 : 0));
+          if (cells.length > 0) parsedRows.push(cells);
+        }
+      }
+      if (parsedRows.length > 0) return parsedRows;
+    }
+
+    return [
+      ["Header 1", "Header 2"],
+      ["Cell 1", "Cell 2"],
+    ];
+  };
+
   const text = getTextContent();
   const type = block.type ? block.type.toLowerCase() : "paragraph";
 
@@ -165,19 +199,13 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
       );
 
     case "table":
-      const grid =
-        (block.properties?.grid as string[][]) ||
-        (block.properties?.formatting?.grid as string[][]) ||
-        (block.content?.grid as string[][]) || [
-          ["Header 1", "Header 2"],
-          ["Cell 1", "Cell 2"],
-        ];
+      const grid = getGridFromBlock();
       return (
-        <div className="my-3 overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+        <div className="my-3 overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xs">
           <table className="w-full text-xs text-left text-slate-700 dark:text-slate-300">
             <tbody>
               {grid.map((row, rIdx) => (
-                <tr key={rIdx} className={rIdx === 0 ? "bg-slate-100 dark:bg-slate-800 font-bold" : "border-t border-slate-200 dark:border-slate-800"}>
+                <tr key={rIdx} className={rIdx === 0 ? "bg-slate-100 dark:bg-slate-800 font-bold border-b border-slate-200 dark:border-slate-700" : "border-t border-slate-200 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition"}>
                   {row.map((cell, cIdx) => (
                     <td key={cIdx} className="p-2.5 border-r border-slate-200 dark:border-slate-800 last:border-r-0">
                       {cell}
