@@ -210,7 +210,7 @@ function ToolScopeSelector({
                       <span
                         className={classNames(
                           "w-2 h-2 rounded-full shrink-0",
-                          RISK_DOT[tool.riskTier] ?? "bg-gray-400"
+                          RISK_DOT[tool.riskTier] ?? "bg-[color:var(--color-text-muted)]"
                         )}
                         title={`Risk: ${tool.riskTier}`}
                       />

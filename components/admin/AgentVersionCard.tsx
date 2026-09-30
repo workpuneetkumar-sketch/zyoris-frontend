@@ -5,22 +5,20 @@
  * ─────────────────────────────────────────────────────────────
  * Day 7 — Model/Version State & Promotion Card
  *
- * Displays one AgentVersion with:
- *   - Version state badge (PRODUCTION / STAGING / DRAFT / RETIRED / FAILED)
- *   - Regression gate results table (PASS / FAIL / PENDING per gate)
- *   - "Promote to Production" button — ONLY active when:
- *       (a) version.state === "STAGING", AND
- *       (b) version.allGatesPassed === true
- *   - Post-promote: shows approval queue link (promotion routes through
- *     the existing Approval Queue — no new approval logic)
+ * Chart palette applied via .zyoris-chart-scope on the GateRow
+ * wrapper and the PromoteArea wrapper.
  *
- * Non-negotiables:
- * - The Promote button is structurally disabled (not just styled) when
- *   gates have not all passed — enforced at the component level and
- *   redundantly guarded in the API layer.
- * - Production models never silently change — every promotion creates
- *   an auditable approvalRequestId shown as a link here.
- * - All colors via CSS variable tokens only.
+ * Pass/fail gate row colors: var(--chart-success) / var(--chart-danger)
+ * Warning (pending gates): var(--chart-warning)
+ * All chart tokens resolved from the scoped block in globals.css.
+ *
+ * Non-chart structural tokens (--color-surface, --color-border, etc.)
+ * are left untouched — only the pass/fail/warning delta colors change.
+ *
+ * Non-negotiables (unchanged):
+ * - Promote button disabled when gates not all passed.
+ * - Every promotion creates an auditable approvalRequestId.
+ * - All layout, spacing, radius, card container: unchanged.
  */
 
 import { useState } from "react";
@@ -48,11 +46,13 @@ import type {
 } from "@/lib/types/day7.ts";
 
 // ─── Version state badge ──────────────────────────────────────────────────────
+// State badges keep their existing semantic CSS var tokens —
+// they are not chart/metric elements.
 
 interface VersionStateMeta {
-  label: string;
-  icon: React.ElementType;
-  pill: string;
+  label:     string;
+  icon:      React.ElementType;
+  pill:      string;
   iconColor: string;
 }
 
@@ -90,7 +90,7 @@ const VERSION_STATE_META: Record<VersionState, VersionStateMeta> = {
 };
 
 function VersionStateBadge({ state }: { state: VersionState }) {
-  const m = VERSION_STATE_META[state] ?? VERSION_STATE_META.DRAFT;
+  const m    = VERSION_STATE_META[state] ?? VERSION_STATE_META.DRAFT;
   const Icon = m.icon;
   return (
     <span
@@ -107,6 +107,8 @@ function VersionStateBadge({ state }: { state: VersionState }) {
 }
 
 // ─── Gate result row ──────────────────────────────────────────────────────────
+// GateRow is the metric/delta element — wrapped in zyoris-chart-scope.
+// Background tints and text use var(--chart-success/warning/danger).
 
 function GateRow({ gate }: { gate: RegressionGate }) {
   const isPending = gate.result === "PENDING";
@@ -114,45 +116,73 @@ function GateRow({ gate }: { gate: RegressionGate }) {
   const isFail    = gate.result === "FAIL";
 
   return (
+    // zyoris-chart-scope makes var(--chart-*) resolve inside this element
     <div
-      className={classNames(
-        "flex items-center gap-3 px-3 py-2.5 rounded-xl border",
-        isPending ? "bg-[color:var(--color-background-secondary)] border-[color:var(--color-border-light)]"  :
-        isPass    ? "bg-[color:var(--color-success-light)]         border-[color:var(--color-success-light)]" :
-                    "bg-[color:var(--color-error-light)]           border-[color:var(--color-error-light)]"
-      )}
+      className="zyoris-chart-scope flex items-center gap-3 px-3 py-2.5 rounded-xl border"
+      style={{
+        backgroundColor: isPending
+          ? "var(--color-background-secondary)"
+          : isPass
+          ? "color-mix(in oklch, var(--chart-success) 12%, transparent)"
+          : "color-mix(in oklch, var(--chart-danger) 12%, transparent)",
+        borderColor: isPending
+          ? "var(--color-border-light)"
+          : isPass
+          ? "color-mix(in oklch, var(--chart-success) 30%, transparent)"
+          : "color-mix(in oklch, var(--chart-danger) 30%, transparent)",
+      }}
       data-testid="regression-gate-row"
       data-gate-result={gate.result}
     >
       {/* Result icon */}
       <div className="shrink-0">
-        {isPending && <Clock       size={14} className="text-[color:var(--color-text-muted)]" />}
-        {isPass    && <CheckCircle2 size={14} className="text-[color:var(--color-success)]"    />}
-        {isFail    && <XCircle      size={14} className="text-[color:var(--color-error)]"      />}
+        {isPending && (
+          <Clock size={14} className="text-[color:var(--color-text-muted)]" />
+        )}
+        {isPass && (
+          <CheckCircle2
+            size={14}
+            style={{ color: "var(--chart-success)" }}
+          />
+        )}
+        {isFail && (
+          <XCircle
+            size={14}
+            style={{ color: "var(--chart-danger)" }}
+          />
+        )}
       </div>
 
       {/* Label */}
-      <p className={classNames(
-        "text-xs font-semibold flex-1 min-w-0 truncate",
-        isPending ? "text-[color:var(--color-text-muted)]"        :
-        isPass    ? "text-[color:var(--color-success-foreground)]" :
-                    "text-[color:var(--color-error-foreground)]"
-      )}>
+      <p
+        className="text-xs font-semibold flex-1 min-w-0 truncate"
+        style={{
+          color: isPending
+            ? "var(--color-text-muted)"
+            : isPass
+            ? "var(--chart-success)"
+            : "var(--chart-danger)",
+        }}
+      >
         {gate.label}
       </p>
 
       {/* Measured vs threshold */}
       {gate.measuredValue != null && (
-        <span className={classNames(
-          "text-xs font-mono shrink-0",
-          isPass ? "text-[color:var(--color-success-foreground)]" :
-          isFail ? "text-[color:var(--color-error-foreground)]"   :
-                   "text-[color:var(--color-text-muted)]"
-        )}>
+        <span
+          className="text-xs font-mono shrink-0"
+          style={{
+            color: isPending
+              ? "var(--color-text-muted)"
+              : isPass
+              ? "var(--chart-success)"
+              : "var(--chart-danger)",
+          }}
+        >
           {gate.measuredValue}
-          {gate.unit && <span className="opacity-70 ml-0.5">{gate.unit}</span>}
+          {gate.unit && <span style={{ opacity: 0.7, marginLeft: "0.125rem" }}>{gate.unit}</span>}
           {gate.threshold != null && (
-            <span className="opacity-60 ml-1">
+            <span style={{ opacity: 0.6, marginLeft: "0.25rem" }}>
               / {gate.threshold}{gate.unit}
             </span>
           )}
@@ -160,12 +190,16 @@ function GateRow({ gate }: { gate: RegressionGate }) {
       )}
 
       {/* Result label */}
-      <span className={classNames(
-        "text-[10px] font-extrabold uppercase tracking-wide shrink-0",
-        isPending ? "text-[color:var(--color-text-muted)]"        :
-        isPass    ? "text-[color:var(--color-success-foreground)]" :
-                    "text-[color:var(--color-error-foreground)]"
-      )}>
+      <span
+        className="text-[10px] font-extrabold uppercase tracking-wide shrink-0"
+        style={{
+          color: isPending
+            ? "var(--color-text-muted)"
+            : isPass
+            ? "var(--chart-success)"
+            : "var(--chart-danger)",
+        }}
+      >
         {gate.result}
       </span>
     </div>
@@ -173,25 +207,21 @@ function GateRow({ gate }: { gate: RegressionGate }) {
 }
 
 // ─── Promote button / state ───────────────────────────────────────────────────
+// PromoteArea warning/blocking messages use chart-warning / chart-danger.
 
 interface PromoteAreaProps {
-  version: AgentVersion;
+  version:    AgentVersion;
   onPromoted: (approvalRequestId: string) => void;
 }
 
 function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
   const [promoting, setPromoting] = useState(false);
 
-  // Derived: can this version be promoted?
-  const canPromote = version.state === "STAGING" && version.allGatesPassed;
+  const canPromote  = version.state === "STAGING" && version.allGatesPassed;
   const alreadySent = !!version.approvalRequestId;
 
-  const failingGates = version.regressionGates.filter(
-    (g) => g.result === "FAIL"
-  );
-  const pendingGates = version.regressionGates.filter(
-    (g) => g.result === "PENDING"
-  );
+  const failingGates = version.regressionGates.filter((g) => g.result === "FAIL");
+  const pendingGates = version.regressionGates.filter((g) => g.result === "PENDING");
 
   const handlePromote = async () => {
     if (!canPromote || alreadySent || promoting) return;
@@ -199,9 +229,7 @@ function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
     try {
       const res = await promoteAgentVersion(version.id, version);
       onPromoted(res.approvalRequestId);
-      toast.success(
-        res.message ?? "Promotion request sent to Approval Queue."
-      );
+      toast.success(res.message ?? "Promotion request sent to Approval Queue.");
     } catch (err: any) {
       toast.error(err.message ?? "Promotion failed.");
     } finally {
@@ -209,11 +237,13 @@ function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
     }
   };
 
-  // Already sent for approval
   if (alreadySent) {
     return (
       <div className="flex items-center gap-3 flex-wrap pt-3 border-t border-[color:var(--color-border-light)]">
-        <span className="inline-flex items-center gap-1.5 text-xs font-bold text-[color:var(--color-success)]">
+        <span
+          className="inline-flex items-center gap-1.5 text-xs font-bold"
+          style={{ color: "var(--chart-success)" }}
+        >
           <CheckCircle2 size={14} />
           Promotion request sent
         </span>
@@ -231,22 +261,28 @@ function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
     );
   }
 
-  // Not a STAGING version — no promote action available
-  if (version.state !== "STAGING") {
-    return null;
-  }
+  if (version.state !== "STAGING") return null;
 
-  // STAGING — show promote button (disabled when gates not all passed)
   return (
+    // zyoris-chart-scope so var(--chart-warning/danger) resolve in inline styles below
     <div
-      className="flex flex-col gap-2 pt-3 border-t border-[color:var(--color-border-light)]"
+      className="zyoris-chart-scope flex flex-col gap-2 pt-3 border-t border-[color:var(--color-border-light)]"
       data-testid="promote-area"
     >
-      {/* Gate blockers */}
+      {/* Failing gates banner */}
       {failingGates.length > 0 && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-[color:var(--color-error-light)] border border-[color:var(--color-error-light)]">
-          <XCircle size={13} className="text-[color:var(--color-error)] shrink-0 mt-0.5" />
-          <p className="text-[11px] text-[color:var(--color-error-foreground)] leading-relaxed">
+        <div
+          className="flex items-start gap-2 px-3 py-2 rounded-xl border"
+          style={{
+            backgroundColor: "color-mix(in oklch, var(--chart-danger) 10%, transparent)",
+            borderColor:      "color-mix(in oklch, var(--chart-danger) 25%, transparent)",
+          }}
+        >
+          <XCircle size={13} className="shrink-0 mt-0.5" style={{ color: "var(--chart-danger)" }} />
+          <p
+            className="text-[11px] leading-relaxed"
+            style={{ color: "var(--chart-danger)" }}
+          >
             <span className="font-bold">
               {failingGates.length} gate{failingGates.length !== 1 ? "s" : ""} failing
             </span>
@@ -256,10 +292,21 @@ function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
           </p>
         </div>
       )}
+
+      {/* Pending gates banner */}
       {pendingGates.length > 0 && failingGates.length === 0 && (
-        <div className="flex items-start gap-2 px-3 py-2 rounded-xl bg-[color:var(--color-warning-light)] border border-[color:var(--color-warning-light)]">
-          <Clock size={13} className="text-[color:var(--color-warning-foreground)] shrink-0 mt-0.5" />
-          <p className="text-[11px] text-[color:var(--color-warning-foreground)] leading-relaxed">
+        <div
+          className="flex items-start gap-2 px-3 py-2 rounded-xl border"
+          style={{
+            backgroundColor: "color-mix(in oklch, var(--chart-warning) 10%, transparent)",
+            borderColor:      "color-mix(in oklch, var(--chart-warning) 25%, transparent)",
+          }}
+        >
+          <Clock size={13} className="shrink-0 mt-0.5" style={{ color: "var(--chart-warning)" }} />
+          <p
+            className="text-[11px] leading-relaxed"
+            style={{ color: "var(--chart-warning)" }}
+          >
             <span className="font-bold">
               {pendingGates.length} gate{pendingGates.length !== 1 ? "s" : ""} still running
             </span>
@@ -282,7 +329,7 @@ function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
           className={classNames(
             "inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all",
             canPromote && !promoting
-              ? "bg-[color:var(--color-success)] hover:opacity-90 text-white shadow-sm"
+              ? "bg-[color:var(--color-success)] hover:opacity-90 text-[color:var(--color-primary-foreground)] shadow-sm"
               : "bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)] cursor-not-allowed"
           )}
         >
@@ -305,11 +352,9 @@ function PromoteArea({ version, onPromoted }: PromoteAreaProps) {
 // ─── Main card ────────────────────────────────────────────────────────────────
 
 export interface AgentVersionCardProps {
-  version: AgentVersion;
-  /** Called after a successful promotion request */
-  onPromoted?: (approvalRequestId: string) => void;
-  className?: string;
-  /** Start collapsed (for RETIRED / FAILED versions) */
+  version:           AgentVersion;
+  onPromoted?:       (approvalRequestId: string) => void;
+  className?:        string;
   defaultCollapsed?: boolean;
 }
 
@@ -319,7 +364,7 @@ export function AgentVersionCard({
   className,
   defaultCollapsed = false,
 }: AgentVersionCardProps) {
-  const [version, setVersion] = useState(initialVersion);
+  const [version,   setVersion]   = useState(initialVersion);
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   const handlePromoted = (approvalRequestId: string) => {
@@ -331,7 +376,6 @@ export function AgentVersionCard({
   const isRetired = version.state === "RETIRED";
   const isDraft   = version.state === "DRAFT";
 
-  // Border accent for production version
   const outerClass = classNames(
     "bg-[color:var(--color-surface)] rounded-2xl border shadow-sm overflow-hidden",
     isProd
@@ -343,9 +387,8 @@ export function AgentVersionCard({
   return (
     <div className={outerClass} data-testid="agent-version-card" data-state={version.state}>
 
-      {/* ── Card header ─────────────────────────────────────────────── */}
+      {/* ── Card header ───────────────────────────────────────────────── */}
       <div className="flex items-center gap-3 px-5 py-4 bg-[color:var(--color-surface-active)] border-b border-[color:var(--color-border-light)]">
-        {/* Version number + state */}
         <div className="w-8 h-8 rounded-xl bg-[color:var(--color-background-secondary)] flex items-center justify-center shrink-0">
           <Cpu size={15} className="text-[color:var(--color-text-muted)]" />
         </div>
@@ -366,7 +409,6 @@ export function AgentVersionCard({
           </p>
         </div>
 
-        {/* Meta */}
         <div className="text-right shrink-0 hidden sm:block">
           <p className="text-[10px] text-[color:var(--color-text-muted)]">
             Created {new Date(version.createdAt).toLocaleDateString()}
@@ -379,7 +421,6 @@ export function AgentVersionCard({
           )}
         </div>
 
-        {/* Collapse toggle for retired/draft cards */}
         {(isRetired || isDraft) && (
           <button
             onClick={() => setCollapsed((v) => !v)}
@@ -395,6 +436,7 @@ export function AgentVersionCard({
 
       {!collapsed && (
         <div className="p-5 space-y-4">
+
           {/* Changelog */}
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)] mb-1.5">
@@ -409,12 +451,19 @@ export function AgentVersionCard({
           <div>
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2 flex items-center gap-1.5">
               Regression Gates
+              {/* Gate summary label — uses chart tokens via inline style */}
               {version.allGatesPassed ? (
-                <span className="text-[color:var(--color-success)] font-bold">
+                <span
+                  className="font-bold"
+                  style={{ color: "var(--chart-success)" }}
+                >
                   · All Passed ✓
                 </span>
               ) : version.regressionGates.some((g) => g.result === "FAIL") ? (
-                <span className="text-[color:var(--color-error)] font-bold">
+                <span
+                  className="font-bold"
+                  style={{ color: "var(--chart-danger)" }}
+                >
                   · {version.regressionGates.filter((g) => g.result === "FAIL").length} Failing
                 </span>
               ) : (
@@ -441,7 +490,7 @@ export function AgentVersionCard({
             )}
           </div>
 
-          {/* Promote area — only for STAGING */}
+          {/* Promote area */}
           <PromoteArea version={version} onPromoted={handlePromoted} />
         </div>
       )}
