@@ -49,6 +49,7 @@ import {
   Lock,
   Unlock,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 interface WorkspacePageViewProps {
@@ -453,8 +454,19 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       router.push("/workspace/trash");
     } catch (err: any) {
       console.error("Failed to delete page:", err);
-      const msg = err?.response?.data?.message || "Failed to move page to Trash.";
-      toast.error(msg);
+      if (err?.response?.status === 404) {
+        toast.info("Page was already removed or moved to Trash.");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("zyoris:page-deleted", { detail: pageId })
+          );
+        }
+        refetchTree();
+        router.push("/workspace/trash");
+      } else {
+        const msg = err?.response?.data?.message || "Failed to move page to Trash.";
+        toast.error(msg);
+      }
     }
   };
 
@@ -473,20 +485,45 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
   }
 
   if (error) {
+    const isNotFound = error.toLowerCase().includes("not found") || error.includes("404");
     return (
-      <div className="max-w-3xl mx-auto my-12 p-8 bg-red-50/50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 rounded-2xl text-center">
-        <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+      <div className="max-w-2xl mx-auto my-12 p-8 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl text-center shadow-xl">
+        <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/60 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-600 dark:text-amber-400">
+          <Trash2 className="w-8 h-8" />
+        </div>
         <h3 className="text-xl font-bold text-slate-900 dark:text-slate-100 mb-2">
-          Unable to Load Page
+          {isNotFound ? "Page Not Found or Moved to Trash" : "Unable to Load Page"}
         </h3>
-        <p className="text-slate-600 dark:text-slate-300 text-sm mb-6">{error}</p>
-        <button
-          onClick={fetchPageData}
-          className="inline-flex items-center space-x-2 px-5 py-2.5 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl font-semibold text-xs hover:bg-slate-800 transition"
-        >
-          <RefreshCw className="w-4 h-4" />
-          <span>Retry Loading</span>
-        </button>
+        <p className="text-slate-600 dark:text-slate-400 text-sm mb-6 max-w-md mx-auto">
+          {isNotFound
+            ? "This page may have been deleted, moved to Trash, or the link is no longer valid."
+            : error}
+        </p>
+        <div className="flex items-center justify-center space-x-3">
+          <button
+            onClick={() => router.push("/workspace/trash")}
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-semibold text-xs transition shadow-sm"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>View Trash</span>
+          </button>
+          <button
+            onClick={() => router.push("/workspace")}
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 rounded-xl font-semibold text-xs hover:bg-slate-800 transition shadow-sm"
+          >
+            <Folder className="w-4 h-4" />
+            <span>Go to Workspace</span>
+          </button>
+          {!isNotFound && (
+            <button
+              onClick={fetchPageData}
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 rounded-xl font-semibold text-xs hover:bg-slate-200 transition"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
+          )}
+        </div>
       </div>
     );
   }

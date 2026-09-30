@@ -95,7 +95,15 @@ const PageTreeNodeItem: React.FC<{
       if (isActive) router.push("/workspace/trash");
     } catch (err: any) {
       console.error("Backend delete request error:", err);
-      alert(err?.response?.data?.message || "Failed to delete page on server. Please try again.");
+      if (err?.response?.status === 404) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("zyoris:page-deleted", { detail: safeId }));
+        }
+        if (onRefreshTree) onRefreshTree();
+        if (isActive) router.push("/workspace/trash");
+      } else {
+        alert(err?.response?.data?.message || "Failed to delete page on server. Please try again.");
+      }
     }
   };
 

@@ -439,6 +439,21 @@ export async function updateWorkspacePage(
  * DELETE /workspace/pages/:id
  */
 export async function deleteWorkspacePage(id: string): Promise<void> {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem("zyoris_workspace_local_pages");
+      if (raw) {
+        const list = JSON.parse(raw);
+        const updated = list.filter((p: any) => p.id !== id);
+        localStorage.setItem("zyoris_workspace_local_pages", JSON.stringify(updated));
+      }
+      localStorage.removeItem(`zyoris_page_blocks_${id}`);
+      window.dispatchEvent(new CustomEvent("zyoris:page-deleted", { detail: id }));
+    } catch (e) {
+      console.error("Failed to clean up deleted page in localStorage:", e);
+    }
+  }
+
   if (id.startsWith("local-") || id.startsWith("page-")) {
     return;
   }
