@@ -752,10 +752,10 @@ function renderBlockInput(
       for (const line of lines) {
         if (/^\|?\s*[-:]+\s*(\|\s*[-:]+\s*)+\|?$/.test(line)) continue;
         if (line.includes("|")) {
-          const cells = line
-            .split("|")
-            .map((c) => c.trim())
-            .filter((_, idx, arr) => idx > 0 && idx < arr.length - (line.endsWith("|") ? 1 : 0));
+          let cleanLine = line;
+          if (cleanLine.startsWith("|")) cleanLine = cleanLine.substring(1);
+          if (cleanLine.endsWith("|")) cleanLine = cleanLine.substring(0, cleanLine.length - 1);
+          const cells = cleanLine.split("|").map((c) => c.trim());
           if (cells.length > 0) parsedRows.push(cells);
         }
       }
@@ -999,6 +999,23 @@ function renderBlockInput(
 
     case "table":
       const grid = getGridFromBlock();
+      const syncTableUpdate = (newGrid: string[][]) => {
+        const markdownTable = newGrid
+          .map((row, idx) => {
+            const line = "| " + row.map((cell) => String(cell ?? "").replace(/\|/g, "\\|")).join(" | ") + " |";
+            if (idx === 0) {
+              const sep = "| " + row.map(() => "---").join(" | ") + " |";
+              return line + "\n" + sep;
+            }
+            return line;
+          })
+          .join("\n");
+        onUpdateBlockFields(index, {
+          text: markdownTable,
+          formatting: { ...fmt, grid: newGrid },
+        });
+      };
+
       return (
         <div className="my-2 space-y-2">
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
@@ -1016,7 +1033,7 @@ function renderBlockInput(
                             const newGrid = grid.map((r, i) =>
                               i === rIdx ? r.map((c, j) => (j === cIdx ? e.target.value : c)) : r
                             );
-                            onUpdateBlockFields(index, { formatting: { ...fmt, grid: newGrid } });
+                            syncTableUpdate(newGrid);
                           }}
                           className="w-full bg-transparent focus:outline-none"
                         />
@@ -1034,7 +1051,7 @@ function renderBlockInput(
                 onClick={() => {
                   const newRow = new Array(grid[0]?.length || 2).fill("New Cell");
                   const newGrid = [...grid, newRow];
-                  onUpdateBlockFields(index, { formatting: { ...fmt, grid: newGrid } });
+                  syncTableUpdate(newGrid);
                 }}
                 className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded font-semibold text-slate-700 dark:text-slate-300"
               >
@@ -1044,7 +1061,7 @@ function renderBlockInput(
                 type="button"
                 onClick={() => {
                   const newGrid = grid.map((row) => [...row, "New Cell"]);
-                  onUpdateBlockFields(index, { formatting: { ...fmt, grid: newGrid } });
+                  syncTableUpdate(newGrid);
                 }}
                 className="px-2 py-1 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded font-semibold text-slate-700 dark:text-slate-300"
               >
@@ -1277,24 +1294,6 @@ function renderBlockInput(
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
-        </div>
-      );
-
-    case "table":
-      return (
-        <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl space-y-2 overflow-x-auto">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 uppercase tracking-wider">
-            <span>Grid Table</span>
-          </div>
-          <textarea
-            value={text}
-            disabled={!canEdit}
-            onChange={(e) => onChangeText(index, e.target.value)}
-            onKeyDown={(e) => onKeyDown(e, index)}
-            placeholder="Header 1 | Header 2 | Header 3&#10;Value 1  | Value 2  | Value 3"
-            rows={3}
-            className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none"
-          />
         </div>
       );
 

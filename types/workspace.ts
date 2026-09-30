@@ -20,6 +20,8 @@ export interface BlockFormatting {
   link?: string | null;
   isOpen?: boolean;
   subtext?: string;
+  grid?: string[][];
+  [key: string]: any;
 }
 
 export interface WorkspaceBlock {
@@ -90,6 +92,7 @@ export interface CreateBlockDto {
   text?: string;
   content?: any;
   properties?: Record<string, any>;
+  formatting?: Record<string, any>;
   position?: number;
   parentBlockId?: string | null;
 }
@@ -99,6 +102,7 @@ export interface UpdateBlockDto {
   text?: string;
   content?: any;
   properties?: Record<string, any>;
+  formatting?: Record<string, any>;
   position?: number;
   parentBlockId?: string | null;
 }

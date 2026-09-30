@@ -35,6 +35,9 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
     if (Array.isArray(block.properties?.formatting?.grid) && block.properties.formatting.grid.length > 0) {
       return block.properties.formatting.grid;
     }
+    if (Array.isArray(block.formatting?.grid) && block.formatting.grid.length > 0) {
+      return block.formatting.grid;
+    }
     if (Array.isArray(block.content?.grid) && block.content.grid.length > 0) {
       return block.content.grid;
     }
@@ -46,10 +49,10 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
       for (const line of lines) {
         if (/^\|?\s*[-:]+\s*(\|\s*[-:]+\s*)+\|?$/.test(line)) continue;
         if (line.includes("|")) {
-          const cells = line
-            .split("|")
-            .map((c) => c.trim())
-            .filter((_, idx, arr) => idx > 0 && idx < arr.length - (line.endsWith("|") ? 1 : 0));
+          let cleanLine = line;
+          if (cleanLine.startsWith("|")) cleanLine = cleanLine.substring(1);
+          if (cleanLine.endsWith("|")) cleanLine = cleanLine.substring(0, cleanLine.length - 1);
+          const cells = cleanLine.split("|").map((c) => c.trim());
           if (cells.length > 0) parsedRows.push(cells);
         }
       }

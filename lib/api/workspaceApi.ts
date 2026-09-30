@@ -114,10 +114,21 @@ export function mapFrontendTypeToBackend(type: string): string {
       return "DIVIDER";
     case "code":
       return "CODE";
-    case "link":
+    case "table":
+      return "TABLE";
+    case "database":
+      return "DATABASE";
     case "image":
+      return "IMAGE";
     case "embed":
-      return "TEXT";
+      return "EMBED";
+    case "toggle":
+      return "TOGGLE";
+    case "callout":
+      return "CALLOUT";
+    case "bookmark":
+    case "link":
+      return "BOOKMARK";
     default:
       if (type === type.toUpperCase() && type.length > 1) return type;
       return "TEXT";
@@ -150,6 +161,20 @@ export function mapBackendTypeToFrontend(type: string, content?: any): string {
       return "divider";
     case "CODE":
       return "code";
+    case "TABLE":
+      return "table";
+    case "DATABASE":
+      return "database";
+    case "IMAGE":
+      return "image";
+    case "EMBED":
+      return "embed";
+    case "TOGGLE":
+      return "toggle";
+    case "CALLOUT":
+      return "callout";
+    case "BOOKMARK":
+      return "bookmark";
     default:
       return type?.toLowerCase() || "paragraph";
   }
@@ -167,11 +192,26 @@ export function normalizeBackendBlock(block: any): WorkspaceBlock {
 
   const frontendType = mapBackendTypeToFrontend(block.type, block.content);
 
+  const grid =
+    block.properties?.grid ||
+    contentObj.properties?.grid ||
+    block.formatting?.grid ||
+    contentObj.formatting?.grid ||
+    contentObj.grid ||
+    block.grid;
+
   const properties = {
     ...(block.properties || {}),
     ...(contentObj.properties || {}),
     checked: contentObj.checked ?? block.properties?.checked ?? false,
     url: contentObj.url ?? block.properties?.url ?? null,
+    ...(grid ? { grid } : {}),
+  };
+
+  const formatting = {
+    ...(block.formatting || {}),
+    ...(contentObj.formatting || {}),
+    ...(grid ? { grid } : {}),
   };
 
   return {
@@ -180,8 +220,12 @@ export function normalizeBackendBlock(block: any): WorkspaceBlock {
     pageId: block.pageId,
     type: frontendType,
     text: text || "",
-    content: contentObj,
+    content: {
+      ...contentObj,
+      ...(grid ? { grid } : {}),
+    },
     properties,
+    formatting,
     position: block.position ?? 0,
     parentBlockId: block.parentBlockId ?? block.parentId ?? null,
   };
@@ -208,6 +252,16 @@ export function buildBackendBlockPayload(
     contentObj.properties = payload.properties;
     if (payload.properties.checked !== undefined) contentObj.checked = payload.properties.checked;
     if (payload.properties.url !== undefined) contentObj.url = payload.properties.url;
+    if (payload.properties.grid !== undefined) contentObj.grid = payload.properties.grid;
+  }
+
+  if (payload.formatting) {
+    contentObj.formatting = payload.formatting;
+    if (payload.formatting.grid !== undefined) {
+      contentObj.grid = payload.formatting.grid;
+      if (!contentObj.properties) contentObj.properties = {};
+      contentObj.properties.grid = payload.formatting.grid;
+    }
   }
 
   const result: any = {
@@ -1524,8 +1578,19 @@ export async function parseFileToWorkspaceBlocks(
               ...dataRows.map((row) => headers.map((_, i) => String(row[i] ?? "").trim())),
             ];
 
+            const markdownTable = grid
+              .map((row, idx) => {
+                const line = "| " + row.map((cell) => String(cell ?? "").replace(/\|/g, "\\|")).join(" | ") + " |";
+                if (idx === 0) {
+                  const sep = "| " + row.map(() => "---").join(" | ") + " |";
+                  return line + "\n" + sep;
+                }
+                return line;
+              })
+              .join("\n");
+
             blocks.push(
-              createBlock("table", `${file.name} Table Grid`, {
+              createBlock("table", markdownTable, {
                 grid,
                 formatting: { grid },
                 headers,
@@ -1603,14 +1668,25 @@ export async function parseFileToWorkspaceBlocks(
                 const cells = Array.from(tr.querySelectorAll("th, td")).map((c) =>
                   c.textContent?.trim() || ""
                 );
-                if (cells.length > 0) {
+                if (cells.length > 0 && cells.some((cell) => cell !== "")) {
                   grid.push(cells);
                 }
               });
 
               if (grid.length > 0) {
+                const markdownTable = grid
+                  .map((row, idx) => {
+                    const line = "| " + row.map((cell) => String(cell ?? "").replace(/\|/g, "\\|")).join(" | ") + " |";
+                    if (idx === 0) {
+                      const sep = "| " + row.map(() => "---").join(" | ") + " |";
+                      return line + "\n" + sep;
+                    }
+                    return line;
+                  })
+                  .join("\n");
+
                 blocks.push(
-                  createBlock("table", "Imported Table", {
+                  createBlock("table", markdownTable, {
                     grid,
                     formatting: { grid },
                   })
@@ -1676,6 +1752,33 @@ export async function parseFileToWorkspaceBlocks(
         blocks.push(createBlock("quote", trimmed.replace(/^>\s*/, "").trim()));
       } else if (["---", "***", "___"].includes(trimmed)) {
         blocks.push(createBlock("divider", ""));
+      } else if (trimmed.startsWith("|") || (trimmed.includes("|") && trimmed.endsWith("|"))) {
+        const tableLines: string[] = [line];
+        while (
+          i + 1 < lines.length &&
+          (lines[i + 1].trim().startsWith("|") ||
+            (lines[i + 1].trim().includes("|") && lines[i + 1].trim().endsWith("|")))
+        ) {
+          i++;
+          tableLines.push(lines[i]);
+        }
+        const grid: string[][] = [];
+        for (const tLine of tableLines) {
+          const tTrim = tLine.trim();
+          if (/^\|?\s*[-:]+\s*(\|\s*[-:]+\s*)+\|?$/.test(tTrim)) continue;
+          let cleanLine = tTrim;
+          if (cleanLine.startsWith("|")) cleanLine = cleanLine.substring(1);
+          if (cleanLine.endsWith("|")) cleanLine = cleanLine.substring(0, cleanLine.length - 1);
+          const cells = cleanLine.split("|").map((c) => c.trim());
+          if (cells.length > 0) grid.push(cells);
+        }
+        const markdownTable = tableLines.join("\n");
+        blocks.push(
+          createBlock("table", markdownTable, {
+            grid,
+            formatting: { grid },
+          })
+        );
       } else {
         const clean = trimmed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, "").trim();
         if (clean.length > 0) {
