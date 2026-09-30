@@ -273,7 +273,7 @@ export interface WorkspaceRevision {
 
 // ── FE2-08 · Page Import ──────────────────────────────────────────────────────
 
-export type SupportedImportFormat = "docx" | "md" | "txt" | "html";
+export type SupportedImportFormat = "docx" | "md" | "txt" | "html" | "csv";
 
 export interface PageImportPreviewResult {
   blocks: WorkspaceBlock[];

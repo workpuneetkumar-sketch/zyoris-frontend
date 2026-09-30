@@ -12,6 +12,7 @@ import {
   WorkspaceDatabaseProperty,
   WorkspaceDatabaseRow,
   WorkspaceDatabaseView,
+  SupportedImportFormat,
 } from "@/types/workspace";
 import {
   AssignableScopesResponse,
@@ -1347,7 +1348,6 @@ export async function parseFileToWorkspaceBlocks(
   pageId: string
 ): Promise<PageImportPreviewResult> {
   const ext = file.name.split(".").pop()?.toLowerCase() || "txt";
-  const rawText = await file.text();
   const blocks: WorkspaceBlock[] = [];
   const warnings: string[] = [];
 
@@ -1367,11 +1367,93 @@ export async function parseFileToWorkspaceBlocks(
     };
   };
 
-  if (ext === "html" || ext === "htm") {
+  let rawText = "";
+  let htmlContent = "";
+
+  if (ext === "docx") {
+    try {
+      const mammoth = await import("mammoth");
+      const arrayBuffer = await file.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const result = await mammoth.convertToHtml({ buffer });
+      htmlContent = result.value || "";
+      if (result.messages && result.messages.length > 0) {
+        result.messages.forEach((msg: any) => {
+          if (msg.type === "warning" && msg.message) {
+            warnings.push(msg.message);
+          }
+        });
+      }
+    } catch (docxErr: any) {
+      console.error("Mammoth DOCX parsing error:", docxErr);
+      warnings.push("Could not parse DOCX binary formatting. Extracting basic text fallback.");
+      try {
+        rawText = await file.text();
+        rawText = rawText.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, " ");
+      } catch (e) {
+        rawText = "";
+      }
+    }
+  } else if (ext === "csv") {
+    try {
+      const XLSX = await import("xlsx");
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
+      const sheetName = workbook.SheetNames[0];
+      if (sheetName) {
+        const worksheet = workbook.Sheets[sheetName];
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+        if (rawRows.length > 0) {
+          const headers = (rawRows[0] || []).map((h) => String(h ?? "").trim()).filter(Boolean);
+          const dataRows = rawRows.slice(1).filter((r) => r.some((val: any) => String(val ?? "").trim() !== ""));
+
+          blocks.push(createBlock("h1", `📊 Imported Dataset: ${file.name.replace(/\.csv$/i, "")}`));
+          blocks.push(
+            createBlock(
+              "quote",
+              `Imported ${dataRows.length} rows across ${headers.length} columns (${headers.join(", ")}) from ${file.name}.`
+            )
+          );
+
+          if (headers.length > 0) {
+            const grid = [
+              headers,
+              ...dataRows.map((row) => headers.map((_, i) => String(row[i] ?? "").trim())),
+            ];
+
+            blocks.push(
+              createBlock("table", `${file.name} Table Grid`, {
+                grid,
+                formatting: { grid },
+                headers,
+                totalRows: dataRows.length,
+              })
+            );
+
+            if (dataRows.length > 100) {
+              warnings.push(`Imported top 100 rows into page table. All data remains saved in source.`);
+            }
+          }
+        }
+      }
+    } catch (csvErr: any) {
+      console.error("CSV import error:", csvErr);
+      warnings.push("Failed to parse CSV spreadsheet. Extracting raw text.");
+      rawText = await file.text();
+    }
+  } else if (ext === "html" || ext === "htm") {
+    htmlContent = await file.text();
+  } else {
+    rawText = await file.text();
+  }
+
+  // Parse HTML content (from .docx or .html) into native blocks
+  if (htmlContent && blocks.length === 0) {
     try {
       if (typeof window !== "undefined" && typeof DOMParser !== "undefined") {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(rawText, "text/html");
+        const doc = parser.parseFromString(htmlContent, "text/html");
         const body = doc.body;
 
         const processNode = (node: Node) => {
@@ -1380,7 +1462,7 @@ export async function parseFileToWorkspaceBlocks(
             const tag = el.tagName.toLowerCase();
             const textContent = el.textContent?.trim() || "";
 
-            if (!textContent && tag !== "hr") return;
+            if (!textContent && tag !== "hr" && tag !== "table") return;
 
             if (tag === "h1") {
               blocks.push(createBlock("h1", textContent));
@@ -1389,11 +1471,21 @@ export async function parseFileToWorkspaceBlocks(
             } else if (["h3", "h4", "h5", "h6"].includes(tag)) {
               blocks.push(createBlock("h3", textContent));
             } else if (tag === "p") {
-              blocks.push(createBlock("paragraph", textContent));
+              const bulletMatch = textContent.match(/^[\u2022\u25cf\u2023\u25b6\u2013\u2014\-*+]\s*(.*)/);
+              const numberMatch = textContent.match(/^\d+[\.\)]\s*(.*)/);
+
+              if (bulletMatch && bulletMatch[1]) {
+                blocks.push(createBlock("bulleted", bulletMatch[1].trim()));
+              } else if (numberMatch && numberMatch[1]) {
+                blocks.push(createBlock("numbered", numberMatch[1].trim()));
+              } else {
+                blocks.push(createBlock("paragraph", textContent));
+              }
             } else if (tag === "ul" || tag === "ol") {
               const listType = tag === "ul" ? "bulleted" : "numbered";
               el.querySelectorAll(":scope > li").forEach((li) => {
-                const liText = li.textContent?.trim();
+                let liText = li.textContent?.trim() || "";
+                liText = liText.replace(/^[\u2022\u25cf\u2023\u25b6\u2013\u2014\-*+]\s*/, "");
                 if (liText) blocks.push(createBlock(listType, liText));
               });
             } else if (tag === "pre" || tag === "code") {
@@ -1402,7 +1494,27 @@ export async function parseFileToWorkspaceBlocks(
               blocks.push(createBlock("quote", textContent));
             } else if (tag === "hr") {
               blocks.push(createBlock("divider", ""));
-            } else if (!["ul", "ol", "body", "html", "head", "script", "style"].includes(tag)) {
+            } else if (tag === "table") {
+              const rows = Array.from(el.querySelectorAll("tr"));
+              const grid: string[][] = [];
+              rows.forEach((tr) => {
+                const cells = Array.from(tr.querySelectorAll("th, td")).map((c) =>
+                  c.textContent?.trim() || ""
+                );
+                if (cells.length > 0) {
+                  grid.push(cells);
+                }
+              });
+
+              if (grid.length > 0) {
+                blocks.push(
+                  createBlock("table", "Imported Table", {
+                    grid,
+                    formatting: { grid },
+                  })
+                );
+              }
+            } else if (!["ul", "ol", "body", "html", "head", "script", "style", "table", "tbody", "thead", "tr", "td", "th"].includes(tag)) {
               if (el.children.length === 0) {
                 blocks.push(createBlock("paragraph", textContent));
               } else {
@@ -1419,8 +1531,8 @@ export async function parseFileToWorkspaceBlocks(
     }
   }
 
-  // Fallback to Markdown / Plain Text parsing if blocks is empty or file is .md/.txt/.docx
-  if (blocks.length === 0) {
+  // Fallback to Markdown / Plain Text parsing if blocks is empty or file is .md/.txt
+  if (blocks.length === 0 && rawText) {
     const lines = rawText.split(/\r?\n/);
     let inCodeBlock = false;
     let codeLines: string[] = [];
@@ -1463,7 +1575,7 @@ export async function parseFileToWorkspaceBlocks(
       } else if (["---", "***", "___"].includes(trimmed)) {
         blocks.push(createBlock("divider", ""));
       } else {
-        const clean = trimmed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, "").trim();
+        const clean = trimmed.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\xFF]/g, "").trim();
         if (clean.length > 0) {
           blocks.push(createBlock("paragraph", clean));
         }
@@ -1481,7 +1593,7 @@ export async function parseFileToWorkspaceBlocks(
 
   return {
     blocks,
-    detectedFormat: (ext as any) || "txt",
+    detectedFormat: (ext === "htm" ? "html" : ext) as SupportedImportFormat,
     blockCount: blocks.length,
     warnings,
   };

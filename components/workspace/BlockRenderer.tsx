@@ -165,10 +165,13 @@ export const BlockRenderer: React.FC<BlockRendererProps> = ({ block }) => {
       );
 
     case "table":
-      const grid = (block.properties?.grid as string[][]) || [
-        ["Header 1", "Header 2"],
-        ["Cell 1", "Cell 2"],
-      ];
+      const grid =
+        (block.properties?.grid as string[][]) ||
+        (block.properties?.formatting?.grid as string[][]) ||
+        (block.content?.grid as string[][]) || [
+          ["Header 1", "Header 2"],
+          ["Cell 1", "Cell 2"],
+        ];
       return (
         <div className="my-3 overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
           <table className="w-full text-xs text-left text-slate-700 dark:text-slate-300">

@@ -962,10 +962,13 @@ function renderBlockInput(
       );
 
     case "table":
-      const grid = (block.properties?.grid as string[][]) || [
-        ["Header 1", "Header 2"],
-        ["Cell 1", "Cell 2"],
-      ];
+      const grid =
+        (block.properties?.grid as string[][]) ||
+        (block.properties?.formatting?.grid as string[][]) ||
+        (block.content?.grid as string[][]) || [
+          ["Header 1", "Header 2"],
+          ["Cell 1", "Cell 2"],
+        ];
       return (
         <div className="my-2 space-y-2">
           <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">

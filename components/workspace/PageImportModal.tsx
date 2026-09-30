@@ -46,7 +46,7 @@ import { previewPageImport, commitPageImport } from "@/lib/api/workspaceApi";
 import type { PageImportPreviewResult, WorkspaceBlock, SupportedImportFormat } from "@/types/workspace";
 
 // ── Supported formats ─────────────────────────────────────────────────────────
-const SUPPORTED_FORMATS: SupportedImportFormat[] = ["docx", "md", "txt", "html"];
+const SUPPORTED_FORMATS: SupportedImportFormat[] = ["docx", "csv", "md", "txt", "html"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB hard block
 const LARGE_FILE_WARNING_BYTES = 5 * 1024 * 1024; // 5 MB soft warning
 
@@ -316,7 +316,7 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".docx,.md,.txt,.html"
+                  accept=".docx,.csv,.md,.txt,.html"
                   className="hidden"
                   onChange={handleFileInput}
                 />
@@ -335,7 +335,7 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
                       Drop a file here, or click to browse
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      .docx, .md, .txt, .html · max 10 MB
+                      .docx, .csv, .md, .txt, .html · max 10 MB
                     </p>
                   </>
                 )}
@@ -385,9 +385,11 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
                         <FileCheck className="w-3.5 h-3.5 text-teal-500" /> Supported Formats & Conversion:
                       </p>
                       <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        <li><strong>.docx (Word Document)</strong>: Converts Word headings, lists, tables, and paragraphs cleanly without garbage characters.</li>
+                        <li><strong>.csv (Spreadsheet)</strong>: Converts tabular data into formatted table blocks with column headers and metadata summaries.</li>
                         <li><strong>.md (Markdown)</strong>: Converts <code>#</code>, <code>##</code>, <code>###</code> into Headings, lists, code fences <code>```</code>, and blockquotes.</li>
                         <li><strong>.html / .htm</strong>: Parses <code>&lt;h1&gt;</code>-<code>&lt;h3&gt;</code>, <code>&lt;p&gt;</code>, <code>&lt;ul&gt;</code>, <code>&lt;ol&gt;</code>, <code>&lt;pre&gt;</code>, <code>&lt;blockquote&gt;</code> into native page blocks.</li>
-                        <li><strong>.txt / .docx</strong>: Converts paragraphs and structured text into readable blocks.</li>
+                        <li><strong>.txt</strong>: Converts paragraphs and structured plain text into readable blocks.</li>
                       </ul>
                     </div>
 

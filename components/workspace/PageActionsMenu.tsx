@@ -267,7 +267,7 @@ export const PageActionsMenu: React.FC<PageActionsMenuProps> = ({
         id: "import",
         label: "Import",
         section: "features",
-        keywords: ["import", "docx", "markdown", "upload", "file", "word"],
+        keywords: ["import", "docx", "csv", "markdown", "upload", "file", "word", "spreadsheet"],
         icon: Upload,
         iconColor: "text-teal-500",
         disabled: !canEdit || isLocked,
