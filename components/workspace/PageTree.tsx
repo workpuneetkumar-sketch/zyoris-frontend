@@ -4,8 +4,9 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { WorkspacePageNode } from "@/types/workspace";
-import { deleteWorkspacePage } from "@/lib/api/workspaceApi";
+import { deleteWorkspacePage, duplicateWorkspacePage } from "@/lib/api/workspaceApi";
 import { getPageContent } from "@/lib/api/workspaceApi";
+import { saveStoredLocalPage } from "@/hooks/useWorkspace";
 import { MovePageModal } from "./MovePageModal";
 import { TurnIntoWikiModal } from "./TurnIntoWikiModal";
 import { PageAnalyticsPanel } from "./PageAnalyticsPanel";
@@ -26,6 +27,7 @@ import {
   Trash2,
   Link as LinkIcon,
   Copy,
+  Files,
   BookOpen,
   BarChart2,
   History,
@@ -86,11 +88,48 @@ const PageTreeNodeItem: React.FC<{
     }
     try {
       await deleteWorkspacePage(safeId);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("zyoris:page-deleted", { detail: safeId }));
+      }
       if (onRefreshTree) onRefreshTree();
-      if (isActive) router.push("/workspace");
+      if (isActive) router.push("/workspace/trash");
     } catch (err: any) {
       console.error("Backend delete request error:", err);
-      alert(err?.response?.data?.message || "Failed to delete page on server. Please try again.");
+      if (err?.response?.status === 404) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("zyoris:page-deleted", { detail: safeId }));
+        }
+        if (onRefreshTree) onRefreshTree();
+        if (isActive) router.push("/workspace/trash");
+      } else {
+        alert(err?.response?.data?.message || "Failed to delete page on server. Please try again.");
+      }
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!safeId) return;
+    setIsMenuOpen(false);
+    try {
+      const newPage = await duplicateWorkspacePage(safeId);
+      if (newPage?.id) {
+        saveStoredLocalPage({
+          id: newPage.id,
+          title: newPage.title || `${node.title || "Untitled"} (Copy)`,
+          icon: newPage.icon || node.icon || "📄",
+          parentId: newPage.parentId || null,
+          isFolder: !!newPage.isFolder,
+          isDatabase: !!newPage.isDatabase,
+        });
+      }
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("zyoris:page-created", { detail: newPage }));
+      }
+      if (onRefreshTree) onRefreshTree();
+      if (newPage?.id) router.push(`/workspace/pages/${newPage.id}`);
+    } catch (err: any) {
+      console.error("Failed to duplicate page:", err);
+      alert(err?.response?.data?.message || "Failed to duplicate page.");
     }
   };
 
@@ -248,6 +287,14 @@ const PageTreeNodeItem: React.FC<{
               >
                 <Copy className="w-3.5 h-3.5 text-slate-400" />
                 <span>Copy Content</span>
+              </button>
+
+              <button
+                onClick={handleDuplicate}
+                className="w-full flex items-center space-x-2 px-3 py-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-medium"
+              >
+                <Files className="w-3.5 h-3.5 text-indigo-500" />
+                <span>Duplicate</span>
               </button>
 
               <div className="my-1 border-t border-slate-100 dark:border-slate-800" />

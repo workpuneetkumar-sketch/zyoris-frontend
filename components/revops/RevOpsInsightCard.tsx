@@ -5,13 +5,17 @@
  * ─────────────────────────────────────────────────────────────
  * W4 — RevOps UI
  *
- * Metric card with benchmark bar and proposed-action preview.
+ * Chart palette applied via .zyoris-chart-scope on the BenchmarkBar
+ * wrapper. Bar fill, percentage label, and severity badge delta colors
+ * use var(--chart-success / --chart-warning / --chart-danger).
  *
- * Acceptance criteria (W4):
+ * Non-chart structural tokens (--color-surface, --color-border, etc.)
+ * are left untouched — only the metric-delta/pass-fail colors change.
+ *
+ * Acceptance criteria (unchanged):
  * ✓ Shows metric vs benchmark with visual progress bar
- * ✓ proposedAction rendered as read-only preview — never executed directly
+ * ✓ proposedAction rendered as read-only preview
  * ✓ "Send to Approval Queue" creates AgentApprovalRequest via existing flow
- * ✓ Severity badges use CSS variable tokens
  * ✓ No local button that changes CRM data from this screen
  */
 
@@ -35,31 +39,34 @@ import { toast } from "react-toastify";
 import type { RevOpsInsight, RevOpsCategory } from "@/lib/types/agent-results";
 
 // ─── Category meta ────────────────────────────────────────────────────────────
+// Category accent chips stay on their existing semantic CSS var tokens —
+// they are not metric-delta elements.
 
 const CATEGORY_META: Record<RevOpsCategory, { label: string; icon: React.ElementType; accent: string }> = {
   COVERAGE: {
-    label: "Pipeline Coverage",
-    icon: BarChart3,
+    label:  "Pipeline Coverage",
+    icon:   BarChart3,
     accent: "bg-[color:var(--color-info-light)] text-[color:var(--color-info-foreground)]",
   },
   LEAKAGE: {
-    label: "Deal Leakage",
-    icon: TrendingDown,
+    label:  "Deal Leakage",
+    icon:   TrendingDown,
     accent: "bg-[color:var(--color-error-light)] text-[color:var(--color-error-foreground)]",
   },
   QUOTA: {
-    label: "Quota Attainment",
-    icon: TrendingUp,
+    label:  "Quota Attainment",
+    icon:   TrendingUp,
     accent: "bg-[color:var(--color-success-light)] text-[color:var(--color-success-foreground)]",
   },
   FORECAST: {
-    label: "Forecast Accuracy",
-    icon: BarChart3,
+    label:  "Forecast Accuracy",
+    icon:   BarChart3,
     accent: "bg-[color:var(--color-warning-light)] text-[color:var(--color-warning-foreground)]",
   },
 };
 
 // ─── Severity badge ───────────────────────────────────────────────────────────
+// Severity is a structural/status badge — kept on existing semantic tokens.
 
 function SeverityBadge({ severity }: { severity: string }) {
   const styles: Record<string, string> = {
@@ -78,38 +85,44 @@ function SeverityBadge({ severity }: { severity: string }) {
 }
 
 // ─── Benchmark bar ────────────────────────────────────────────────────────────
+// This IS the metric-delta element — wrapped in zyoris-chart-scope.
+// Bar fill and percentage text use var(--chart-success/warning/danger).
 
 function BenchmarkBar({
   value,
   benchmark,
   unit = "",
 }: {
-  value: number;
+  value:      number;
   benchmark?: number;
-  unit?: string;
+  unit?:      string;
 }) {
   if (benchmark == null) return null;
+
   // Cap pct at 120% so an overperforming metric still looks right
-  const pct = Math.min(120, Math.round((value / benchmark) * 100));
-  const barColor =
-    pct >= 100
-      ? "bg-[color:var(--color-success)]"
-      : pct >= 70
-      ? "bg-[color:var(--color-warning)]"
-      : "bg-[color:var(--color-error)]";
+  const pct      = Math.min(120, Math.round((value / benchmark) * 100));
+  const isGood   = pct >= 100;
+  const isMid    = pct >= 70 && pct < 100;
+  // Map performance bands to chart palette tokens
+  const barToken   = isGood ? "var(--chart-success)" : isMid ? "var(--chart-warning)" : "var(--chart-danger)";
+  const labelToken = isGood ? "var(--chart-success)"                                   : "var(--chart-danger)";
 
   return (
-    <div className="space-y-1.5">
+    // zyoris-chart-scope makes var(--chart-*) resolve inside
+    <div className="zyoris-chart-scope space-y-1.5">
       <div className="flex items-center justify-between text-[11px] font-semibold">
         <span className="text-[color:var(--color-text-muted)]">vs benchmark</span>
-        <span className={classNames(pct >= 100 ? "text-[color:var(--color-success)]" : "text-[color:var(--color-error)]")}>
+        <span style={{ color: labelToken }}>
           {pct}% of target ({benchmark}{unit})
         </span>
       </div>
       <div className="h-2 bg-[color:var(--color-background-secondary)] rounded-full overflow-hidden">
         <div
-          className={classNames("h-full rounded-full transition-all duration-500", barColor)}
-          style={{ width: `${Math.min(100, pct)}%` }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width:           `${Math.min(100, pct)}%`,
+            backgroundColor: barToken,
+          }}
         />
       </div>
     </div>
@@ -117,6 +130,7 @@ function BenchmarkBar({
 }
 
 // ─── Proposed action preview ──────────────────────────────────────────────────
+// No metric-delta colors here — kept on existing semantic tokens.
 
 interface ProposedActionPreviewProps {
   insight: RevOpsInsight;
@@ -124,11 +138,11 @@ interface ProposedActionPreviewProps {
 
 function ProposedActionPreview({ insight }: ProposedActionPreviewProps) {
   const { proposedAction } = insight;
-  const [sending, setSending]     = useState(false);
+  const [sending,    setSending]    = useState(false);
   const [approvalId, setApprovalId] = useState<string | null>(
     proposedAction?.approvalRequestId ?? null
   );
-  const [open, setOpen]           = useState(false);
+  const [open, setOpen] = useState(false);
 
   if (!proposedAction) return null;
 
@@ -147,7 +161,6 @@ function ProposedActionPreview({ insight }: ProposedActionPreviewProps) {
 
   return (
     <div className="rounded-xl border border-[color:var(--color-border)] overflow-hidden">
-      {/* Toggle header */}
       <button
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between px-4 py-3 bg-[color:var(--color-surface-active)] hover:bg-[color:var(--color-surface-hover)] transition-colors"
@@ -165,7 +178,6 @@ function ProposedActionPreview({ insight }: ProposedActionPreviewProps) {
 
       {open && (
         <div className="p-4 space-y-3 border-t border-[color:var(--color-border-light)]">
-          {/* Action label */}
           <div>
             <p className="text-xs font-bold text-[color:var(--color-text)]">
               {proposedAction.label}
@@ -177,12 +189,10 @@ function ProposedActionPreview({ insight }: ProposedActionPreviewProps) {
             )}
           </div>
 
-          {/* Action type chip */}
           <code className="inline-block text-[10px] font-mono px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)]">
             {proposedAction.type}
           </code>
 
-          {/* Send / already sent */}
           <div className="pt-1 border-t border-[color:var(--color-border-light)]">
             {approvalId ? (
               <div className="flex items-center gap-2">
@@ -229,7 +239,7 @@ function ProposedActionPreview({ insight }: ProposedActionPreviewProps) {
 // ─── Main card ────────────────────────────────────────────────────────────────
 
 export interface RevOpsInsightCardProps {
-  insight: RevOpsInsight;
+  insight:    RevOpsInsight;
   className?: string;
 }
 
@@ -248,7 +258,10 @@ export function RevOpsInsightCard({ insight, className }: RevOpsInsightCardProps
         {/* Category + metric header */}
         <div className="flex items-start justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2.5">
-            <div className={classNames("w-8 h-8 rounded-xl flex items-center justify-center shrink-0", meta.accent)}>
+            <div className={classNames(
+              "w-8 h-8 rounded-xl flex items-center justify-center shrink-0",
+              meta.accent
+            )}>
               <Icon size={15} />
             </div>
             <div>

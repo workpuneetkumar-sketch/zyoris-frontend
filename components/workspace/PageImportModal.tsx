@@ -35,12 +35,18 @@ import {
   Code,
   Link as LinkIcon,
   RefreshCw,
+  HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  FileCheck,
+  ListChecks,
+  ShieldCheck,
 } from "lucide-react";
 import { previewPageImport, commitPageImport } from "@/lib/api/workspaceApi";
 import type { PageImportPreviewResult, WorkspaceBlock, SupportedImportFormat } from "@/types/workspace";
 
 // ── Supported formats ─────────────────────────────────────────────────────────
-const SUPPORTED_FORMATS: SupportedImportFormat[] = ["docx", "md", "txt", "html"];
+const SUPPORTED_FORMATS: SupportedImportFormat[] = ["docx", "csv", "md", "txt", "html"];
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB hard block
 const LARGE_FILE_WARNING_BYTES = 5 * 1024 * 1024; // 5 MB soft warning
 
@@ -141,6 +147,7 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
   const [preview, setPreview] = useState<PageImportPreviewResult | null>(null);
   const [importMode, setImportMode] = useState<"append" | "replace">("append");
   const [isDragOver, setIsDragOver] = useState(false);
+  const [showGuidelines, setShowGuidelines] = useState(true);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -309,7 +316,7 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".docx,.md,.txt,.html"
+                  accept=".docx,.csv,.md,.txt,.html"
                   className="hidden"
                   onChange={handleFileInput}
                 />
@@ -328,7 +335,7 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
                       Drop a file here, or click to browse
                     </p>
                     <p className="text-xs text-slate-400 mt-1">
-                      .docx, .md, .txt, .html · max 10 MB
+                      .docx, .csv, .md, .txt, .html · max 10 MB
                     </p>
                   </>
                 )}
@@ -352,6 +359,63 @@ export const PageImportModal: React.FC<PageImportModalProps> = ({
                   </span>
                 </div>
               )}
+
+              {/* Import Guidelines Collapsible Box */}
+              <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 overflow-hidden transition-all">
+                <button
+                  type="button"
+                  onClick={() => setShowGuidelines((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-3 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/60 transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <HelpCircle className="w-4 h-4 text-teal-500" />
+                    <span>Import Guidelines & Data Formatting Rules</span>
+                  </div>
+                  {showGuidelines ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
+
+                {showGuidelines && (
+                  <div className="px-4 pb-4 pt-1 space-y-3 text-xs text-slate-600 dark:text-slate-300 border-t border-slate-200/60 dark:border-slate-800">
+                    <div className="space-y-1">
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <FileCheck className="w-3.5 h-3.5 text-teal-500" /> Supported Formats & Conversion:
+                      </p>
+                      <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        <li><strong>.docx (Word Document)</strong>: Converts Word headings, lists, tables, and paragraphs cleanly without garbage characters.</li>
+                        <li><strong>.csv (Spreadsheet)</strong>: Converts tabular data into formatted table blocks with column headers and metadata summaries.</li>
+                        <li><strong>.md (Markdown)</strong>: Converts <code>#</code>, <code>##</code>, <code>###</code> into Headings, lists, code fences <code>```</code>, and blockquotes.</li>
+                        <li><strong>.html / .htm</strong>: Parses <code>&lt;h1&gt;</code>-<code>&lt;h3&gt;</code>, <code>&lt;p&gt;</code>, <code>&lt;ul&gt;</code>, <code>&lt;ol&gt;</code>, <code>&lt;pre&gt;</code>, <code>&lt;blockquote&gt;</code> into native page blocks.</li>
+                        <li><strong>.txt</strong>: Converts paragraphs and structured plain text into readable blocks.</li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <ListChecks className="w-3.5 h-3.5 text-teal-500" /> Limits & Recommendations:
+                      </p>
+                      <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        <li>Maximum file size: <strong>10 MB</strong>.</li>
+                        <li>Recommended block limit: <strong>500 blocks</strong> per import for fast editing.</li>
+                      </ul>
+                    </div>
+
+                    <div className="space-y-1">
+                      <p className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-teal-500" /> Import Modes & Security:
+                      </p>
+                      <ul className="list-disc pl-5 space-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 leading-relaxed">
+                        <li><strong>Append</strong>: Adds blocks below existing page content.</li>
+                        <li><strong>Replace</strong>: Overwrites current page blocks.</li>
+                        <li>All embedded scripts and unsafe HTML tags are automatically sanitized.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           )}
 

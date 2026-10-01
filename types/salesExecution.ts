@@ -358,47 +358,90 @@ export interface TimelineFilter {
 // ── Day 2 — Sequences & Playbooks Types ─────────────────────────────────────
 
 export interface SequenceStep {
+  id?: string;
+  sequenceId?: string;
   stepOrder: number;
-  stepType: "EMAIL" | "CALL" | "TASK" | "WHATSAPP" | string;
+  stepType:
+    | "SEND_EMAIL"
+    | "SEND_WHATSAPP"
+    | "CALL_TASK"
+    | "WAIT_DELAY"
+    | "WAIT_CONDITION"
+    | "BRANCH_CONDITION"
+    | "CUSTOM_ACTION"
+    | "EMAIL"
+    | "CALL"
+    | "TASK"
+    | "WHATSAPP"
+    | string;
+  name?: string | null;
+  config?: Record<string, unknown>;
   delayDays?: number;
   subject?: string;
   body?: string;
+  [key: string]: unknown;
 }
 
 export interface CreateSequencePayload {
   name: string;
   description?: string;
+  exitCriteria?: string;
   steps: SequenceStep[];
+  [key: string]: unknown;
 }
 
 export interface SequenceRecord {
   id: string;
   name: string;
   description?: string;
+  exitCriteria?: string;
   steps: SequenceStep[];
   status?: string;
   createdAt?: string;
+  updatedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface SequenceEnrollmentPayload {
+  targetEntityType: "LEAD" | "CONTACT" | "CUSTOMER" | "DEAL" | string;
+  targetEntityId: string;
+  metadata?: Record<string, unknown>;
   contactId?: string;
   leadId?: string;
   customerId?: string;
   dealId?: string;
+  [key: string]: unknown;
 }
 
 export interface SequenceEnrollment {
   id: string;
+  organizationId?: string;
   sequenceId: string;
+  targetEntityType?: string;
+  targetEntityId?: string;
   contactId?: string;
   leadId?: string;
   customerId?: string;
   dealId?: string;
-  currentStep: number;
-  status: "ACTIVE" | "PAUSED" | "COMPLETED" | string;
+  currentStep?: number;
+  currentStepOrder?: number;
+  nextExecutionAt?: string | null;
+  status:
+    | "ACTIVE"
+    | "PAUSED"
+    | "COMPLETED"
+    | "TERMINATED_REPLY"
+    | "TERMINATED_OPT_OUT"
+    | "TERMINATED_CONVERTED"
+    | "CANCELLED"
+    | "FAILED"
+    | string;
   pauseReason?: string;
+  terminationReason?: string | null;
   enrolledAt: string;
+  completedAt?: string | null;
   lastStepExecutedAt?: string;
+  [key: string]: unknown;
 }
 
 export interface AdvanceSequenceStepPayload {
@@ -411,110 +454,207 @@ export interface PauseSequencePayload {
   status?: string;
 }
 
-export interface PlaybookStep {
-  order: number;
-  title: string;
-  description: string;
-  actionType: "DISCOVERY" | "DEMO" | "PROPOSAL" | "CLOSING" | "FOLLOW_UP" | string;
-}
+// ── Task 1 — Activity & Identity Review Types ───────────────────────────────
 
-export interface CreatePlaybookPayload {
-  name: string;
-  description?: string;
-  steps: PlaybookStep[];
-}
-
-export interface PlaybookRecord {
+export interface ActivityReviewItem {
   id: string;
-  name: string;
-  description?: string;
-  steps: PlaybookStep[];
-  createdAt?: string;
-}
-
-export interface EvaluatePlaybookPayload {
-  playbookId?: string;
-  dealId?: string;
-  leadId?: string;
-  customerId?: string;
-  context?: Record<string, unknown>;
-}
-
-export interface PlaybookEvaluationResult {
-  playbookId?: string;
-  score: number;
-  recommendations: string[];
-  nextBestActions: string[];
-  status: string;
-  evaluatedAt: string;
-}
-
-// ── Day 3 — Quotes & E-Sign Types ──────────────────────────────────────────
-
-export interface QuoteItem {
-  name?: string;
-  description?: string;
-  quantity: number;
-  unitPrice: number;
-  total?: number;
-}
-
-export interface CreateQuotePayload {
-  title?: string;
-  dealId?: string;
-  customerId?: string;
-  validUntil?: string;
-  currency?: string;
-  taxRate?: number;
-  discount?: number;
-  items: QuoteItem[];
-}
-
-export interface QuoteRecord {
-  id: string;
-  title: string;
-  dealId?: string;
-  customerId?: string;
-  totalAmount: number;
-  currency: string;
-  status: "DRAFT" | "APPROVED" | "PDF_GENERATED" | "SENT_FOR_ESIGN" | "SIGNED" | string;
-  items: QuoteItem[];
-  validUntil?: string;
-  pdfUrl?: string;
-  envelopeId?: string;
+  activityId: string;
+  activity?: CapturedActivity;
+  status: "PENDING" | "RESOLVED" | "DISMISSED" | string;
+  reviewType: "DUPLICATE" | "IDENTITY" | string;
+  conflictDetails?: Record<string, unknown>;
+  confidence?: number;
+  reason?: string;
+  suggestedMatches?: Array<{
+    id: string;
+    name?: string;
+    email?: string;
+    confidence?: number;
+  }>;
   createdAt: string;
-  approvedBy?: string;
-  approvedAt?: string;
+  updatedAt?: string;
 }
 
-export interface ApproveQuotePayload {
-  comment?: string;
-  approvedBy?: string;
-}
-
-export interface GenerateQuotePdfPayload {
-  theme?: string;
-  headerText?: string;
-}
-
-export interface EsignSigner {
-  name: string;
-  email: string;
-  role?: string;
-}
-
-export interface QuoteEsignPayload {
-  signers?: EsignSigner[];
-  signerEmail?: string;
+export interface ActivityReviewsResponse {
+  success: boolean;
+  data: ActivityReviewItem[];
+  pagination?: SalesActivitiesPagination;
   message?: string;
 }
 
-export interface EsignWebhookPayload {
-  eventId: string;
-  envelopeId: string;
-  eventType: "ENVELOPE_SENT" | "ENVELOPE_DELIVERED" | "ENVELOPE_SIGNED" | "ENVELOPE_DECLINED" | "ENVELOPE_EXPIRED" | string;
-  status?: string;
-  signerEmail?: string;
+export interface ResolveReviewPayload {
+  resolution?: string;
+  targetActivityId?: string;
+  action?: string;
+  customerId?: string;
+  dealId?: string;
+  contactId?: string;
+  [key: string]: unknown;
+}
+
+export interface DismissReviewPayload {
+  reason?: string;
+  [key: string]: unknown;
+}
+
+// ── Task 2 — Proposals & Rules Types ────────────────────────────────────────
+
+export type ProposalStatus =
+  | "DRAFT"
+  | "PENDING_APPROVAL"
+  | "APPROVED"
+  | "REJECTED"
+  | "APPLIED"
+  | "CANCELLED";
+
+export interface ProposalFieldChange {
+  field: string;
+  currentValue?: unknown;
+  proposedValue?: unknown;
+  reason?: string;
+  confidence?: number;
+  evidence?: string;
+}
+
+export interface SalesProposal {
+  id: string;
+  title?: string;
+  targetEntityType?: "CUSTOMER" | "DEAL" | "CONTACT" | "COMPANY" | "LEAD" | string;
+  targetEntityId?: string;
+  field?: string;
+  currentValue?: unknown;
+  proposedValue?: unknown;
+  rationale?: string;
+  riskCategory?: string;
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH" | string;
+  confidence?: number;
+  dealId?: string;
+  customerId?: string;
+  deal?: { id: string; title: string; stage?: string };
+  customer?: { id: string; name: string; email?: string };
+  status: ProposalStatus | string;
+  requiresApproval?: boolean;
+  changes?: ProposalFieldChange[];
+  proposedPrice?: number;
+  discountPercentage?: number;
+  notes?: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectionReason?: string;
+  appliedAt?: string;
+  evidenceIds?: string[];
+  createdAt: string;
+  updatedAt?: string;
+  [key: string]: unknown;
+}
+
+export interface CreateProposalPayload {
+  targetEntityType: "CUSTOMER" | "DEAL" | "CONTACT" | "COMPANY" | "LEAD" | string;
+  targetEntityId: string;
+  field: string;
+  proposedValue: unknown;
+  rationale: string;
+  currentValue?: unknown;
+  confidence?: number;
+  riskCategory?: "FINANCIAL" | "STAGE_CHANGE" | "OWNERSHIP" | "LIFECYCLE" | "SENSITIVE_DATA" | "METADATA" | string;
+  evidenceIds?: string[];
+  triggeringSignal?: string;
+  source?: string;
+  title?: string;
+  dealId?: string;
+  customerId?: string;
+  proposedPrice?: number;
+  discountPercentage?: number;
+  changes?: ProposalFieldChange[];
+  notes?: string;
+  [key: string]: unknown;
+}
+
+export interface ProposalRule {
+  id: string;
+  name: string;
+  condition: string;
+  action: string;
+  discountThreshold?: number;
+  minDealValue?: number;
+  autoApprove?: boolean;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreateProposalRulePayload {
+  targetEntityType?: string;
+  fieldName?: string;
+  riskLevel?: "LOW" | "MEDIUM" | "HIGH" | string;
+  approvalRequirement?: "AUTO_APPLY" | "REQUIRES_APPROVAL" | "BLOCKED" | string;
+  minConfidenceAutoApply?: number;
+  isActive?: boolean;
+  description?: string;
+  name?: string;
+  condition?: string;
+  action?: string;
+  discountThreshold?: number;
+  minDealValue?: number;
+  autoApprove?: boolean;
+  [key: string]: unknown;
+}
+
+// ── Task 2 — Outreach Generator & Drafts Types ──────────────────────────────
+
+export type OutreachChannel = "EMAIL" | "WHATSAPP" | "CALL_SCRIPT" | "LINKEDIN";
+
+export interface OutreachGeneratePayload {
+  targetEntityType: "CUSTOMER" | "DEAL" | "CONTACT" | "COMPANY" | "LEAD" | string;
+  targetEntityId: string;
+  channel: OutreachChannel | string;
+  tone?: string;
+  objective?: string;
+  templateId?: string;
+  customPromptInstructions?: string;
+  // Convenience aliases for UI flexibility
+  leadId?: string;
+  dealId?: string;
+  customerId?: string;
+  goal?: string;
+  context?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface OutreachDraft {
+  id: string;
+  organizationId?: string;
+  targetEntityType?: string;
+  targetEntityId?: string;
+  channel: OutreachChannel | string;
+  subject?: string | null;
+  body: string;
+  content?: string;
+  tone?: string;
+  callToAction?: string | null;
+  groundingMetadata?: Array<Record<string, unknown>>;
+  groundedEvidence?: string[];
+  personalizationFactors?: string[];
+  templateId?: string | null;
+  status: "DRAFT" | "APPROVED" | "SENT" | "DISCARDED" | "REJECTED" | string;
+  createdAt: string;
+  updatedAt?: string;
+  leadId?: string;
+  dealId?: string;
+  customerId?: string;
+  [key: string]: unknown;
+}
+
+// ── Task 2 — Sequence Executions & Detailed Enrollments ─────────────────────
+
+export interface SequenceExecution {
+  id: string;
+  sequenceId: string;
+  enrollmentId: string;
+  stepNumber: number;
+  channel: string;
+  status: "SUCCESS" | "FAILED" | "PENDING" | "SKIPPED" | string;
+  executedAt: string;
+  error?: string;
   payload?: Record<string, unknown>;
 }
 

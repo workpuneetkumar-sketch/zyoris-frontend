@@ -20,6 +20,7 @@ import {
   FileText,
   Briefcase,
   Users,
+  Building2,
   Check,
   AlertTriangle,
   Loader2,
@@ -37,6 +38,7 @@ import {
   TaskPriority,
   TaskAssignmentEvent,
 } from "@/lib/api/tasksApi";
+import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 import {
   MyTaskBucket,
   TaskCounts,
@@ -80,6 +82,7 @@ interface MyTasksViewProps {
   onUpdateStatus: (taskId: string, status: TaskStatus) => Promise<boolean>;
   onRefresh: () => void;
   onOpenTaskDetail?: (task: Task) => void;
+  onReassignedTask?: (assignment: EffectiveAssignmentResponse) => void;
 }
 
 export const MyTasksView: React.FC<MyTasksViewProps> = ({
@@ -637,6 +640,27 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                         <span>Page Docs</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </Link>
+                    )}
+
+                    {/* Department Badge if available */}
+                    {Boolean(task.department || task.effectiveAssignment?.department) && (
+                      <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-lg text-xs font-semibold border border-slate-200/60 dark:border-slate-700/60">
+                        <Building2 className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>{task.department || task.effectiveAssignment?.department}</span>
+                      </span>
+                    )}
+
+                    {/* Department Queue Badge if applicable */}
+                    {Boolean(
+                      (task.assigneeType === "DEPARTMENT" ||
+                        task.effectiveAssignment?.assigneeType === "DEPARTMENT") &&
+                        !task.assignedTo &&
+                        !task.effectiveAssignment?.assignedTo
+                    ) && (
+                      <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 rounded-lg text-xs font-semibold border border-indigo-200/60 dark:border-indigo-800/60">
+                        <Users className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Team Queue</span>
+                      </span>
                     )}
 
                     {/* Lead Context Link */}

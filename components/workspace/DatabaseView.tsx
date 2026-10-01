@@ -29,7 +29,9 @@ import {
   CheckSquare,
   Trash2,
   ChevronDown,
+  Upload,
 } from "lucide-react";
+import { DatabaseImportWizardModal } from "@/components/projects/workspace/DatabaseImportWizardModal";
 
 interface DatabaseViewProps {
   database?: WorkspaceDatabase | null;
@@ -61,6 +63,7 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
   const [activeViewId, setActiveViewId] = useState<string>("view-1");
 
   const [isAddPropModalOpen, setIsAddPropModalOpen] = useState<boolean>(false);
+  const [isImportWizardOpen, setIsImportWizardOpen] = useState<boolean>(false);
   const [newPropName, setNewPropName] = useState<string>("");
   const [newPropType, setNewPropType] = useState<string>("text");
   const [isSubmittingProp, setIsSubmittingProp] = useState<boolean>(false);
@@ -222,6 +225,14 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
 
         <div className="flex items-center space-x-2">
           <button
+            onClick={() => setIsImportWizardOpen(true)}
+            className="inline-flex items-center space-x-1 px-3 py-1.5 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 rounded-lg text-xs font-semibold transition"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Import CSV</span>
+          </button>
+
+          <button
             onClick={() => setIsAddPropModalOpen(true)}
             className="inline-flex items-center space-x-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg text-xs font-medium transition"
           >
@@ -364,6 +375,30 @@ export const DatabaseView: React.FC<DatabaseViewProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Database CSV Import Wizard Modal */}
+      {isImportWizardOpen && (
+        <DatabaseImportWizardModal
+          database={
+            database || {
+              id: `db-${pageId}`,
+              pageId,
+              name: "Page Database",
+              properties,
+              rows,
+              views,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+          }
+          isOpen={isImportWizardOpen}
+          onClose={() => setIsImportWizardOpen(false)}
+          onImportSuccess={() => {
+            setIsImportWizardOpen(false);
+            if (onRefresh) onRefresh();
+          }}
+        />
       )}
     </div>
   );

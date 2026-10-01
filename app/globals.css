@@ -103,98 +103,122 @@ a {
   100% { transform: translateX(-50%); }
 }
 
-/* Light theme variables (unchanged) */
+/* Light theme variables — enterprise indigo/slate SaaS palette */
 :root, .light {
-  --color-background: #f8fafc;
-  --color-background-secondary: #f1f5f9;
-  --color-background-tertiary: #e2e8f0;
-  --color-surface: #ffffff;
-  --color-surface-hover: #f8fafc;
-  --color-surface-active: #f1f5f9;
-  --color-text: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #94a3b8;
-  --color-border: #e2e8f0;
-  --color-border-light: #f1f5f9;
-  --color-primary: #2563eb;
-  --color-primary-light: #3b82f6;
-  --color-primary-dark: #1d4ed8;
-  --color-primary-foreground: #ffffff;
-  --color-success: #16a34a;
-  --color-success-light: #dcfce7;
-  --color-success-foreground: #16a34a;
-  --color-warning: #d97706;
-  --color-warning-light: #fef3c7;
-  --color-warning-foreground: #d97706;
-  --color-error: #dc2626;
-  --color-error-light: #fee2e2;
-  --color-error-foreground: #dc2626;
-  --color-info: #2563eb;
-  --color-info-light: #dbeafe;
-  --color-info-foreground: #2563eb;
+  /* ── Surfaces ─────────────────────────────────────────────────── */
+  --color-background:           #f4f6fa;   /* warm slate — slightly warmer than before */
+  --color-background-secondary: #eef1f7;
+  --color-background-tertiary:  #e2e6ef;
+  --color-surface:              #ffffff;
+  --color-surface-hover:        #f7f9fc;
+  --color-surface-active:       #eef1f7;
 
-  /* Category tokens (Light) */
-  --color-cat-crm: #0284c7;
-  --color-cat-crm-bg: #e0f2fe;
-  --color-cat-finance: #059669;
-  --color-cat-finance-bg: #d1fae5;
-  --color-cat-marketing: #d97706;
+  /* ── Text ─────────────────────────────────────────────────────── */
+  --color-text:           #0f172a;        /* slate-900 */
+  --color-text-secondary: #475569;        /* slate-600 */
+  --color-text-muted:     #64748b;        /* slate-500 — was #94a3b8; now 4.5:1+ on white */
+
+  /* ── Borders ─────────────────────────────────────────────────── */
+  --color-border:       #dde2ee;
+  --color-border-light: #eef1f7;
+
+  /* ── Primary — deep indigo ────────────────────────────────────── */
+  --color-primary:             #4f46e5;   /* indigo-600 */
+  --color-primary-light:       #6366f1;   /* indigo-500 */
+  --color-primary-dark:        #4338ca;   /* indigo-700 */
+  --color-primary-foreground:  #ffffff;
+
+  /* ── Semantic states ─────────────────────────────────────────── */
+  --color-success:             #059669;   /* emerald-600 */
+  --color-success-light:       #d1fae5;
+  --color-success-foreground:  #065f46;   /* emerald-800 — contrast on success-light */
+
+  --color-warning:             #d97706;   /* amber-600 */
+  --color-warning-light:       #fef3c7;
+  --color-warning-foreground:  #92400e;   /* amber-900 — contrast on warning-light */
+
+  --color-error:               #dc2626;   /* red-600 */
+  --color-error-light:         #fee2e2;
+  --color-error-foreground:    #991b1b;   /* red-800 — contrast on error-light */
+
+  --color-info:                #4f46e5;   /* aligns with primary */
+  --color-info-light:          #ede9fe;   /* indigo-100 */
+  --color-info-foreground:     #3730a3;   /* indigo-800 — contrast on info-light */
+
+  /* ── Category tokens (Light) ─────────────────────────────────── */
+  --color-cat-crm:          #0284c7;
+  --color-cat-crm-bg:       #e0f2fe;
+  --color-cat-finance:      #059669;
+  --color-cat-finance-bg:   #d1fae5;
+  --color-cat-marketing:    #d97706;
   --color-cat-marketing-bg: #fef3c7;
-  --color-cat-comm: #7c3aed;
-  --color-cat-comm-bg: #ede9fe;
-  --color-cat-hr: #db2777;
-  --color-cat-hr-bg: #fce7f3;
-  --color-cat-projects: #2563eb;
-  --color-cat-projects-bg: #dbeafe;
-  --color-cat-custom: #4b5563;
-  --color-cat-custom-bg: #f3f4f6;
+  --color-cat-comm:         #7c3aed;
+  --color-cat-comm-bg:      #ede9fe;
+  --color-cat-hr:           #db2777;
+  --color-cat-hr-bg:        #fce7f3;
+  --color-cat-projects:     #4f46e5;
+  --color-cat-projects-bg:  #ede9fe;
+  --color-cat-custom:       #4b5563;
+  --color-cat-custom-bg:    #f3f4f6;
 }
 
-/* Dark theme variables - Production quality, user requested */
+/* Dark theme variables — deep indigo enterprise, high-contrast */
 .dark {
-  --color-background: #050816;
-  --color-background-secondary: #0b1120;
-  --color-background-tertiary: #111827;
-  --color-surface: #111827;
-  --color-surface-hover: #1e293b;
-  --color-surface-active: #1e3a8a;
-  --color-text: #f8fafc;
-  --color-text-secondary: #cbd5e1;
-  --color-text-muted: #94a3b8;
-  --color-border: #334155;
-  --color-border-light: #1e293b;
-  --color-primary: #3b82f6;
-  --color-primary-light: #60a5fa;
-  --color-primary-dark: #2563eb;
-  --color-primary-foreground: #ffffff;
-  --color-success: #22c55e;
-  --color-success-light: #14532d;
-  --color-success-foreground: #22c55e;
-  --color-warning: #f59e0b;
-  --color-warning-light: #713f12;
-  --color-warning-foreground: #f59e0b;
-  --color-error: #ef4444;
-  --color-error-light: #7f1d1d;
-  --color-error-foreground: #ef4444;
-  --color-info: #3b82f6;
-  --color-info-light: #1e3a8a;
-  --color-info-foreground: #3b82f6;
+  /* ── Surfaces ─────────────────────────────────────────────────── */
+  --color-background:           #080c18;   /* slightly warmer deep navy */
+  --color-background-secondary: #0d1225;
+  --color-background-tertiary:  #131929;
+  --color-surface:              #131929;
+  --color-surface-hover:        #1a2235;
+  --color-surface-active:       #1e1b4b;   /* indigo-950 — was blue-900, now indigo */
 
-  /* Category tokens (Dark) */
-  --color-cat-crm: #38bdf8;
-  --color-cat-crm-bg: rgba(14, 165, 233, 0.15);
-  --color-cat-finance: #34d399;
-  --color-cat-finance-bg: rgba(16, 185, 129, 0.15);
-  --color-cat-marketing: #fbbf24;
-  --color-cat-marketing-bg: rgba(245, 158, 11, 0.15);
-  --color-cat-comm: #a78bfa;
-  --color-cat-comm-bg: rgba(139, 92, 246, 0.15);
-  --color-cat-hr: #f472b6;
-  --color-cat-hr-bg: rgba(236, 72, 153, 0.15);
-  --color-cat-projects: #60a5fa;
-  --color-cat-projects-bg: rgba(59, 130, 246, 0.15);
-  --color-cat-custom: #9ca3af;
-  --color-cat-custom-bg: rgba(107, 114, 128, 0.15);
+  /* ── Text ─────────────────────────────────────────────────────── */
+  --color-text:           #f1f5f9;        /* slate-100 */
+  --color-text-secondary: #cbd5e1;        /* slate-300 */
+  --color-text-muted:     #94a3b8;        /* slate-400 — fine in dark mode */
+
+  /* ── Borders ─────────────────────────────────────────────────── */
+  --color-border:       #2a3349;
+  --color-border-light: #1a2235;
+
+  /* ── Primary — indigo-400 for dark readability ────────────────── */
+  --color-primary:             #818cf8;   /* indigo-400 */
+  --color-primary-light:       #a5b4fc;   /* indigo-300 */
+  --color-primary-dark:        #6366f1;   /* indigo-500 */
+  --color-primary-foreground:  #ffffff;
+
+  /* ── Semantic states (dark) ──────────────────────────────────── */
+  --color-success:             #34d399;   /* emerald-400 */
+  --color-success-light:       #064e3b;   /* emerald-900 */
+  --color-success-foreground:  #6ee7b7;   /* emerald-300 */
+
+  --color-warning:             #fbbf24;   /* amber-400 */
+  --color-warning-light:       #78350f;   /* amber-900 */
+  --color-warning-foreground:  #fde68a;   /* amber-200 */
+
+  --color-error:               #f87171;   /* red-400 */
+  --color-error-light:         #7f1d1d;   /* red-900 */
+  --color-error-foreground:    #fca5a5;   /* red-300 */
+
+  --color-info:                #818cf8;   /* indigo-400 = primary */
+  --color-info-light:          #1e1b4b;   /* indigo-950 */
+  --color-info-foreground:     #a5b4fc;   /* indigo-300 */
+
+  /* ── Category tokens (Dark) ──────────────────────────────────── */
+  --color-cat-crm:          #38bdf8;
+  --color-cat-crm-bg:       rgba(14,  165, 233, 0.15);
+  --color-cat-finance:      #34d399;
+  --color-cat-finance-bg:   rgba(16,  185, 129, 0.15);
+  --color-cat-marketing:    #fbbf24;
+  --color-cat-marketing-bg: rgba(245, 158,  11, 0.15);
+  --color-cat-comm:         #a78bfa;
+  --color-cat-comm-bg:      rgba(139,  92, 246, 0.15);
+  --color-cat-hr:           #f472b6;
+  --color-cat-hr-bg:        rgba(236,  72, 153, 0.15);
+  --color-cat-projects:     #818cf8;
+  --color-cat-projects-bg:  rgba(129, 140, 248, 0.15);
+  --color-cat-custom:       #9ca3af;
+  --color-cat-custom-bg:    rgba(107, 114, 128, 0.15);
 }
 
 
@@ -2486,4 +2510,24 @@ a {
   border: 1px solid rgba(37, 99, 235, 0.2);
 }
 
-
+
+
+
+/* ── Zyoris chart palette — scoped tokens ─────────────────────────────────── */
+/* Applied by wrapping chart/metric groups in class="zyoris-chart-scope".      */
+/* These tokens are ADDITIVE — nothing above this line is modified.            */
+.zyoris-chart-scope {
+  --chart-1:       oklch(0.6723 0.1606 244.9955);  /* blue  — primary series  */
+  --chart-2:       oklch(0.6907 0.1554 160.3454);  /* teal  — second series   */
+  --chart-3:       oklch(0.8214 0.1600  82.5337);  /* amber — third series    */
+  --chart-4:       oklch(0.5919 0.2186  10.5826);  /* rose  — fourth series   */
+  --chart-axis:    oklch(0.5637 0.0078 247.9662);  /* muted blue-grey         */
+  --chart-grid:    oklch(0.9317 0.0118 231.6594);  /* very light blue-grey    */
+  --chart-success: oklch(0.6907 0.1554 160.3454);  /* teal = chart-2          */
+  --chart-warning: oklch(0.8214 0.1600  82.5337);  /* amber = chart-3         */
+  --chart-danger:  oklch(0.6188 0.2376  25.7658);  /* red-orange              */
+}
+
+.dark .zyoris-chart-scope {
+  --chart-grid: oklch(0.2674 0.0047 248.0045);     /* dark mode grid lines    */
+}

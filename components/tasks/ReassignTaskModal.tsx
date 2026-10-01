@@ -1,41 +1,49 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   X,
-  CheckSquare,
+  ArrowRightLeft,
   Building2,
   User,
-  Calendar,
-  Flag,
   Loader2,
   AlertCircle,
   CheckCircle2,
   Users,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { getAssignableScopes, assignPageAsTask } from "@/lib/api/workspaceApi";
+import { getAssignableScopes, reassignTask } from "@/lib/api/workspaceApi";
 import {
   AssignableScopesResponse,
   AssigneeType,
-  AssignPageAsTaskPayload,
-  AssignmentResult,
+  ReassignTaskPayload,
+  EffectiveAssignmentResponse,
 } from "@/types/workspaceAssignment";
 
-interface AssignmentTaskModalProps {
+export interface ReassignTaskModalProps {
   isOpen: boolean;
+  taskId: string;
+  currentAssignment?: {
+    department?: string | null;
+    assignedTo?: {
+      id: string;
+      name?: string | null;
+      email?: string;
+    } | null;
+    scope?: string | null;
+    assigneeType?: AssigneeType | string | null;
+    [key: string]: any;
+  } | null;
   onClose: () => void;
-  pageId: string;
-  pageTitle: string;
-  onSuccess: (result?: AssignmentResult) => void;
+  onSuccess: (assignment: EffectiveAssignmentResponse) => void;
 }
 
-export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
+export const ReassignTaskModal: React.FC<ReassignTaskModalProps> = ({
   isOpen,
+  taskId,
+  currentAssignment,
   onClose,
-  pageId,
-  pageTitle,
   onSuccess,
 }) => {
   const { user } = useAuth();
@@ -45,9 +53,7 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
   const [assigneeType, setAssigneeType] = useState<AssigneeType>("DEPARTMENT");
   const [selectedDepartment, setSelectedDepartment] = useState<string>("");
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [taskTitle, setTaskTitle] = useState<string>("");
-  const [dueDate, setDueDate] = useState<string>("");
-  const [priority, setPriority] = useState<"LOW" | "MEDIUM" | "HIGH">("MEDIUM");
+  const [reason, setReason] = useState<string>("");
 
   // Scopes State
   const [scopes, setScopes] = useState<AssignableScopesResponse | null>(null);
@@ -56,8 +62,10 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
 
   // Submission State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const isSubmittingRef = useRef<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
+
 
   useEffect(() => {
     setMounted(true);
@@ -68,12 +76,10 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
     if (!isOpen) return;
 
     // Reset form fields
-    setTaskTitle(pageTitle ? `[Page Task] ${pageTitle}` : "");
     setSelectedDepartment("");
     setSelectedUserId("");
-    setDueDate("");
-    setPriority("MEDIUM");
-    setAssigneeType("DEPARTMENT");
+    setReason("");
+    setAssigneeType(currentAssignment?.assigneeType === "USER" ? "USER" : "DEPARTMENT");
     setSubmitError(null);
     setIsSuccess(false);
 
@@ -86,8 +92,19 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
         if (!isSubscribed) return;
         setScopes(data);
         if (data.departments && data.departments.length > 0) {
-          // Preselect first department for convenience
-          setSelectedDepartment(data.departments[0].name);
+          // Preselect current department if available in scopes, else preselect first
+          const currentDept = currentAssignment?.department;
+          const matchingDept = currentDept
+            ? data.departments.find(
+                (d) => d.name.toLowerCase() === currentDept.toLowerCase()
+              )
+            : null;
+
+          if (matchingDept) {
+            setSelectedDepartment(matchingDept.name);
+          } else {
+            setSelectedDepartment(data.departments[0].name);
+          }
         }
       })
       .catch((err) => {
@@ -110,7 +127,7 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
     return () => {
       isSubscribed = false;
     };
-  }, [isOpen, pageTitle]);
+  }, [isOpen, currentAssignment]);
 
   // Filter employees strictly by selected department name
   const filteredEmployees = useMemo(() => {
@@ -122,95 +139,107 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
     );
   }, [scopes, selectedDepartment]);
 
-  // Handle department change: update department and clear selected user
+  // Handle department change: update department and clear selected user immediately
   const handleDepartmentChange = (deptName: string) => {
     setSelectedDepartment(deptName);
     setSelectedUserId("");
     setSubmitError(null);
   };
 
+  // Synchronize and clear stale selected user if not belonging to filteredEmployees
+  useEffect(() => {
+    if (selectedUserId && !filteredEmployees.some((emp) => emp.userId === selectedUserId)) {
+      setSelectedUserId("");
+    }
+  }, [filteredEmployees, selectedUserId]);
+
   const handleClose = () => {
-    if (isSubmitting) return;
+    if (isSubmitting) return; // Prevent closing while in flight
     setSubmitError(null);
     onClose();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting || isSuccess) return;
+    if (isSubmittingRef.current || isSubmitting || isSuccess) return;
 
     // Client-side validations
-    const cleanTitle = taskTitle.trim();
-    if (!cleanTitle) {
-      setSubmitError("Task title cannot be empty");
-      return;
-    }
-
     if (!selectedDepartment) {
       setSubmitError("Please select a department");
       return;
     }
 
-    if (assigneeType === "USER" && !selectedUserId) {
-      setSubmitError("Please select an individual team member");
-      return;
-    }
-
-    let isoDueDate: string | undefined = undefined;
-    if (dueDate) {
-      const todayStr = new Date().toISOString().split("T")[0];
-      if (dueDate < todayStr) {
-        setSubmitError("Due date cannot be in the past. Please select today or a future date.");
+    if (assigneeType === "USER") {
+      if (!selectedUserId) {
+        setSubmitError("Please select an individual team member");
         return;
       }
-      const parsedDate = new Date(dueDate);
-      if (isNaN(parsedDate.getTime())) {
-        setSubmitError("Please enter a valid due date");
+      const isMemberInDept = filteredEmployees.some((emp) => emp.userId === selectedUserId);
+      if (!isMemberInDept) {
+        setSelectedUserId("");
+        setSubmitError("Selected member does not belong to the selected department. Please choose a valid member.");
         return;
       }
-      isoDueDate = parsedDate.toISOString();
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setSubmitError(null);
 
-    const payload: AssignPageAsTaskPayload = {
+    const trimmedReason = reason.trim();
+    const payload: ReassignTaskPayload = {
       assigneeType,
       targetDepartment: selectedDepartment,
       ...(assigneeType === "USER" ? { targetUserId: selectedUserId } : {}),
-      title: cleanTitle,
-      dueDate: isoDueDate,
-      priority,
+      ...(trimmedReason ? { reason: trimmedReason } : {}),
     };
 
     try {
-      const result = await assignPageAsTask(pageId, payload);
+      const updatedAssignment = await reassignTask(taskId, payload);
       setIsSuccess(true);
       setTimeout(() => {
-        onSuccess(result);
+        onSuccess(updatedAssignment);
         onClose();
-      }, 700);
+      }, 600);
     } catch (err: any) {
-      console.error("Assignment submission error:", err);
-      let errorMsg = "Failed to assign page as task";
+      console.error("Task reassignment error:", err);
+      let errorMsg = "An error occurred while reassigning the task.";
 
-      if (err?.response?.data) {
-        const data = err.response.data;
-        if (Array.isArray(data.details) && data.details.length > 0) {
-          errorMsg = data.details
-            .map((item: any) => item.message || `${item.field}: invalid`)
-            .join("; ");
-        } else if (data.message) {
+      if (err?.response) {
+        const { status, data } = err.response;
+
+        if (status === 400) {
+          if (Array.isArray(data?.details) && data.details.length > 0) {
+            errorMsg = data.details
+              .map((item: any) => item.message || `${item.field || "field"}: invalid`)
+              .join("; ");
+          } else if (data?.message) {
+            errorMsg = data.message;
+          } else if (data?.error) {
+            errorMsg = String(data.error);
+          } else {
+            errorMsg = "Invalid reassignment request. Please check the required fields.";
+          }
+        } else if (status === 401) {
+          errorMsg = data?.message || "Authentication required. Please sign in again.";
+        } else if (status === 403) {
+          errorMsg = data?.message || "You do not have permission to reassign this task.";
+        } else if (status === 404) {
+          errorMsg = data?.message || "Task or target assignee was not found.";
+        } else if (status >= 500) {
+          errorMsg = data?.message || "A server error occurred. Please try again later.";
+        } else if (data?.message) {
           errorMsg = data.message;
-        } else if (data.error) {
-          errorMsg = String(data.error);
         }
+      } else if (err?.request) {
+        errorMsg = "Network error: Unable to connect to server. Please check your internet connection.";
       } else if (err?.message) {
         errorMsg = err.message;
       }
 
       setSubmitError(errorMsg);
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   };
@@ -221,19 +250,20 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
     <div
       className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150"
       onClick={(e) => {
-        if (e.target === e.currentTarget) handleClose();
+        if (e.target === e.currentTarget && !isSubmitting) handleClose();
       }}
     >
       <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800">
           <div className="flex items-center space-x-2">
-            <CheckSquare className="w-5 h-5 text-indigo-500" />
+            <ArrowRightLeft className="w-5 h-5 text-indigo-500" />
             <h2 className="text-base font-bold text-slate-900 dark:text-white">
-              Assign Page as Task
+              Reassign Task
             </h2>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             disabled={isSubmitting}
             className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition disabled:opacity-40"
@@ -245,6 +275,34 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
 
         {/* Content Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
+          {/* Current Assignment Context */}
+          {currentAssignment && (
+            <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs space-y-1.5">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-400">
+                Current Assignment
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-slate-700 dark:text-slate-300">
+                <div className="flex items-center space-x-2">
+                  <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="text-slate-500 dark:text-slate-400">Department:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white truncate">
+                    {currentAssignment.department || "None"}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  <span className="text-slate-500 dark:text-slate-400">Assignee:</span>
+                  <span className="font-semibold text-slate-900 dark:text-white truncate">
+                    {currentAssignment.assignedTo?.name ||
+                      (currentAssignment.assigneeType === "DEPARTMENT"
+                        ? "Department Queue"
+                        : "Unassigned")}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Organization Context */}
           <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200/80 dark:border-slate-700/60 text-xs">
             <div className="flex items-center space-x-2 text-slate-600 dark:text-slate-300">
@@ -267,7 +325,7 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
           {isSuccess && (
             <div className="flex items-center space-x-2 p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-xl text-xs font-semibold text-emerald-700 dark:text-emerald-300 animate-in fade-in">
               <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
-              <span>Task created and assigned successfully!</span>
+              <span>Task reassigned successfully!</span>
             </div>
           )}
 
@@ -297,6 +355,7 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
                 <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => {
                       setAssigneeType("DEPARTMENT");
                       setSelectedUserId("");
@@ -306,13 +365,14 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
                       assigneeType === "DEPARTMENT"
                         ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                    }`}
+                    } disabled:opacity-60`}
                   >
                     <Users className="w-3.5 h-3.5" />
                     <span>Department Queue</span>
                   </button>
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={() => {
                       setAssigneeType("USER");
                       setSubmitError(null);
@@ -321,7 +381,7 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
                       assigneeType === "USER"
                         ? "bg-white dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 shadow-xs"
                         : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-                    }`}
+                    } disabled:opacity-60`}
                   >
                     <User className="w-3.5 h-3.5" />
                     <span>Individual Member</span>
@@ -394,65 +454,28 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
                 </div>
               )}
 
-              {/* Task Title */}
+              {/* Reason Field */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Task Title <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={taskTitle}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Reason <span className="text-slate-400 font-normal">(Optional)</span>
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    {reason.length}/500
+                  </span>
+                </div>
+                <textarea
+                  value={reason}
                   onChange={(e) => {
-                    setTaskTitle(e.target.value);
+                    setReason(e.target.value.slice(0, 500));
                     setSubmitError(null);
                   }}
-                  maxLength={255}
+                  maxLength={500}
+                  rows={3}
                   disabled={isSubmitting}
-                  placeholder="e.g. Review workspace specification"
-                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 transition"
+                  placeholder="Why is this task being reassigned?"
+                  className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 transition resize-none placeholder:text-slate-400"
                 />
-              </div>
-
-              {/* Priority and Due Date Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Priority */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                    <Flag className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Priority</span>
-                  </label>
-                  <select
-                    value={priority}
-                    onChange={(e) =>
-                      setPriority(e.target.value as "LOW" | "MEDIUM" | "HIGH")
-                    }
-                    disabled={isSubmitting}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 transition"
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                  </select>
-                </div>
-
-                {/* Due Date */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1 flex items-center space-x-1">
-                    <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Due Date</span>
-                  </label>
-                  <input
-                    type="date"
-                    min={new Date().toISOString().split("T")[0]}
-                    value={dueDate}
-                    onChange={(e) => {
-                      setDueDate(e.target.value);
-                      setSubmitError(null);
-                    }}
-                    disabled={isSubmitting}
-                    className="w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-60 transition"
-                  />
-                </div>
               </div>
             </>
           )}
@@ -473,20 +496,22 @@ export const AssignmentTaskModal: React.FC<AssignmentTaskModalProps> = ({
                 isSubmitting ||
                 isLoadingScopes ||
                 isSuccess ||
+                Boolean(scopesError) ||
                 !selectedDepartment ||
-                (assigneeType === "USER" && !selectedUserId)
+                (assigneeType === "USER" &&
+                  (!selectedUserId || !filteredEmployees.some((emp) => emp.userId === selectedUserId)))
               }
               className="inline-flex items-center space-x-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Assigning...</span>
+                  <span>Reassigning...</span>
                 </>
               ) : (
                 <>
-                  <CheckSquare className="w-3.5 h-3.5" />
-                  <span>Assign</span>
+                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                  <span>Reassign</span>
                 </>
               )}
             </button>

@@ -20,19 +20,26 @@ export function saveStoredLocalPage(page: Partial<WorkspacePage> & { id: string;
   if (typeof window === "undefined") return;
   try {
     const existing = getStoredLocalPages();
+    const isNew = !existing.some((p) => p.id === page.id);
+    const existingNode = existing.find((p) => p.id === page.id);
     const filtered = existing.filter((p) => p.id !== page.id);
+    
     const newNode: WorkspacePageNode = {
       id: page.id,
       title: page.title || "Untitled",
-      icon: page.icon || "📄",
-      parentId: page.parentId || null,
-      isDatabase: page.isDatabase || false,
-      children: [],
-      createdAt: page.createdAt || new Date().toISOString(),
+      icon: page.icon || existingNode?.icon || "📄",
+      parentId: page.parentId !== undefined ? page.parentId : (existingNode?.parentId || null),
+      isFolder: page.isFolder !== undefined ? page.isFolder : (existingNode?.isFolder || false),
+      isDatabase: page.isDatabase !== undefined ? page.isDatabase : (existingNode?.isDatabase || false),
+      children: existingNode?.children || [],
+      createdAt: page.createdAt || existingNode?.createdAt || new Date().toISOString(),
+      updatedAt: page.updatedAt || new Date().toISOString(),
     };
-    const updated = [newNode, ...filtered];
+    const updated = isNew ? [newNode, ...filtered] : existing.map((p) => (p.id === page.id ? newNode : p));
     localStorage.setItem(LOCAL_PAGES_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent("zyoris:page-created", { detail: newNode }));
+
+    const eventName = isNew ? "zyoris:page-created" : "zyoris:page-updated";
+    window.dispatchEvent(new CustomEvent(eventName, { detail: newNode }));
   } catch (e) {
     console.error("Failed to save local page:", e);
   }
@@ -72,6 +79,13 @@ function buildTreeFromFlatNodes(flatNodes: WorkspacePageNode[]): WorkspacePageNo
     }
   });
 
+  // Sort roots by most recent first so new and duplicated pages appear at the top
+  roots.sort((a, b) => {
+    const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    return timeB - timeA;
+  });
+
   return roots;
 }
 
@@ -80,22 +94,39 @@ export function useWorkspace() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchPageTree = useCallback(async () => {
-    setIsLoading(true);
+  const fetchPageTree = useCallback(async (isInitialLoad = false) => {
+    if (isInitialLoad) {
+      setIsLoading(true);
+    }
     setError(null);
     try {
       const remoteTree = await getWorkspacePageTree();
       const localPages = getStoredLocalPages();
 
-      // Merge remote tree & local pages
-      const allFlatNodes: WorkspacePageNode[] = [];
-      const seenIds = new Set<string>();
+      // Merge remote tree & local pages: retain latest metadata & timestamps
+      const nodeMap = new Map<string, WorkspacePageNode>();
+
+      localPages.forEach((lp) => {
+        if (lp.id) {
+          nodeMap.set(lp.id, {
+            ...lp,
+            createdAt: lp.createdAt || new Date().toISOString(),
+            updatedAt: lp.updatedAt || new Date().toISOString(),
+          });
+        }
+      });
 
       const addRecursively = (nodes: WorkspacePageNode[]) => {
         nodes.forEach((n) => {
-          if (n.id && !seenIds.has(n.id)) {
-            seenIds.add(n.id);
-            allFlatNodes.push(n);
+          if (n.id) {
+            const existing = nodeMap.get(n.id);
+            nodeMap.set(n.id, {
+              ...existing,
+              ...n,
+              icon: n.icon || existing?.icon || "📄",
+              createdAt: n.createdAt || existing?.createdAt || new Date().toISOString(),
+              updatedAt: n.updatedAt || existing?.updatedAt || n.createdAt || new Date().toISOString(),
+            });
             if (n.children && n.children.length > 0) {
               addRecursively(n.children);
             }
@@ -104,14 +135,7 @@ export function useWorkspace() {
       };
 
       addRecursively(remoteTree);
-
-      localPages.forEach((lp) => {
-        if (lp.id && !seenIds.has(lp.id)) {
-          seenIds.add(lp.id);
-          allFlatNodes.push(lp);
-        }
-      });
-
+      const allFlatNodes = Array.from(nodeMap.values());
       const mergedTree = buildTreeFromFlatNodes(allFlatNodes);
       setPageTree(mergedTree);
     } catch (err: any) {
@@ -136,21 +160,25 @@ export function useWorkspace() {
         setError(msg);
       }
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
-    fetchPageTree();
+    fetchPageTree(true);
 
     const handlePageEvent = () => {
-      fetchPageTree();
+      fetchPageTree(false);
     };
 
     window.addEventListener("zyoris:page-created", handlePageEvent);
+    window.addEventListener("zyoris:page-updated", handlePageEvent);
     window.addEventListener("zyoris:page-deleted", handlePageEvent);
     return () => {
       window.removeEventListener("zyoris:page-created", handlePageEvent);
+      window.removeEventListener("zyoris:page-updated", handlePageEvent);
       window.removeEventListener("zyoris:page-deleted", handlePageEvent);
     };
   }, [fetchPageTree]);
@@ -159,6 +187,6 @@ export function useWorkspace() {
     pageTree,
     isLoading,
     error,
-    refetchTree: fetchPageTree,
+    refetchTree: () => fetchPageTree(false),
   };
 }

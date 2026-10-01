@@ -45,10 +45,17 @@ export const ProjectTaskCreateModal: React.FC<ProjectTaskCreateModalProps> = ({
 
   if (!isOpen) return null;
 
+  const todayStr = new Date().toISOString().split("T")[0];
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
       setError("Task title is required.");
+      return;
+    }
+
+    if (dueDate && dueDate < todayStr) {
+      setError("Due date cannot be in the past. Please select today or a future date.");
       return;
     }
 
@@ -182,6 +189,7 @@ export const ProjectTaskCreateModal: React.FC<ProjectTaskCreateModalProps> = ({
               </label>
               <input
                 type="date"
+                min={todayStr}
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
                 className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-900 dark:text-white"

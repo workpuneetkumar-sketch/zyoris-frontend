@@ -20,6 +20,8 @@ export interface BlockFormatting {
   link?: string | null;
   isOpen?: boolean;
   subtext?: string;
+  grid?: string[][];
+  [key: string]: any;
 }
 
 export interface WorkspaceBlock {
@@ -56,6 +58,11 @@ export interface WorkspacePage {
     canShare?: boolean;
     canDelete?: boolean;
   };
+  isWiki?: boolean;
+  isLocked?: boolean;
+  layoutWidth?: PageLayoutWidth;
+  smallText?: boolean;
+  settings?: WorkspacePageSettings;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -85,6 +92,7 @@ export interface CreateBlockDto {
   text?: string;
   content?: any;
   properties?: Record<string, any>;
+  formatting?: Record<string, any>;
   position?: number;
   parentBlockId?: string | null;
 }
@@ -94,6 +102,7 @@ export interface UpdateBlockDto {
   text?: string;
   content?: any;
   properties?: Record<string, any>;
+  formatting?: Record<string, any>;
   position?: number;
   parentBlockId?: string | null;
 }
@@ -178,11 +187,12 @@ export interface WorkspaceDatabase {
 export type PageLayoutWidth = "default" | "full";
 
 export interface WorkspacePageSettings {
-  id: string;
+  id?: string;
   icon?: string | null;
   coverImage?: string | null;
   layoutWidth?: PageLayoutWidth;
   smallText?: boolean;
+  isLocked?: boolean;
   fullWidth?: boolean;
   updatedAt?: string;
 }
@@ -267,7 +277,7 @@ export interface WorkspaceRevision {
 
 // ── FE2-08 · Page Import ──────────────────────────────────────────────────────
 
-export type SupportedImportFormat = "docx" | "md" | "txt" | "html";
+export type SupportedImportFormat = "docx" | "md" | "txt" | "html" | "csv";
 
 export interface PageImportPreviewResult {
   blocks: WorkspaceBlock[];

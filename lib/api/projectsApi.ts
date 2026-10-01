@@ -144,7 +144,7 @@ export interface CreateProjectPayload {
   description?: string;
   clientId?: string;       // optional, backend allows null
   status?: "PLANNING" | "ACTIVE" | "ON_HOLD" | "COMPLETED";
-  startDate: string;
+  startDate?: string;
   endDate?: string;
 }
 
@@ -169,6 +169,26 @@ export interface AddMemberPayload {
   role?: string;
 }
 
+/**
+ * Converts a date string (e.g. "YYYY-MM-DD") to a valid ISO datetime string (e.g. "YYYY-MM-DDTHH:mm:ss.sssZ").
+ * Returns undefined if the string is empty or invalid.
+ */
+function toIsoDatetime(dateStr?: string | null): string | undefined {
+  if (!dateStr || typeof dateStr !== "string") return undefined;
+  const trimmed = dateStr.trim();
+  if (!trimmed) return undefined;
+  if (trimmed.includes("T")) {
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? undefined : d.toISOString();
+  }
+  const isoCandidate = new Date(`${trimmed}T00:00:00.000Z`);
+  if (!isNaN(isoCandidate.getTime())) {
+    return isoCandidate.toISOString();
+  }
+  const fallback = new Date(trimmed);
+  return isNaN(fallback.getTime()) ? undefined : fallback.toISOString();
+}
+
 // ── API Methods ─────────────────────────────────────────────────────────
 
 export async function getProjects(): Promise<Project[]> {
@@ -191,12 +211,20 @@ export async function getProjectById(id: string): Promise<Project> {
 }
 
 export async function createProject(data: CreateProjectPayload): Promise<Project> {
+  const payload: CreateProjectPayload = {
+    ...data,
+    ...(data.startDate ? { startDate: toIsoDatetime(data.startDate) } : {}),
+    ...(data.endDate ? { endDate: toIsoDatetime(data.endDate) } : {}),
+  };
+  if (data.startDate && !payload.startDate) delete payload.startDate;
+  if (data.endDate && !payload.endDate) delete payload.endDate;
+
   try {
-    const res = await api.post("/projects", data);
+    const res = await api.post("/projects", payload);
     return res.data?.data || res.data;
   } catch (error: any) {
     if (axios.isAxiosError(error) && (error.response?.status === 404 || error.response?.status === 405)) {
-      const res = await api.post("/projects/create", data);
+      const res = await api.post("/projects/create", payload);
       return res.data?.data || res.data;
     }
     throw error;
@@ -204,8 +232,16 @@ export async function createProject(data: CreateProjectPayload): Promise<Project
 }
 
 export async function updateProject(id: string, data: UpdateProjectPayload): Promise<Project> {
+  const payload: UpdateProjectPayload = {
+    ...data,
+    ...(data.startDate !== undefined ? { startDate: toIsoDatetime(data.startDate) } : {}),
+    ...(data.endDate !== undefined ? { endDate: toIsoDatetime(data.endDate) } : {}),
+  };
+  if (data.startDate !== undefined && !payload.startDate) delete payload.startDate;
+  if (data.endDate !== undefined && !payload.endDate) delete payload.endDate;
+
   try {
-    const res = await api.patch(`/projects/${id}`, data);
+    const res = await api.patch(`/projects/${id}`, payload);
     return res.data?.data || res.data;
   } catch (error: any) {
     throw error;

@@ -26,6 +26,7 @@ import {
 } from "@/types/salesExecution";
 import { getMeetingPrep } from "@/lib/api/salesExecutionApi";
 import EvidenceChip from "./EvidenceChip";
+import { useSalesEntities } from "@/hooks/useSalesEntities";
 
 interface MeetingPrepInterfaceProps {
   initialMeetingId?: string;
@@ -34,6 +35,7 @@ interface MeetingPrepInterfaceProps {
 export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
   initialMeetingId = "",
 }) => {
+  const { leads, contacts } = useSalesEntities();
   const [meetingId, setMeetingId] = useState(initialMeetingId);
   const [prep, setPrep] = useState<MeetingPrepBrief | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,13 +97,36 @@ export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
     <div className="meeting-prep-container">
       {/* Top Search & Meeting Selector Bar */}
       <div className="meeting-prep-topbar">
-        <form onSubmit={handleSearchSubmit} className="meeting-prep-selector">
-          <div className="sales-search-wrap" style={{ minWidth: "300px" }}>
+        <form onSubmit={handleSearchSubmit} className="meeting-prep-selector" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
+          <select
+            className="sales-select"
+            style={{ width: "240px" }}
+            value={inputMeetingId}
+            onChange={(e) => {
+              const val = e.target.value;
+              setInputMeetingId(val);
+              if (val.trim()) {
+                setMeetingId(val.trim());
+                fetchPrep(val.trim());
+              }
+            }}
+          >
+            <option value="">-- Choose Lead/Meeting --</option>
+            <optgroup label="Live Leads">
+              {leads.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.name} ({l.id})
+                </option>
+              ))}
+            </optgroup>
+          </select>
+
+          <div className="sales-search-wrap" style={{ minWidth: "240px" }}>
             <Search size={15} className="sales-search-icon" />
             <input
               type="text"
               className="sales-input sales-search-input"
-              placeholder="Enter Meeting ID (e.g. meet_test_01)..."
+              placeholder="Or enter custom Meeting ID..."
               value={inputMeetingId}
               onChange={(e) => setInputMeetingId(e.target.value)}
             />
