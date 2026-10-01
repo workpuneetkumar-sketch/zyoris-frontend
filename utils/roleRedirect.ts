@@ -89,6 +89,10 @@ export const isPathAllowed = (
     "/dashboard/reminders",
     "/dashboard/builder",
     "/dashboard/contacts",
+    // Day 6 Agent pages
+    "/support",
+    "/revops",
+    "/reports",
   ];
 
   if (ALWAYS_ALLOWED.some((p) => path === p || path.startsWith(`${p}/`))) {

@@ -34,6 +34,12 @@ const ALLOWED_MIME = [
   "text/csv",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "application/vnd.ms-excel",
+  "application/pdf",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
 ];
 
 function isValidFile(f: File) {
@@ -41,7 +47,13 @@ function isValidFile(f: File) {
     ALLOWED_MIME.includes(f.type) ||
     f.name.endsWith(".csv") ||
     f.name.endsWith(".xlsx") ||
-    f.name.endsWith(".xls")
+    f.name.endsWith(".xls") ||
+    f.name.endsWith(".pdf") ||
+    f.name.endsWith(".ppt") ||
+    f.name.endsWith(".pptx") ||
+    f.name.endsWith(".png") ||
+    f.name.endsWith(".jpg") ||
+    f.name.endsWith(".jpeg")
   );
 }
 
@@ -161,20 +173,23 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
     });
     
     if (!isValidFile(selected)) {
-      setError("Invalid file type. Please upload a CSV or Excel file (.csv, .xlsx, .xls).");
+      setError("Invalid file type. Please upload a CSV, Excel, PDF, or PPT file.");
       return;
     }
     setError(null);
     setFile(selected);
     try {
-      const parsed = await parsePreviewRows(selected, 5);
-      setPreview(parsed);
-      setMissingHeaders(validateHeaders(parsed.headers));
-      setDuplicatesInFile(detectDuplicates(parsed.rows));
-      console.log('[processFile] Preview parsed:', {
-        headers: parsed.headers,
-        rows: parsed.rows.length,
-      });
+      if (selected.name.endsWith(".csv") || selected.name.endsWith(".xlsx") || selected.name.endsWith(".xls")) {
+        const parsed = await parsePreviewRows(selected, 5);
+        setPreview(parsed);
+        setMissingHeaders(validateHeaders(parsed.headers));
+        setDuplicatesInFile(detectDuplicates(parsed.rows));
+      } else {
+        // PDF and PPT preview not locally parsed
+        setPreview(null);
+        setMissingHeaders([]);
+        setDuplicatesInFile(0);
+      }
     } catch (err) {
       console.error('[processFile] Error parsing file:', err);
       setPreview(null);
@@ -291,7 +306,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           <div>
             <h3 className="text-lg font-extrabold text-white">Bulk Import Leads</h3>
             <p className="text-xs text-blue-100 font-semibold uppercase tracking-widest mt-0.5">
-              CSV file upload · up to 5 000 rows
+              CSV, PDF, OR PPT UPLOAD · UP TO 5 000 ROWS
             </p>
           </div>
           <button
@@ -318,15 +333,15 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   isDragging ? "border-blue-500 bg-blue-50/40" : "border-slate-200 hover:border-blue-400 hover:bg-slate-50"
                 }`}
               >
-                <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileChange} className="hidden" />
+                <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.pdf,.ppt,.pptx" onChange={handleFileChange} className="hidden" />
                 <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mb-3">
                   <Upload size={24} />
                 </div>
                 <p className="text-sm font-extrabold text-slate-900 mb-1">
-                  {isDragging ? "Drop CSV here" : "Choose a file or drag & drop"}
+                  {isDragging ? "Drop file here" : "Choose a file or drag & drop"}
                 </p>
                 <p className="text-xs text-slate-400 font-semibold uppercase tracking-widest">
-                  CSV only · max 10 MB / 5 000 rows
+                  CSV, PDF, PPT · MAX 10 MB / 5 000 ROWS
                 </p>
               </div>
 
@@ -581,7 +596,11 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
               </div>
               <div>
                 <h4 className="text-base font-extrabold text-gray-900 mb-1">
-                  {jobStatus ? statusLabel(jobStatus.status) : "Starting import…"}
+                  {jobStatus 
+                    ? (jobStatus.totalRows === 0 && file?.name.match(/\.(pdf|ppt|pptx)$/i)
+                        ? "Extracting leads from document…"
+                        : statusLabel(jobStatus.status))
+                    : "Starting import…"}
                 </h4>
                 <p className="text-xs text-gray-400">{file?.name}</p>
               </div>
@@ -591,15 +610,19 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-1.5">
                   <span>
                     {jobStatus
-                      ? `${jobStatus.processedRows.toLocaleString()} / ${jobStatus.totalRows.toLocaleString()} rows`
+                      ? (jobStatus.totalRows === 0 && file?.name.match(/\.(pdf|ppt|pptx)$/i)
+                          ? "Parsing document text..."
+                          : `${jobStatus.processedRows.toLocaleString()} / ${jobStatus.totalRows.toLocaleString()} rows`)
                       : "Waiting for server…"}
                   </span>
-                  <span className="font-bold tabular-nums">{Math.round(progressPct)}%</span>
+                  {!(jobStatus?.totalRows === 0 && file?.name.match(/\.(pdf|ppt|pptx)$/i)) && (
+                    <span className="font-bold tabular-nums">{Math.round(progressPct)}%</span>
+                  )}
                 </div>
-                <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="w-full h-2.5 bg-gray-100 rounded-full overflow-hidden relative">
                   <div
-                    className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                    style={{ width: `${progressPct}%` }}
+                    className={`h-full bg-blue-600 rounded-full transition-all duration-500 ${jobStatus?.totalRows === 0 && file?.name.match(/\.(pdf|ppt|pptx)$/i) ? 'w-full animate-pulse opacity-75' : ''}`}
+                    style={{ width: jobStatus?.totalRows === 0 && file?.name.match(/\.(pdf|ppt|pptx)$/i) ? '100%' : `${progressPct}%` }}
                   />
                 </div>
               </div>

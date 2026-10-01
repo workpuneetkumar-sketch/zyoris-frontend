@@ -270,6 +270,18 @@ const NAV_GROUPS: NavGroup[] = [
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
       },
       {
+        href: "/support",
+        label: "Support",
+        icon: MessageSquare,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
+        href: "/revops",
+        label: "RevOps",
+        icon: TrendingUp,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+      },
+      {
         href: "/automation",
         label: "Automation",
         icon: Zap,

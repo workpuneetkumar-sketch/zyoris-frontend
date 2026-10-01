@@ -127,5 +127,6 @@ export interface Lead {
     };
     tags?: string[];
     note?: string;
+    customFields?: Record<string, string>;
     [key: string]: unknown;
 }
