@@ -985,7 +985,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setOpenGroups((prev) => {
       let changed = false;
       const next = { ...prev };
-      visibleNavGroups.forEach((group) => {
+      visibleNavGroups.forEach((group) => {      
         if (next[group.label] !== undefined) return;
         const hasActiveItem = group.items.some(
           (item) =>
