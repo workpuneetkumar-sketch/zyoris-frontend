@@ -295,6 +295,7 @@ export default function LeadDetailPage() {
     const { data: extractionData, cleanNote } = parseExtractionData(lead);
     const hasNote = cleanNote && cleanNote.trim().length > 0;
     const isWhatsAppAI = lead.source === "whatsapp_ai_detection";
+    const hasCustomFields = lead.customFields && Object.keys(lead.customFields).length > 0;
 
     // ── Detail view ───────────────────────────────────────────────────────────
     return (
@@ -524,8 +525,28 @@ export default function LeadDetailPage() {
                 </div>
             )}
 
+            {/* Custom Fields */}
+            {hasCustomFields && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="px-5 py-3 border-b border-gray-50 bg-gray-50/50">
+                        <h3 className="text-sm font-semibold text-gray-700">Custom Extracted Details</h3>
+                    </div>
+                    <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-y-4 gap-x-6">
+                        {Object.entries(lead.customFields!).map(([key, value]) => (
+                            <div key={key} className="flex items-start gap-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5 shrink-0" />
+                                <div>
+                                    <p className="text-xs text-gray-400 mb-0.5 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                    <p className="text-sm text-gray-800">{safeString(value)}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Empty State - If no data at all */}
-            {!hasContactInfo && !hasTags && !hasNote && (
+            {!hasContactInfo && !hasTags && !hasNote && !hasCustomFields && (
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 text-center">
                     <p className="text-gray-400 text-sm">No additional information available for this lead.</p>
                     <p className="text-gray-300 text-xs mt-1">Contact details, tags, and notes will appear here once added.</p>
