@@ -983,7 +983,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (hasActiveItem) {
           next[group.label] = true;
           changed = true;
-        }
+        }    
       });
       if (changed) {
         try {
