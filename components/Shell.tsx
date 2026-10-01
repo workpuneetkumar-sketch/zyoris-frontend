@@ -81,12 +81,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM",
     items: [
       {
-        href: "/workspace",
-        label: "Workspace / Notion",
-        icon: FileText,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
-      },
-      {
         href: "/leads",
         label: "Leads",
         icon: Users,
@@ -145,6 +139,12 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Communication",
     items: [
+      {
+        href: "/workspace",
+        label: "Workspace",
+        icon: FileText,
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
+      },
       {
         href: "/communications",
         label: "Communication Hub",
@@ -608,6 +608,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const COMMUNICATION_STATIC_GROUP = {
     label: "Communication",
     items: [
+      { href: "/workspace",      label: "Workspace",         icon: FileText },
       { href: "/communications", label: "Communication Hub", icon: Inbox },
       { href: "/email",          label: "Email",             icon: Mail },
       { href: "/whatsapp",       label: "WhatsApp",          icon: MessageSquare },
@@ -719,7 +720,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       // ── Key → expanded items ──────────────────────────────────────────
       const KEY_EXPANSION: Record<string, { href: string; label: string; iconKey: string }[]> = {
         crm: [
-          { href: "/workspace",   label: "Workspace",   iconKey: "workspace"   },
           { href: "/leads",       label: "Leads",       iconKey: "leads"       },
           { href: "/deals",       label: "Deals",       iconKey: "deals"       },
           { href: "/customers",   label: "Customers",   iconKey: "customers"   },
@@ -730,6 +730,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           { href: "/ai-insights", label: "AI Insights", iconKey: "ai-insights" },
         ],
         communication: [
+          { href: "/workspace",      label: "Workspace",         iconKey: "workspace"      },
           { href: "/communications", label: "Communication Hub", iconKey: "communications" },
           { href: "/email",          label: "Email",             iconKey: "email"          },
           { href: "/whatsapp",       label: "WhatsApp",          iconKey: "whatsapp"       },
@@ -740,6 +741,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           { href: "/meetings",       label: "Meetings",          iconKey: "meetings"       },
         ],
         communications: [
+          { href: "/workspace",      label: "Workspace",         iconKey: "workspace"      },
           { href: "/communications", label: "Communication Hub", iconKey: "communications" },
           { href: "/email",          label: "Email",             iconKey: "email"          },
           { href: "/whatsapp",       label: "WhatsApp",          iconKey: "whatsapp"       },
@@ -753,6 +755,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       // ── Group buckets ─────────────────────────────────────────────────
       const KEY_TO_GROUP: Record<string, string> = {
+        workspace: "Communication",
         leads: "CRM", deals: "CRM", customers: "CRM", "ai-insights": "CRM",
         contacts: "CRM", companies: "CRM", activities: "CRM",
         reminders: "CRM", crm: "CRM",
@@ -787,6 +790,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       };
 
       const ROUTE_TO_GROUP: Record<string, string> = {
+        "/workspace": "Communication",
         "/leads": "CRM", "/deals": "CRM", "/customers": "CRM", "/ai-insights": "CRM",
         "/contacts": "CRM", "/companies": "CRM", "/activities": "CRM",
         "/sales/execution": "CRM", "/sales/activities": "CRM",
@@ -920,19 +924,27 @@ export function AppShell({ children }: { children: ReactNode }) {
         });
       }
 
-      // ── Always ensure Workspace and Sales Execution are present in CRM group ──
+      // ── Always ensure Sales Execution is present in CRM group and Workspace is removed ──
+      if (itemsByGroup["CRM"]) {
+        itemsByGroup["CRM"] = itemsByGroup["CRM"].filter((x) => x.href !== "/workspace");
+      }
       if (!itemsByGroup["CRM"]) {
         itemsByGroup["CRM"] = [
-          { href: "/workspace", label: "Workspace", icon: FileText },
           { href: "/sales/execution", label: "Sales Execution", icon: TrendingUp },
         ];
       } else {
-        if (!itemsByGroup["CRM"].some((x) => x.href === "/workspace")) {
-          itemsByGroup["CRM"].unshift({ href: "/workspace", label: "Workspace", icon: FileText });
-        }
         if (!itemsByGroup["CRM"].some((x) => x.href === "/sales/execution")) {
           itemsByGroup["CRM"].push({ href: "/sales/execution", label: "Sales Execution", icon: TrendingUp });
         }
+      }
+
+      // ── Always ensure Workspace is present in Communication group ──
+      if (!itemsByGroup["Communication"]) {
+        itemsByGroup["Communication"] = [
+          { href: "/workspace", label: "Workspace", icon: FileText },
+        ];
+      } else if (!itemsByGroup["Communication"].some((x) => x.href === "/workspace")) {
+        itemsByGroup["Communication"].unshift({ href: "/workspace", label: "Workspace", icon: FileText });
       }
 
       // ── Build groups in display order ─────────────────────────────────
@@ -971,7 +983,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (hasActiveItem) {
           next[group.label] = true;
           changed = true;
-        }
+        }    
       });
       if (changed) {
         try {
