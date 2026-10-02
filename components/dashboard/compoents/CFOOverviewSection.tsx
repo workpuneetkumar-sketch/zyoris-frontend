@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api/api";
 import {
   DollarSign, BarChart2, ShieldCheck, PieChart, Wallet,
@@ -46,37 +46,36 @@ export function CFOOverviewSection({ token }: { token: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadCfoData = useCallback(async () => {
     if (!token) return;
+    try {
+      setLoading(true);
+      setError(null);
 
-    async function loadCfoData() {
-      try {
-        setLoading(true);
-        setError(null);
+      const [cfoRes, forecastRes] = await Promise.all([
+        api.get<CFODashboardData>("/dashboard/cfo"),
+        api.get<ForecastResponse>("/analytics/revenue/forecast").catch(err => {
+          console.error("Forecast fetch failed for CFO", err);
+          return { data: null };
+        })
+      ]);
 
-        const [cfoRes, forecastRes] = await Promise.all([
-          api.get<CFODashboardData>("/dashboard/cfo"),
-          api.get<ForecastResponse>("/analytics/revenue/forecast").catch(err => {
-            console.error("Forecast fetch failed for CFO", err);
-            return { data: null }; // Graceful fallback
-          })
-        ]);
-
-        setData(cfoRes.data);
-        if (forecastRes.data) {
-          setForecast(forecastRes.data);
-        }
-      } catch (err: any) {
-        console.error("CFO Dashboard Load Error", err);
-        setError("Failed to retrieve financial parameters.");
-        toast.error("Error loading financial data.");
-      } finally {
-        setLoading(false);
+      setData(cfoRes.data);
+      if (forecastRes.data) {
+        setForecast(forecastRes.data);
       }
+    } catch (err: any) {
+      console.error("CFO Dashboard Load Error", err);
+      setError("Failed to retrieve financial parameters.");
+      toast.error("Error loading financial data.");
+    } finally {
+      setLoading(false);
     }
+  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
     loadCfoData();
-  }, [token]);
+  }, [loadCfoData]);
 
   if (loading) {
     return (
@@ -99,7 +98,7 @@ export function CFOOverviewSection({ token }: { token: string }) {
       <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center text-red-600">
         <p className="text-sm font-semibold">{error || "Failed to load financial workspace."}</p>
         <button
-          onClick={() => window.location.reload()}
+          onClick={loadCfoData}
           className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition-colors"
         >
           <RefreshCw size={12} /> Retry
@@ -137,15 +136,15 @@ export function CFOOverviewSection({ token }: { token: string }) {
     }
   ];
 
-  // Derive category expenses dynamically using standard proportions
+  // Real expense category data from backend
+  // The /dashboard/cfo endpoint returns expensesSummary.totalExpenses (a scalar).
+  // Per-category breakdown is NOT returned by the backend — we do NOT fabricate proportions.
   const totalExpensesVal = expensesSummary.totalExpenses || 0;
-  const derivedExpenses = [
-    { name: "Salary & Wages", value: Math.round(totalExpensesVal * 0.40) },
-    { name: "Marketing Campaigns", value: Math.round(totalExpensesVal * 0.25) },
-    { name: "Office Rent & Tech", value: Math.round(totalExpensesVal * 0.18) },
-    { name: "Travel & Leisure", value: Math.round(totalExpensesVal * 0.12) },
-    { name: "Miscellaneous", value: Math.round(totalExpensesVal * 0.05) }
-  ].filter(item => item.value > 0);
+  // Use categories[] if the backend ever adds them; otherwise show honest empty state
+  const expenseCategories: Array<{ name: string; amount: number }> =
+    Array.isArray((expensesSummary as any).categories)
+      ? (expensesSummary as any).categories
+      : [];
 
   // Prepare chart data for revenue forecast
   const revenueChartData = forecast
@@ -245,17 +244,21 @@ export function CFOOverviewSection({ token }: { token: string }) {
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col h-[380px]">
           <div>
             <h3 className="text-sm font-bold text-gray-800">Expense Allocations</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Dynamic cost categories proportional to total spend.</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              {totalExpensesVal > 0
+                ? `Total spend: $${Math.round(totalExpensesVal).toLocaleString()}`
+                : "Cost category breakdown from backend."}
+            </p>
           </div>
-          
+
           <div className="flex-1 min-h-0 w-full flex flex-col sm:flex-row items-center justify-center gap-4 mt-2">
-            {totalExpensesVal > 0 ? (
+            {expenseCategories.length > 0 ? (
               <>
                 <div className="w-[180px] h-[180px] shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <RechartsPieChart>
                       <Pie
-                        data={derivedExpenses}
+                        data={expenseCategories.map(c => ({ name: c.name, value: c.amount }))}
                         cx="50%"
                         cy="50%"
                         innerRadius={55}
@@ -263,7 +266,7 @@ export function CFOOverviewSection({ token }: { token: string }) {
                         paddingAngle={3}
                         dataKey="value"
                       >
-                        {derivedExpenses.map((entry, index) => (
+                        {expenseCategories.map((_, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -272,22 +275,45 @@ export function CFOOverviewSection({ token }: { token: string }) {
                   </ResponsiveContainer>
                 </div>
                 <div className="flex-1 space-y-2.5 w-full sm:w-auto">
-                  {derivedExpenses.map((item, idx) => (
+                  {expenseCategories.map((item, idx) => (
                     <div key={item.name} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                         <span className="text-gray-500 font-medium">{item.name}</span>
                       </div>
                       <span className="text-gray-800 font-semibold font-mono">
-                        ${item.value.toLocaleString()} ({Math.round((item.value / totalExpensesVal) * 100)}%)
+                        ${item.amount.toLocaleString()}
+                        {totalExpensesVal > 0 && (
+                          <span className="text-gray-400 ml-1">
+                            ({Math.round((item.amount / totalExpensesVal) * 100)}%)
+                          </span>
+                        )}
                       </span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <div className="h-full w-full flex items-center justify-center text-sm text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                No expense allocations available.
+              /* Backend does not return expense category breakdown.
+                 Show the total only — no fabricated proportions. */
+              <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-center">
+                {totalExpensesVal > 0 ? (
+                  <>
+                    <div className="w-28 h-28 rounded-full border-4 border-dashed border-gray-200 flex items-center justify-center">
+                      <div className="text-center">
+                        <p className="text-lg font-extrabold text-gray-800">
+                          ${Math.round(totalExpensesVal / 1000)}k
+                        </p>
+                        <p className="text-[10px] text-gray-400">Total</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 max-w-[200px] leading-relaxed">
+                      Category breakdown unavailable — backend returns total spend only.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400">No expense data available.</p>
+                )}
               </div>
             )}
           </div>
