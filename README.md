@@ -31,7 +31,7 @@ Zyoris is an enterprise-grade full-stack SaaS platform that ingests data from CR
    npm run dev
    ```
 
-   Backend runs on `http://localhost:4000`.
+   Backend runs on `https://zyoris.onrender.com` (deployed) or `http://localhost:4000` (local dev).
 
 2. **Frontend**
 
@@ -44,6 +44,10 @@ Zyoris is an enterprise-grade full-stack SaaS platform that ingests data from CR
 
    Frontend runs on `http://localhost:3000`.
 
+   > **Backend URL:** Set `NEXT_PUBLIC_BACKEND_URL` in `.env`.
+   > - Deployed backend: `NEXT_PUBLIC_BACKEND_URL=https://zyoris.onrender.com`
+   > - Local backend: `NEXT_PUBLIC_BACKEND_URL=http://localhost:4000`
+
 ### Docker (full stack)
 
 ```bash
@@ -53,7 +57,7 @@ docker-compose up --build
 This starts:
 
 - Postgres on `5432`
-- Backend on `4000`
+- Backend on `4000` (or use the deployed instance at `https://zyoris.onrender.com`)
 - Frontend on `3000`
 
 ### Seed users and roles
