@@ -1,5 +1,6 @@
 // components/tasks/TaskDetailModal.tsx
 "use client";
+import { cleanTaskDescription } from "@/utils/taskUtils";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -527,10 +528,6 @@ export function TaskDetailModal({
                 {/* ── Top Header Bar ─────────────────────────────────────────── */}
                 <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/80">
                     <div className="flex items-center space-x-2.5">
-                        <span className="text-xs font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-1 rounded-md border border-blue-200/60 dark:border-blue-800">
-                            TASK-{task.id.slice(-6).toUpperCase()}
-                        </span>
-
                         {/* Status dropdown quick toggle */}
                         <select
                             value={task.status}
@@ -1233,7 +1230,7 @@ export function TaskDetailModal({
                                     ) : (
                                         <input
                                             type="text"
-                                            placeholder="Task ID to depend on (e.g. task_xyz)..."
+                                            placeholder="Select task to depend on..."
                                             value={newDepId}
                                             onChange={(e) => setNewDepId(e.target.value)}
                                             className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
@@ -1441,10 +1438,8 @@ export function TaskDetailModal({
                 </div>
 
                 {/* ── Footer ─────────────────────────────────────────────────── */}
-                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 flex justify-between items-center">
-                    <span className="text-[11px] text-slate-400 font-mono">
-                        TASK ID: {task.id}
-                    </span>
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 flex justify-end items-center">
+                    
                     <button
                         onClick={onClose}
                         className="px-4 py-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl text-xs font-bold hover:opacity-90 transition"

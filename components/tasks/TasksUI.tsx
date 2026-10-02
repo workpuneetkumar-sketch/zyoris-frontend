@@ -1,5 +1,6 @@
 // components/tasks/TasksUI.tsx
 "use client";
+import { cleanTaskDescription } from "@/utils/taskUtils";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -1105,9 +1106,6 @@ export function TasksUI({
                                                                 {/* Card Top: Key, Priority, Selection */}
                                                                 <div className="flex justify-between items-center">
                                                                     <div className="flex items-center space-x-2">
-                                                                        <span className="text-[10px] font-mono font-bold text-slate-400">
-                                                                            TASK-{task.id.slice(-4).toUpperCase()}
-                                                                        </span>
                                                                         <span
                                                                             className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
                                                                                 PRIORITY_STYLES[task.priority]
@@ -1137,9 +1135,9 @@ export function TasksUI({
                                                                 </h4>
 
                                                                 {/* Description Snippet */}
-                                                                {task.description && (
+                                                                {Boolean(cleanTaskDescription(task.description)) && (
                                                                     <p className="text-[11px] text-slate-400 line-clamp-2 leading-relaxed">
-                                                                        {task.description}
+                                                                        {cleanTaskDescription(task.description)}
                                                                     </p>
                                                                 )}
 
@@ -1328,9 +1326,6 @@ export function TasksUI({
                                                                     className="text-left group-hover:text-blue-600 dark:group-hover:text-blue-400 transition"
                                                                 >
                                                                     <div className="flex items-center space-x-2">
-                                                                        <span className="text-[10px] font-mono text-slate-400 font-bold">
-                                                                            TASK-{task.id.slice(-4).toUpperCase()}
-                                                                        </span>
                                                                         <span
                                                                             className={`font-semibold text-sm ${
                                                                                 task.status === "DONE"
@@ -1341,9 +1336,9 @@ export function TasksUI({
                                                                             {task.title}
                                                                         </span>
                                                                     </div>
-                                                                    {task.description && (
+                                                                    {Boolean(cleanTaskDescription(task.description)) && (
                                                                         <p className="text-xs text-slate-400 truncate max-w-md mt-0.5">
-                                                                            {task.description}
+                                                                            {cleanTaskDescription(task.description)}
                                                                         </p>
                                                                     )}
                                                                 </button>
