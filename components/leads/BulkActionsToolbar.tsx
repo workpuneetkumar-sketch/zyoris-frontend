@@ -671,10 +671,12 @@ function SuccessBanner({
 
 export function LeadCheckbox({
   leadId,
+  leadName,
   isSelected,
   onToggle,
 }: {
   leadId: string;
+  leadName?: string;
   isSelected: boolean;
   onToggle: (id: string) => void;
 }) {
@@ -684,7 +686,7 @@ export function LeadCheckbox({
       checked={isSelected}
       onChange={() => onToggle(leadId)}
       className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-      aria-label={`Select lead ${leadId}`}
+      aria-label={leadName ? `Select lead ${leadName}` : "Select lead"}
     />
   );
 }

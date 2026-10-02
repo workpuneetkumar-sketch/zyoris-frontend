@@ -52,6 +52,7 @@ import {
   tickSequence,
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
 
 interface SequencesCadenceWorkspaceProps {
   customerId?: string;
@@ -767,7 +768,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                           )}
                           {enr.leadId && (
                             <span className="sales-pill sales-pill-sub">
-                              Lead: {enr.leadId}
+                              Lead: {leads.find((l) => l.id === enr.leadId)?.name || "Enrolled Lead"}
                             </span>
                           )}
                         </div>
@@ -1227,7 +1228,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                     >
                       {contacts.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.name} {c.email ? `(${c.email})` : ""} - {c.id}
+                          {c.name}{c.email ? ` (${c.email})` : ""}
                         </option>
                       ))}
                     </select>
@@ -1239,7 +1240,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                     >
                       {leads.map((l) => (
                         <option key={l.id} value={l.id}>
-                          {l.name} {l.details ? `(${l.details})` : ""} - {l.id}
+                          {formatLeadOptionLabel(l)}
                         </option>
                       ))}
                     </select>
@@ -1251,7 +1252,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                     >
                       {deals.map((d) => (
                         <option key={d.id} value={d.id}>
-                          {d.name} {d.details ? `(${d.details})` : ""} - {d.id}
+                          {d.name}{d.details ? ` (${d.details})` : ""}
                         </option>
                       ))}
                     </select>

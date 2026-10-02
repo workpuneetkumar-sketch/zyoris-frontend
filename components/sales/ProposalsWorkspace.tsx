@@ -43,6 +43,7 @@ import {
   createProposalRule,
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel } from "@/lib/utils/leadDisplay";
 
 const PROPOSALS_STORAGE_KEY = "zyoris_proposals_cache";
 
@@ -1298,19 +1299,19 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                         {targetEntityType === "DEAL" &&
                           deals.map((d) => (
                             <option key={d.id} value={d.id}>
-                              {d.name} {d.details ? `(${d.details})` : `[${d.id}]`}
+                              {d.name}{d.details ? ` (${d.details})` : ""}
                             </option>
                           ))}
                         {targetEntityType === "LEAD" &&
                           leads.map((l) => (
                             <option key={l.id} value={l.id}>
-                              {l.name} {l.email ? `(${l.email})` : `[${l.id}]`}
+                              {formatLeadOptionLabel(l)}
                             </option>
                           ))}
                         {(targetEntityType === "CUSTOMER" || targetEntityType === "CONTACT") &&
                           contacts.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.name} {c.email ? `(${c.email})` : `[${c.id}]`}
+                              {c.name}{c.email ? ` (${c.email})` : ""}
                             </option>
                           ))}
                         {targetEntityType === "COMPANY" && (

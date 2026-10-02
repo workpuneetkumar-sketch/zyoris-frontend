@@ -33,6 +33,7 @@ import {
   getOutreachDraftById,
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
 
 interface OutreachGeneratorWorkspaceProps {
   leadId?: string;
@@ -171,7 +172,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
       content: channelBody,
       status: "DRAFT",
       evidence: [
-        `Grounded in active CRM entity record: ${entityName} (${targetEntityId})`,
+        `Grounded in active CRM entity record: ${entityName}`,
         `Context objective: ${goal.trim() || "Pipeline progress and meeting acceleration"}`,
         `Governance standard: Verified compliance with 15% discount rules`,
       ],
@@ -407,7 +408,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                   >
                     {deals.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name} {d.details ? `(${d.details})` : ""} - {d.id}
+                        {d.name}{d.details ? ` (${d.details})` : ""}
                       </option>
                     ))}
                   </select>
@@ -419,7 +420,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                   >
                     {leads.map((l) => (
                       <option key={l.id} value={l.id}>
-                        {l.name} {l.details ? `(${l.details})` : ""} - {l.id}
+                        {formatLeadOptionLabel(l)}
                       </option>
                     ))}
                   </select>
@@ -431,7 +432,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                   >
                     {contacts.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.email ? `(${c.email})` : ""} - {c.id}
+                        {c.name}{c.email ? ` (${c.email})` : ""}
                       </option>
                     ))}
                   </select>
@@ -441,7 +442,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                     className="sales-input"
                     value={targetEntityId}
                     onChange={(e) => setTargetEntityId(e.target.value)}
-                    placeholder={`Enter ${targetEntityType.toLowerCase()} UUID...`}
+                    placeholder={`Enter ${targetEntityType.toLowerCase()} reference...`}
                     required
                   />
                 )}
@@ -449,7 +450,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
             </div>
 
             {/* CRM Facts & Context Evidence Card */}
-            {(selectedDeal || selectedLead || selectedContact || targetEntityId) && (
+            {(selectedDeal || selectedLead || selectedContact || (!isTechnicalId(targetEntityId) && targetEntityId)) && (
               <div style={{ padding: "0.75rem", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8rem" }}>
                 <span style={{ fontWeight: 600, color: "var(--color-text)", display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.35rem" }}>
                   <ShieldCheck size={13} style={{ color: "var(--color-primary)" }} />
@@ -474,7 +475,9 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                       {selectedContact.email && <span className="sales-pill sales-pill-sub">{selectedContact.email}</span>}
                     </>
                   )}
-                  <span className="sales-pill sales-pill-sub">ID: {targetEntityId}</span>
+                  {!selectedDeal && !selectedLead && !selectedContact && !isTechnicalId(targetEntityId) && targetEntityId && (
+                    <span className="sales-pill sales-pill-sub">Target: {targetEntityId}</span>
+                  )}
                 </div>
               </div>
             )}

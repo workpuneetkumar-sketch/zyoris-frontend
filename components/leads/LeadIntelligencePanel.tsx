@@ -748,7 +748,7 @@ export function LeadIntelligencePanel({ lead }: LeadIntelligencePanelProps) {
               Config version {intelligence?.score?.configVersion ?? "—"}
             </span>
             <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-gray-100 text-gray-700">
-              Lead ID {lead.id}
+              {lead.name ? (lead.company ? `${lead.name} (${lead.company})` : lead.name) : (lead.company || lead.email || "Selected Lead")}
             </span>
           </div>
         </div>

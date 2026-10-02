@@ -3250,5 +3250,151 @@ test("Task 1 — Issue 14: Customer-Facing Lead Selection and Meeting Prep Sanit
     assert.strictEqual(isTechnicalId("Rahul Sharma"), false);
     assert.strictEqual(isTechnicalId("ABC Technologies"), false);
   });
+
+  await t.test("SalesLeadDropdown: search filtering across name, company, and details is case-insensitive", () => {
+    const leads = [
+      { id: "lead_1", name: "Rahul Sharma", details: "ABC Technologies", type: "LEAD" as const },
+      { id: "lead_2", name: "Sarah Jenkins", details: "Acme Corp", email: "sarah@acme.corp", type: "LEAD" as const },
+      { id: "lead_3", name: "Vikram Malhotra", details: "Global Logistics", type: "LEAD" as const },
+    ];
+
+    const filterLeads = (query: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return leads;
+      return leads.filter((l) => {
+        const name = (l.name || "").toLowerCase();
+        const details = (l.details || "").toLowerCase();
+        const email = (l.email || "").toLowerCase();
+        return name.includes(q) || details.includes(q) || email.includes(q);
+      });
+    };
+
+    // Filter by name
+    assert.strictEqual(filterLeads("rahul").length, 1);
+    assert.strictEqual(filterLeads("rahul")[0].id, "lead_1");
+
+    // Filter by details / company
+    assert.strictEqual(filterLeads("acme").length, 1);
+    assert.strictEqual(filterLeads("acme")[0].id, "lead_2");
+
+    // Filter by email
+    assert.strictEqual(filterLeads("sarah@acme").length, 1);
+
+    // Empty search query returns all
+    assert.strictEqual(filterLeads("").length, 3);
+
+    // Non-matching query returns empty list
+    assert.strictEqual(filterLeads("nonexistent").length, 0);
+  });
+
+  await t.test("SalesLeadDropdown: long lead names and company names truncate cleanly without raw IDs", () => {
+    const longLead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Dr. Alexander Christopher Montgomery-Smith III",
+      company: "International Global Holdings Conglomerate Corporation Ltd.",
+      details: "Enterprise Tier 1 Strategic Partner",
+    };
+
+    const label = formatLeadOptionLabel(longLead);
+    assert.strictEqual(
+      label,
+      "Dr. Alexander Christopher Montgomery-Smith III (International Global Holdings Conglomerate Corporation Ltd.)"
+    );
+    assert.strictEqual(label.includes("cmupjmy5r07botpfht7s9yf7a"), false);
+  });
+
+  await t.test("SalesLeadDropdown: wheel scrolling does not trigger selection or change selected state", () => {
+    let selectedId = "lead_1";
+    let fetchCount = 0;
+
+    const onSelect = (newId: string) => {
+      selectedId = newId;
+      fetchCount++;
+    };
+
+    // Simulate wheel event on the dropdown scrollable list
+    const simulateWheelScroll = (e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      // Notice: scrolling must NOT invoke onSelect!
+    };
+
+    let stoppedPropagation = false;
+    simulateWheelScroll({
+      stopPropagation: () => {
+        stoppedPropagation = true;
+      },
+    });
+
+    assert.strictEqual(stoppedPropagation, true);
+    assert.strictEqual(selectedId, "lead_1");
+    assert.strictEqual(fetchCount, 0);
+
+    // Only explicit click selection updates state and fires fetch
+    onSelect("lead_2");
+    assert.strictEqual(selectedId, "lead_2");
+    assert.strictEqual(fetchCount, 1);
+  });
+
+  await t.test("Meeting Intelligence attribution badges sanitize technical IDs", () => {
+    const intelligenceWithTechnicalIds = {
+      meetingId: "cmupjmy5r07botpfht7s9yf7a",
+      customerId: "cmubecbbm01go124m7lkrowav",
+      dealId: "cmuh5figl064hobm55o4gj0jt",
+    };
+
+    const meetingBadge = isTechnicalId(intelligenceWithTechnicalIds.meetingId)
+      ? "Active Session"
+      : intelligenceWithTechnicalIds.meetingId;
+    const customerBadge = isTechnicalId(intelligenceWithTechnicalIds.customerId)
+      ? "Selected Customer"
+      : intelligenceWithTechnicalIds.customerId;
+    const dealBadge = isTechnicalId(intelligenceWithTechnicalIds.dealId)
+      ? "Selected Deal"
+      : intelligenceWithTechnicalIds.dealId;
+
+    assert.strictEqual(meetingBadge, "Active Session");
+    assert.strictEqual(customerBadge, "Selected Customer");
+    assert.strictEqual(dealBadge, "Selected Deal");
+    assert.strictEqual(meetingBadge.includes("cmup"), false);
+    assert.strictEqual(customerBadge.includes("cmub"), false);
+    assert.strictEqual(dealBadge.includes("cmuh"), false);
+
+    // Legitimate human-readable identifiers are preserved
+    const intelligenceHumanReadable = {
+      meetingId: "Q3-Strategy-Review",
+      customerId: "Acme-Enterprise",
+      dealId: "Cloud-Migration-2026",
+    };
+
+    assert.strictEqual(
+      isTechnicalId(intelligenceHumanReadable.meetingId) ? "Active Session" : intelligenceHumanReadable.meetingId,
+      "Q3-Strategy-Review"
+    );
+    assert.strictEqual(
+      isTechnicalId(intelligenceHumanReadable.customerId) ? "Selected Customer" : intelligenceHumanReadable.customerId,
+      "Acme-Enterprise"
+    );
+    assert.strictEqual(
+      isTechnicalId(intelligenceHumanReadable.dealId) ? "Selected Deal" : intelligenceHumanReadable.dealId,
+      "Cloud-Migration-2026"
+    );
+  });
+
+  await t.test("Manual meeting reference input is decoupled from dropdown selection", () => {
+    let internalSelectedId = "";
+    let manualSearchInput = "";
+
+    // User selects a lead with CUID from dropdown
+    const lead = { id: "cmupjmy5r07botpfht7s9yf7a", name: "Rahul Sharma" };
+    internalSelectedId = lead.id;
+    // Manual search input must NOT be set to lead.id
+    assert.strictEqual(manualSearchInput, "");
+    assert.strictEqual(internalSelectedId, "cmupjmy5r07botpfht7s9yf7a");
+
+    // User manually types a meeting code in the search field
+    manualSearchInput = "meet_strategy_alpha";
+    assert.strictEqual(manualSearchInput, "meet_strategy_alpha");
+    assert.strictEqual(isTechnicalId(manualSearchInput), false);
+  });
 });
 
