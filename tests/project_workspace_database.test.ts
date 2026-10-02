@@ -139,6 +139,94 @@ export function filterProjectTasks(
   });
 }
 
+// ── Pure Activity Sanitization Logic Under Test (mirrors ProjectWorkspace.tsx) ──
+
+export function isTechnicalCuidOrUuid(val?: string | null): boolean {
+  if (!val) return false;
+  const s = val.trim();
+  return (
+    /^c[a-z0-9]{20,}$/i.test(s) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  );
+}
+
+export function formatProjectActivityInherited(
+  project?: { id?: string; name?: string } | null
+): string {
+  const name = project?.name?.trim();
+  const id = project?.id?.trim();
+  const hasValidName = !!(name && !isTechnicalCuidOrUuid(name) && name !== id);
+
+  if (hasValidName && name) {
+    return `Activity inherited from ${name}`;
+  }
+  return "Activity inherited from project";
+}
+
+export function sanitizeProjectActivityMessage(
+  message?: string | null,
+  project?: { id?: string; name?: string } | null
+): string {
+  if (!message) return "";
+
+  const name = project?.name?.trim();
+  const id = project?.id?.trim();
+  const hasValidName = !!(name && !isTechnicalCuidOrUuid(name) && name !== id);
+
+  let result = message;
+
+  // 1. Inherited Project ID / Project ID / projectId patterns (e.g. "Project ID: cmxxxxxxxx", "Inherited project ID cmxxxxxxxx")
+  result = result.replace(
+    /(?:Inherited\s+project\s+ID|Project\s+ID|projectId)[:\s]+(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    (match) => {
+      if (/^Inherited/i.test(match)) {
+        return hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project";
+      }
+      return hasValidName ? (name as string) : "";
+    }
+  );
+
+  // 2. "Activity inherited from project cmxxxxxxxx" or "Inherited from project cmxxxxxxxx"
+  result = result.replace(
+    /(?:Activity\s+inherited\s+from\s+project|Inherited\s+from\s+project)\s+(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project"
+  );
+
+  // 3. "Project cmxxxxxxxx was updated"
+  result = result.replace(
+    /Project\s+(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    hasValidName ? `${name}` : "Project"
+  );
+
+  // 4. If project.id is known and matches a technical ID, sanitize exact occurrences
+  if (id && (isTechnicalCuidOrUuid(id) || id.length >= 15)) {
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const inheritedWithId = new RegExp(`(?:Inherited\\s+project\\s+ID|Project\\s+ID|projectId)[:\\s]+${escapedId}`, "gi");
+    result = result.replace(inheritedWithId, (match) => {
+      if (/^Inherited/i.test(match)) {
+        return hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project";
+      }
+      return hasValidName ? (name as string) : "";
+    });
+
+    const inheritedFromProjWithId = new RegExp(`(?:Activity\\s+inherited\\s+from\\s+project|Inherited\\s+from\\s+project)\\s+${escapedId}`, "gi");
+    result = result.replace(inheritedFromProjWithId, hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project");
+
+    const projWithId = new RegExp(`Project\\s+${escapedId}`, "gi");
+    result = result.replace(projWithId, hasValidName ? (name as string) : "Project");
+
+    // Any remaining isolated exact technical project.id
+    const rawIdOnly = new RegExp(`\\b${escapedId}\\b`, "g");
+    result = result.replace(rawIdOnly, hasValidName ? (name as string) : "");
+  }
+
+  // 5. Clean any remaining standalone raw database CUID (20+ chars) or UUIDs (36 chars)
+  const rawTechnicalIdPattern = /\bc[a-z0-9]{20,}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+  result = result.replace(rawTechnicalIdPattern, hasValidName ? (name as string) : "");
+
+  return result.replace(/\s{2,}/g, " ").trim();
+}
+
 // ── Pure Sorting & Filtering Logic Under Test (mirrors ProjectDatabaseTable.tsx)
 
 export function filterDatabaseRows(
@@ -498,3 +586,136 @@ test("Database Table Filtering: global search and column-specific filter", () =>
     ["r1", "r3"]
   );
 });
+
+test("Task 1 — Issue 5: Customer-facing Project Activity Sanitization", async (t) => {
+  await t.test("Project ID is not rendered and human-readable project name is used instead", () => {
+    const project = {
+      id: "cm8abc1234567890xyz",
+      name: "Marketing Website",
+    };
+    const rendered = formatProjectActivityInherited(project);
+    assert.equal(rendered, "Activity inherited from Marketing Website");
+    assert.ok(!rendered.includes("cm8abc1234567890xyz"));
+    assert.ok(!rendered.includes("Project ID"));
+    assert.ok(!rendered.includes("Inherited project ID"));
+  });
+
+  await t.test("Inherited project ID is not rendered when project name is missing or unavailable", () => {
+    const projectNoName = {
+      id: "cm8abc1234567890xyz",
+    };
+    const rendered = formatProjectActivityInherited(projectNoName);
+    assert.equal(rendered, "Activity inherited from project");
+    assert.ok(!rendered.includes("cm8abc1234567890xyz"));
+    assert.ok(!rendered.includes("Project ID"));
+  });
+
+  await t.test("Raw CUID/UUID used as name is suppressed and falls back cleanly without inventing names", () => {
+    const projectCuidName = {
+      id: "cm8abc1234567890xyz",
+      name: "cm8abc1234567890xyz",
+    };
+    const rendered = formatProjectActivityInherited(projectCuidName);
+    assert.equal(rendered, "Activity inherited from project");
+    assert.ok(!rendered.includes("cm8abc1234567890xyz"));
+  });
+
+  await t.test("Sanitizes activity message containing raw CUID when project name exists", () => {
+    const project = {
+      id: "cm8abc1234567890xyz",
+      name: "Marketing Website",
+    };
+    const msg = "Project cm8abc1234567890xyz was updated";
+    const sanitized = sanitizeProjectActivityMessage(msg, project);
+    assert.equal(sanitized, "Marketing Website was updated");
+    assert.ok(!sanitized.includes("cm8abc1234567890xyz"));
+  });
+
+  await t.test("Sanitizes activity message containing raw CUID when project name is unavailable", () => {
+    const project = {
+      id: "cm8abc1234567890xyz",
+    };
+    const msg = "Project cm8abc1234567890xyz was updated";
+    const sanitized = sanitizeProjectActivityMessage(msg, project);
+    assert.equal(sanitized, "Project was updated");
+    assert.ok(!sanitized.includes("cm8abc1234567890xyz"));
+  });
+
+  await t.test("Sanitizes inherited project ID activity descriptions", () => {
+    const project = {
+      id: "cm8abc1234567890xyz",
+      name: "Marketing Website",
+    };
+    const badDesc1 = "Activity inherited from project cm8abc1234567890xyz";
+    assert.equal(
+      sanitizeProjectActivityMessage(badDesc1, project),
+      "Activity inherited from Marketing Website"
+    );
+
+    const badDesc2 = "Inherited Project ID: cm8abc1234567890xyz";
+    assert.equal(
+      sanitizeProjectActivityMessage(badDesc2, project),
+      "Activity inherited from Marketing Website"
+    );
+
+    const badDesc3 = "Project ID: cm8abc1234567890xyz";
+    assert.equal(
+      sanitizeProjectActivityMessage(badDesc3, project),
+      "Marketing Website"
+    );
+  });
+
+  await t.test("Long technical IDs (UUID & CUID) are stripped from activity messages", () => {
+    const project = {
+      id: "550e8400-e29b-41d4-a716-446655440000",
+      name: "Mobile App Redesign",
+    };
+    const msg = "Activity inherited from project 550e8400-e29b-41d4-a716-446655440000";
+    const sanitized = sanitizeProjectActivityMessage(msg, project);
+    assert.equal(sanitized, "Activity inherited from Mobile App Redesign");
+    assert.ok(!sanitized.includes("550e8400-e29b-41d4-a716-446655440000"));
+  });
+
+  await t.test("Internal project ID and task relations are preserved for application logic", () => {
+    const project = {
+      id: "cm8abc1234567890xyz",
+      name: "Marketing Website",
+    };
+    const task = {
+      id: "cmtask123",
+      title: "Design Landing Page",
+      projectId: project.id,
+      status: "TODO" as const,
+      priority: "HIGH" as const,
+      createdAt: "2026-10-01T10:00:00Z",
+      updatedAt: "2026-10-01T10:00:00Z",
+    };
+
+    // Internal ID remains intact for application logic
+    assert.equal(task.projectId, "cm8abc1234567890xyz");
+    assert.equal(project.id, "cm8abc1234567890xyz");
+
+    // Only customer-facing activity rendering hides the ID
+    const activityInherited = formatProjectActivityInherited(project);
+    assert.ok(!activityInherited.includes(task.projectId));
+    assert.ok(!activityInherited.includes(project.id));
+    assert.equal(activityInherited, "Activity inherited from Marketing Website");
+  });
+
+  await t.test("Legitimate customer-facing project keys (e.g. 'PRJ') are preserved and not sanitized", () => {
+    const project = {
+      id: "cm8abc1234567890xyz",
+      name: "Marketing Website",
+      key: "PRJ",
+      status: "PLANNING",
+    };
+
+    // Customer-facing key messages like "Created under key PRJ with status PLANNING." must remain intact
+    const initMessage = `Created under key ${project.key || "PRJ"} with status ${project.status}.`;
+    const sanitizedInitMessage = sanitizeProjectActivityMessage(initMessage, project);
+    assert.equal(sanitizedInitMessage, "Created under key PRJ with status PLANNING.");
+    assert.ok(sanitizedInitMessage.includes("PRJ"));
+    assert.ok(!isTechnicalCuidOrUuid(project.key));
+  });
+});
+

@@ -311,14 +311,9 @@ export const ReassignTaskModal: React.FC<ReassignTaskModalProps> = ({
                 Organization:
               </span>
               <span className="font-bold text-slate-900 dark:text-white truncate max-w-[240px]">
-                {user?.organizationName || user?.organizationId || "Active Organization"}
+                {user?.organizationName || "Active Organization"}
               </span>
             </div>
-            {scopes?.organizationId && (
-              <span className="text-[11px] text-slate-400 font-mono truncate max-w-[100px]">
-                {scopes.organizationId}
-              </span>
-            )}
           </div>
 
           {/* Success Notification */}

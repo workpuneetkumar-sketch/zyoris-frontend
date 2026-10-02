@@ -626,7 +626,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                         className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-xs font-semibold transition border border-slate-200/60 dark:border-slate-700/60"
                       >
                         <FolderKanban className="w-3.5 h-3.5 text-blue-500" />
-                        <span>Project: {(task as any).projectName || task.projectId}</span>
+                        <span>Project: {(task as any).projectName || (!task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_") ? task.projectId : "Workspace Project")}</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </Link>
                     )}
@@ -638,7 +638,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                         className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-xs font-semibold transition border border-slate-200/60 dark:border-slate-700/60"
                       >
                         <FileText className="w-3.5 h-3.5 text-purple-500" />
-                        <span>Page Docs</span>
+                        <span>Source Page: {(task as any).pageTitle || (task as any).page?.title || "Document"}</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </Link>
                     )}
@@ -746,7 +746,11 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-blue-600 dark:text-blue-400 text-[11px] uppercase">
-                      {evt.eventType || "Assignment"}
+                      {evt.eventType === "USER"
+                        ? "Individual Assignment"
+                        : evt.eventType === "DEPARTMENT"
+                        ? "Department Assignment"
+                        : evt.eventType || "Assignment"}
                     </span>
                     <span className="text-[10px] text-slate-400">
                       {evt.createdAt ? new Date(evt.createdAt).toLocaleTimeString() : "Just now"}
@@ -755,12 +759,9 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                   <p className="font-semibold text-slate-800 dark:text-slate-200">
                     {evt.task?.title || "Task Assignment"}
                   </p>
-                  {evt.task?.title && (
-                    <p className="text-slate-500 line-clamp-1">{evt.task.title}</p>
-                  )}
-                  {evt.assignedById && (
+                  {(evt as any).assignedBy?.name && (
                     <span className="text-[10px] text-slate-400">
-                      Assigned by: {evt.assignedById}
+                      Assigned by: {(evt as any).assignedBy.name}
                     </span>
                   )}
                 </div>

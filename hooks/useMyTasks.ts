@@ -12,6 +12,7 @@ import {
   updateTask,
   TaskAssignmentEvent,
   UpdateTaskPayload,
+  saveTaskAssignment,
 } from "@/lib/api/tasksApi";
 import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 
@@ -185,6 +186,7 @@ export function useMyTasks(currentUserId?: string) {
   const handleReassign = useCallback(
     (updatedAssignment: EffectiveAssignmentResponse) => {
       const taskId = updatedAssignment.taskId;
+      saveTaskAssignment(taskId, updatedAssignment);
       // If task was reassigned away from current user (e.g. department queue or another user)
       const isStillAssignedToMe =
         updatedAssignment.assigneeType === "USER" &&

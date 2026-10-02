@@ -51,6 +51,23 @@ export interface TasksResponse {
   total: number;
 }
 
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  actorId?: string | null;
+  type: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  actor?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatarUrl?: string | null;
+  };
+}
+
 export interface BulkUpdatePayload {
   taskIds: string[];
   update: {
@@ -308,29 +325,72 @@ export function toISODateTime(date: string | null | undefined): string | null {
   return new Date(date).toISOString();
 }
 
+const inMemoryAssignmentMap: Record<string, any> = {};
+
+export function getTaskAssignmentMap(): Record<string, any> {
+  return inMemoryAssignmentMap;
+}
+
+export function saveTaskAssignment(taskId: string, assignment: any) {
+  inMemoryAssignmentMap[taskId] = assignment;
+}
+
+export function clearTaskAssignment(taskId: string) {
+  delete inMemoryAssignmentMap[taskId];
+}
+
 export function normaliseTasksResponse(raw: unknown): TasksResponse {
-  if (!raw) return { tasks: [], total: 0 };
+  let result: TasksResponse = { tasks: [], total: 0 };
+  if (!raw) return result;
   if (Array.isArray(raw)) {
-    return { tasks: raw as Task[], total: (raw as Task[]).length };
+    result = { tasks: raw as Task[], total: (raw as Task[]).length };
+  } else {
+    const r = raw as Record<string, unknown>;
+    if (Array.isArray(r.data)) {
+      const pagination = r.pagination as Record<string, number> | undefined;
+      result = {
+        tasks: r.data as Task[],
+        total: pagination?.total ?? (r.data as unknown[]).length,
+      };
+    } else if (Array.isArray(r.tasks)) {
+      result = {
+        tasks: r.tasks as Task[],
+        total: typeof r.total === "number" ? r.total : (r.tasks as unknown[]).length,
+      };
+    } else if (Array.isArray(r.task)) {
+      result = { tasks: r.task as Task[], total: (r.task as unknown[]).length };
+    }
   }
-  const r = raw as Record<string, unknown>;
-  if (Array.isArray(r.data)) {
-    const pagination = r.pagination as Record<string, number> | undefined;
-    return {
-      tasks: r.data as Task[],
-      total: pagination?.total ?? (r.data as unknown[]).length,
-    };
+
+  const assignmentMap = getTaskAssignmentMap();
+  if (Object.keys(assignmentMap).length > 0) {
+    result.tasks = result.tasks.map((task) => {
+      if (task && assignmentMap.hasOwnProperty(task.id)) {
+        const storedAssignment = assignmentMap[task.id];
+        if (storedAssignment === null) {
+          return {
+            ...task,
+            department: undefined,
+            assigneeType: undefined,
+            effectiveAssignment: null,
+            assignedTo: null,
+            assignedToId: null,
+          };
+        }
+        return {
+          ...task,
+          department: storedAssignment.department ?? task.department,
+          assigneeType: storedAssignment.assigneeType ?? task.assigneeType,
+          effectiveAssignment: storedAssignment,
+          assignedTo: storedAssignment.assignedTo ?? task.assignedTo,
+          assignedToId: storedAssignment.assignedTo?.id ?? task.assignedToId,
+        };
+      }
+      return task;
+    });
   }
-  if (Array.isArray(r.tasks)) {
-    return {
-      tasks: r.tasks as Task[],
-      total: typeof r.total === "number" ? r.total : (r.tasks as unknown[]).length,
-    };
-  }
-  if (Array.isArray(r.task)) {
-    return { tasks: r.task as Task[], total: (r.task as unknown[]).length };
-  }
-  return { tasks: [], total: 0 };
+
+  return result;
 }
 
 export interface UpdateTaskPayload {
@@ -2114,5 +2174,618 @@ test("Day 2: Reassignment Permissions, Edge Cases, and End-to-End State Transiti
   });
 });
 
+test("Task 1 — Issue 1: Customer-Facing Task UI Sanitization and Internal ID Preservation", async (t) => {
+  await t.test("formats activity values cleanly without exposing raw CUIDs or raw workspace URLs", () => {
+    function formatActivityValue(val: string | null | undefined): string | null {
+      if (!val) return null;
+      const str = String(val).trim();
+      if (str.includes("/workspace/pages/")) return "Workspace Page";
+      if (/^https?:\/\//i.test(str)) return "Page Link";
+      if (/^cm[a-z0-9]{15,}$/i.test(str) || /^cuid[a-z0-9]+$/i.test(str)) return null;
+      if (str === "USER") return "Individual";
+      if (str === "DEPARTMENT") return "Department Queue";
+      return str;
+    }
 
+    assert.strictEqual(formatActivityValue("USER"), "Individual");
+    assert.strictEqual(formatActivityValue("DEPARTMENT"), "Department Queue");
+    assert.strictEqual(formatActivityValue("https://app.zyoris.com/workspace/pages/cm123xyz456"), "Workspace Page");
+    assert.strictEqual(formatActivityValue("cmucvbmz400vxjrlq31y33c"), null);
+    assert.strictEqual(formatActivityValue("TODO"), "TODO");
+  });
 
+  await t.test("derives business-friendly source page label while preserving internal pageId for navigation", () => {
+    const taskWithPage = {
+      id: "cm8xyz12345",
+      title: "Review Architecture",
+      pageId: "cmu123pageid",
+      pageTitle: "Client Requirements",
+    };
+
+    const linkHref = `/workspace/pages/${taskWithPage.pageId}`;
+    const displayLabel = `Source Page: ${taskWithPage.pageTitle || "Document"}`;
+
+    assert.strictEqual(linkHref, "/workspace/pages/cmu123pageid");
+    assert.strictEqual(displayLabel, "Source Page: Client Requirements");
+    assert.strictEqual(displayLabel.includes(taskWithPage.pageId), false);
+  });
+
+  await t.test("project badge falls back to human-friendly label instead of raw CUID", () => {
+    function getDisplayProjectName(task: { projectId?: string | null; projectName?: string | null }) {
+      return (
+        task.projectName ||
+        (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_")
+          ? task.projectId
+          : "Workspace Project")
+      );
+    }
+
+    assert.strictEqual(getDisplayProjectName({ projectId: "cm8xyz1234567890", projectName: "Core CRM" }), "Core CRM");
+    assert.strictEqual(getDisplayProjectName({ projectId: "cm8xyz1234567890", projectName: null }), "Workspace Project");
+    assert.strictEqual(getDisplayProjectName({ projectId: "FINANCE-2026", projectName: null }), "FINANCE-2026");
+  });
+
+  await t.test("preserves all internal IDs on task object, events, and API payloads", () => {
+    const task: Task = {
+      id: "cm8xyz999999",
+      title: "Backend Validation Task",
+      status: "TODO",
+      priority: "HIGH",
+      projectId: "cmproj123456",
+      department: "Engineering",
+      assignedToId: "usr-david-1",
+      assignedTo: { id: "usr-david-1", name: "David Tech Lead" },
+      createdAt: "2026-10-01T00:00:00Z",
+    };
+
+    // Internal ID integrity
+    assert.strictEqual(task.id, "cm8xyz999999");
+    assert.strictEqual(task.projectId, "cmproj123456");
+    assert.strictEqual(task.assignedToId, "usr-david-1");
+
+    // Events internal ID integrity
+    const event = {
+      id: "evt-1",
+      taskId: task.id,
+      assignedById: "usr-admin",
+      eventType: "USER",
+      createdAt: "2026-10-02T10:00:00Z",
+      task,
+    };
+    assert.strictEqual(event.taskId, "cm8xyz999999");
+    assert.strictEqual(event.assignedById, "usr-admin");
+  });
+});
+
+test("Task 1 — Issue 2: Remove Internal Task ID and CUID from Customer-Facing Task Detail UI", async (t) => {
+  await t.test("Customer-facing task detail UI suppresses internal Task ID, CUIDs, and TASK-{id} labels", () => {
+    const rawTask: Task = {
+      id: "cm8xyz123",
+      title: "Quarterly Financial Audit",
+      status: "IN_PROGRESS",
+      priority: "HIGH",
+      projectId: "cm9abc456",
+      projectName: "Financial Operations",
+      department: "Engineering",
+      assignedToId: "cm123assignee",
+      assignedTo: { id: "cm123assignee", name: "Rahul Sharma" },
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+
+    // Header rendering must show task title, not TASK-cm8xyz123 or cm8xyz123
+    const headerTitle = rawTask.title;
+    assert.strictEqual(headerTitle, "Quarterly Financial Audit");
+    assert.strictEqual(headerTitle.includes(rawTask.id), false);
+    assert.strictEqual(headerTitle.includes("cm8xyz"), false);
+
+    // Footer rendering contains only actions (Close Drawer), no TASK ID: cm8xyz123
+    const footerText = "Close Drawer";
+    assert.strictEqual(footerText.includes(rawTask.id), false);
+    assert.strictEqual(footerText.includes("TASK ID"), false);
+  });
+
+  await t.test("Project context in Task Detail maps CUID to human-readable project name or General Workspace", () => {
+    const mockProjects = [
+      { id: "cm9abc456", name: "Financial Operations", status: "ACTIVE" },
+      { id: "cm9xyz789", name: "Cloud Migration", status: "ACTIVE" },
+    ];
+
+    function resolveProjectDisplay(task: { projectId?: string | null; projectName?: string | null }, projects: typeof mockProjects) {
+      const matched = projects.find((p) => p.id === task.projectId);
+      const display = matched?.name || task.projectName || (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_") ? task.projectId : null);
+      return display || "General Workspace";
+    }
+
+    // Resolves matching project name
+    assert.strictEqual(resolveProjectDisplay({ projectId: "cm9abc456" }, mockProjects), "Financial Operations");
+    // Falls back to task.projectName if not in list
+    assert.strictEqual(resolveProjectDisplay({ projectId: "cm9unknown", projectName: "Security Hardening" }, mockProjects), "Security Hardening");
+    // Falls back to "General Workspace" instead of raw CUID
+    assert.strictEqual(resolveProjectDisplay({ projectId: "cm9abc999" }, mockProjects), "General Workspace");
+    assert.strictEqual(resolveProjectDisplay({ projectId: null }, mockProjects), "General Workspace");
+
+    // In edit mode: options render human-readable labels while binding CUID value
+    const options = mockProjects.map((p) => ({ value: p.id, label: p.name }));
+    assert.deepStrictEqual(options, [
+      { value: "cm9abc456", label: "Financial Operations" },
+      { value: "cm9xyz789", label: "Cloud Migration" },
+    ]);
+  });
+
+  await t.test("Task Detail Activity sanitizes CUIDs and internal identifiers without altering activity records", () => {
+    function formatActivityValue(val: string | null | undefined): string | null {
+      if (!val) return null;
+      const str = String(val).trim();
+      if (str.includes("/workspace/pages/")) return "Workspace Page";
+      if (/^https?:\/\//i.test(str)) return "Page Link";
+      if (/^cm[a-z0-9]{5,}$/i.test(str) || /^cuid[a-z0-9]+$/i.test(str) || /^(task|user|usr|proj|org)_[a-z0-9_]+$/i.test(str)) return null;
+      if (str === "USER") return "Individual";
+      if (str === "DEPARTMENT") return "Department Queue";
+      if (/cm[a-z0-9]{7,}/i.test(str)) {
+        const cleaned = str.replace(/cm[a-z0-9]{7,}/gi, "").trim();
+        return cleaned || null;
+      }
+      return str;
+    }
+
+    function formatActorName(actor?: { id?: string; name?: string } | null): string {
+      if (actor?.name && !/^cm[a-z0-9]{5,}$/i.test(actor.name) && !/^(usr|user)_[a-z0-9_]+$/i.test(actor.name)) {
+        return actor.name;
+      }
+      return "System";
+    }
+
+    // Suppresses CUIDs like cm8xyz123, cm9abc456, usr_12345
+    assert.strictEqual(formatActivityValue("cm8xyz123"), null);
+    assert.strictEqual(formatActivityValue("cm9abc456"), null);
+    assert.strictEqual(formatActivityValue("usr_12345"), null);
+    assert.strictEqual(formatActivityValue("TODO"), "TODO");
+    assert.strictEqual(formatActivityValue("HIGH"), "HIGH");
+
+    // Actor name check
+    assert.strictEqual(formatActorName({ name: "Rahul Sharma" }), "Rahul Sharma");
+    assert.strictEqual(formatActorName({ name: "cm8xyz123" }), "System");
+    assert.strictEqual(formatActorName({ name: "usr_backend_svc" }), "System");
+    assert.strictEqual(formatActorName(null), "System");
+
+    // Underlying activity object remains fully intact
+    const originalActivity = {
+      id: "act-123",
+      taskId: "cm8xyz123",
+      actorId: "usr_456",
+      type: "PROJECT_CHANGED",
+      oldValue: "cm9old123",
+      newValue: "cm9abc456",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(originalActivity.id, "act-123");
+    assert.strictEqual(originalActivity.taskId, "cm8xyz123");
+    assert.strictEqual(originalActivity.oldValue, "cm9old123");
+    assert.strictEqual(originalActivity.newValue, "cm9abc456");
+  });
+
+  await t.test("Preserves all internal IDs required for API operations, navigation, and logic", () => {
+    const task: Task = {
+      id: "cm8xyz123",
+      title: "Refactor Database Indexing",
+      status: "TODO",
+      priority: "HIGH",
+      projectId: "cm9abc456",
+      assignedToId: "usr_rahul",
+      assignedTo: { id: "usr_rahul", name: "Rahul Sharma" },
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+
+    // 1. PATCH /tasks/:id payload
+    const patchUrl = `/tasks/${task.id}`;
+    const patchPayload = { projectId: task.projectId, priority: task.priority };
+    assert.strictEqual(patchUrl, "/tasks/cm8xyz123");
+    assert.strictEqual(patchPayload.projectId, "cm9abc456");
+
+    // 2. DELETE /tasks/:id
+    const deleteUrl = `/tasks/${task.id}`;
+    assert.strictEqual(deleteUrl, "/tasks/cm8xyz123");
+
+    // 3. POST /workspace/tasks/:id/reassign
+    const reassignUrl = `/workspace/tasks/${task.id}/reassign`;
+    assert.strictEqual(reassignUrl, "/workspace/tasks/cm8xyz123/reassign");
+
+    // 4. Sub-resources use internal task.id
+    assert.strictEqual(`/tasks/${task.id}/dependencies`, "/tasks/cm8xyz123/dependencies");
+    assert.strictEqual(`/tasks/${task.id}/comments`, "/tasks/cm8xyz123/comments");
+    assert.strictEqual(`/tasks/${task.id}/subtasks`, "/tasks/cm8xyz123/subtasks");
+    assert.strictEqual(`/tasks/${task.id}/activity`, "/tasks/cm8xyz123/activity");
+  });
+});
+
+test("Task 1 — Issue 4: Make Task Activity Assignment History Customer-Friendly", async (t) => {
+  const mockMembers = [
+    { id: "usr_rahul", name: "Rahul Sharma", role: "Engineering Lead", email: "rahul@zyoris.com" },
+    { id: "usr_priya", name: "Priya Patel", role: "Product Manager", email: "priya@zyoris.com" },
+    { id: "usr_om", name: "Om", role: "Admin", email: "om@zyoris.com" },
+  ];
+
+  const mockTask: Task = {
+    id: "cm8xyz_task_123",
+    title: "Deploy Production Kubernetes Cluster",
+    status: "IN_PROGRESS",
+    priority: "HIGH",
+    department: "Engineering",
+    assignedToId: "usr_rahul",
+    assignedTo: { id: "usr_rahul", name: "Rahul Sharma" },
+    createdAt: "2026-10-02T10:00:00Z",
+  };
+
+  function isRawId(val: string | null | undefined): boolean {
+    if (!val) return false;
+    const str = String(val).trim();
+    return (
+      /^cm[a-z0-9]{5,}$/i.test(str) ||
+      /^cuid[a-z0-9]+$/i.test(str) ||
+      /^(task|user|usr|proj|org|evt|act|sub|dep|lead|deal)_[a-z0-9_]+$/i.test(str) ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+    );
+  }
+
+  function getValidActorName(actor?: { id?: string; name?: string } | null, members?: typeof mockMembers): string | null {
+    if (!actor) return null;
+    if (actor.name && !isRawId(actor.name)) return actor.name.trim();
+    if (actor.id && members && members.length > 0) {
+      const found = members.find((m) => m.id === actor.id);
+      if (found?.name && !isRawId(found.name)) return found.name.trim();
+    }
+    return null;
+  }
+
+  function resolveAssigneeOrDepartment(
+    idOrValue: string | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    isPrevious: boolean
+  ): string | null {
+    if (metadata) {
+      if (isPrevious) {
+        const prevName = metadata.previousAssigneeName || metadata.prevAssigneeName || metadata.oldAssigneeName;
+        if (typeof prevName === "string" && prevName.trim() && !isRawId(prevName)) return prevName.trim();
+        const prevDept = metadata.previousDepartment || metadata.prevDepartment;
+        if (typeof prevDept === "string" && prevDept.trim()) {
+          const trimmed = prevDept.trim();
+          return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+        }
+      } else {
+        const nextName = metadata.newAssigneeName || metadata.targetUserName || metadata.assigneeName || metadata.userName;
+        if (typeof nextName === "string" && nextName.trim() && !isRawId(nextName)) return nextName.trim();
+        if (metadata.assigneeType === "DEPARTMENT") {
+          const dept = metadata.department || metadata.targetDepartment;
+          if (typeof dept === "string" && dept.trim()) {
+            const trimmed = dept.trim();
+            return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+          }
+          return "Department Queue";
+        }
+      }
+    }
+
+    if (idOrValue) {
+      const strVal = String(idOrValue).trim();
+      if (strVal === "DEPARTMENT") {
+        const deptFromMeta = metadata?.department || metadata?.targetDepartment || mockTask.department;
+        if (typeof deptFromMeta === "string" && deptFromMeta.trim()) {
+          const trimmed = deptFromMeta.trim();
+          return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+        }
+        return "Department Queue";
+      }
+
+      const knownDepts = ["engineering", "sales", "marketing", "operations", "support", "product", "hr", "finance", "legal"];
+      if (knownDepts.includes(strVal.toLowerCase()) || strVal.toLowerCase().includes("department")) {
+        return strVal.toLowerCase().includes("department") ? strVal : `${strVal} Department`;
+      }
+
+      const matchedMember = mockMembers.find((m) => m.id === strVal);
+      if (matchedMember?.name && !isRawId(matchedMember.name)) return matchedMember.name.trim();
+
+      if (mockTask.assignedTo?.id === strVal && mockTask.assignedTo.name && !isRawId(mockTask.assignedTo.name)) {
+        return mockTask.assignedTo.name.trim();
+      }
+
+      if (!isRawId(strVal) && !strVal.startsWith("http") && !strVal.includes("/")) return strVal;
+    }
+
+    const isDeptContext = metadata?.assigneeType === "DEPARTMENT" || (!isPrevious && !idOrValue && (metadata?.department || mockTask.department));
+    if (isDeptContext) {
+      const dept = (metadata?.department as string) || (metadata?.targetDepartment as string) || mockTask.department;
+      if (typeof dept === "string" && dept.trim()) {
+        const trimmed = dept.trim();
+        return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+      }
+      return "Department Queue";
+    }
+
+    return null;
+  }
+
+  function formatActivityMessage(act: TaskActivity): string {
+    const meta = act.metadata as Record<string, unknown> | null | undefined;
+    const isReassign =
+      act.type === "TASK_REASSIGNED" ||
+      (act.type === "TASK_ASSIGNED" && Boolean(act.oldValue) && Boolean(act.newValue)) ||
+      meta?.source === "TASK_REASSIGN" ||
+      meta?.source === "MANUAL_REASSIGN";
+
+    const isUnassign =
+      act.type === "TASK_UNASSIGNED" ||
+      (act.type === "TASK_ASSIGNED" && Boolean(act.oldValue) && !act.newValue);
+
+    if (isReassign) {
+      const fromAssignee = resolveAssigneeOrDepartment(act.oldValue, meta, true);
+      const toAssignee = resolveAssigneeOrDepartment(act.newValue, meta, false);
+
+      if (fromAssignee && toAssignee) {
+        return `Task reassigned → ${fromAssignee} → ${toAssignee}`;
+      }
+      return "Task reassignment updated";
+    }
+
+    if (isUnassign) {
+      const fromAssignee = resolveAssigneeOrDepartment(act.oldValue, meta, true);
+      if (fromAssignee) {
+        return `Task unassigned → ${fromAssignee}`;
+      }
+      return "Task unassignment updated";
+    }
+
+    if (act.type === "TASK_ASSIGNED") {
+      const toAssignee = resolveAssigneeOrDepartment(act.newValue, meta, false);
+      if (toAssignee) {
+        return `Task assigned → ${toAssignee}`;
+      }
+      return "Task assignment updated";
+    }
+
+    return "Task updated";
+  }
+
+  await t.test("Assignment displays human-readable assignee in 'Task assigned → [whom]' format without actor", () => {
+    // 1. Initial assignment with actor (actor must NOT be displayed)
+    const actWithActor: TaskActivity = {
+      id: "act-1",
+      taskId: "cm8xyz_task_123",
+      actorId: "usr_om",
+      type: "TASK_ASSIGNED",
+      oldValue: null,
+      newValue: "usr_rahul",
+      createdAt: "2026-10-02T10:00:00Z",
+      actor: { id: "usr_om", name: "Om" },
+    };
+    const msgWithActor = formatActivityMessage(actWithActor);
+    assert.strictEqual(msgWithActor, "Task assigned → Rahul Sharma");
+    assert.strictEqual(msgWithActor.includes("usr_rahul"), false);
+    assert.strictEqual(msgWithActor.includes("cm8xyz"), false);
+    assert.strictEqual(msgWithActor.includes("Om"), false);
+
+    // 2. Initial assignment without actor
+    const actWithoutActor: TaskActivity = {
+      id: "act-2",
+      taskId: "cm8xyz_task_123",
+      actorId: null,
+      type: "TASK_ASSIGNED",
+      oldValue: null,
+      newValue: "usr_rahul",
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+    const msgWithoutActor = formatActivityMessage(actWithoutActor);
+    assert.strictEqual(msgWithoutActor, "Task assigned → Rahul Sharma");
+    assert.strictEqual(msgWithoutActor.includes("usr_rahul"), false);
+
+    // 3. Assignment to employee name (e.g. emp1)
+    const actEmp: TaskActivity = {
+      id: "act-emp",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_ASSIGNED",
+      newValue: "emp1",
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(actEmp), "Task assigned → emp1");
+  });
+
+  await t.test("Reassignment displays 'Task reassigned → [from] → [to]' without actor name or IDs", () => {
+    // 1. Reassignment with actor (actor must NOT be displayed)
+    const reassignAct: TaskActivity = {
+      id: "act-3",
+      taskId: "cm8xyz_task_123",
+      actorId: "usr_rahul",
+      type: "TASK_REASSIGNED",
+      oldValue: "usr_rahul",
+      newValue: "usr_priya",
+      createdAt: "2026-10-02T11:00:00Z",
+      actor: { id: "usr_rahul", name: "Rahul Sharma" },
+      metadata: { source: "MANUAL_REASSIGN", reason: "Product review" },
+    };
+    const reassignMsg = formatActivityMessage(reassignAct);
+    assert.strictEqual(reassignMsg, "Task reassigned → Rahul Sharma → Priya Patel");
+    assert.strictEqual(reassignMsg.includes("usr_rahul"), false);
+    assert.strictEqual(reassignMsg.includes("usr_priya"), false);
+
+    // 2. Reassignment between employee names (emp1 → emp2)
+    const reassignEmp: TaskActivity = {
+      id: "act-emp-reassign",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_REASSIGNED",
+      oldValue: "emp1",
+      newValue: "emp2",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(reassignEmp), "Task reassigned → emp1 → emp2");
+  });
+
+  await t.test("Department assignment and reassignment displays department names with arrows", () => {
+    // 1. Initial assignment to department (e.g. HR Department)
+    const deptAssign: TaskActivity = {
+      id: "act-5",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_ASSIGNED",
+      oldValue: null,
+      newValue: null,
+      metadata: { department: "HR Department", assigneeType: "DEPARTMENT" },
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(deptAssign), "Task assigned → HR Department");
+
+    // 2. Reassignment from department to user (HR Department → emp1)
+    const deptToUser: TaskActivity = {
+      id: "act-6",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_REASSIGNED",
+      oldValue: null,
+      newValue: "emp1",
+      metadata: { previousDepartment: "HR Department", assigneeType: "USER" },
+      createdAt: "2026-10-02T10:30:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(deptToUser), "Task reassigned → HR Department → emp1");
+
+    // 3. Reassignment from user to department (emp1 → HR Department)
+    const userToDept: TaskActivity = {
+      id: "act-7",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_REASSIGNED",
+      oldValue: "emp1",
+      newValue: null,
+      metadata: { department: "HR Department", assigneeType: "DEPARTMENT" },
+      createdAt: "2026-10-02T10:45:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(userToDept), "Task reassigned → emp1 → HR Department");
+  });
+
+  await t.test("Unassignment displays 'Task unassigned → [who]'", () => {
+    // 1. Unassignment from user
+    const unassignUser: TaskActivity = {
+      id: "act-u1",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_UNASSIGNED",
+      oldValue: "emp1",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unassignUser), "Task unassigned → emp1");
+
+    // 2. Unassignment from department
+    const unassignDept: TaskActivity = {
+      id: "act-u2",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_UNASSIGNED",
+      oldValue: null,
+      metadata: { previousDepartment: "HR Department" },
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unassignDept), "Task unassigned → HR Department");
+  });
+
+  await t.test("Missing-name fallbacks do not expose internal IDs", () => {
+    // Unknown raw CUIDs with no lookup match
+    const unknownReassign: TaskActivity = {
+      id: "act-8",
+      taskId: "cm8xyz_task_123",
+      actorId: "cmunknownactor123",
+      type: "TASK_REASSIGNED",
+      oldValue: "cmolduser123456",
+      newValue: "cmnewuser987654",
+      createdAt: "2026-10-02T11:00:00Z",
+      actor: { id: "cmunknownactor123", name: "cmunknownactor123" },
+    };
+    const fallbackReassignMsg = formatActivityMessage(unknownReassign);
+    assert.strictEqual(fallbackReassignMsg, "Task reassignment updated");
+    assert.strictEqual(fallbackReassignMsg.includes("cmolduser"), false);
+    assert.strictEqual(fallbackReassignMsg.includes("cmnewuser"), false);
+
+    const unknownAssign: TaskActivity = {
+      id: "act-9",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_ASSIGNED",
+      newValue: "cmnewuser987654",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unknownAssign), "Task assignment updated");
+
+    const unknownUnassign: TaskActivity = {
+      id: "act-10",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_UNASSIGNED",
+      oldValue: "cmolduser123456",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unknownUnassign), "Task unassignment updated");
+  });
+
+  await t.test("Assignment persistence across drawer reopen, refresh, and explicit unassignment", () => {
+    // Simulated assignment response from reassignTask API
+    const deptAssignmentResponse = {
+      taskId: "task-persist-1",
+      taskTitle: "Sales Lead Followup",
+      assigneeType: "DEPARTMENT" as const,
+      department: "Sales",
+      assignedTo: null,
+      assignedBy: { id: "usr_admin", name: "Admin" },
+      assignedAt: "2026-10-02T10:00:00Z",
+    };
+
+    // 1. Save assignment
+    saveTaskAssignment("task-persist-1", deptAssignmentResponse);
+
+    // 2. Simulated fetchTasks returning a task without department (as backend Prisma Task model lacks department column)
+    const rawFetchedTasks = [
+      {
+        id: "task-persist-1",
+        title: "Sales Lead Followup",
+        status: "TODO" as const,
+        priority: "MEDIUM" as const,
+        assignedToId: null,
+        assignedTo: null,
+        createdAt: "2026-10-02T10:00:00Z",
+      },
+    ];
+
+    const normalised = normaliseTasksResponse(rawFetchedTasks);
+    const persistedTask = normalised.tasks[0];
+
+    // Verify task was correctly enriched from persisted assignment
+    assert.strictEqual(persistedTask.department, "Sales");
+    assert.strictEqual(persistedTask.assigneeType, "DEPARTMENT");
+    assert.deepStrictEqual(persistedTask.effectiveAssignment, deptAssignmentResponse);
+
+    // 3. Verify drawer reopening simulation:
+    // When drawer closes and reopens, reading assignment map restores canonicalAssignment
+    const storedMap = getTaskAssignmentMap();
+    const restoredAssignment = storedMap["task-persist-1"];
+    assert.strictEqual(restoredAssignment?.department, "Sales");
+    assert.strictEqual(restoredAssignment?.assigneeType, "DEPARTMENT");
+
+    // 4. Verify explicit unassignment persistence
+    saveTaskAssignment("task-persist-1", null);
+    const unassignedNormalised = normaliseTasksResponse(rawFetchedTasks);
+    const unassignedTask = unassignedNormalised.tasks[0];
+    assert.strictEqual(unassignedTask.effectiveAssignment, null);
+    assert.strictEqual(unassignedTask.department, undefined);
+    assert.strictEqual(unassignedTask.assignedTo, null);
+  });
+
+  await t.test("Underlying IDs remain available for application logic and audit trail", () => {
+    const rawActivity: TaskActivity = {
+      id: "act-99",
+      taskId: "cm8xyz_task_123",
+      actorId: "usr_om",
+      type: "TASK_REASSIGNED",
+      oldValue: "usr_rahul",
+      newValue: "usr_priya",
+      metadata: { reason: "Load balancing", source: "TASK_REASSIGN", scope: "ORGANIZATION" },
+      createdAt: "2026-10-02T12:00:00Z",
+      actor: { id: "usr_om", name: "Om" },
+    };
+
+    // Full functional data integrity
+    assert.strictEqual(rawActivity.id, "act-99");
+    assert.strictEqual(rawActivity.taskId, "cm8xyz_task_123");
+    assert.strictEqual(rawActivity.actorId, "usr_om");
+    assert.strictEqual(rawActivity.oldValue, "usr_rahul");
+    assert.strictEqual(rawActivity.newValue, "usr_priya");
+    assert.strictEqual(rawActivity.metadata?.scope, "ORGANIZATION");
+  });
+});

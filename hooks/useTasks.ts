@@ -19,6 +19,8 @@ import {
     BulkUpdateFields,
     BulkUpdateResponse,
     getTaskLabelsMap,
+    getTaskAssignmentMap,
+    saveTaskAssignment,
 } from "@/lib/api/tasksApi";
 import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 
@@ -208,6 +210,9 @@ export function useTasks(currentUserId?: string) {
     async function handleUpdate(id: string, data: UpdateTaskPayload): Promise<boolean> {
         setSaving(true);
         setSaveError(null);
+        if (data.assignedToId === null || data.assignedToId === "") {
+            saveTaskAssignment(id, null);
+        }
         // Optimistic update for both tasks list and active selectedTask
         setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, ...data } : t)));
         setSelectedTask((prev) => (prev && prev.id === id ? { ...prev, ...data } : prev));
@@ -353,9 +358,40 @@ export function useTasks(currentUserId?: string) {
 
     function openDetail(task: Task) {
         const labelsMap = getTaskLabelsMap();
-        const fullTask = labelsMap[task.id] && (!task.labels || task.labels.length === 0)
+        const assignmentMap = getTaskAssignmentMap();
+        let fullTask = labelsMap[task.id] && (!task.labels || task.labels.length === 0)
             ? { ...task, labels: labelsMap[task.id] }
             : task;
+
+        if (assignmentMap && assignmentMap.hasOwnProperty(task.id)) {
+            const stored = assignmentMap[task.id];
+            if (stored === null) {
+                fullTask = {
+                    ...fullTask,
+                    department: undefined,
+                    assigneeType: undefined,
+                    effectiveAssignment: null,
+                    assignedTo: null,
+                    assignedToId: null,
+                };
+            } else {
+                const resolvedAssignedTo = stored.assignedTo
+                    ? {
+                          id: stored.assignedTo.id,
+                          name: stored.assignedTo.name ?? "",
+                          email: stored.assignedTo.email ?? "",
+                      }
+                    : fullTask.assignedTo;
+                fullTask = {
+                    ...fullTask,
+                    department: stored.department ?? fullTask.department,
+                    assigneeType: stored.assigneeType ?? fullTask.assigneeType,
+                    effectiveAssignment: stored,
+                    assignedTo: resolvedAssignedTo,
+                    assignedToId: stored.assignedTo?.id ?? fullTask.assignedToId,
+                };
+            }
+        }
         setSelectedTask(fullTask);
         setIsDetailOpen(true);
     }
@@ -369,6 +405,7 @@ export function useTasks(currentUserId?: string) {
     // ── Reassignment synchronization ──────────────────────────────────────────
     const handleReassign = useCallback((updatedAssignment: EffectiveAssignmentResponse) => {
         const taskId = updatedAssignment.taskId;
+        saveTaskAssignment(taskId, updatedAssignment);
         const updateTaskFields = (t: Task): Task => {
             if (t.id !== taskId) return t;
             return {
