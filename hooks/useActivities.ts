@@ -27,6 +27,7 @@ export function useActivities() {
     const [error, setError] = useState<string | null>(null);
     const [openMenu, setOpenMenu] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<Activity | null>(null);
+    const [selectedActivity, setSelectedActivity] = useState<Activity | null>(null);
     const [stats, setStats] = useState<ActivityStats | null>(null);
     const [overdue, setOverdue] = useState<OverdueActivity[]>([]);
     const [breakdown, setBreakdown] = useState<ActivityTypeBreakdown[]>([]);
@@ -71,6 +72,10 @@ export function useActivities() {
 
     async function handleAction(action: string, activity: Activity) {
         switch (action) {
+            case "View": {
+                setSelectedActivity(activity);
+                break;
+            }
             case "Delete": {
                 setConfirmDelete(activity);
                 break;
@@ -102,6 +107,7 @@ export function useActivities() {
         error,
         openMenu,
         confirmDelete,
+        selectedActivity,
         stats,
         overdue,
         breakdown,
@@ -111,6 +117,7 @@ export function useActivities() {
         setPage,
         setOpenMenu,
         setConfirmDelete,
+        setSelectedActivity,
         setDateRange,
         setOpenAddModal,
         // handlers

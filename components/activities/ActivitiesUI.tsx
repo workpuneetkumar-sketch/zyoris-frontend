@@ -31,6 +31,7 @@ import {
     ActivityTypeBreakdown,
     ActivitiesFilters,
 } from "@/types/activities";
+import { sanitizeSourcePageText } from "@/lib/utils/sourcePageSanitizer";
 
 // ── Helper: Get relative time ─────────────────────────────────────────────────
 function getRelativeTime(dateString: string): string {
@@ -417,8 +418,12 @@ export function ActivitiesTable({
                                         <tr key={activity.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                                             {/* Activity */}
                                             <td className="px-5 py-3.5 max-w-[220px]">
-                                                <p className="font-medium text-gray-800 text-[13px] truncate">{activity.title}</p>
-                                                <p className="text-[11px] text-gray-400 truncate">{activity.description}</p>
+                                                <p className="font-medium text-gray-800 text-[13px] truncate">
+                                                    {sanitizeSourcePageText(activity.title, activity.sourcePageTitle)}
+                                                </p>
+                                                <p className="text-[11px] text-gray-400 truncate">
+                                                    {sanitizeSourcePageText(activity.description, activity.sourcePageTitle)}
+                                                </p>
                                             </td>
                                             {/* Related To */}
                                             <td className="px-5 py-3.5 whitespace-nowrap">

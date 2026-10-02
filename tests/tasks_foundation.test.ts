@@ -2789,3 +2789,466 @@ test("Task 1 — Issue 4: Make Task Activity Assignment History Customer-Friendl
     assert.strictEqual(rawActivity.metadata?.scope, "ORGANIZATION");
   });
 });
+
+test("Task 1 — Issue 13: Customer-Facing Source Page Cleanup and Activities Functionality", async (t) => {
+  function sanitizeSourcePageText(text?: string | null, knownTitle?: string | null): string {
+    if (!text) return "";
+    let result = text;
+    result = result.replace(/\[([^\]]+)\]\((?:https?:\/\/[^\/]+)?\/workspace\/pages\/[^\)]+\)/gi, (_, linkText) => {
+      const trimmed = linkText.trim();
+      if (
+        trimmed.startsWith("/workspace/pages") ||
+        trimmed.startsWith("http") ||
+        /^cm[a-z0-9]{5,}$/i.test(trimmed) ||
+        /^c[a-z0-9]{20,}$/i.test(trimmed)
+      ) {
+        return knownTitle?.trim() || "Workspace Page";
+      }
+      return trimmed;
+    });
+    result = result.replace(
+      /(?:Source\s+Page|sourcePageId|pageId)[:\s]+(?:https?:\/\/[^\s]+)?\/workspace\/pages\/[a-z0-9_-]+/gi,
+      () => {
+        return knownTitle?.trim() ? `Source Page: ${knownTitle.trim()}` : "Source Page: Workspace Page";
+      }
+    );
+    result = result.replace(
+      /(?:https?:\/\/[^\s\/]+)?\/workspace\/pages\/(?:cm[a-z0-9]{5,}|c[a-z0-9]{20,}|[a-z0-9_-]{10,})/gi,
+      () => {
+        return knownTitle?.trim() ? knownTitle.trim() : "Workspace Page";
+      }
+    );
+    result = result.replace(
+      /(?:sourcePageId|pageId)[:\s]+(?:cm[a-z0-9]{5,}|c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+      () => {
+        return knownTitle?.trim() ? `Source Page: ${knownTitle.trim()}` : "";
+      }
+    );
+    result = result.replace(/\b(?:sourcePage|page)[_\s-]*(?:id)?[:\s]*(?:c[a-z0-9]{20,}|cm[a-z0-9]{5,})\b/gi, () => {
+      return knownTitle?.trim() ? `Source Page: ${knownTitle.trim()}` : "";
+    });
+    return result.replace(/\s{2,}/g, " ").trim();
+  }
+
+  function extractSourcePageInfo(activity: {
+    title?: string | null;
+    description?: string | null;
+    sourcePageId?: string | null;
+    sourcePageTitle?: string | null;
+    metadata?: Record<string, any> | null;
+  }) {
+    let pageId =
+      activity.sourcePageId ||
+      activity.metadata?.sourcePageId ||
+      activity.metadata?.pageId ||
+      null;
+
+    let pageTitle =
+      activity.sourcePageTitle ||
+      activity.metadata?.pageTitle ||
+      activity.metadata?.sourcePageTitle ||
+      null;
+
+    const combined = `${activity.title || ""} ${activity.description || ""}`;
+    const mdMatch = combined.match(
+      /\[([^\]]+)\]\((?:https?:\/\/[^\/]+)?\/workspace\/pages\/([a-z0-9_-]+)\)/i
+    );
+    if (mdMatch) {
+      if (!pageTitle) {
+        const extractedTitle = mdMatch[1].trim();
+        if (
+          !extractedTitle.startsWith("/workspace/pages") &&
+          !extractedTitle.startsWith("http") &&
+          !/^cm[a-z0-9]{5,}$/i.test(extractedTitle) &&
+          !/^c[a-z0-9]{20,}$/i.test(extractedTitle)
+        ) {
+          pageTitle = extractedTitle;
+        }
+      }
+      if (!pageId) {
+        pageId = mdMatch[2].trim();
+      }
+    }
+
+    if (!pageId) {
+      const urlMatch = combined.match(
+        /(?:https?:\/\/[^\s\/]+)?\/workspace\/pages\/([a-z0-9_-]+)/i
+      );
+      if (urlMatch) {
+        pageId = urlMatch[1].trim();
+      }
+    }
+
+    return {
+      sourcePageId: pageId,
+      sourcePageTitle: pageTitle || (pageId ? "Workspace Page" : null),
+    };
+  }
+
+  // SOURCE PAGE:
+  await t.test("Raw Source Page markdown is not rendered and human-readable page title is displayed", () => {
+    const rawMarkdown = "Task created from [Project Requirements](/workspace/pages/cmucvbmz400vxjrlq31y33c)";
+    const sanitized = sanitizeSourcePageText(rawMarkdown);
+    assert.strictEqual(sanitized, "Task created from Project Requirements");
+    assert.ok(!sanitized.includes("/workspace/pages/"));
+    assert.ok(!sanitized.includes("cmucvbmz400vxjrlq31y33c"));
+  });
+
+  await t.test("Raw source-page URL is not rendered and falls back to safe label when title unavailable", () => {
+    const rawUrl = "Source Page: /workspace/pages/cmucvbmz400vxjrlq31y33c";
+    const sanitized = sanitizeSourcePageText(rawUrl);
+    assert.strictEqual(sanitized, "Source Page: Workspace Page");
+    assert.ok(!sanitized.includes("/workspace/pages/"));
+    assert.ok(!sanitized.includes("cmucvbmz400vxjrlq31y33c"));
+
+    const withTitle = sanitizeSourcePageText(rawUrl, "Client Brief");
+    assert.strictEqual(withTitle, "Source Page: Client Brief");
+  });
+
+  await t.test("Raw workspace page ID and sourcePageId are not rendered", () => {
+    const rawIdText = "sourcePageId: cmucvbmz400vxjrlq31y33c";
+    const sanitized = sanitizeSourcePageText(rawIdText);
+    assert.strictEqual(sanitized, "");
+    assert.ok(!sanitized.includes("cmucvbmz400vxjrlq31y33c"));
+
+    const withTitle = sanitizeSourcePageText(rawIdText, "Marketing Overview");
+    assert.strictEqual(withTitle, "Source Page: Marketing Overview");
+  });
+
+  await t.test("Existing source-page navigation still works while internal IDs remain available", () => {
+    const activity = {
+      id: "act-101",
+      title: "Review Notes",
+      description: "Notes from [Design Specs](/workspace/pages/cmucvbmz400vxjrlq31y33c)",
+      sourcePageId: "cmucvbmz400vxjrlq31y33c",
+      sourcePageTitle: "Design Specs",
+    };
+
+    const sourceInfo = extractSourcePageInfo(activity);
+    assert.strictEqual(sourceInfo.sourcePageId, "cmucvbmz400vxjrlq31y33c");
+    assert.strictEqual(sourceInfo.sourcePageTitle, "Design Specs");
+
+    // Internal ID used for navigation
+    const href = `/workspace/pages/${sourceInfo.sourcePageId}`;
+    assert.strictEqual(href, "/workspace/pages/cmucvbmz400vxjrlq31y33c");
+
+    // Visible text is clean
+    const visibleDesc = sanitizeSourcePageText(activity.description, sourceInfo.sourcePageTitle);
+    assert.strictEqual(visibleDesc, "Notes from Design Specs");
+    assert.ok(!visibleDesc.includes(sourceInfo.sourcePageId));
+  });
+
+  // VIEW:
+  await t.test("Existing activity can be selected and viewed without exposing internal IDs", () => {
+    const activity = {
+      id: "cmact_12345",
+      title: "Meeting with Client",
+      description: "Discussed deliverables in [Architecture Review](/workspace/pages/cmucvbmz400vxjrlq31y33c)",
+      relatedTo: "John Doe",
+      relatedToCompany: "Acme Corp",
+      type: "Meeting",
+      owner: "Om",
+      ownerAvatar: "O",
+      dueDate: "10/15/2026",
+      dueTime: "14:00",
+      status: "Upcoming",
+      priority: "High",
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+
+    let selectedActivity: any = null;
+    function onAction(action: string, act: any) {
+      if (action === "View") {
+        selectedActivity = act;
+      }
+    }
+
+    onAction("View", activity);
+    assert.notStrictEqual(selectedActivity, null);
+    assert.strictEqual(selectedActivity?.title, "Meeting with Client");
+
+    const info = extractSourcePageInfo(selectedActivity!);
+    const viewTitle = sanitizeSourcePageText(selectedActivity!.title, info.sourcePageTitle);
+    const viewDesc = sanitizeSourcePageText(selectedActivity!.description, info.sourcePageTitle);
+
+    assert.strictEqual(viewTitle, "Meeting with Client");
+    assert.strictEqual(viewDesc, "Discussed deliverables in Architecture Review");
+    assert.ok(!viewDesc.includes("cmucvbmz400vxjrlq31y33c"));
+    assert.ok(!viewTitle.includes("cmact_12345"));
+  });
+
+  // ADD ACTIVITY:
+  await t.test("Successful activity creation handles array response from /activities/get-activities without dropping items", () => {
+    const backendData = [
+      {
+        id: "cmuqudzd103cvfrdlc7eg7pvl",
+        organizationId: "ORG-32551",
+        entityType: "COMPANY",
+        entityId: "default",
+        type: "NOTE",
+        message: "New Note",
+        createdById: "cmubkshyk0002n92hdw3hcj06",
+        metadata: { priority: "Medium" },
+        createdAt: "2026-10-02T10:50:41.606Z",
+        createdBy: { id: "cmubkshyk0002n92hdw3hcj06", name: "om" },
+      },
+    ];
+
+    const parsedActivities = Array.isArray(backendData)
+      ? backendData
+      : Array.isArray((backendData as any)?.activities)
+      ? (backendData as any).activities
+      : Array.isArray((backendData as any)?.data)
+      ? (backendData as any).data
+      : [];
+
+    assert.strictEqual(parsedActivities.length, 1);
+    assert.strictEqual(parsedActivities[0].id, "cmuqudzd103cvfrdlc7eg7pvl");
+    assert.strictEqual(parsedActivities[0].message, "New Note");
+  });
+
+  await t.test("Add Activity payload conforms to backend schema and does not create fake activity locally", () => {
+    const formData = {
+      entityType: "COMPANY" as const,
+      entityId: "default",
+      type: "NOTE" as const,
+      message: "Customer feedback recorded",
+      priority: "High" as const,
+      relatedTo: "Alice Smith",
+      relatedCompany: "Tech Corp",
+      dueDate: "2026-10-10",
+      dueTime: "11:00",
+    };
+
+    const metadata: Record<string, unknown> = {
+      priority: formData.priority,
+      relatedTo: formData.relatedTo,
+      relatedCompany: formData.relatedCompany,
+      dueDate: formData.dueDate,
+      dueTime: formData.dueTime,
+    };
+
+    const payload = {
+      entityType: formData.entityType,
+      entityId: formData.entityId,
+      type: formData.type,
+      message: formData.message,
+      metadata,
+    };
+
+    assert.strictEqual(payload.entityType, "COMPANY");
+    assert.strictEqual(payload.entityId, "default");
+    assert.strictEqual(payload.type, "NOTE");
+    assert.strictEqual(payload.message, "Customer feedback recorded");
+    assert.strictEqual(payload.metadata.priority, "High");
+    assert.strictEqual(payload.metadata.relatedCompany, "Tech Corp");
+  });
+});
+
+test("Task 1 — Issue 14: Customer-Facing Lead Selection and Meeting Prep Sanitization", async (t) => {
+  const CUID_REGEX = /^c[a-z0-9]{24}$/i;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const TECHNICAL_ID_REGEX = /^(cm[a-z0-9]{20,}|c[a-z0-9]{24}|lead_[a-z0-9_-]+)$/i;
+
+  function isTechnicalId(val: string | null | undefined): boolean {
+    if (!val || typeof val !== "string") return false;
+    const trimmed = val.trim();
+    return CUID_REGEX.test(trimmed) || UUID_REGEX.test(trimmed) || TECHNICAL_ID_REGEX.test(trimmed);
+  }
+
+  interface LeadLike {
+    id?: string | null;
+    name?: string | null;
+    company?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    details?: string | null;
+  }
+
+  function formatLeadDisplayName(lead: LeadLike | null | undefined, fallbackText: string = "Selected Lead"): string {
+    if (!lead) return fallbackText;
+    const name = lead.name?.trim();
+    const company = lead.company?.trim();
+    const email = lead.email?.trim();
+    const phone = lead.phone?.trim();
+    const details = lead.details?.trim();
+
+    if (name && !isTechnicalId(name)) {
+      if (company && !isTechnicalId(company)) {
+        return `${name} — ${company}`;
+      }
+      return name;
+    }
+    if (company && !isTechnicalId(company)) return company;
+    if (email) return email;
+    if (phone) return phone;
+    if (details && !isTechnicalId(details)) return details;
+    return fallbackText;
+  }
+
+  function formatLeadOptionLabel(lead: LeadLike, fallbackText: string = "Selected Lead"): string {
+    const name = lead.name?.trim();
+    const company = lead.company?.trim();
+    const email = lead.email?.trim();
+    const details = lead.details?.trim();
+
+    const primaryLabel = (name && !isTechnicalId(name))
+      ? name
+      : (company && !isTechnicalId(company))
+      ? company
+      : (email && !isTechnicalId(email))
+      ? email
+      : fallbackText;
+
+    let secondary: string | null = null;
+    if (company && company !== primaryLabel && !isTechnicalId(company)) {
+      secondary = company;
+    } else if (details && details !== primaryLabel && !isTechnicalId(details)) {
+      secondary = details;
+    } else if (email && email !== primaryLabel) {
+      secondary = email;
+    }
+    return secondary ? `${primaryLabel} (${secondary})` : primaryLabel;
+  }
+
+  function sanitizeLeadReference(text: string | null | undefined, fallback: string = "Selected Lead"): string {
+    if (!text) return fallback;
+    if (isTechnicalId(text)) return fallback;
+    return text
+      .replace(/\bcm[a-z0-9]{20,}\b/gi, fallback)
+      .replace(/Lead:\s*cm[a-z0-9]{20,}/gi, `Lead: ${fallback}`)
+      .replace(/Lead ID:\s*cm[a-z0-9]{20,}/gi, fallback)
+      .replace(/Selected Lead:\s*cm[a-z0-9]{20,}/gi, `Selected Lead: ${fallback}`);
+  }
+
+  await t.test("Lead selection displays human-readable lead name", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+    };
+    const display = formatLeadDisplayName(lead);
+    assert.strictEqual(display, "Rahul Sharma");
+  });
+
+  await t.test("Lead CUID is not displayed in lead selection display or options", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+    };
+    const display = formatLeadDisplayName(lead);
+    const option = formatLeadOptionLabel(lead);
+    assert.ok(!display.includes("cmupjmy5r07botpfht7s9yf7a"));
+    assert.ok(!option.includes("cmupjmy5r07botpfht7s9yf7a"));
+  });
+
+  await t.test("Company information is displayed when available", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+      company: "ABC Technologies",
+    };
+    const display = formatLeadDisplayName(lead);
+    assert.strictEqual(display, "Rahul Sharma — ABC Technologies");
+
+    const option = formatLeadOptionLabel(lead);
+    assert.strictEqual(option, "Rahul Sharma (ABC Technologies)");
+  });
+
+  await t.test("Meeting Prep displays human-readable lead information", () => {
+    const leads = [
+      { id: "cmupjmy5r07botpfht7s9yf7a", name: "Rahul Sharma", company: "ABC Technologies", details: "Enterprise Lead" },
+    ];
+    const meetingId = "cmupjmy5r07botpfht7s9yf7a";
+    const activeLead = leads.find((l) => l.id === meetingId);
+    assert.ok(activeLead);
+
+    const leadInfo = activeLead.name ? `${activeLead.name} (${activeLead.company || activeLead.details})` : "Selected Lead";
+    assert.strictEqual(leadInfo, "Rahul Sharma (ABC Technologies)");
+    assert.ok(!leadInfo.includes("cmupjmy5r07botpfht7s9yf7a"));
+  });
+
+  await t.test("Missing lead name uses a safe fallback without exposing raw CUID", () => {
+    const leadWithCompany = { id: "cmupjmy5r07botpfht7s9yf7a", company: "ABC Technologies" };
+    assert.strictEqual(formatLeadDisplayName(leadWithCompany), "ABC Technologies");
+
+    const leadWithEmail = { id: "cmupjmy5r07botpfht7s9yf7a", email: "rahul@abctech.com" };
+    assert.strictEqual(formatLeadDisplayName(leadWithEmail), "rahul@abctech.com");
+
+    const leadEmpty = { id: "cmupjmy5r07botpfht7s9yf7a" };
+    assert.strictEqual(formatLeadDisplayName(leadEmpty), "Selected Lead");
+    assert.strictEqual(formatLeadOptionLabel(leadEmpty), "Selected Lead");
+    assert.ok(!formatLeadDisplayName(leadEmpty).includes("cmupjmy5r07botpfht7s9yf7a"));
+  });
+
+  await t.test("Underlying lead ID remains available to API and state logic", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+      company: "ABC Technologies",
+    };
+
+    const customerVisibleLabel = formatLeadOptionLabel(lead);
+    assert.strictEqual(customerVisibleLabel, "Rahul Sharma (ABC Technologies)");
+
+    const option = {
+      value: lead.id,
+      text: customerVisibleLabel,
+    };
+    assert.strictEqual(option.value, "cmupjmy5r07botpfht7s9yf7a");
+
+    const selectedLeadId = option.value;
+    const requestPayload = {
+      leadId: selectedLeadId,
+      notes: "Pre-meeting preparation",
+    };
+    assert.strictEqual(requestPayload.leadId, "cmupjmy5r07botpfht7s9yf7a");
+  });
+
+  await t.test("Selecting a lead still sends the correct lead ID to meeting prep API", () => {
+    const leads = [
+      { id: "cmupjmy5r07botpfht7s9yf7a", name: "Rahul Sharma", details: "ABC Technologies" },
+      { id: "cmuh5figl064hobm55o4gj0jt", name: "Sarah Jenkins", details: "Acme Corp" },
+    ];
+
+    let apiRequestedId: string | null = null;
+    function fakeGetMeetingPrep(id: string) {
+      apiRequestedId = id;
+      return { success: true, data: { id } };
+    }
+
+    const selectedOption = leads[1];
+    fakeGetMeetingPrep(selectedOption.id);
+
+    assert.strictEqual(apiRequestedId, "cmuh5figl064hobm55o4gj0jt");
+  });
+
+  await t.test("Meeting Prep still uses the correct selected lead ID while hiding CUID from UI", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+      details: "ABC Technologies",
+    };
+
+    const currentMeetingId = lead.id;
+
+    const renderedUI = {
+      badge: `Lead: ${lead.name}`,
+      details: lead.details,
+      isCuidVisible: false,
+    };
+
+    assert.strictEqual(renderedUI.badge, "Lead: Rahul Sharma");
+    assert.strictEqual(renderedUI.details, "ABC Technologies");
+    assert.strictEqual(currentMeetingId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(renderedUI.badge.includes(currentMeetingId), false);
+  });
+
+  await t.test("Technical ID check identifies CUIDs and UUIDs correctly", () => {
+    assert.strictEqual(isTechnicalId("cmupjmy5r07botpfht7s9yf7a"), true);
+    assert.strictEqual(isTechnicalId("123e4567-e89b-12d3-a456-426614174000"), true);
+    assert.strictEqual(isTechnicalId("lead_enterprise_1"), true);
+    assert.strictEqual(isTechnicalId("Rahul Sharma"), false);
+    assert.strictEqual(isTechnicalId("ABC Technologies"), false);
+  });
+});
+

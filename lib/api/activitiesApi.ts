@@ -18,6 +18,7 @@ import { fetchEmails } from "./emailApi";
 import { getMeetings } from "./meetingsApi";
 import { fetchTasks } from "./tasksApi";
 import { fetchConversations } from "./whatsappApi";
+import { sanitizeSourcePageText, extractSourcePageInfo } from "@/lib/utils/sourcePageSanitizer";
 
 // ── Helper: Get initials from name ─────────────────────────────────────────────
 
@@ -59,11 +60,14 @@ function convertTimelineItemToActivity(item: any): NormalizedActivity {
   const type = typeMap[item.type] || "Note";
   const createdAt = item.timestamp || item.createdAt || new Date().toISOString();
   const date = new Date(createdAt);
+  const sourceInfo = extractSourcePageInfo(item);
+  const rawTitle = item.message || item.title || "Activity";
+  const rawDesc = item.message || item.description || "";
 
   return {
     id: item.id,
-    title: item.message || item.title || "Activity",
-    description: item.message || item.description || "",
+    title: sanitizeSourcePageText(rawTitle, sourceInfo.sourcePageTitle),
+    description: sanitizeSourcePageText(rawDesc, sourceInfo.sourcePageTitle),
     relatedTo: item.metadata?.relatedTo || item.relatedTo || "Contact",
     relatedToCompany: item.metadata?.relatedCompany || "Company",
     type,
@@ -74,6 +78,9 @@ function convertTimelineItemToActivity(item: any): NormalizedActivity {
     status: "Upcoming",
     priority: (item.metadata?.priority as Activity["priority"]) || "Medium",
     createdAt,
+    sourcePageId: sourceInfo.sourcePageId,
+    sourcePageTitle: sourceInfo.sourcePageTitle,
+    metadata: item.metadata,
   };
 }
 
@@ -151,10 +158,14 @@ function convertTaskToActivity(task: any): NormalizedActivity {
     MEDIUM: "Medium",
     HIGH: "High",
   };
+  const sourceInfo = extractSourcePageInfo(task);
+  const rawTitle = task.title || "Task";
+  const rawDesc = task.description || "";
+
   return {
     id: task.id,
-    title: task.title || "Task",
-    description: task.description || "",
+    title: sanitizeSourcePageText(rawTitle, sourceInfo.sourcePageTitle),
+    description: sanitizeSourcePageText(rawDesc, sourceInfo.sourcePageTitle),
     relatedTo: task.assignedTo?.name || "Contact",
     relatedToCompany: "Company",
     type: "Task",
@@ -165,6 +176,9 @@ function convertTaskToActivity(task: any): NormalizedActivity {
     status: statusMap[task.status] || "Upcoming",
     priority: priorityMap[task.priority] || "Medium",
     createdAt: dateStr,
+    sourcePageId: sourceInfo.sourcePageId,
+    sourcePageTitle: sourceInfo.sourcePageTitle,
+    metadata: task.metadata,
   };
 }
 
@@ -205,20 +219,33 @@ function convertActivityToActivity(activity: any): NormalizedActivity {
       default: return "Note";
     }
   })() as ActivityType;
+
+  const sourceInfo = extractSourcePageInfo(activity);
+  const rawTitle = activity.message || activity.title || "Activity";
+  const rawDesc = activity.message || activity.description || "";
+
+  // Check if custom dueDate or dueTime is provided in metadata
+  const dueDateDisplay = activity.metadata?.dueDate
+    ? new Date(activity.metadata.dueDate).toLocaleDateString()
+    : date.toLocaleDateString();
+
   return {
     id: activity.id,
-    title: activity.message || activity.title || "Activity",
-    description: activity.message || activity.description || "",
+    title: sanitizeSourcePageText(rawTitle, sourceInfo.sourcePageTitle),
+    description: sanitizeSourcePageText(rawDesc, sourceInfo.sourcePageTitle),
     relatedTo: activity.metadata?.relatedTo || "Contact",
     relatedToCompany: activity.metadata?.relatedCompany || "Company",
     type,
     owner: activity.createdBy?.name || "User",
     ownerAvatar: getInitials(activity.createdBy?.name || "User"),
-    dueDate: date.toLocaleDateString(),
+    dueDate: dueDateDisplay,
     dueTime: activity.metadata?.dueTime || date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     status: "Upcoming",
     priority: (activity.metadata?.priority as Activity["priority"]) || "Medium",
     createdAt: dateStr,
+    sourcePageId: sourceInfo.sourcePageId,
+    sourcePageTitle: sourceInfo.sourcePageTitle,
+    metadata: activity.metadata,
   };
 }
 
@@ -271,7 +298,13 @@ export async function fetchActivities(
   // Process activities
   if (activitiesRes.status === "fulfilled" && activitiesRes.value) {
     const data = activitiesRes.value.data;
-    const activities = data.activities || data.data || [];
+    const activities = Array.isArray(data)
+      ? data
+      : Array.isArray(data?.activities)
+      ? data.activities
+      : Array.isArray(data?.data)
+      ? data.data
+      : [];
     console.log("📋 /activities/get-activities data:", data);
     console.log("📋 /activities/get-activities items:", activities);
     activities.forEach((a: any) => {
