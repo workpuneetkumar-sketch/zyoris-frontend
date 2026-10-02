@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   ListTree,
   Plus,
@@ -53,6 +53,7 @@ import {
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
 import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
+import { formatStepTypeLabel, renderTemplatePreview } from "@/lib/utils/salesDisplay";
 
 interface SequencesCadenceWorkspaceProps {
   customerId?: string;
@@ -88,6 +89,28 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
   ]);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const textareaRefs = useRef<{ [key: number]: HTMLTextAreaElement | null }>({});
+
+  const insertVariableAtCursor = (idx: number, token: string) => {
+    const textarea = textareaRefs.current[idx];
+    const currentBody = newSteps[idx]?.body || "";
+    if (!textarea) {
+      handleUpdateStep(idx, "body", currentBody + token);
+      return;
+    }
+
+    const start = textarea.selectionStart ?? currentBody.length;
+    const end = textarea.selectionEnd ?? currentBody.length;
+    const newBody = currentBody.substring(0, start) + token + currentBody.substring(end);
+
+    handleUpdateStep(idx, "body", newBody);
+
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + token.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
 
   // Enroll in Sequence Modal
   const [isEnrollOpen, setIsEnrollOpen] = useState(false);
@@ -633,7 +656,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                       <span key={idx} className="sales-pill sales-pill-sub">
                         {getStepIcon(st.stepType)}
                         <span style={{ marginLeft: "0.2rem" }}>
-                          Step {st.stepOrder}: {st.stepType} {st.delayDays ? `(+${st.delayDays}d)` : ""}
+                          Step {st.stepOrder}: {formatStepTypeLabel(st.stepType)} {st.delayDays ? `(+${st.delayDays}d)` : ""}
                         </span>
                       </span>
                     ))}
@@ -922,7 +945,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontWeight: 600 }}>
                           {getStepIcon(st.stepType)}
-                          <span>Step {st.stepOrder}: {st.stepType}</span>
+                          <span>Step {st.stepOrder}: {formatStepTypeLabel(st.stepType)}</span>
                         </div>
                         <span className="sales-pill sales-pill-sub">
                           Delay: {st.delayDays || 0} days
@@ -935,7 +958,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                       )}
                       {st.body && (
                         <div style={{ fontSize: "0.775rem", color: "var(--color-text-secondary)", marginTop: "0.2rem" }}>
-                          {st.body}
+                          {renderTemplatePreview(st.body)}
                         </div>
                       )}
                     </div>
@@ -1070,11 +1093,11 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                               value={st.stepType}
                               onChange={(e) => handleUpdateStep(idx, "stepType", e.target.value)}
                             >
-                              <option value="EMAIL">Send Email (EMAIL)</option>
-                              <option value="CALL">Phone Call (CALL)</option>
-                              <option value="TASK">Task / Action (TASK)</option>
-                              <option value="WAIT">Wait Delay (WAIT)</option>
-                              <option value="LINKEDIN">LinkedIn Touchpoint (LINKEDIN)</option>
+                              <option value="EMAIL">Send Email</option>
+                              <option value="CALL">Phone Call</option>
+                              <option value="TASK">Create Task</option>
+                              <option value="WAIT">Wait Delay</option>
+                              <option value="LINKEDIN">LinkedIn Touchpoint</option>
                             </select>
                           </div>
                           <div>
@@ -1132,8 +1155,41 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                         </div>
 
                         <div style={{ marginTop: "0.5rem" }}>
-                          <label className="sales-label">Template Body / Action Instructions</label>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.35rem", flexWrap: "wrap", gap: "0.35rem" }}>
+                            <label className="sales-label" style={{ margin: 0 }}>Template Body / Action Instructions</label>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.3rem", flexWrap: "wrap" }}>
+                              <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>Insert variable:</span>
+                              {[
+                                { label: "+ First Name", token: "{{firstName}}" },
+                                { label: "+ Company", token: "{{company}}" },
+                                { label: "+ Full Name", token: "{{name}}" },
+                                { label: "+ Job Title", token: "{{jobTitle}}" },
+                              ].map((v) => (
+                                <button
+                                  key={v.token}
+                                  type="button"
+                                  onClick={() => insertVariableAtCursor(idx, v.token)}
+                                  className="sales-btn"
+                                  style={{
+                                    fontSize: "0.72rem",
+                                    padding: "0.15rem 0.45rem",
+                                    borderRadius: "5px",
+                                    background: "rgba(37, 99, 235, 0.08)",
+                                    color: "var(--color-primary)",
+                                    border: "1px solid rgba(37, 99, 235, 0.22)",
+                                    cursor: "pointer",
+                                    fontWeight: 500,
+                                  }}
+                                >
+                                  {v.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <textarea
+                            ref={(el) => {
+                              textareaRefs.current[idx] = el;
+                            }}
                             rows={2}
                             className="sales-textarea"
                             value={st.body || ""}

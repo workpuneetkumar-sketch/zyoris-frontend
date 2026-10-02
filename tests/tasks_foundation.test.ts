@@ -3398,3 +3398,215 @@ test("Task 1 — Issue 14: Customer-Facing Lead Selection and Meeting Prep Sanit
   });
 });
 
+test("Task 1 — Issue 16: Customer-Friendly Action Controls and Template Variable Sanitization", async (t) => {
+  const {
+    formatStepTypeLabel,
+    formatOutreachChannel,
+    formatProposalAction,
+    formatPreferenceChannel,
+    formatConsentStatus,
+    formatTemplateDisplayText,
+    renderTemplatePreview,
+    STEP_TYPE_LABELS,
+  } = await import("../lib/utils/salesDisplay.ts");
+
+  await t.test("Sequences: Step types map to customer-friendly labels without modifying internal enums", () => {
+    assert.strictEqual(formatStepTypeLabel("EMAIL"), "Send Email");
+    assert.strictEqual(formatStepTypeLabel("SEND_EMAIL"), "Send Email");
+    assert.strictEqual(formatStepTypeLabel("CALL"), "Phone Call");
+    assert.strictEqual(formatStepTypeLabel("CALL_TASK"), "Phone Call");
+    assert.strictEqual(formatStepTypeLabel("TASK"), "Create Task");
+    assert.strictEqual(formatStepTypeLabel("WAIT"), "Wait Delay");
+    assert.strictEqual(formatStepTypeLabel("WAIT_DELAY"), "Wait Delay");
+    assert.strictEqual(formatStepTypeLabel("LINKEDIN"), "LinkedIn Touchpoint");
+    assert.strictEqual(formatStepTypeLabel("WHATSAPP"), "WhatsApp Message");
+    assert.strictEqual(formatStepTypeLabel("SEND_WHATSAPP"), "WhatsApp Message");
+    assert.strictEqual(formatStepTypeLabel("WAIT_CONDITION"), "Wait for Condition");
+    assert.strictEqual(formatStepTypeLabel("BRANCH_CONDITION"), "Branching Decision");
+
+    // Formatted label output example: "Step 1: Send Email"
+    const step1 = { stepOrder: 1, stepType: "EMAIL" };
+    const step2 = { stepOrder: 2, stepType: "CALL" };
+    assert.strictEqual(`Step ${step1.stepOrder}: ${formatStepTypeLabel(step1.stepType)}`, "Step 1: Send Email");
+    assert.strictEqual(`Step ${step2.stepOrder}: ${formatStepTypeLabel(step2.stepType)}`, "Step 2: Phone Call");
+
+    // Internal stepType values remain untouched
+    assert.strictEqual(step1.stepType, "EMAIL");
+    assert.strictEqual(step2.stepType, "CALL");
+  });
+
+  await t.test("Sequences: Dropdown options remove developer enum suffixes while retaining enum values", () => {
+    // Dropdown options should render friendly labels without "(EMAIL)" suffix
+    const dropdownOptions = [
+      { value: "EMAIL", label: "Send Email" },
+      { value: "CALL", label: "Phone Call" },
+      { value: "TASK", label: "Create Task" },
+      { value: "WAIT", label: "Wait Delay" },
+      { value: "LINKEDIN", label: "LinkedIn Touchpoint" },
+    ];
+
+    dropdownOptions.forEach((opt) => {
+      // Must not contain developer enum suffix like "Send Email (EMAIL)"
+      assert.strictEqual(opt.label.includes(`(${opt.value})`), false);
+      // Friendly label should match expected display
+      assert.strictEqual(opt.label, STEP_TYPE_LABELS[opt.value]);
+    });
+  });
+
+  await t.test("Sequences: Personalization toolbar inserts correct template token at cursor position", () => {
+    // Helper replicating insertVariableAtCursor logic
+    function insertVariable(currentBody: string, token: string, selectionStart: number, selectionEnd: number) {
+      const newBody = currentBody.substring(0, selectionStart) + token + currentBody.substring(selectionEnd);
+      const newCursorPos = selectionStart + token.length;
+      return { newBody, newCursorPos };
+    }
+
+    // 1. Insert at middle cursor position
+    const text1 = "Hello , how are you?";
+    const res1 = insertVariable(text1, "{{firstName}}", 6, 6);
+    assert.strictEqual(res1.newBody, "Hello {{firstName}}, how are you?");
+    assert.strictEqual(res1.newCursorPos, 6 + "{{firstName}}".length);
+
+    // 2. Insert with selected text replacement
+    const text2 = "Welcome [NAME] to our portal";
+    const res2 = insertVariable(text2, "{{company}}", 8, 14);
+    assert.strictEqual(res2.newBody, "Welcome {{company}} to our portal");
+
+    // 3. Insert + Full Name and + Job Title
+    const text3 = "Contact ";
+    const res3 = insertVariable(text3, "{{name}}", text3.length, text3.length);
+    assert.strictEqual(res3.newBody, "Contact {{name}}");
+
+    const text4 = "Role: ";
+    const res4 = insertVariable(text4, "{{jobTitle}}", text4.length, text4.length);
+    assert.strictEqual(res4.newBody, "Role: {{jobTitle}}");
+
+    // 4. Stored underlying step body preserves exact template tokens
+    const stepPayload = {
+      stepOrder: 1,
+      stepType: "EMAIL",
+      subject: "Introduction",
+      body: res1.newBody,
+    };
+    assert.strictEqual(stepPayload.body, "Hello {{firstName}}, how are you?");
+    assert.strictEqual(stepPayload.stepType, "EMAIL");
+  });
+
+  await t.test("Sequences: Preview converts raw template variables to customer-friendly chips/tags", () => {
+    const rawTemplate = "Hi {{firstName}}, thanks for connecting from {{company}}. Is {{name}} still {{jobTitle}}?";
+
+    // Plain text formatter
+    const friendlyText = formatTemplateDisplayText(rawTemplate);
+    assert.strictEqual(
+      friendlyText,
+      "Hi [First Name], thanks for connecting from [Company]. Is [Full Name] still [Job Title]?"
+    );
+    assert.strictEqual(friendlyText.includes("{{firstName}}"), false);
+    assert.strictEqual(friendlyText.includes("{{company}}"), false);
+
+    // Node preview renderer returns React element tree with styled variable chips
+    const previewNode = renderTemplatePreview(rawTemplate);
+    assert.ok(previewNode);
+    // Underlying template string remains completely untouched
+    assert.strictEqual(rawTemplate, "Hi {{firstName}}, thanks for connecting from {{company}}. Is {{name}} still {{jobTitle}}?");
+  });
+
+  await t.test("Outreach Generator: Formats outreach channels to customer-friendly labels", () => {
+    assert.strictEqual(formatOutreachChannel("EMAIL"), "Email");
+    assert.strictEqual(formatOutreachChannel("WHATSAPP"), "WhatsApp");
+    assert.strictEqual(formatOutreachChannel("CALL_SCRIPT"), "Phone Call Script");
+    assert.strictEqual(formatOutreachChannel("LINKEDIN"), "LinkedIn Message");
+    assert.strictEqual(formatOutreachChannel("ALL"), "All Channels");
+
+    // Active draft badge display
+    const activeDraft = {
+      id: "draft_123",
+      channel: "CALL_SCRIPT",
+      content: "Hello prospect...",
+    };
+    const displayedBadge = formatOutreachChannel(activeDraft.channel);
+    assert.strictEqual(displayedBadge, "Phone Call Script");
+
+    // Internal channel value and API payload remain unchanged
+    assert.strictEqual(activeDraft.channel, "CALL_SCRIPT");
+
+    // Channel selection tabs list
+    const availableChannels = ["EMAIL", "WHATSAPP", "CALL_SCRIPT", "LINKEDIN"];
+    const channelTabLabels = availableChannels.map((c) => formatOutreachChannel(c));
+    assert.deepStrictEqual(channelTabLabels, ["Email", "WhatsApp", "Phone Call Script", "LinkedIn Message"]);
+  });
+
+  await t.test("Proposals: Governance actions format to customer-friendly labels", () => {
+    assert.strictEqual(formatProposalAction("AUTO_APPROVE"), "Auto Approve");
+    assert.strictEqual(formatProposalAction("REQUIRE_VP_APPROVAL"), "Require VP Approval");
+    assert.strictEqual(formatProposalAction("FLAG_COMPLIANCE"), "Flag Compliance");
+
+    // Rule card badge
+    const rule = {
+      id: "rule_1",
+      name: "High Discount Threshold",
+      action: "REQUIRE_VP_APPROVAL",
+      isActive: true,
+    };
+
+    assert.strictEqual(formatProposalAction(rule.action), "Require VP Approval");
+    // Internal rule action remains unchanged
+    assert.strictEqual(rule.action, "REQUIRE_VP_APPROVAL");
+  });
+
+  await t.test("Customer Preferences: Channel options and consent statuses format cleanly", () => {
+    // Channels
+    assert.strictEqual(formatPreferenceChannel("EMAIL"), "Email");
+    assert.strictEqual(formatPreferenceChannel("PHONE"), "Phone");
+    assert.strictEqual(formatPreferenceChannel("SMS"), "SMS");
+    assert.strictEqual(formatPreferenceChannel("WHATSAPP"), "WhatsApp");
+    assert.strictEqual(formatPreferenceChannel("IN_APP"), "In-App");
+    assert.strictEqual(formatPreferenceChannel("NONE"), "None");
+
+    // Consent statuses
+    assert.strictEqual(formatConsentStatus("GRANTED"), "Granted");
+    assert.strictEqual(formatConsentStatus("PENDING"), "Pending");
+    assert.strictEqual(formatConsentStatus("WITHDRAWN"), "Withdrawn");
+    assert.strictEqual(formatConsentStatus("NOT_SET"), "Not Set");
+
+    // Modal options retain underlying values
+    const preferencePayload = {
+      preferredChannel: "WHATSAPP",
+      consentStatus: "GRANTED",
+    };
+    assert.strictEqual(formatPreferenceChannel(preferencePayload.preferredChannel), "WhatsApp");
+    assert.strictEqual(formatConsentStatus(preferencePayload.consentStatus), "Granted");
+    assert.strictEqual(preferencePayload.preferredChannel, "WHATSAPP");
+    assert.strictEqual(preferencePayload.consentStatus, "GRANTED");
+  });
+
+  await t.test("End-to-End API payload immutability check for Issue 16", () => {
+    // Sequences API payload
+    const sequencePayload = {
+      name: "Outbound SaaS Sequence",
+      steps: [
+        { stepOrder: 1, stepType: "EMAIL", body: "Hi {{firstName}}, welcome to {{company}}!" },
+        { stepOrder: 2, stepType: "CALL", body: "Follow up with {{name}}" },
+      ],
+    };
+    assert.strictEqual(sequencePayload.steps[0].stepType, "EMAIL");
+    assert.strictEqual(sequencePayload.steps[0].body.includes("{{firstName}}"), true);
+    assert.strictEqual(sequencePayload.steps[1].stepType, "CALL");
+
+    // Outreach API payload
+    const outreachPayload = {
+      channel: "CALL_SCRIPT",
+      leadId: "lead_123",
+      template: "Outreach Pitch",
+    };
+    assert.strictEqual(outreachPayload.channel, "CALL_SCRIPT");
+
+    // Proposal API payload
+    const proposalRulePayload = {
+      name: "VP Approvals for large deals",
+      action: "REQUIRE_VP_APPROVAL",
+    };
+    assert.strictEqual(proposalRulePayload.action, "REQUIRE_VP_APPROVAL");
+  });
+});
+

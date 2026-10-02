@@ -34,6 +34,7 @@ import {
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
 import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
+import { formatOutreachChannel } from "@/lib/utils/salesDisplay";
 
 interface OutreachGeneratorWorkspaceProps {
   leadId?: string;
@@ -203,7 +204,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
       setDrafts((prev) => [fallbackDraft, ...prev]);
     } finally {
       setGenerating(false);
-      setActionBanner({ type: "success", text: `Grounded ${channel.toLowerCase()} draft generated successfully!` });
+      setActionBanner({ type: "success", text: `Grounded ${formatOutreachChannel(channel).toLowerCase()} draft generated successfully!` });
       setTimeout(() => setActionBanner(null), 4000);
     }
   };
@@ -358,7 +359,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                     onClick={() => setChannel(c)}
                   >
                     {getChannelIcon(c)}
-                    <span>{c.replace("_", " ")}</span>
+                    <span>{formatOutreachChannel(c)}</span>
                   </button>
                 ))}
               </div>
@@ -594,7 +595,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <span className="sales-badge sales-badge-info">
                     {getChannelIcon(activeDraft.channel)}
-                    <span style={{ marginLeft: "0.3rem" }}>{activeDraft.channel}</span>
+                    <span style={{ marginLeft: "0.3rem" }}>{formatOutreachChannel(activeDraft.channel)}</span>
                   </span>
                   <span
                     className={`sales-badge ${
@@ -805,7 +806,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 className={`sales-channel-tab ${channelFilter === c ? "sales-channel-tab-active" : ""}`}
                 onClick={() => setChannelFilter(c)}
               >
-                <span>{c.replace("_", " ")}</span>
+                <span>{formatOutreachChannel(c)}</span>
               </button>
             ))}
           </div>
@@ -844,7 +845,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 <div className="sales-proposal-card-header">
                   <span className="sales-badge sales-badge-info">
                     {getChannelIcon(d.channel)}
-                    <span style={{ marginLeft: "0.25rem" }}>{d.channel}</span>
+                    <span style={{ marginLeft: "0.25rem" }}>{formatOutreachChannel(d.channel)}</span>
                   </span>
                   <span className="sales-timeline-timestamp">
                     <Clock size={12} /> {new Date(d.createdAt).toLocaleDateString()}
@@ -898,7 +899,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
               {!loadingDetail && selectedDraftDetail && (
                 <>
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                    <span className="sales-badge sales-badge-info">{selectedDraftDetail.channel}</span>
+                    <span className="sales-badge sales-badge-info">{formatOutreachChannel(selectedDraftDetail.channel)}</span>
                     <span className="sales-badge sales-badge-success">{selectedDraftDetail.status}</span>
                   </div>
 
