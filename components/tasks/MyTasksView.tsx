@@ -1,5 +1,6 @@
 // components/tasks/MyTasksView.tsx
 "use client";
+import { cleanTaskDescription } from "@/utils/taskUtils";
 
 import React, { useState, useRef } from "react";
 import Link from "next/link";
@@ -541,9 +542,9 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                       </button>
                     </div>
 
-                    {task.description && (
+                    {Boolean(cleanTaskDescription(task.description)) && (
                       <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 max-w-2xl">
-                        {task.description}
+                        {cleanTaskDescription(task.description)}
                       </p>
                     )}
                   </div>
@@ -670,7 +671,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                         className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-xs font-semibold transition border border-slate-200/60 dark:border-slate-700/60"
                       >
                         <Users className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Lead: {task.leadId}</span>
+                        <span>Lead Details</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </Link>
                     )}
@@ -682,7 +683,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                         className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-blue-950/40 text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 rounded-lg text-xs font-semibold transition border border-slate-200/60 dark:border-slate-700/60"
                       >
                         <Briefcase className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Deal: {task.dealId}</span>
+                        <span>Deal Details</span>
                         <ExternalLink className="w-3 h-3 opacity-60" />
                       </Link>
                     )}
@@ -752,7 +753,7 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
                     </span>
                   </div>
                   <p className="font-semibold text-slate-800 dark:text-slate-200">
-                    Task ID: {evt.taskId}
+                    {evt.task?.title || "Task Assignment"}
                   </p>
                   {evt.task?.title && (
                     <p className="text-slate-500 line-clamp-1">{evt.task.title}</p>
