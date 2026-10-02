@@ -43,6 +43,8 @@ import {
   createProposalRule,
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel } from "@/lib/utils/leadDisplay";
+import { formatProposalAction } from "@/lib/utils/salesDisplay";
 
 const PROPOSALS_STORAGE_KEY = "zyoris_proposals_cache";
 
@@ -855,7 +857,7 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                 <div key={r.id} className="sales-rule-card">
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                      <span className="sales-badge sales-badge-info">{r.action}</span>
+                      <span className="sales-badge sales-badge-info">{formatProposalAction(r.action)}</span>
                       <h4 className="sales-rule-name">{r.name}</h4>
                     </div>
                     <span className={`sales-badge ${r.isActive ? "sales-badge-success" : "sales-badge-muted"}`}>
@@ -1298,19 +1300,19 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                         {targetEntityType === "DEAL" &&
                           deals.map((d) => (
                             <option key={d.id} value={d.id}>
-                              {d.name} {d.details ? `(${d.details})` : `[${d.id}]`}
+                              {d.name}{d.details ? ` (${d.details})` : ""}
                             </option>
                           ))}
                         {targetEntityType === "LEAD" &&
                           leads.map((l) => (
                             <option key={l.id} value={l.id}>
-                              {l.name} {l.email ? `(${l.email})` : `[${l.id}]`}
+                              {formatLeadOptionLabel(l)}
                             </option>
                           ))}
                         {(targetEntityType === "CUSTOMER" || targetEntityType === "CONTACT") &&
                           contacts.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.name} {c.email ? `(${c.email})` : `[${c.id}]`}
+                              {c.name}{c.email ? ` (${c.email})` : ""}
                             </option>
                           ))}
                         {targetEntityType === "COMPANY" && (

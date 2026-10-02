@@ -118,6 +118,45 @@ export function clearTaskLabels(taskId: string) {
     }
 }
 
+const TASK_ASSIGNMENT_STORAGE_KEY = "zyoris_task_assignments";
+const inMemoryAssignmentMap: Record<string, EffectiveAssignmentResponse | null> = {};
+
+export function getTaskAssignmentMap(): Record<string, EffectiveAssignmentResponse | null> {
+    if (typeof window === "undefined" || !window.localStorage) return inMemoryAssignmentMap;
+    try {
+        const raw = localStorage.getItem(TASK_ASSIGNMENT_STORAGE_KEY);
+        return raw ? JSON.parse(raw) : inMemoryAssignmentMap;
+    } catch {
+        return inMemoryAssignmentMap;
+    }
+}
+
+export function saveTaskAssignment(taskId: string, assignment: EffectiveAssignmentResponse | null) {
+    inMemoryAssignmentMap[taskId] = assignment;
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+        const current = getTaskAssignmentMap();
+        current[taskId] = assignment;
+        localStorage.setItem(TASK_ASSIGNMENT_STORAGE_KEY, JSON.stringify(current));
+    } catch {
+        // Ignore storage errors
+    }
+}
+
+export function clearTaskAssignment(taskId: string) {
+    delete inMemoryAssignmentMap[taskId];
+    if (typeof window === "undefined" || !window.localStorage) return;
+    try {
+        const current = getTaskAssignmentMap();
+        if (taskId in current) {
+            delete current[taskId];
+            localStorage.setItem(TASK_ASSIGNMENT_STORAGE_KEY, JSON.stringify(current));
+        }
+    } catch {
+        // Ignore storage errors
+    }
+}
+
 export interface Task {
     id: string;
     title: string;
@@ -300,6 +339,7 @@ export interface TaskActivity {
     type:
         | "TASK_CREATED"
         | "TASK_ASSIGNED"
+        | "TASK_REASSIGNED"
         | "TASK_UNASSIGNED"
         | "STATUS_CHANGED"
         | "PRIORITY_CHANGED"
@@ -387,6 +427,42 @@ export function normaliseTasksResponse(raw: unknown): TasksResponse {
         }
         return task;
     });
+
+    // Apply stored assignment data (survives drawer close/reopen and page refresh)
+    const assignmentMap = getTaskAssignmentMap();
+    if (Object.keys(assignmentMap).length > 0) {
+        result.tasks = result.tasks.map((task) => {
+            if (task && assignmentMap.hasOwnProperty(task.id)) {
+                const storedAssignment = assignmentMap[task.id];
+                if (storedAssignment === null) {
+                    return {
+                        ...task,
+                        department: undefined,
+                        assigneeType: undefined,
+                        effectiveAssignment: null,
+                        assignedTo: null,
+                        assignedToId: null,
+                    };
+                }
+                const resolvedAssignedTo = storedAssignment.assignedTo
+                    ? {
+                          id: storedAssignment.assignedTo.id,
+                          name: storedAssignment.assignedTo.name ?? "",
+                          email: storedAssignment.assignedTo.email ?? "",
+                      }
+                    : task.assignedTo;
+                return {
+                    ...task,
+                    department: storedAssignment.department ?? task.department,
+                    assigneeType: storedAssignment.assigneeType ?? task.assigneeType,
+                    effectiveAssignment: storedAssignment,
+                    assignedTo: resolvedAssignedTo,
+                    assignedToId: storedAssignment.assignedTo?.id ?? task.assignedToId,
+                };
+            }
+            return task;
+        });
+    }
 
     return result;
 }
@@ -498,6 +574,30 @@ export async function fetchTaskById(id: string): Promise<Task> {
         if (data && labelsMap[data.id]) {
             data.labels = labelsMap[data.id];
         }
+        const assignmentMap = getTaskAssignmentMap();
+        if (data && assignmentMap.hasOwnProperty(data.id)) {
+            const stored = assignmentMap[data.id];
+            if (stored === null) {
+                data.department = undefined;
+                data.assigneeType = undefined;
+                data.effectiveAssignment = null;
+                data.assignedTo = null;
+                data.assignedToId = null;
+            } else {
+                const resolvedAssignedTo = stored.assignedTo
+                    ? {
+                          id: stored.assignedTo.id,
+                          name: stored.assignedTo.name ?? "",
+                          email: stored.assignedTo.email ?? "",
+                      }
+                    : data.assignedTo;
+                data.department = stored.department ?? data.department;
+                data.assigneeType = stored.assigneeType ?? data.assigneeType;
+                data.effectiveAssignment = stored;
+                data.assignedTo = resolvedAssignedTo;
+                data.assignedToId = stored.assignedTo?.id ?? data.assignedToId;
+            }
+        }
         if (data && !data.dependencies && Array.isArray((data as any).dependsOn)) {
             data.dependencies = normaliseTaskDependenciesResponse((data as any).dependsOn, data.id);
         }
@@ -514,6 +614,30 @@ export async function fetchTaskById(id: string): Promise<Task> {
                 const labelsMap = getTaskLabelsMap();
                 if (data && labelsMap[data.id]) {
                     data.labels = labelsMap[data.id];
+                }
+                const assignmentMap = getTaskAssignmentMap();
+                if (data && assignmentMap.hasOwnProperty(data.id)) {
+                    const stored = assignmentMap[data.id];
+                    if (stored === null) {
+                        data.department = undefined;
+                        data.assigneeType = undefined;
+                        data.effectiveAssignment = null;
+                        data.assignedTo = null;
+                        data.assignedToId = null;
+                    } else {
+                        const fallbackAssignedTo = stored.assignedTo
+                            ? {
+                                  id: stored.assignedTo.id,
+                                  name: stored.assignedTo.name ?? "",
+                                  email: stored.assignedTo.email ?? "",
+                              }
+                            : data.assignedTo;
+                        data.department = stored.department ?? data.department;
+                        data.assigneeType = stored.assigneeType ?? data.assigneeType;
+                        data.effectiveAssignment = stored;
+                        data.assignedTo = fallbackAssignedTo;
+                        data.assignedToId = stored.assignedTo?.id ?? data.assignedToId;
+                    }
                 }
                 if (data && !data.dependencies && Array.isArray((data as any).dependsOn)) {
                     data.dependencies = normaliseTaskDependenciesResponse((data as any).dependsOn, data.id);
@@ -686,6 +810,7 @@ export async function deleteTask(id: string): Promise<{ success: boolean; messag
     const res = await api.delete<any>(`/tasks/${id}`);
     clearTaskSubstatus(id);
     clearTaskLabels(id);
+    clearTaskAssignment(id);
     return res.data;
 }
 

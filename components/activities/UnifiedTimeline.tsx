@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import { useTimeline } from "@/hooks/useTimeline";
 import { TimelineItem, TimelineItemType, TIMELINE_ITEM_LABELS } from "@/types/timeline";
+import Link from "next/link";
+import { sanitizeSourcePageText, extractSourcePageInfo } from "@/lib/utils/sourcePageSanitizer";
 
 // ── Icon map ─────────────────────────────────────────────────────────────────
 
@@ -101,7 +103,9 @@ function TimelineCard({
           </span>
         </div>
         {item.description && (
-          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{item.description}</p>
+          <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+            {sanitizeSourcePageText(item.description)}
+          </p>
         )}
         <div className="flex items-center gap-2 mt-1.5 flex-wrap">
           {item.relatedTo && (
@@ -137,7 +141,13 @@ function ActivityDrawer({
   const icon = TYPE_ICONS[item.type];
 
   const metaEntries = item.metadata
-    ? Object.entries(item.metadata).filter(([, v]) => v != null && v !== "")
+    ? Object.entries(item.metadata).filter(
+        ([k, v]) =>
+          v != null &&
+          v !== "" &&
+          !/^(?:sourcePageId|pageId|workspacePageId)$/i.test(k) &&
+          !/^(?:c[a-z0-9]{20,}|cm[a-z0-9]{5,})$/i.test(String(v).trim())
+      )
     : [];
 
   return (
@@ -200,9 +210,31 @@ function ActivityDrawer({
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
                 Description
               </p>
-              <p className="text-sm text-gray-700 leading-relaxed">{item.description}</p>
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {sanitizeSourcePageText(item.description)}
+              </p>
             </div>
           )}
+
+          {/* Source Page link if present */}
+          {(() => {
+            const { sourcePageId, sourcePageTitle } = extractSourcePageInfo(item as any);
+            if (!sourcePageId) return null;
+            return (
+              <div>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-1">
+                  Source Page
+                </p>
+                <Link
+                  href={`/workspace/pages/${sourcePageId}`}
+                  className="text-xs text-blue-600 hover:underline font-medium inline-flex items-center gap-1"
+                >
+                  <FileText size={13} />
+                  <span>{sourcePageTitle || "Workspace Page"}</span>
+                </Link>
+              </div>
+            );
+          })()}
 
           {/* Related to */}
           {item.relatedTo && (

@@ -27,6 +27,8 @@ import {
 } from "@/lib/api/salesExecutionApi";
 import EvidenceChip from "./EvidenceChip";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
+import SalesLeadDropdown from "./SalesLeadDropdown";
 
 interface MeetingIntelligenceInterfaceProps {
   initialMeetingId?: string;
@@ -41,7 +43,9 @@ export const MeetingIntelligenceInterface: React.FC<MeetingIntelligenceInterface
 }) => {
   const { leads, contacts } = useSalesEntities();
   const [meetingId, setMeetingId] = useState(initialMeetingId);
-  const [searchMeetingId, setSearchMeetingId] = useState(initialMeetingId);
+  const [searchMeetingId, setSearchMeetingId] = useState(
+    initialMeetingId && !isTechnicalId(initialMeetingId) ? initialMeetingId : ""
+  );
   const [dealId, setDealId] = useState(initialDealId);
   const [customerId, setCustomerId] = useState(initialCustomerId);
 
@@ -114,10 +118,19 @@ export const MeetingIntelligenceInterface: React.FC<MeetingIntelligenceInterface
   useEffect(() => {
     if (initialMeetingId) {
       setMeetingId(initialMeetingId);
-      setSearchMeetingId(initialMeetingId);
+      if (!isTechnicalId(initialMeetingId)) {
+        setSearchMeetingId(initialMeetingId);
+      }
       fetchIntelligence(initialMeetingId);
     }
   }, [initialMeetingId, fetchIntelligence]);
+
+  const handleLeadSelect = (leadId: string) => {
+    if (leadId.trim()) {
+      setMeetingId(leadId.trim());
+      fetchIntelligence(leadId.trim());
+    }
+  };
 
   // Handle Load Existing Intelligence
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -180,35 +193,19 @@ export const MeetingIntelligenceInterface: React.FC<MeetingIntelligenceInterface
       {/* Top Search / Meeting Bar */}
       <div className="meeting-prep-topbar">
         <form onSubmit={handleSearchSubmit} className="meeting-prep-selector" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-          <select
-            className="sales-select"
-            style={{ width: "240px" }}
-            value={searchMeetingId}
-            onChange={(e) => {
-              const val = e.target.value;
-              setSearchMeetingId(val);
-              if (val.trim()) {
-                setMeetingId(val.trim());
-                fetchIntelligence(val.trim());
-              }
-            }}
-          >
-            <option value="">-- Select Lead/Meeting --</option>
-            <optgroup label="Live Leads">
-              {leads.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.id})
-                </option>
-              ))}
-            </optgroup>
-          </select>
+          <SalesLeadDropdown
+            leads={leads}
+            selectedId={meetingId}
+            onSelect={handleLeadSelect}
+            placeholder="-- Select Lead/Meeting --"
+          />
 
           <div className="sales-search-wrap" style={{ minWidth: "240px" }}>
             <Search size={15} className="sales-search-icon" />
             <input
               type="text"
               className="sales-input sales-search-input"
-              placeholder="Or enter Meeting ID..."
+              placeholder="Or enter meeting reference..."
               value={searchMeetingId}
               onChange={(e) => setSearchMeetingId(e.target.value)}
             />
@@ -221,7 +218,46 @@ export const MeetingIntelligenceInterface: React.FC<MeetingIntelligenceInterface
         {meetingId && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              Context ID: <strong>{meetingId}</strong>
+              {(() => {
+                const activeLead = leads.find((l) => l.id === meetingId);
+                if (activeLead) {
+                  return (
+                    <>
+                      Lead: <strong>{activeLead.name || activeLead.details || "Selected Lead"}</strong>
+                      {activeLead.details && activeLead.name && (
+                        <span style={{ marginLeft: "0.25rem", opacity: 0.85 }}>({activeLead.details})</span>
+                      )}
+                    </>
+                  );
+                }
+                const activeContact = contacts.find((c) => c.id === meetingId);
+                if (activeContact) {
+                  return (
+                    <>
+                      Contact: <strong>{activeContact.name}</strong>
+                    </>
+                  );
+                }
+                if (intelligence) {
+                  return (
+                    <>
+                      Meeting: <strong>Intelligence Session</strong>
+                    </>
+                  );
+                }
+                if (isTechnicalId(meetingId)) {
+                  return (
+                    <>
+                      Meeting: <strong>Active Session</strong>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    Meeting: <strong>{meetingId}</strong>
+                  </>
+                );
+              })()}
             </span>
             <button
               type="button"
@@ -266,35 +302,67 @@ export const MeetingIntelligenceInterface: React.FC<MeetingIntelligenceInterface
             }}
           >
             <div className="sales-form-group" style={{ margin: 0 }}>
-              <label className="sales-label">Meeting ID *</label>
-              <input
-                type="text"
-                className="sales-input"
-                placeholder="e.g. meet_test_01"
-                value={meetingId}
-                onChange={(e) => setMeetingId(e.target.value)}
-                required
-              />
+              <label className="sales-label">Meeting Reference *</label>
+              {isTechnicalId(meetingId) ? (
+                <div
+                  className="sales-input"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    background: "var(--color-background-secondary)",
+                    color: "var(--color-text)",
+                  }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    Linked: {leads.find((l) => l.id === meetingId)?.name || "Selected Lead"}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setMeetingId("")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "var(--color-primary)",
+                      cursor: "pointer",
+                      fontSize: "0.75rem",
+                      fontWeight: 600,
+                      padding: 0,
+                    }}
+                  >
+                    Change
+                  </button>
+                </div>
+              ) : (
+                <input
+                  type="text"
+                  className="sales-input"
+                  placeholder="e.g. meet_test_01"
+                  value={meetingId}
+                  onChange={(e) => setMeetingId(e.target.value)}
+                  required
+                />
+              )}
             </div>
 
             <div className="sales-form-group" style={{ margin: 0 }}>
-              <label className="sales-label">Deal Context ID (Optional)</label>
+              <label className="sales-label">Deal Context (Optional)</label>
               <input
                 type="text"
                 className="sales-input"
                 placeholder="e.g. deal_123"
-                value={dealId}
+                value={isTechnicalId(dealId) ? "" : dealId}
                 onChange={(e) => setDealId(e.target.value)}
               />
             </div>
 
             <div className="sales-form-group" style={{ margin: 0 }}>
-              <label className="sales-label">Customer Context ID (Optional)</label>
+              <label className="sales-label">Customer Context (Optional)</label>
               <input
                 type="text"
                 className="sales-input"
                 placeholder="e.g. cust_123"
-                value={customerId}
+                value={isTechnicalId(customerId) ? "" : customerId}
                 onChange={(e) => setCustomerId(e.target.value)}
               />
             </div>
@@ -389,17 +457,26 @@ export const MeetingIntelligenceInterface: React.FC<MeetingIntelligenceInterface
               {/* Attribution Context */}
               {intelligence.meetingId && (
                 <span className="meeting-intel-context-badge">
-                  <Clock size={12} /> Meeting: {intelligence.meetingId}
+                  <Clock size={12} /> Meeting:{" "}
+                  {isTechnicalId(intelligence.meetingId)
+                    ? "Active Session"
+                    : intelligence.meetingId}
                 </span>
               )}
               {intelligence.customerId && (
                 <span className="meeting-intel-context-badge">
-                  <Building2 size={12} /> Customer: {intelligence.customerId}
+                  <Building2 size={12} /> Customer:{" "}
+                  {isTechnicalId(intelligence.customerId)
+                    ? "Selected Customer"
+                    : intelligence.customerId}
                 </span>
               )}
               {intelligence.dealId && (
                 <span className="meeting-intel-context-badge">
-                  <Briefcase size={12} /> Deal: {intelligence.dealId}
+                  <Briefcase size={12} /> Deal:{" "}
+                  {isTechnicalId(intelligence.dealId)
+                    ? "Selected Deal"
+                    : intelligence.dealId}
                 </span>
               )}
             </div>

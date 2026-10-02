@@ -27,6 +27,8 @@ import {
 import { getMeetingPrep } from "@/lib/api/salesExecutionApi";
 import EvidenceChip from "./EvidenceChip";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
+import SalesLeadDropdown from "./SalesLeadDropdown";
 
 interface MeetingPrepInterfaceProps {
   initialMeetingId?: string;
@@ -40,7 +42,9 @@ export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
   const [prep, setPrep] = useState<MeetingPrepBrief | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [inputMeetingId, setInputMeetingId] = useState(initialMeetingId);
+  const [inputMeetingId, setInputMeetingId] = useState(
+    initialMeetingId && !isTechnicalId(initialMeetingId) ? initialMeetingId : ""
+  );
 
   const fetchPrep = useCallback(async (id: string) => {
     if (!id.trim()) {
@@ -72,10 +76,19 @@ export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
   useEffect(() => {
     if (initialMeetingId) {
       setMeetingId(initialMeetingId);
-      setInputMeetingId(initialMeetingId);
+      if (!isTechnicalId(initialMeetingId)) {
+        setInputMeetingId(initialMeetingId);
+      }
       fetchPrep(initialMeetingId);
     }
   }, [initialMeetingId, fetchPrep]);
+
+  const handleLeadSelect = (leadId: string) => {
+    if (leadId.trim()) {
+      setMeetingId(leadId.trim());
+      fetchPrep(leadId.trim());
+    }
+  };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -98,35 +111,19 @@ export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
       {/* Top Search & Meeting Selector Bar */}
       <div className="meeting-prep-topbar">
         <form onSubmit={handleSearchSubmit} className="meeting-prep-selector" style={{ gap: "0.75rem", flexWrap: "wrap" }}>
-          <select
-            className="sales-select"
-            style={{ width: "240px" }}
-            value={inputMeetingId}
-            onChange={(e) => {
-              const val = e.target.value;
-              setInputMeetingId(val);
-              if (val.trim()) {
-                setMeetingId(val.trim());
-                fetchPrep(val.trim());
-              }
-            }}
-          >
-            <option value="">-- Choose Lead/Meeting --</option>
-            <optgroup label="Live Leads">
-              {leads.map((l) => (
-                <option key={l.id} value={l.id}>
-                  {l.name} ({l.id})
-                </option>
-              ))}
-            </optgroup>
-          </select>
+          <SalesLeadDropdown
+            leads={leads}
+            selectedId={meetingId}
+            onSelect={handleLeadSelect}
+            placeholder="-- Choose Lead/Meeting --"
+          />
 
           <div className="sales-search-wrap" style={{ minWidth: "240px" }}>
             <Search size={15} className="sales-search-icon" />
             <input
               type="text"
               className="sales-input sales-search-input"
-              placeholder="Or enter custom Meeting ID..."
+              placeholder="Or enter meeting reference..."
               value={inputMeetingId}
               onChange={(e) => setInputMeetingId(e.target.value)}
             />
@@ -139,7 +136,46 @@ export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
         {meetingId && (
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
             <span style={{ fontSize: "0.8125rem", color: "var(--color-text-secondary)" }}>
-              Active ID: <strong>{meetingId}</strong>
+              {(() => {
+                const activeLead = leads.find((l) => l.id === meetingId);
+                if (activeLead) {
+                  return (
+                    <>
+                      Lead: <strong>{activeLead.name || activeLead.details || "Selected Lead"}</strong>
+                      {activeLead.details && activeLead.name && (
+                        <span style={{ marginLeft: "0.25rem", opacity: 0.85 }}>({activeLead.details})</span>
+                      )}
+                    </>
+                  );
+                }
+                const activeContact = contacts.find((c) => c.id === meetingId);
+                if (activeContact) {
+                  return (
+                    <>
+                      Contact: <strong>{activeContact.name}</strong>
+                    </>
+                  );
+                }
+                if (prep?.meetingContext?.title) {
+                  return (
+                    <>
+                      Meeting: <strong>{prep.meetingContext.title}</strong>
+                    </>
+                  );
+                }
+                if (isTechnicalId(meetingId)) {
+                  return (
+                    <>
+                      Meeting: <strong>Active Session</strong>
+                    </>
+                  );
+                }
+                return (
+                  <>
+                    Meeting: <strong>{meetingId}</strong>
+                  </>
+                );
+              })()}
             </span>
             <button
               type="button"
@@ -187,7 +223,7 @@ export const MeetingPrepInterface: React.FC<MeetingPrepInterfaceProps> = ({
           </div>
           <h3 className="sales-empty-title">No Meeting Preparation Loaded</h3>
           <p className="sales-empty-desc">
-            Enter a valid Meeting ID above to generate a grounded sales intelligence brief before your call.
+            Choose a lead or enter a meeting to generate a grounded sales intelligence brief before your call.
           </p>
         </div>
       )}

@@ -17,6 +17,7 @@ import {
 import { CustomerPreferences } from "@/types/customers";
 import { fetchCustomerPreferences, updateCustomerPreferences } from "@/lib/api/customersApi";
 import { toast } from "react-toastify";
+import { formatPreferenceChannel, formatConsentStatus } from "@/lib/utils/salesDisplay";
 
 const INPUT_CLASS = `w-full h-10 rounded-lg border px-3 text-sm outline-none transition-all
   bg-[var(--color-surface)]
@@ -199,7 +200,7 @@ export function CustomerPreferencesModal({
               <Row
                 icon={<MessageSquare size={14} className="text-emerald-500" />}
                 label="Preferred Channel"
-                value={prefs.preferredChannel ?? <span className="text-[var(--color-text-muted)]">—</span>}
+                value={prefs.preferredChannel ? formatPreferenceChannel(prefs.preferredChannel) : <span className="text-[var(--color-text-muted)]">—</span>}
               />
               <Row
                 icon={<ShieldCheck size={14} className="text-cyan-500" />}
@@ -210,7 +211,7 @@ export function CustomerPreferencesModal({
                       prefs.consentStatus === "GRANTED" ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300" :
                       prefs.consentStatus === "WITHDRAWN" ? "bg-red-50 text-red-700 dark:bg-red-500/20 dark:text-red-300" :
                       "bg-amber-50 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300"
-                    }`}>{prefs.consentStatus}</span>
+                    }`}>{formatConsentStatus(prefs.consentStatus)}</span>
                   ) : <span className="text-[var(--color-text-muted)]">—</span>
                 }
               />
@@ -281,7 +282,7 @@ export function CustomerPreferencesModal({
                     onChange={(e) => setField("preferredChannel", e.target.value || null)}
                   >
                     <option value="">— Not set —</option>
-                    {CHANNEL_OPTIONS.map((ch) => <option key={ch} value={ch}>{ch}</option>)}
+                    {CHANNEL_OPTIONS.map((ch) => <option key={ch} value={ch}>{formatPreferenceChannel(ch)}</option>)}
                   </select>
                 </div>
                 <div>
@@ -294,7 +295,7 @@ export function CustomerPreferencesModal({
                     onChange={(e) => setField("consentStatus", e.target.value || null)}
                   >
                     <option value="">— Not set —</option>
-                    {CONSENT_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    {CONSENT_OPTIONS.map((c) => <option key={c} value={c}>{formatConsentStatus(c)}</option>)}
                   </select>
                 </div>
               </div>

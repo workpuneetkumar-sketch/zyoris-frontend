@@ -663,6 +663,7 @@ export function LeadsTable({
                                             <td className="px-4 py-3.5" onClick={e => e.stopPropagation()}>
                                                 <LeadCheckbox
                                                     leadId={lead.id}
+                                                    leadName={lead.name}
                                                     isSelected={isSelected(lead.id)}
                                                     onToggle={onToggleSelect}
                                                 />

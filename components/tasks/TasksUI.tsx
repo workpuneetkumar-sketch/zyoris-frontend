@@ -1146,7 +1146,13 @@ export function TasksUI({
                                                                     {task.projectId && (
                                                                         <span className="inline-flex items-center space-x-1 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded text-[9px] font-bold">
                                                                             <FolderKanban size={10} />
-                                                                            <span>{task.projectId}</span>
+                                                                            <span>
+                                                                                {(task as any).projectName ||
+                                                                                    (task as any).project?.name ||
+                                                                                    (!task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_")
+                                                                                        ? task.projectId
+                                                                                        : "Project")}
+                                                                            </span>
                                                                         </span>
                                                                     )}
 

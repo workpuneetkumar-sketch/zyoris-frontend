@@ -264,7 +264,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                     <option value="">Select a lead…</option>
                     {leads.map((l) => (
                       <option key={l.id} value={l.id}>
-                        {l.name}{l.email ? ` (${l.email})` : ""}{l.status ? ` — ${l.status}` : ""}
+                        {l.name || l.company || l.email || "Selected Lead"}{l.email && l.name ? ` (${l.email})` : ""}{l.status ? ` — ${l.status}` : ""}
                       </option>
                     ))}
                   </select>

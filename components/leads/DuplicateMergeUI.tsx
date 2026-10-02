@@ -467,7 +467,7 @@ function PreviewStep({
               <div key={lead.id} className="flex items-center gap-2">
                 <X size={12} className="text-red-400 shrink-0" />
                 <span className="text-xs text-gray-600">
-                  {lead.name} ({lead.email || lead.phone || lead.id})
+                  {lead.name}{lead.email ? ` (${lead.email})` : lead.phone ? ` (${lead.phone})` : lead.company ? ` (${lead.company})` : ""}
                 </span>
               </div>
             ))}

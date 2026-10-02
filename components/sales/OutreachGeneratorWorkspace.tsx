@@ -33,6 +33,8 @@ import {
   getOutreachDraftById,
 } from "@/lib/api/salesExecutionApi";
 import { useSalesEntities } from "@/hooks/useSalesEntities";
+import { formatLeadOptionLabel, isTechnicalId } from "@/lib/utils/leadDisplay";
+import { formatOutreachChannel } from "@/lib/utils/salesDisplay";
 
 interface OutreachGeneratorWorkspaceProps {
   leadId?: string;
@@ -171,7 +173,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
       content: channelBody,
       status: "DRAFT",
       evidence: [
-        `Grounded in active CRM entity record: ${entityName} (${targetEntityId})`,
+        `Grounded in active CRM entity record: ${entityName}`,
         `Context objective: ${goal.trim() || "Pipeline progress and meeting acceleration"}`,
         `Governance standard: Verified compliance with 15% discount rules`,
       ],
@@ -202,7 +204,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
       setDrafts((prev) => [fallbackDraft, ...prev]);
     } finally {
       setGenerating(false);
-      setActionBanner({ type: "success", text: `Grounded ${channel.toLowerCase()} draft generated successfully!` });
+      setActionBanner({ type: "success", text: `Grounded ${formatOutreachChannel(channel).toLowerCase()} draft generated successfully!` });
       setTimeout(() => setActionBanner(null), 4000);
     }
   };
@@ -357,7 +359,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                     onClick={() => setChannel(c)}
                   >
                     {getChannelIcon(c)}
-                    <span>{c.replace("_", " ")}</span>
+                    <span>{formatOutreachChannel(c)}</span>
                   </button>
                 ))}
               </div>
@@ -407,7 +409,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                   >
                     {deals.map((d) => (
                       <option key={d.id} value={d.id}>
-                        {d.name} {d.details ? `(${d.details})` : ""} - {d.id}
+                        {d.name}{d.details ? ` (${d.details})` : ""}
                       </option>
                     ))}
                   </select>
@@ -419,7 +421,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                   >
                     {leads.map((l) => (
                       <option key={l.id} value={l.id}>
-                        {l.name} {l.details ? `(${l.details})` : ""} - {l.id}
+                        {formatLeadOptionLabel(l)}
                       </option>
                     ))}
                   </select>
@@ -431,7 +433,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                   >
                     {contacts.map((c) => (
                       <option key={c.id} value={c.id}>
-                        {c.name} {c.email ? `(${c.email})` : ""} - {c.id}
+                        {c.name}{c.email ? ` (${c.email})` : ""}
                       </option>
                     ))}
                   </select>
@@ -441,7 +443,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                     className="sales-input"
                     value={targetEntityId}
                     onChange={(e) => setTargetEntityId(e.target.value)}
-                    placeholder={`Enter ${targetEntityType.toLowerCase()} UUID...`}
+                    placeholder={`Enter ${targetEntityType.toLowerCase()} reference...`}
                     required
                   />
                 )}
@@ -449,7 +451,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
             </div>
 
             {/* CRM Facts & Context Evidence Card */}
-            {(selectedDeal || selectedLead || selectedContact || targetEntityId) && (
+            {(selectedDeal || selectedLead || selectedContact || (!isTechnicalId(targetEntityId) && targetEntityId)) && (
               <div style={{ padding: "0.75rem", background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: "8px", fontSize: "0.8rem" }}>
                 <span style={{ fontWeight: 600, color: "var(--color-text)", display: "flex", alignItems: "center", gap: "0.35rem", marginBottom: "0.35rem" }}>
                   <ShieldCheck size={13} style={{ color: "var(--color-primary)" }} />
@@ -474,7 +476,9 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                       {selectedContact.email && <span className="sales-pill sales-pill-sub">{selectedContact.email}</span>}
                     </>
                   )}
-                  <span className="sales-pill sales-pill-sub">ID: {targetEntityId}</span>
+                  {!selectedDeal && !selectedLead && !selectedContact && !isTechnicalId(targetEntityId) && targetEntityId && (
+                    <span className="sales-pill sales-pill-sub">Target: {targetEntityId}</span>
+                  )}
                 </div>
               </div>
             )}
@@ -591,7 +595,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                   <span className="sales-badge sales-badge-info">
                     {getChannelIcon(activeDraft.channel)}
-                    <span style={{ marginLeft: "0.3rem" }}>{activeDraft.channel}</span>
+                    <span style={{ marginLeft: "0.3rem" }}>{formatOutreachChannel(activeDraft.channel)}</span>
                   </span>
                   <span
                     className={`sales-badge ${
@@ -802,7 +806,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 className={`sales-channel-tab ${channelFilter === c ? "sales-channel-tab-active" : ""}`}
                 onClick={() => setChannelFilter(c)}
               >
-                <span>{c.replace("_", " ")}</span>
+                <span>{formatOutreachChannel(c)}</span>
               </button>
             ))}
           </div>
@@ -841,7 +845,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 <div className="sales-proposal-card-header">
                   <span className="sales-badge sales-badge-info">
                     {getChannelIcon(d.channel)}
-                    <span style={{ marginLeft: "0.25rem" }}>{d.channel}</span>
+                    <span style={{ marginLeft: "0.25rem" }}>{formatOutreachChannel(d.channel)}</span>
                   </span>
                   <span className="sales-timeline-timestamp">
                     <Clock size={12} /> {new Date(d.createdAt).toLocaleDateString()}
@@ -895,7 +899,7 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
               {!loadingDetail && selectedDraftDetail && (
                 <>
                   <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-                    <span className="sales-badge sales-badge-info">{selectedDraftDetail.channel}</span>
+                    <span className="sales-badge sales-badge-info">{formatOutreachChannel(selectedDraftDetail.channel)}</span>
                     <span className="sales-badge sales-badge-success">{selectedDraftDetail.status}</span>
                   </div>
 

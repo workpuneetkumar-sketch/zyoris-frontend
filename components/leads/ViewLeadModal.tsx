@@ -452,8 +452,8 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
 
         {/* Footer */}
         <div className="px-7 py-4 bg-white border-t border-blue-100 flex items-center justify-between">
-          <div className="text-xs text-gray-400 font-mono">
-            Lead ID: {lead.id}
+          <div className="text-xs text-gray-500 font-medium">
+            {lead.name ? (lead.company ? `${lead.name} — ${lead.company}` : lead.name) : (lead.company || lead.email || "Selected Lead")}
           </div>
           <button
             onClick={onClose}

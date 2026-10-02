@@ -72,6 +72,97 @@ export type WorkspaceTabKey =
   | "database"
   | "activity";
 
+/**
+ * Task 1 — Issue 5: Customer-facing project activity helper functions.
+ * Strips technical/inherited Project IDs and CUIDs from customer-facing display
+ * while preserving legitimate customer-facing project keys (e.g. "PRJ").
+ */
+export function isTechnicalCuidOrUuid(val?: string | null): boolean {
+  if (!val) return false;
+  const s = val.trim();
+  return (
+    /^c[a-z0-9]{20,}$/i.test(s) ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)
+  );
+}
+
+export function formatProjectActivityInherited(
+  project?: { id?: string; name?: string } | null
+): string {
+  const name = project?.name?.trim();
+  const id = project?.id?.trim();
+  const hasValidName = !!(name && !isTechnicalCuidOrUuid(name) && name !== id);
+
+  if (hasValidName && name) {
+    return `Activity inherited from ${name}`;
+  }
+  return "Activity inherited from project";
+}
+
+export function sanitizeProjectActivityMessage(
+  message?: string | null,
+  project?: { id?: string; name?: string } | null
+): string {
+  if (!message) return "";
+
+  const name = project?.name?.trim();
+  const id = project?.id?.trim();
+  const hasValidName = !!(name && !isTechnicalCuidOrUuid(name) && name !== id);
+
+  let result = message;
+
+  // 1. Inherited Project ID / Project ID / projectId patterns (e.g. "Project ID: cmxxxxxxxx", "Inherited project ID cmxxxxxxxx")
+  result = result.replace(
+    /(?:Inherited\s+project\s+ID|Project\s+ID|projectId)[:\s]+(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    (match) => {
+      if (/^Inherited/i.test(match)) {
+        return hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project";
+      }
+      return hasValidName ? (name as string) : "";
+    }
+  );
+
+  // 2. "Activity inherited from project cmxxxxxxxx" or "Inherited from project cmxxxxxxxx"
+  result = result.replace(
+    /(?:Activity\s+inherited\s+from\s+project|Inherited\s+from\s+project)\s+(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project"
+  );
+
+  // 3. "Project cmxxxxxxxx was updated"
+  result = result.replace(
+    /Project\s+(?:c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+    hasValidName ? `${name}` : "Project"
+  );
+
+  // 4. If project.id is known and matches a technical ID, sanitize exact occurrences
+  if (id && (isTechnicalCuidOrUuid(id) || id.length >= 15)) {
+    const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const inheritedWithId = new RegExp(`(?:Inherited\\s+project\\s+ID|Project\\s+ID|projectId)[:\\s]+${escapedId}`, "gi");
+    result = result.replace(inheritedWithId, (match) => {
+      if (/^Inherited/i.test(match)) {
+        return hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project";
+      }
+      return hasValidName ? (name as string) : "";
+    });
+
+    const inheritedFromProjWithId = new RegExp(`(?:Activity\\s+inherited\\s+from\\s+project|Inherited\\s+from\\s+project)\\s+${escapedId}`, "gi");
+    result = result.replace(inheritedFromProjWithId, hasValidName ? `Activity inherited from ${name}` : "Activity inherited from project");
+
+    const projWithId = new RegExp(`Project\\s+${escapedId}`, "gi");
+    result = result.replace(projWithId, hasValidName ? (name as string) : "Project");
+
+    // Any remaining isolated exact technical project.id
+    const rawIdOnly = new RegExp(`\\b${escapedId}\\b`, "g");
+    result = result.replace(rawIdOnly, hasValidName ? (name as string) : "");
+  }
+
+  // 5. Clean any remaining standalone raw database CUID (20+ chars) or UUIDs (36 chars)
+  const rawTechnicalIdPattern = /\bc[a-z0-9]{20,}\b|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+  result = result.replace(rawTechnicalIdPattern, hasValidName ? (name as string) : "");
+
+  return result.replace(/\s{2,}/g, " ").trim();
+}
+
 interface ProjectWorkspaceProps {
   initialProject: Project;
 }
@@ -1061,7 +1152,7 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
                 <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-purple-500 border-2 border-white dark:border-slate-900" />
                 <div className="flex items-center space-x-2 text-xs">
                   <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    Milestone: {ms.title}
+                    Milestone: {sanitizeProjectActivityMessage(ms.title, project)}
                   </span>
                   <span className="text-[10px] text-slate-400">
                     Due {new Date(ms.dueDate).toLocaleDateString()}
@@ -1079,14 +1170,14 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
                 <div className="absolute -left-[31px] top-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
                 <div className="flex items-center space-x-2 text-xs">
                   <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    Task Created: {t.title}
+                    Task Created: {sanitizeProjectActivityMessage(t.title, project)}
                   </span>
                   <span className="text-[10px] text-slate-400">
                     {new Date(t.createdAt).toLocaleDateString()}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Inherited project ID <span className="font-mono text-blue-600">{project.id}</span>
+                  {formatProjectActivityInherited(project)}
                 </p>
               </div>
             ))}

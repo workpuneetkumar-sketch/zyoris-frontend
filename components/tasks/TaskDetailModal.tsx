@@ -3,6 +3,7 @@
 import { cleanTaskDescription } from "@/utils/taskUtils";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import {
     X,
     Calendar,
@@ -63,8 +64,11 @@ import {
     fetchTaskActivity,
     getTaskLabelsMap,
     saveTaskLabels,
+    getTaskAssignmentMap,
+    saveTaskAssignment,
 } from "@/lib/api/tasksApi";
 import { fetchTeamMembers } from "@/lib/api/leadsApi";
+import { getProjects, Project } from "@/lib/api/projectsApi";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -89,6 +93,315 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
     BLOCKED:     "Blocked",
     DONE:        "Done",
 };
+
+function formatActivityValue(val: string | null | undefined): string | null {
+    if (!val) return null;
+    const str = String(val).trim();
+    if (str.includes("/workspace/pages/")) return "Workspace Page";
+    if (/^https?:\/\//i.test(str)) return "Page Link";
+    if (/^cm[a-z0-9]{5,}$/i.test(str) || /^cuid[a-z0-9]+$/i.test(str) || /^(task|user|usr|proj|org)_[a-z0-9_]+$/i.test(str)) return null;
+    if (str === "USER") return "Individual";
+    if (str === "DEPARTMENT") return "Department Queue";
+    if (/cm[a-z0-9]{7,}/i.test(str)) {
+        const cleaned = str.replace(/cm[a-z0-9]{7,}/gi, "").trim();
+        return cleaned || null;
+    }
+    return str;
+}
+
+interface ActivityHelperContext {
+    members: TeamMember[];
+    task: Task;
+    canonicalAssignment: EffectiveAssignmentResponse | null;
+    allTasks: Task[];
+    projects: Project[];
+}
+
+function isRawId(val: string | null | undefined): boolean {
+    if (!val) return false;
+    const str = String(val).trim();
+    return (
+        /^cm[a-z0-9]{5,}$/i.test(str) ||
+        /^c[a-z0-9]{20,}$/i.test(str) ||
+        /^cuid[a-z0-9]+$/i.test(str) ||
+        /^(task|user|usr|proj|org|evt|act|sub|dep|lead|deal)_[a-z0-9_]+$/i.test(str) ||
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+    );
+}
+
+function getValidActorName(
+    actor?: { id?: string; name?: string } | null,
+    members?: TeamMember[]
+): string | null {
+    if (!actor) return null;
+    if (actor.name && !isRawId(actor.name)) {
+        return actor.name.trim();
+    }
+    if (actor.id && members && members.length > 0) {
+        const found = members.find((m) => m.id === actor.id);
+        if (found?.name && !isRawId(found.name)) {
+            return found.name.trim();
+        }
+    }
+    return null;
+}
+
+function resolveAssigneeOrDepartment(
+    idOrValue: string | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    ctx: ActivityHelperContext,
+    isPrevious: boolean
+): string | null {
+    // 1. Check explicit name fields in metadata
+    if (metadata) {
+        if (isPrevious) {
+            const prevName = metadata.previousAssigneeName || metadata.prevAssigneeName || metadata.oldAssigneeName;
+            if (typeof prevName === "string" && prevName.trim() && !isRawId(prevName)) {
+                return prevName.trim();
+            }
+            const prevDept = metadata.previousDepartment || metadata.prevDepartment;
+            if (typeof prevDept === "string" && prevDept.trim()) {
+                const trimmed = prevDept.trim();
+                return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+            }
+        } else {
+            const nextName = metadata.newAssigneeName || metadata.targetUserName || metadata.assigneeName || metadata.userName;
+            if (typeof nextName === "string" && nextName.trim() && !isRawId(nextName)) {
+                return nextName.trim();
+            }
+            if (metadata.assigneeType === "DEPARTMENT") {
+                const dept = metadata.department || metadata.targetDepartment;
+                if (typeof dept === "string" && dept.trim()) {
+                    const trimmed = dept.trim();
+                    return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+                }
+                return "Department Queue";
+            }
+        }
+    }
+
+    // 2. If idOrValue is provided
+    if (idOrValue) {
+        const strVal = String(idOrValue).trim();
+
+        // Check if idOrValue is already a Department name
+        if (strVal === "DEPARTMENT") {
+            const deptFromMeta = metadata?.department || metadata?.targetDepartment || ctx.task.department || ctx.canonicalAssignment?.department;
+            if (typeof deptFromMeta === "string" && deptFromMeta.trim()) {
+                const trimmed = deptFromMeta.trim();
+                return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+            }
+            return "Department Queue";
+        }
+
+        const knownDepts = ["engineering", "sales", "marketing", "operations", "support", "product", "hr", "finance", "legal"];
+        if (knownDepts.includes(strVal.toLowerCase()) || strVal.toLowerCase().includes("department")) {
+            return strVal.toLowerCase().includes("department") ? strVal : `${strVal} Department`;
+        }
+
+        // Try lookup in members list by ID
+        const matchedMember = ctx.members.find((m) => m.id === strVal);
+        if (matchedMember?.name && !isRawId(matchedMember.name)) {
+            return matchedMember.name.trim();
+        }
+
+        // Try lookup in task.assignedTo
+        if (ctx.task.assignedTo?.id === strVal && ctx.task.assignedTo.name && !isRawId(ctx.task.assignedTo.name)) {
+            return ctx.task.assignedTo.name.trim();
+        }
+
+        // Try lookup in canonicalAssignment
+        if (ctx.canonicalAssignment?.assignedTo?.id === strVal && ctx.canonicalAssignment.assignedTo.name && !isRawId(ctx.canonicalAssignment.assignedTo.name)) {
+            return ctx.canonicalAssignment.assignedTo.name.trim();
+        }
+
+        // Try lookup in allTasks
+        const taskMatch = ctx.allTasks.find((t) => t.assignedTo?.id === strVal);
+        if (taskMatch?.assignedTo?.name && !isRawId(taskMatch.assignedTo.name)) {
+            return taskMatch.assignedTo.name.trim();
+        }
+
+        // If it's not a raw ID / CUID, it might be an actual human name already!
+        if (!isRawId(strVal) && !strVal.startsWith("http") && !strVal.includes("/")) {
+            return strVal;
+        }
+    }
+
+    // 3. Department fallback from metadata or task if it was a department assignment
+    const isDeptContext =
+        metadata?.assigneeType === "DEPARTMENT" ||
+        (!isPrevious && !idOrValue && (metadata?.department || ctx.task.department));
+
+    if (isDeptContext) {
+        const dept = (metadata?.department as string) || (metadata?.targetDepartment as string) || ctx.task.department || ctx.canonicalAssignment?.department;
+        if (typeof dept === "string" && dept.trim()) {
+            const trimmed = dept.trim();
+            return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+        }
+        return "Department Queue";
+    }
+
+    return null;
+}
+
+function formatActivityMessage(act: TaskActivity, ctx: ActivityHelperContext): string {
+    const actorName = getValidActorName(act.actor, ctx.members);
+    const meta = act.metadata as Record<string, unknown> | null | undefined;
+    const isReassign =
+        act.type === "TASK_REASSIGNED" ||
+        (act.type === "TASK_ASSIGNED" && Boolean(act.oldValue) && Boolean(act.newValue)) ||
+        meta?.source === "TASK_REASSIGN" ||
+        meta?.source === "MANUAL_REASSIGN";
+
+    const isUnassign =
+        act.type === "TASK_UNASSIGNED" ||
+        (act.type === "TASK_ASSIGNED" && Boolean(act.oldValue) && !act.newValue);
+
+    if (isReassign) {
+        const fromAssignee = resolveAssigneeOrDepartment(act.oldValue, meta, ctx, true);
+        const toAssignee = resolveAssigneeOrDepartment(act.newValue, meta, ctx, false);
+
+        if (fromAssignee && toAssignee) {
+            return `Task reassigned → ${fromAssignee} → ${toAssignee}`;
+        }
+        return "Task reassignment updated";
+    }
+
+    if (isUnassign) {
+        const fromAssignee = resolveAssigneeOrDepartment(act.oldValue, meta, ctx, true);
+        if (fromAssignee) {
+            return `Task unassigned → ${fromAssignee}`;
+        }
+        return "Task unassignment updated";
+    }
+
+    if (act.type === "TASK_ASSIGNED") {
+        const toAssignee = resolveAssigneeOrDepartment(act.newValue, meta, ctx, false);
+        if (toAssignee) {
+            return `Task assigned → ${toAssignee}`;
+        }
+        return "Task assignment updated";
+    }
+
+    if (act.type === "TASK_CREATED") {
+        const title = act.newValue && !isRawId(act.newValue) ? ` "${act.newValue}"` : "";
+        return actorName ? `${actorName} created this task${title}` : `Task created${title}`;
+    }
+
+    if (act.type === "STATUS_CHANGED") {
+        const statusMap: Record<string, string> = {
+            TODO: "To Do",
+            IN_PROGRESS: "In Progress",
+            REVIEW: "Review",
+            BLOCKED: "Blocked",
+            DONE: "Done",
+        };
+        const oldStatus = act.oldValue ? statusMap[act.oldValue] || act.oldValue : null;
+        const newStatus = act.newValue ? statusMap[act.newValue] || act.newValue : null;
+        if (oldStatus && newStatus) {
+            return actorName
+                ? `${actorName} changed status: ${oldStatus} → ${newStatus}`
+                : `Status changed: ${oldStatus} → ${newStatus}`;
+        }
+        if (newStatus) {
+            return actorName
+                ? `${actorName} set status to ${newStatus}`
+                : `Status set to ${newStatus}`;
+        }
+        return actorName ? `${actorName} updated task status` : "Status updated";
+    }
+
+    if (act.type === "PRIORITY_CHANGED") {
+        const priMap: Record<string, string> = {
+            LOW: "Low",
+            MEDIUM: "Medium",
+            HIGH: "High",
+        };
+        const oldPri = act.oldValue ? priMap[act.oldValue] || act.oldValue : null;
+        const newPri = act.newValue ? priMap[act.newValue] || act.newValue : null;
+        if (oldPri && newPri) {
+            return actorName
+                ? `${actorName} changed priority: ${oldPri} → ${newPri}`
+                : `Priority changed: ${oldPri} → ${newPri}`;
+        }
+        if (newPri) {
+            return actorName
+                ? `${actorName} set priority to ${newPri}`
+                : `Priority set to ${newPri}`;
+        }
+        return actorName ? `${actorName} updated priority` : "Priority updated";
+    }
+
+    if (act.type === "DUE_DATE_CHANGED") {
+        const formatD = (d?: string | null) => {
+            if (!d) return null;
+            try {
+                return new Date(d).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                });
+            } catch {
+                return null;
+            }
+        };
+        const oldDate = formatD(act.oldValue);
+        const newDate = formatD(act.newValue);
+        if (oldDate && newDate) {
+            return actorName
+                ? `${actorName} changed due date: ${oldDate} → ${newDate}`
+                : `Due date changed: ${oldDate} → ${newDate}`;
+        }
+        if (newDate) {
+            return actorName
+                ? `${actorName} set due date to ${newDate}`
+                : `Due date set to ${newDate}`;
+        }
+        return actorName ? `${actorName} updated due date` : "Due date updated";
+    }
+
+    if (act.type === "COMMENT_ADDED") {
+        return actorName ? `${actorName} added a comment` : "Comment added";
+    }
+    if (act.type === "COMMENT_UPDATED") {
+        return actorName ? `${actorName} updated a comment` : "Comment updated";
+    }
+    if (act.type === "COMMENT_DELETED") {
+        return actorName ? `${actorName} deleted a comment` : "Comment deleted";
+    }
+
+    if (act.type === "SUBTASK_CREATED") {
+        const title = act.newValue && !isRawId(act.newValue) ? `: "${act.newValue}"` : "";
+        return actorName ? `${actorName} added subtask${title}` : `Subtask added${title}`;
+    }
+    if (act.type === "SUBTASK_UPDATED") {
+        return actorName ? `${actorName} updated a subtask` : "Subtask updated";
+    }
+    if (act.type === "SUBTASK_DELETED") {
+        return actorName ? `${actorName} deleted a subtask` : "Subtask deleted";
+    }
+
+    if (act.type === "DEPENDENCY_ADDED") {
+        const depTask = ctx.allTasks.find((t) => t.id === act.newValue || t.id === act.oldValue);
+        const depTitle = depTask ? `: "${depTask.title}"` : "";
+        return actorName ? `${actorName} linked blocker${depTitle}` : `Blocker linked${depTitle}`;
+    }
+    if (act.type === "DEPENDENCY_REMOVED") {
+        return actorName ? `${actorName} removed dependency` : "Dependency removed";
+    }
+
+    // Generic fallback for any other custom or unhandled event
+    const oldFmt = formatActivityValue(act.oldValue);
+    const newFmt = formatActivityValue(act.newValue);
+    const typeLabel = act.type.replace(/_/g, " ").toLowerCase();
+    if (oldFmt && newFmt) {
+        return `${typeLabel}: ${oldFmt} → ${newFmt}`;
+    }
+    if (newFmt) {
+        return `${typeLabel}: ${newFmt}`;
+    }
+    return typeLabel;
+}
 
 interface TeamMember {
     id: string;
@@ -133,10 +446,14 @@ export function TaskDetailModal({
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
 
-    // Canonical assignment state from authoritative backend response
+    // Canonical assignment state from authoritative backend response or persistent storage
     const [canonicalAssignment, setCanonicalAssignment] = useState<EffectiveAssignmentResponse | null>(() => {
         if (task.effectiveAssignment) {
             return task.effectiveAssignment;
+        }
+        const storedMap = getTaskAssignmentMap();
+        if (storedMap && storedMap.hasOwnProperty(task.id)) {
+            return storedMap[task.id];
         }
         return null;
     });
@@ -146,7 +463,9 @@ export function TaskDetailModal({
     useEffect(() => {
         if (prevTaskIdRef.current !== task.id) {
             prevTaskIdRef.current = task.id;
-            setCanonicalAssignment(incomingEffectiveAssignment ?? null);
+            const storedMap = getTaskAssignmentMap();
+            const stored = storedMap && storedMap.hasOwnProperty(task.id) ? storedMap[task.id] : null;
+            setCanonicalAssignment(incomingEffectiveAssignment ?? stored ?? null);
         } else if (incomingEffectiveAssignment) {
             setCanonicalAssignment(incomingEffectiveAssignment);
         }
@@ -171,6 +490,7 @@ export function TaskDetailModal({
     });
 
     const [members, setMembers] = useState<TeamMember[]>([]);
+    const [projects, setProjects] = useState<Project[]>([]);
     const [localSaveError, setLocalSaveError] = useState<string | null>(null);
     const [newTagInput, setNewTagInput] = useState("");
 
@@ -234,11 +554,14 @@ export function TaskDetailModal({
             .catch(() => {});
     }, [task.id]);
 
-    // Load team members
+    // Load team members and projects
     useEffect(() => {
         fetchTeamMembers()
             .then((data) => setMembers(data.members ?? data ?? []))
             .catch(() => setMembers([]));
+        getProjects()
+            .then((data) => setProjects(Array.isArray(data) ? data : []))
+            .catch(() => setProjects([]));
     }, []);
 
     // Load sub-resources when tabs change
@@ -330,6 +653,9 @@ export function TaskDetailModal({
     };
 
     const handleReassignSuccess = (updatedAssignment: EffectiveAssignmentResponse) => {
+        // Persist to local storage map so reopening drawer preserves assignment
+        saveTaskAssignment(task.id, updatedAssignment);
+
         // Update local canonical assignment state directly with returned canonical data
         setCanonicalAssignment(updatedAssignment);
 
@@ -826,7 +1152,7 @@ export function TaskDetailModal({
 
                                         const assignmentTypeLabel =
                                             effectiveAssigneeType === "DEPARTMENT"
-                                                ? "Department"
+                                                ? "Department Queue"
                                                 : effectiveAssigneeType === "USER"
                                                 ? "Individual"
                                                 : null;
@@ -848,6 +1174,18 @@ export function TaskDetailModal({
                                                   year: "numeric",
                                               })
                                             : null;
+
+                                        const sourcePageTitle =
+                                            canonicalAssignment?.pageContext?.pageTitle ||
+                                            (task as any).pageTitle ||
+                                            (task as any).page?.title ||
+                                            null;
+
+                                        const sourcePageId =
+                                            canonicalAssignment?.pageContext?.pageId ||
+                                            (task as any).pageId ||
+                                            (task as any).page?.id ||
+                                            null;
 
                                         return (
                                             <>
@@ -877,10 +1215,24 @@ export function TaskDetailModal({
                                                 {assignmentTypeLabel && (
                                                     <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
                                                         <Users size={12} className="text-slate-400 shrink-0" />
-                                                        <span className="text-slate-400">Type:</span>
+                                                        <span className="text-slate-400">Assignment:</span>
                                                         <span className="font-semibold text-slate-800 dark:text-slate-200">
                                                             {assignmentTypeLabel}
                                                         </span>
+                                                    </div>
+                                                )}
+
+                                                {/* Source Page (if available) */}
+                                                {sourcePageId && (
+                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
+                                                        <FileText size={12} className="text-purple-500 shrink-0" />
+                                                        <span className="text-slate-400">Source Page:</span>
+                                                        <Link
+                                                            href={`/workspace/pages/${sourcePageId}`}
+                                                            className="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate"
+                                                        >
+                                                            {sourcePageTitle || "Document"}
+                                                        </Link>
                                                     </div>
                                                 )}
 
@@ -946,17 +1298,41 @@ export function TaskDetailModal({
                                         Project
                                     </p>
                                     {isEditing ? (
-                                        <input
+                                        <select
                                             name="projectId"
                                             value={form.projectId ?? ""}
                                             onChange={handleChange}
-                                            placeholder="e.g. CORE-DEV"
-                                            className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
-                                        />
+                                            className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none cursor-pointer"
+                                        >
+                                            <option value="">General Workspace (No Project)</option>
+                                            {projects.map((p) => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name}
+                                                </option>
+                                            ))}
+                                            {form.projectId && !projects.some((p) => p.id === form.projectId) && (
+                                                <option value={form.projectId}>
+                                                    {(task as any).projectName || "Selected Project"}
+                                                </option>
+                                            )}
+                                        </select>
                                     ) : (
-                                        <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                            {task.projectId ? String(task.projectId) : "General Workspace"}
-                                        </span>
+                                        (() => {
+                                            const matchedProject = projects.find((p) => p.id === task.projectId);
+                                            const displayProjectName =
+                                                matchedProject?.name ||
+                                                (task as any).projectName ||
+                                                (task as any).project?.name ||
+                                                (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_")
+                                                    ? String(task.projectId)
+                                                    : null);
+
+                                            return (
+                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                                    {displayProjectName || "General Workspace"}
+                                                </span>
+                                            );
+                                        })()
                                     )}
                                 </div>
 
@@ -1175,8 +1551,8 @@ export function TaskDetailModal({
                                                     <div>
                                                         <span className="font-semibold text-slate-800 dark:text-slate-200">
                                                             {isBlocker ? "Depends on: " : "Depended on by: "}
-                                                            <span className="font-mono text-blue-600 dark:text-blue-400">
-                                                                {linkedTask ? linkedTask.title : dep.dependencyId}
+                                                            <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                                                {linkedTask ? linkedTask.title : "Linked Task"}
                                                             </span>
                                                         </span>
                                                         {linkedTask?.status && (
@@ -1223,7 +1599,7 @@ export function TaskDetailModal({
                                             <option value="">Select task to depend on...</option>
                                             {dependencyCandidates.map((t) => (
                                                 <option key={t.id} value={t.id}>
-                                                    TASK-{t.id.slice(-4).toUpperCase()}: {t.title}
+                                                    {t.title}
                                                 </option>
                                             ))}
                                         </select>
@@ -1385,36 +1761,54 @@ export function TaskDetailModal({
 
                             {/* Timeline items */}
                             <div className="relative pl-6 border-l-2 border-slate-100 dark:border-slate-800 space-y-4 pt-1">
-                                {activities.map((act) => (
-                                    <div key={act.id} className="relative space-y-1">
-                                        <div className="absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-full bg-blue-500 ring-4 ring-white dark:ring-slate-900" />
-                                        <div className="flex items-center justify-between text-[11px]">
-                                            <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                {act.actor?.name || "System"}
-                                            </span>
-                                            <span className="text-slate-400 text-[10px]">
-                                                {new Date(act.createdAt).toLocaleString("en-US", {
-                                                    month: "short",
-                                                    day: "numeric",
-                                                    hour: "numeric",
-                                                    minute: "2-digit",
-                                                })}
-                                            </span>
-                                        </div>
-                                        <p className="text-xs text-slate-600 dark:text-slate-400">
-                                            <strong className="font-semibold text-slate-700 dark:text-slate-300">
-                                                {act.type.replace(/_/g, " ").toLowerCase()}
-                                            </strong>
-                                            {act.oldValue && act.newValue ? (
-                                                <span className="font-mono text-[11px] ml-1.5">
-                                                    {act.oldValue} → {act.newValue}
+                                {activities.map((act) => {
+                                    const actorDisplayName = getValidActorName(act.actor, members) || "System";
+                                    const activityMessage = formatActivityMessage(act, {
+                                        members,
+                                        task,
+                                        canonicalAssignment,
+                                        allTasks,
+                                        projects,
+                                    });
+                                    const meta = act.metadata as Record<string, unknown> | null | undefined;
+                                    const isAssignmentEvent =
+                                        act.type === "TASK_ASSIGNED" ||
+                                        act.type === "TASK_REASSIGNED" ||
+                                        act.type === "TASK_UNASSIGNED" ||
+                                        meta?.source === "TASK_REASSIGN" ||
+                                        meta?.source === "MANUAL_REASSIGN";
+                                    const reasonText =
+                                        meta?.reason && typeof meta.reason === "string" && !isRawId(meta.reason)
+                                            ? meta.reason.trim()
+                                            : null;
+
+                                    return (
+                                        <div key={act.id} className="relative space-y-1">
+                                            <div className="absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-full bg-blue-500 ring-4 ring-white dark:ring-slate-900" />
+                                            <div className="flex items-center justify-between text-[11px]">
+                                                <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                    {!isAssignmentEvent ? actorDisplayName : null}
                                                 </span>
-                                            ) : (
-                                                act.newValue ? `: ${act.newValue}` : ""
+                                                <span className="text-slate-400 text-[10px]">
+                                                    {new Date(act.createdAt).toLocaleString("en-US", {
+                                                        month: "short",
+                                                        day: "numeric",
+                                                        hour: "numeric",
+                                                        minute: "2-digit",
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
+                                                {activityMessage}
+                                            </p>
+                                            {reasonText && (
+                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                                                    Reason: &ldquo;{reasonText}&rdquo;
+                                                </p>
                                             )}
-                                        </p>
-                                    </div>
-                                ))}
+                                        </div>
+                                    );
+                                })}
 
                                 {activities.length === 0 && !subLoading && (
                                     <p className="text-xs text-slate-400 text-center py-6">
@@ -1439,7 +1833,6 @@ export function TaskDetailModal({
 
                 {/* ── Footer ─────────────────────────────────────────────────── */}
                 <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 flex justify-end items-center">
-                    
                     <button
                         onClick={onClose}
                         className="px-4 py-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl text-xs font-bold hover:opacity-90 transition"

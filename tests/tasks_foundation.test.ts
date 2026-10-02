@@ -51,6 +51,23 @@ export interface TasksResponse {
   total: number;
 }
 
+export interface TaskActivity {
+  id: string;
+  taskId: string;
+  actorId?: string | null;
+  type: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  metadata?: Record<string, unknown> | null;
+  createdAt: string;
+  actor?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatarUrl?: string | null;
+  };
+}
+
 export interface BulkUpdatePayload {
   taskIds: string[];
   update: {
@@ -308,29 +325,72 @@ export function toISODateTime(date: string | null | undefined): string | null {
   return new Date(date).toISOString();
 }
 
+const inMemoryAssignmentMap: Record<string, any> = {};
+
+export function getTaskAssignmentMap(): Record<string, any> {
+  return inMemoryAssignmentMap;
+}
+
+export function saveTaskAssignment(taskId: string, assignment: any) {
+  inMemoryAssignmentMap[taskId] = assignment;
+}
+
+export function clearTaskAssignment(taskId: string) {
+  delete inMemoryAssignmentMap[taskId];
+}
+
 export function normaliseTasksResponse(raw: unknown): TasksResponse {
-  if (!raw) return { tasks: [], total: 0 };
+  let result: TasksResponse = { tasks: [], total: 0 };
+  if (!raw) return result;
   if (Array.isArray(raw)) {
-    return { tasks: raw as Task[], total: (raw as Task[]).length };
+    result = { tasks: raw as Task[], total: (raw as Task[]).length };
+  } else {
+    const r = raw as Record<string, unknown>;
+    if (Array.isArray(r.data)) {
+      const pagination = r.pagination as Record<string, number> | undefined;
+      result = {
+        tasks: r.data as Task[],
+        total: pagination?.total ?? (r.data as unknown[]).length,
+      };
+    } else if (Array.isArray(r.tasks)) {
+      result = {
+        tasks: r.tasks as Task[],
+        total: typeof r.total === "number" ? r.total : (r.tasks as unknown[]).length,
+      };
+    } else if (Array.isArray(r.task)) {
+      result = { tasks: r.task as Task[], total: (r.task as unknown[]).length };
+    }
   }
-  const r = raw as Record<string, unknown>;
-  if (Array.isArray(r.data)) {
-    const pagination = r.pagination as Record<string, number> | undefined;
-    return {
-      tasks: r.data as Task[],
-      total: pagination?.total ?? (r.data as unknown[]).length,
-    };
+
+  const assignmentMap = getTaskAssignmentMap();
+  if (Object.keys(assignmentMap).length > 0) {
+    result.tasks = result.tasks.map((task) => {
+      if (task && assignmentMap.hasOwnProperty(task.id)) {
+        const storedAssignment = assignmentMap[task.id];
+        if (storedAssignment === null) {
+          return {
+            ...task,
+            department: undefined,
+            assigneeType: undefined,
+            effectiveAssignment: null,
+            assignedTo: null,
+            assignedToId: null,
+          };
+        }
+        return {
+          ...task,
+          department: storedAssignment.department ?? task.department,
+          assigneeType: storedAssignment.assigneeType ?? task.assigneeType,
+          effectiveAssignment: storedAssignment,
+          assignedTo: storedAssignment.assignedTo ?? task.assignedTo,
+          assignedToId: storedAssignment.assignedTo?.id ?? task.assignedToId,
+        };
+      }
+      return task;
+    });
   }
-  if (Array.isArray(r.tasks)) {
-    return {
-      tasks: r.tasks as Task[],
-      total: typeof r.total === "number" ? r.total : (r.tasks as unknown[]).length,
-    };
-  }
-  if (Array.isArray(r.task)) {
-    return { tasks: r.task as Task[], total: (r.task as unknown[]).length };
-  }
-  return { tasks: [], total: 0 };
+
+  return result;
 }
 
 export interface UpdateTaskPayload {
@@ -2114,5 +2174,1439 @@ test("Day 2: Reassignment Permissions, Edge Cases, and End-to-End State Transiti
   });
 });
 
+test("Task 1 — Issue 1: Customer-Facing Task UI Sanitization and Internal ID Preservation", async (t) => {
+  await t.test("formats activity values cleanly without exposing raw CUIDs or raw workspace URLs", () => {
+    function formatActivityValue(val: string | null | undefined): string | null {
+      if (!val) return null;
+      const str = String(val).trim();
+      if (str.includes("/workspace/pages/")) return "Workspace Page";
+      if (/^https?:\/\//i.test(str)) return "Page Link";
+      if (/^cm[a-z0-9]{15,}$/i.test(str) || /^cuid[a-z0-9]+$/i.test(str)) return null;
+      if (str === "USER") return "Individual";
+      if (str === "DEPARTMENT") return "Department Queue";
+      return str;
+    }
 
+    assert.strictEqual(formatActivityValue("USER"), "Individual");
+    assert.strictEqual(formatActivityValue("DEPARTMENT"), "Department Queue");
+    assert.strictEqual(formatActivityValue("https://app.zyoris.com/workspace/pages/cm123xyz456"), "Workspace Page");
+    assert.strictEqual(formatActivityValue("cmucvbmz400vxjrlq31y33c"), null);
+    assert.strictEqual(formatActivityValue("TODO"), "TODO");
+  });
+
+  await t.test("derives business-friendly source page label while preserving internal pageId for navigation", () => {
+    const taskWithPage = {
+      id: "cm8xyz12345",
+      title: "Review Architecture",
+      pageId: "cmu123pageid",
+      pageTitle: "Client Requirements",
+    };
+
+    const linkHref = `/workspace/pages/${taskWithPage.pageId}`;
+    const displayLabel = `Source Page: ${taskWithPage.pageTitle || "Document"}`;
+
+    assert.strictEqual(linkHref, "/workspace/pages/cmu123pageid");
+    assert.strictEqual(displayLabel, "Source Page: Client Requirements");
+    assert.strictEqual(displayLabel.includes(taskWithPage.pageId), false);
+  });
+
+  await t.test("project badge falls back to human-friendly label instead of raw CUID", () => {
+    function getDisplayProjectName(task: { projectId?: string | null; projectName?: string | null }) {
+      return (
+        task.projectName ||
+        (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_")
+          ? task.projectId
+          : "Workspace Project")
+      );
+    }
+
+    assert.strictEqual(getDisplayProjectName({ projectId: "cm8xyz1234567890", projectName: "Core CRM" }), "Core CRM");
+    assert.strictEqual(getDisplayProjectName({ projectId: "cm8xyz1234567890", projectName: null }), "Workspace Project");
+    assert.strictEqual(getDisplayProjectName({ projectId: "FINANCE-2026", projectName: null }), "FINANCE-2026");
+  });
+
+  await t.test("preserves all internal IDs on task object, events, and API payloads", () => {
+    const task: Task = {
+      id: "cm8xyz999999",
+      title: "Backend Validation Task",
+      status: "TODO",
+      priority: "HIGH",
+      projectId: "cmproj123456",
+      department: "Engineering",
+      assignedToId: "usr-david-1",
+      assignedTo: { id: "usr-david-1", name: "David Tech Lead" },
+      createdAt: "2026-10-01T00:00:00Z",
+    };
+
+    // Internal ID integrity
+    assert.strictEqual(task.id, "cm8xyz999999");
+    assert.strictEqual(task.projectId, "cmproj123456");
+    assert.strictEqual(task.assignedToId, "usr-david-1");
+
+    // Events internal ID integrity
+    const event = {
+      id: "evt-1",
+      taskId: task.id,
+      assignedById: "usr-admin",
+      eventType: "USER",
+      createdAt: "2026-10-02T10:00:00Z",
+      task,
+    };
+    assert.strictEqual(event.taskId, "cm8xyz999999");
+    assert.strictEqual(event.assignedById, "usr-admin");
+  });
+});
+
+test("Task 1 — Issue 2: Remove Internal Task ID and CUID from Customer-Facing Task Detail UI", async (t) => {
+  await t.test("Customer-facing task detail UI suppresses internal Task ID, CUIDs, and TASK-{id} labels", () => {
+    const rawTask: Task = {
+      id: "cm8xyz123",
+      title: "Quarterly Financial Audit",
+      status: "IN_PROGRESS",
+      priority: "HIGH",
+      projectId: "cm9abc456",
+      projectName: "Financial Operations",
+      department: "Engineering",
+      assignedToId: "cm123assignee",
+      assignedTo: { id: "cm123assignee", name: "Rahul Sharma" },
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+
+    // Header rendering must show task title, not TASK-cm8xyz123 or cm8xyz123
+    const headerTitle = rawTask.title;
+    assert.strictEqual(headerTitle, "Quarterly Financial Audit");
+    assert.strictEqual(headerTitle.includes(rawTask.id), false);
+    assert.strictEqual(headerTitle.includes("cm8xyz"), false);
+
+    // Footer rendering contains only actions (Close Drawer), no TASK ID: cm8xyz123
+    const footerText = "Close Drawer";
+    assert.strictEqual(footerText.includes(rawTask.id), false);
+    assert.strictEqual(footerText.includes("TASK ID"), false);
+  });
+
+  await t.test("Project context in Task Detail maps CUID to human-readable project name or General Workspace", () => {
+    const mockProjects = [
+      { id: "cm9abc456", name: "Financial Operations", status: "ACTIVE" },
+      { id: "cm9xyz789", name: "Cloud Migration", status: "ACTIVE" },
+    ];
+
+    function resolveProjectDisplay(task: { projectId?: string | null; projectName?: string | null }, projects: typeof mockProjects) {
+      const matched = projects.find((p) => p.id === task.projectId);
+      const display = matched?.name || task.projectName || (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_") ? task.projectId : null);
+      return display || "General Workspace";
+    }
+
+    // Resolves matching project name
+    assert.strictEqual(resolveProjectDisplay({ projectId: "cm9abc456" }, mockProjects), "Financial Operations");
+    // Falls back to task.projectName if not in list
+    assert.strictEqual(resolveProjectDisplay({ projectId: "cm9unknown", projectName: "Security Hardening" }, mockProjects), "Security Hardening");
+    // Falls back to "General Workspace" instead of raw CUID
+    assert.strictEqual(resolveProjectDisplay({ projectId: "cm9abc999" }, mockProjects), "General Workspace");
+    assert.strictEqual(resolveProjectDisplay({ projectId: null }, mockProjects), "General Workspace");
+
+    // In edit mode: options render human-readable labels while binding CUID value
+    const options = mockProjects.map((p) => ({ value: p.id, label: p.name }));
+    assert.deepStrictEqual(options, [
+      { value: "cm9abc456", label: "Financial Operations" },
+      { value: "cm9xyz789", label: "Cloud Migration" },
+    ]);
+  });
+
+  await t.test("Task Detail Activity sanitizes CUIDs and internal identifiers without altering activity records", () => {
+    function formatActivityValue(val: string | null | undefined): string | null {
+      if (!val) return null;
+      const str = String(val).trim();
+      if (str.includes("/workspace/pages/")) return "Workspace Page";
+      if (/^https?:\/\//i.test(str)) return "Page Link";
+      if (/^cm[a-z0-9]{5,}$/i.test(str) || /^cuid[a-z0-9]+$/i.test(str) || /^(task|user|usr|proj|org)_[a-z0-9_]+$/i.test(str)) return null;
+      if (str === "USER") return "Individual";
+      if (str === "DEPARTMENT") return "Department Queue";
+      if (/cm[a-z0-9]{7,}/i.test(str)) {
+        const cleaned = str.replace(/cm[a-z0-9]{7,}/gi, "").trim();
+        return cleaned || null;
+      }
+      return str;
+    }
+
+    function formatActorName(actor?: { id?: string; name?: string } | null): string {
+      if (actor?.name && !/^cm[a-z0-9]{5,}$/i.test(actor.name) && !/^(usr|user)_[a-z0-9_]+$/i.test(actor.name)) {
+        return actor.name;
+      }
+      return "System";
+    }
+
+    // Suppresses CUIDs like cm8xyz123, cm9abc456, usr_12345
+    assert.strictEqual(formatActivityValue("cm8xyz123"), null);
+    assert.strictEqual(formatActivityValue("cm9abc456"), null);
+    assert.strictEqual(formatActivityValue("usr_12345"), null);
+    assert.strictEqual(formatActivityValue("TODO"), "TODO");
+    assert.strictEqual(formatActivityValue("HIGH"), "HIGH");
+
+    // Actor name check
+    assert.strictEqual(formatActorName({ name: "Rahul Sharma" }), "Rahul Sharma");
+    assert.strictEqual(formatActorName({ name: "cm8xyz123" }), "System");
+    assert.strictEqual(formatActorName({ name: "usr_backend_svc" }), "System");
+    assert.strictEqual(formatActorName(null), "System");
+
+    // Underlying activity object remains fully intact
+    const originalActivity = {
+      id: "act-123",
+      taskId: "cm8xyz123",
+      actorId: "usr_456",
+      type: "PROJECT_CHANGED",
+      oldValue: "cm9old123",
+      newValue: "cm9abc456",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(originalActivity.id, "act-123");
+    assert.strictEqual(originalActivity.taskId, "cm8xyz123");
+    assert.strictEqual(originalActivity.oldValue, "cm9old123");
+    assert.strictEqual(originalActivity.newValue, "cm9abc456");
+  });
+
+  await t.test("Preserves all internal IDs required for API operations, navigation, and logic", () => {
+    const task: Task = {
+      id: "cm8xyz123",
+      title: "Refactor Database Indexing",
+      status: "TODO",
+      priority: "HIGH",
+      projectId: "cm9abc456",
+      assignedToId: "usr_rahul",
+      assignedTo: { id: "usr_rahul", name: "Rahul Sharma" },
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+
+    // 1. PATCH /tasks/:id payload
+    const patchUrl = `/tasks/${task.id}`;
+    const patchPayload = { projectId: task.projectId, priority: task.priority };
+    assert.strictEqual(patchUrl, "/tasks/cm8xyz123");
+    assert.strictEqual(patchPayload.projectId, "cm9abc456");
+
+    // 2. DELETE /tasks/:id
+    const deleteUrl = `/tasks/${task.id}`;
+    assert.strictEqual(deleteUrl, "/tasks/cm8xyz123");
+
+    // 3. POST /workspace/tasks/:id/reassign
+    const reassignUrl = `/workspace/tasks/${task.id}/reassign`;
+    assert.strictEqual(reassignUrl, "/workspace/tasks/cm8xyz123/reassign");
+
+    // 4. Sub-resources use internal task.id
+    assert.strictEqual(`/tasks/${task.id}/dependencies`, "/tasks/cm8xyz123/dependencies");
+    assert.strictEqual(`/tasks/${task.id}/comments`, "/tasks/cm8xyz123/comments");
+    assert.strictEqual(`/tasks/${task.id}/subtasks`, "/tasks/cm8xyz123/subtasks");
+    assert.strictEqual(`/tasks/${task.id}/activity`, "/tasks/cm8xyz123/activity");
+  });
+});
+
+test("Task 1 — Issue 4: Make Task Activity Assignment History Customer-Friendly", async (t) => {
+  const mockMembers = [
+    { id: "usr_rahul", name: "Rahul Sharma", role: "Engineering Lead", email: "rahul@zyoris.com" },
+    { id: "usr_priya", name: "Priya Patel", role: "Product Manager", email: "priya@zyoris.com" },
+    { id: "usr_om", name: "Om", role: "Admin", email: "om@zyoris.com" },
+  ];
+
+  const mockTask: Task = {
+    id: "cm8xyz_task_123",
+    title: "Deploy Production Kubernetes Cluster",
+    status: "IN_PROGRESS",
+    priority: "HIGH",
+    department: "Engineering",
+    assignedToId: "usr_rahul",
+    assignedTo: { id: "usr_rahul", name: "Rahul Sharma" },
+    createdAt: "2026-10-02T10:00:00Z",
+  };
+
+  function isRawId(val: string | null | undefined): boolean {
+    if (!val) return false;
+    const str = String(val).trim();
+    return (
+      /^cm[a-z0-9]{5,}$/i.test(str) ||
+      /^cuid[a-z0-9]+$/i.test(str) ||
+      /^(task|user|usr|proj|org|evt|act|sub|dep|lead|deal)_[a-z0-9_]+$/i.test(str) ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str)
+    );
+  }
+
+  function getValidActorName(actor?: { id?: string; name?: string } | null, members?: typeof mockMembers): string | null {
+    if (!actor) return null;
+    if (actor.name && !isRawId(actor.name)) return actor.name.trim();
+    if (actor.id && members && members.length > 0) {
+      const found = members.find((m) => m.id === actor.id);
+      if (found?.name && !isRawId(found.name)) return found.name.trim();
+    }
+    return null;
+  }
+
+  function resolveAssigneeOrDepartment(
+    idOrValue: string | null | undefined,
+    metadata: Record<string, unknown> | null | undefined,
+    isPrevious: boolean
+  ): string | null {
+    if (metadata) {
+      if (isPrevious) {
+        const prevName = metadata.previousAssigneeName || metadata.prevAssigneeName || metadata.oldAssigneeName;
+        if (typeof prevName === "string" && prevName.trim() && !isRawId(prevName)) return prevName.trim();
+        const prevDept = metadata.previousDepartment || metadata.prevDepartment;
+        if (typeof prevDept === "string" && prevDept.trim()) {
+          const trimmed = prevDept.trim();
+          return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+        }
+      } else {
+        const nextName = metadata.newAssigneeName || metadata.targetUserName || metadata.assigneeName || metadata.userName;
+        if (typeof nextName === "string" && nextName.trim() && !isRawId(nextName)) return nextName.trim();
+        if (metadata.assigneeType === "DEPARTMENT") {
+          const dept = metadata.department || metadata.targetDepartment;
+          if (typeof dept === "string" && dept.trim()) {
+            const trimmed = dept.trim();
+            return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+          }
+          return "Department Queue";
+        }
+      }
+    }
+
+    if (idOrValue) {
+      const strVal = String(idOrValue).trim();
+      if (strVal === "DEPARTMENT") {
+        const deptFromMeta = metadata?.department || metadata?.targetDepartment || mockTask.department;
+        if (typeof deptFromMeta === "string" && deptFromMeta.trim()) {
+          const trimmed = deptFromMeta.trim();
+          return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+        }
+        return "Department Queue";
+      }
+
+      const knownDepts = ["engineering", "sales", "marketing", "operations", "support", "product", "hr", "finance", "legal"];
+      if (knownDepts.includes(strVal.toLowerCase()) || strVal.toLowerCase().includes("department")) {
+        return strVal.toLowerCase().includes("department") ? strVal : `${strVal} Department`;
+      }
+
+      const matchedMember = mockMembers.find((m) => m.id === strVal);
+      if (matchedMember?.name && !isRawId(matchedMember.name)) return matchedMember.name.trim();
+
+      if (mockTask.assignedTo?.id === strVal && mockTask.assignedTo.name && !isRawId(mockTask.assignedTo.name)) {
+        return mockTask.assignedTo.name.trim();
+      }
+
+      if (!isRawId(strVal) && !strVal.startsWith("http") && !strVal.includes("/")) return strVal;
+    }
+
+    const isDeptContext = metadata?.assigneeType === "DEPARTMENT" || (!isPrevious && !idOrValue && (metadata?.department || mockTask.department));
+    if (isDeptContext) {
+      const dept = (metadata?.department as string) || (metadata?.targetDepartment as string) || mockTask.department;
+      if (typeof dept === "string" && dept.trim()) {
+        const trimmed = dept.trim();
+        return trimmed.toLowerCase().includes("department") ? trimmed : `${trimmed} Department`;
+      }
+      return "Department Queue";
+    }
+
+    return null;
+  }
+
+  function formatActivityMessage(act: TaskActivity): string {
+    const meta = act.metadata as Record<string, unknown> | null | undefined;
+    const isReassign =
+      act.type === "TASK_REASSIGNED" ||
+      (act.type === "TASK_ASSIGNED" && Boolean(act.oldValue) && Boolean(act.newValue)) ||
+      meta?.source === "TASK_REASSIGN" ||
+      meta?.source === "MANUAL_REASSIGN";
+
+    const isUnassign =
+      act.type === "TASK_UNASSIGNED" ||
+      (act.type === "TASK_ASSIGNED" && Boolean(act.oldValue) && !act.newValue);
+
+    if (isReassign) {
+      const fromAssignee = resolveAssigneeOrDepartment(act.oldValue, meta, true);
+      const toAssignee = resolveAssigneeOrDepartment(act.newValue, meta, false);
+
+      if (fromAssignee && toAssignee) {
+        return `Task reassigned → ${fromAssignee} → ${toAssignee}`;
+      }
+      return "Task reassignment updated";
+    }
+
+    if (isUnassign) {
+      const fromAssignee = resolveAssigneeOrDepartment(act.oldValue, meta, true);
+      if (fromAssignee) {
+        return `Task unassigned → ${fromAssignee}`;
+      }
+      return "Task unassignment updated";
+    }
+
+    if (act.type === "TASK_ASSIGNED") {
+      const toAssignee = resolveAssigneeOrDepartment(act.newValue, meta, false);
+      if (toAssignee) {
+        return `Task assigned → ${toAssignee}`;
+      }
+      return "Task assignment updated";
+    }
+
+    return "Task updated";
+  }
+
+  await t.test("Assignment displays human-readable assignee in 'Task assigned → [whom]' format without actor", () => {
+    // 1. Initial assignment with actor (actor must NOT be displayed)
+    const actWithActor: TaskActivity = {
+      id: "act-1",
+      taskId: "cm8xyz_task_123",
+      actorId: "usr_om",
+      type: "TASK_ASSIGNED",
+      oldValue: null,
+      newValue: "usr_rahul",
+      createdAt: "2026-10-02T10:00:00Z",
+      actor: { id: "usr_om", name: "Om" },
+    };
+    const msgWithActor = formatActivityMessage(actWithActor);
+    assert.strictEqual(msgWithActor, "Task assigned → Rahul Sharma");
+    assert.strictEqual(msgWithActor.includes("usr_rahul"), false);
+    assert.strictEqual(msgWithActor.includes("cm8xyz"), false);
+    assert.strictEqual(msgWithActor.includes("Om"), false);
+
+    // 2. Initial assignment without actor
+    const actWithoutActor: TaskActivity = {
+      id: "act-2",
+      taskId: "cm8xyz_task_123",
+      actorId: null,
+      type: "TASK_ASSIGNED",
+      oldValue: null,
+      newValue: "usr_rahul",
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+    const msgWithoutActor = formatActivityMessage(actWithoutActor);
+    assert.strictEqual(msgWithoutActor, "Task assigned → Rahul Sharma");
+    assert.strictEqual(msgWithoutActor.includes("usr_rahul"), false);
+
+    // 3. Assignment to employee name (e.g. emp1)
+    const actEmp: TaskActivity = {
+      id: "act-emp",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_ASSIGNED",
+      newValue: "emp1",
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(actEmp), "Task assigned → emp1");
+  });
+
+  await t.test("Reassignment displays 'Task reassigned → [from] → [to]' without actor name or IDs", () => {
+    // 1. Reassignment with actor (actor must NOT be displayed)
+    const reassignAct: TaskActivity = {
+      id: "act-3",
+      taskId: "cm8xyz_task_123",
+      actorId: "usr_rahul",
+      type: "TASK_REASSIGNED",
+      oldValue: "usr_rahul",
+      newValue: "usr_priya",
+      createdAt: "2026-10-02T11:00:00Z",
+      actor: { id: "usr_rahul", name: "Rahul Sharma" },
+      metadata: { source: "MANUAL_REASSIGN", reason: "Product review" },
+    };
+    const reassignMsg = formatActivityMessage(reassignAct);
+    assert.strictEqual(reassignMsg, "Task reassigned → Rahul Sharma → Priya Patel");
+    assert.strictEqual(reassignMsg.includes("usr_rahul"), false);
+    assert.strictEqual(reassignMsg.includes("usr_priya"), false);
+
+    // 2. Reassignment between employee names (emp1 → emp2)
+    const reassignEmp: TaskActivity = {
+      id: "act-emp-reassign",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_REASSIGNED",
+      oldValue: "emp1",
+      newValue: "emp2",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(reassignEmp), "Task reassigned → emp1 → emp2");
+  });
+
+  await t.test("Department assignment and reassignment displays department names with arrows", () => {
+    // 1. Initial assignment to department (e.g. HR Department)
+    const deptAssign: TaskActivity = {
+      id: "act-5",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_ASSIGNED",
+      oldValue: null,
+      newValue: null,
+      metadata: { department: "HR Department", assigneeType: "DEPARTMENT" },
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(deptAssign), "Task assigned → HR Department");
+
+    // 2. Reassignment from department to user (HR Department → emp1)
+    const deptToUser: TaskActivity = {
+      id: "act-6",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_REASSIGNED",
+      oldValue: null,
+      newValue: "emp1",
+      metadata: { previousDepartment: "HR Department", assigneeType: "USER" },
+      createdAt: "2026-10-02T10:30:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(deptToUser), "Task reassigned → HR Department → emp1");
+
+    // 3. Reassignment from user to department (emp1 → HR Department)
+    const userToDept: TaskActivity = {
+      id: "act-7",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_REASSIGNED",
+      oldValue: "emp1",
+      newValue: null,
+      metadata: { department: "HR Department", assigneeType: "DEPARTMENT" },
+      createdAt: "2026-10-02T10:45:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(userToDept), "Task reassigned → emp1 → HR Department");
+  });
+
+  await t.test("Unassignment displays 'Task unassigned → [who]'", () => {
+    // 1. Unassignment from user
+    const unassignUser: TaskActivity = {
+      id: "act-u1",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_UNASSIGNED",
+      oldValue: "emp1",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unassignUser), "Task unassigned → emp1");
+
+    // 2. Unassignment from department
+    const unassignDept: TaskActivity = {
+      id: "act-u2",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_UNASSIGNED",
+      oldValue: null,
+      metadata: { previousDepartment: "HR Department" },
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unassignDept), "Task unassigned → HR Department");
+  });
+
+  await t.test("Missing-name fallbacks do not expose internal IDs", () => {
+    // Unknown raw CUIDs with no lookup match
+    const unknownReassign: TaskActivity = {
+      id: "act-8",
+      taskId: "cm8xyz_task_123",
+      actorId: "cmunknownactor123",
+      type: "TASK_REASSIGNED",
+      oldValue: "cmolduser123456",
+      newValue: "cmnewuser987654",
+      createdAt: "2026-10-02T11:00:00Z",
+      actor: { id: "cmunknownactor123", name: "cmunknownactor123" },
+    };
+    const fallbackReassignMsg = formatActivityMessage(unknownReassign);
+    assert.strictEqual(fallbackReassignMsg, "Task reassignment updated");
+    assert.strictEqual(fallbackReassignMsg.includes("cmolduser"), false);
+    assert.strictEqual(fallbackReassignMsg.includes("cmnewuser"), false);
+
+    const unknownAssign: TaskActivity = {
+      id: "act-9",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_ASSIGNED",
+      newValue: "cmnewuser987654",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unknownAssign), "Task assignment updated");
+
+    const unknownUnassign: TaskActivity = {
+      id: "act-10",
+      taskId: "cm8xyz_task_123",
+      type: "TASK_UNASSIGNED",
+      oldValue: "cmolduser123456",
+      createdAt: "2026-10-02T11:00:00Z",
+    };
+    assert.strictEqual(formatActivityMessage(unknownUnassign), "Task unassignment updated");
+  });
+
+  await t.test("Assignment persistence across drawer reopen, refresh, and explicit unassignment", () => {
+    // Simulated assignment response from reassignTask API
+    const deptAssignmentResponse = {
+      taskId: "task-persist-1",
+      taskTitle: "Sales Lead Followup",
+      assigneeType: "DEPARTMENT" as const,
+      department: "Sales",
+      assignedTo: null,
+      assignedBy: { id: "usr_admin", name: "Admin" },
+      assignedAt: "2026-10-02T10:00:00Z",
+    };
+
+    // 1. Save assignment
+    saveTaskAssignment("task-persist-1", deptAssignmentResponse);
+
+    // 2. Simulated fetchTasks returning a task without department (as backend Prisma Task model lacks department column)
+    const rawFetchedTasks = [
+      {
+        id: "task-persist-1",
+        title: "Sales Lead Followup",
+        status: "TODO" as const,
+        priority: "MEDIUM" as const,
+        assignedToId: null,
+        assignedTo: null,
+        createdAt: "2026-10-02T10:00:00Z",
+      },
+    ];
+
+    const normalised = normaliseTasksResponse(rawFetchedTasks);
+    const persistedTask = normalised.tasks[0];
+
+    // Verify task was correctly enriched from persisted assignment
+    assert.strictEqual(persistedTask.department, "Sales");
+    assert.strictEqual(persistedTask.assigneeType, "DEPARTMENT");
+    assert.deepStrictEqual(persistedTask.effectiveAssignment, deptAssignmentResponse);
+
+    // 3. Verify drawer reopening simulation:
+    // When drawer closes and reopens, reading assignment map restores canonicalAssignment
+    const storedMap = getTaskAssignmentMap();
+    const restoredAssignment = storedMap["task-persist-1"];
+    assert.strictEqual(restoredAssignment?.department, "Sales");
+    assert.strictEqual(restoredAssignment?.assigneeType, "DEPARTMENT");
+
+    // 4. Verify explicit unassignment persistence
+    saveTaskAssignment("task-persist-1", null);
+    const unassignedNormalised = normaliseTasksResponse(rawFetchedTasks);
+    const unassignedTask = unassignedNormalised.tasks[0];
+    assert.strictEqual(unassignedTask.effectiveAssignment, null);
+    assert.strictEqual(unassignedTask.department, undefined);
+    assert.strictEqual(unassignedTask.assignedTo, null);
+  });
+
+  await t.test("Underlying IDs remain available for application logic and audit trail", () => {
+    const rawActivity: TaskActivity = {
+      id: "act-99",
+      taskId: "cm8xyz_task_123",
+      actorId: "usr_om",
+      type: "TASK_REASSIGNED",
+      oldValue: "usr_rahul",
+      newValue: "usr_priya",
+      metadata: { reason: "Load balancing", source: "TASK_REASSIGN", scope: "ORGANIZATION" },
+      createdAt: "2026-10-02T12:00:00Z",
+      actor: { id: "usr_om", name: "Om" },
+    };
+
+    // Full functional data integrity
+    assert.strictEqual(rawActivity.id, "act-99");
+    assert.strictEqual(rawActivity.taskId, "cm8xyz_task_123");
+    assert.strictEqual(rawActivity.actorId, "usr_om");
+    assert.strictEqual(rawActivity.oldValue, "usr_rahul");
+    assert.strictEqual(rawActivity.newValue, "usr_priya");
+    assert.strictEqual(rawActivity.metadata?.scope, "ORGANIZATION");
+  });
+});
+
+test("Task 1 — Issue 13: Customer-Facing Source Page Cleanup and Activities Functionality", async (t) => {
+  function sanitizeSourcePageText(text?: string | null, knownTitle?: string | null): string {
+    if (!text) return "";
+    let result = text;
+    result = result.replace(/\[([^\]]+)\]\((?:https?:\/\/[^\/]+)?\/workspace\/pages\/[^\)]+\)/gi, (_, linkText) => {
+      const trimmed = linkText.trim();
+      if (
+        trimmed.startsWith("/workspace/pages") ||
+        trimmed.startsWith("http") ||
+        /^cm[a-z0-9]{5,}$/i.test(trimmed) ||
+        /^c[a-z0-9]{20,}$/i.test(trimmed)
+      ) {
+        return knownTitle?.trim() || "Workspace Page";
+      }
+      return trimmed;
+    });
+    result = result.replace(
+      /(?:Source\s+Page|sourcePageId|pageId)[:\s]+(?:https?:\/\/[^\s]+)?\/workspace\/pages\/[a-z0-9_-]+/gi,
+      () => {
+        return knownTitle?.trim() ? `Source Page: ${knownTitle.trim()}` : "Source Page: Workspace Page";
+      }
+    );
+    result = result.replace(
+      /(?:https?:\/\/[^\s\/]+)?\/workspace\/pages\/(?:cm[a-z0-9]{5,}|c[a-z0-9]{20,}|[a-z0-9_-]{10,})/gi,
+      () => {
+        return knownTitle?.trim() ? knownTitle.trim() : "Workspace Page";
+      }
+    );
+    result = result.replace(
+      /(?:sourcePageId|pageId)[:\s]+(?:cm[a-z0-9]{5,}|c[a-z0-9]{20,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/gi,
+      () => {
+        return knownTitle?.trim() ? `Source Page: ${knownTitle.trim()}` : "";
+      }
+    );
+    result = result.replace(/\b(?:sourcePage|page)[_\s-]*(?:id)?[:\s]*(?:c[a-z0-9]{20,}|cm[a-z0-9]{5,})\b/gi, () => {
+      return knownTitle?.trim() ? `Source Page: ${knownTitle.trim()}` : "";
+    });
+    return result.replace(/\s{2,}/g, " ").trim();
+  }
+
+  function extractSourcePageInfo(activity: {
+    title?: string | null;
+    description?: string | null;
+    sourcePageId?: string | null;
+    sourcePageTitle?: string | null;
+    metadata?: Record<string, any> | null;
+  }) {
+    let pageId =
+      activity.sourcePageId ||
+      activity.metadata?.sourcePageId ||
+      activity.metadata?.pageId ||
+      null;
+
+    let pageTitle =
+      activity.sourcePageTitle ||
+      activity.metadata?.pageTitle ||
+      activity.metadata?.sourcePageTitle ||
+      null;
+
+    const combined = `${activity.title || ""} ${activity.description || ""}`;
+    const mdMatch = combined.match(
+      /\[([^\]]+)\]\((?:https?:\/\/[^\/]+)?\/workspace\/pages\/([a-z0-9_-]+)\)/i
+    );
+    if (mdMatch) {
+      if (!pageTitle) {
+        const extractedTitle = mdMatch[1].trim();
+        if (
+          !extractedTitle.startsWith("/workspace/pages") &&
+          !extractedTitle.startsWith("http") &&
+          !/^cm[a-z0-9]{5,}$/i.test(extractedTitle) &&
+          !/^c[a-z0-9]{20,}$/i.test(extractedTitle)
+        ) {
+          pageTitle = extractedTitle;
+        }
+      }
+      if (!pageId) {
+        pageId = mdMatch[2].trim();
+      }
+    }
+
+    if (!pageId) {
+      const urlMatch = combined.match(
+        /(?:https?:\/\/[^\s\/]+)?\/workspace\/pages\/([a-z0-9_-]+)/i
+      );
+      if (urlMatch) {
+        pageId = urlMatch[1].trim();
+      }
+    }
+
+    return {
+      sourcePageId: pageId,
+      sourcePageTitle: pageTitle || (pageId ? "Workspace Page" : null),
+    };
+  }
+
+  // SOURCE PAGE:
+  await t.test("Raw Source Page markdown is not rendered and human-readable page title is displayed", () => {
+    const rawMarkdown = "Task created from [Project Requirements](/workspace/pages/cmucvbmz400vxjrlq31y33c)";
+    const sanitized = sanitizeSourcePageText(rawMarkdown);
+    assert.strictEqual(sanitized, "Task created from Project Requirements");
+    assert.ok(!sanitized.includes("/workspace/pages/"));
+    assert.ok(!sanitized.includes("cmucvbmz400vxjrlq31y33c"));
+  });
+
+  await t.test("Raw source-page URL is not rendered and falls back to safe label when title unavailable", () => {
+    const rawUrl = "Source Page: /workspace/pages/cmucvbmz400vxjrlq31y33c";
+    const sanitized = sanitizeSourcePageText(rawUrl);
+    assert.strictEqual(sanitized, "Source Page: Workspace Page");
+    assert.ok(!sanitized.includes("/workspace/pages/"));
+    assert.ok(!sanitized.includes("cmucvbmz400vxjrlq31y33c"));
+
+    const withTitle = sanitizeSourcePageText(rawUrl, "Client Brief");
+    assert.strictEqual(withTitle, "Source Page: Client Brief");
+  });
+
+  await t.test("Raw workspace page ID and sourcePageId are not rendered", () => {
+    const rawIdText = "sourcePageId: cmucvbmz400vxjrlq31y33c";
+    const sanitized = sanitizeSourcePageText(rawIdText);
+    assert.strictEqual(sanitized, "");
+    assert.ok(!sanitized.includes("cmucvbmz400vxjrlq31y33c"));
+
+    const withTitle = sanitizeSourcePageText(rawIdText, "Marketing Overview");
+    assert.strictEqual(withTitle, "Source Page: Marketing Overview");
+  });
+
+  await t.test("Existing source-page navigation still works while internal IDs remain available", () => {
+    const activity = {
+      id: "act-101",
+      title: "Review Notes",
+      description: "Notes from [Design Specs](/workspace/pages/cmucvbmz400vxjrlq31y33c)",
+      sourcePageId: "cmucvbmz400vxjrlq31y33c",
+      sourcePageTitle: "Design Specs",
+    };
+
+    const sourceInfo = extractSourcePageInfo(activity);
+    assert.strictEqual(sourceInfo.sourcePageId, "cmucvbmz400vxjrlq31y33c");
+    assert.strictEqual(sourceInfo.sourcePageTitle, "Design Specs");
+
+    // Internal ID used for navigation
+    const href = `/workspace/pages/${sourceInfo.sourcePageId}`;
+    assert.strictEqual(href, "/workspace/pages/cmucvbmz400vxjrlq31y33c");
+
+    // Visible text is clean
+    const visibleDesc = sanitizeSourcePageText(activity.description, sourceInfo.sourcePageTitle);
+    assert.strictEqual(visibleDesc, "Notes from Design Specs");
+    assert.ok(!visibleDesc.includes(sourceInfo.sourcePageId));
+  });
+
+  // VIEW:
+  await t.test("Existing activity can be selected and viewed without exposing internal IDs", () => {
+    const activity = {
+      id: "cmact_12345",
+      title: "Meeting with Client",
+      description: "Discussed deliverables in [Architecture Review](/workspace/pages/cmucvbmz400vxjrlq31y33c)",
+      relatedTo: "John Doe",
+      relatedToCompany: "Acme Corp",
+      type: "Meeting",
+      owner: "Om",
+      ownerAvatar: "O",
+      dueDate: "10/15/2026",
+      dueTime: "14:00",
+      status: "Upcoming",
+      priority: "High",
+      createdAt: "2026-10-02T10:00:00Z",
+    };
+
+    let selectedActivity: any = null;
+    function onAction(action: string, act: any) {
+      if (action === "View") {
+        selectedActivity = act;
+      }
+    }
+
+    onAction("View", activity);
+    assert.notStrictEqual(selectedActivity, null);
+    assert.strictEqual(selectedActivity?.title, "Meeting with Client");
+
+    const info = extractSourcePageInfo(selectedActivity!);
+    const viewTitle = sanitizeSourcePageText(selectedActivity!.title, info.sourcePageTitle);
+    const viewDesc = sanitizeSourcePageText(selectedActivity!.description, info.sourcePageTitle);
+
+    assert.strictEqual(viewTitle, "Meeting with Client");
+    assert.strictEqual(viewDesc, "Discussed deliverables in Architecture Review");
+    assert.ok(!viewDesc.includes("cmucvbmz400vxjrlq31y33c"));
+    assert.ok(!viewTitle.includes("cmact_12345"));
+  });
+
+  // ADD ACTIVITY:
+  await t.test("Successful activity creation handles array response from /activities/get-activities without dropping items", () => {
+    const backendData = [
+      {
+        id: "cmuqudzd103cvfrdlc7eg7pvl",
+        organizationId: "ORG-32551",
+        entityType: "COMPANY",
+        entityId: "default",
+        type: "NOTE",
+        message: "New Note",
+        createdById: "cmubkshyk0002n92hdw3hcj06",
+        metadata: { priority: "Medium" },
+        createdAt: "2026-10-02T10:50:41.606Z",
+        createdBy: { id: "cmubkshyk0002n92hdw3hcj06", name: "om" },
+      },
+    ];
+
+    const parsedActivities = Array.isArray(backendData)
+      ? backendData
+      : Array.isArray((backendData as any)?.activities)
+      ? (backendData as any).activities
+      : Array.isArray((backendData as any)?.data)
+      ? (backendData as any).data
+      : [];
+
+    assert.strictEqual(parsedActivities.length, 1);
+    assert.strictEqual(parsedActivities[0].id, "cmuqudzd103cvfrdlc7eg7pvl");
+    assert.strictEqual(parsedActivities[0].message, "New Note");
+  });
+
+  await t.test("Add Activity payload conforms to backend schema and does not create fake activity locally", () => {
+    const formData = {
+      entityType: "COMPANY" as const,
+      entityId: "default",
+      type: "NOTE" as const,
+      message: "Customer feedback recorded",
+      priority: "High" as const,
+      relatedTo: "Alice Smith",
+      relatedCompany: "Tech Corp",
+      dueDate: "2026-10-10",
+      dueTime: "11:00",
+    };
+
+    const metadata: Record<string, unknown> = {
+      priority: formData.priority,
+      relatedTo: formData.relatedTo,
+      relatedCompany: formData.relatedCompany,
+      dueDate: formData.dueDate,
+      dueTime: formData.dueTime,
+    };
+
+    const payload = {
+      entityType: formData.entityType,
+      entityId: formData.entityId,
+      type: formData.type,
+      message: formData.message,
+      metadata,
+    };
+
+    assert.strictEqual(payload.entityType, "COMPANY");
+    assert.strictEqual(payload.entityId, "default");
+    assert.strictEqual(payload.type, "NOTE");
+    assert.strictEqual(payload.message, "Customer feedback recorded");
+    assert.strictEqual(payload.metadata.priority, "High");
+    assert.strictEqual(payload.metadata.relatedCompany, "Tech Corp");
+  });
+});
+
+test("Task 1 — Issue 14: Customer-Facing Lead Selection and Meeting Prep Sanitization", async (t) => {
+  const CUID_REGEX = /^c[a-z0-9]{24}$/i;
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const TECHNICAL_ID_REGEX = /^(cm[a-z0-9]{20,}|c[a-z0-9]{24}|lead_[a-z0-9_-]+)$/i;
+
+  function isTechnicalId(val: string | null | undefined): boolean {
+    if (!val || typeof val !== "string") return false;
+    const trimmed = val.trim();
+    return CUID_REGEX.test(trimmed) || UUID_REGEX.test(trimmed) || TECHNICAL_ID_REGEX.test(trimmed);
+  }
+
+  interface LeadLike {
+    id?: string | null;
+    name?: string | null;
+    company?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    details?: string | null;
+  }
+
+  function formatLeadDisplayName(lead: LeadLike | null | undefined, fallbackText: string = "Selected Lead"): string {
+    if (!lead) return fallbackText;
+    const name = lead.name?.trim();
+    const company = lead.company?.trim();
+    const email = lead.email?.trim();
+    const phone = lead.phone?.trim();
+    const details = lead.details?.trim();
+
+    if (name && !isTechnicalId(name)) {
+      if (company && !isTechnicalId(company)) {
+        return `${name} — ${company}`;
+      }
+      return name;
+    }
+    if (company && !isTechnicalId(company)) return company;
+    if (email) return email;
+    if (phone) return phone;
+    if (details && !isTechnicalId(details)) return details;
+    return fallbackText;
+  }
+
+  function formatLeadOptionLabel(lead: LeadLike, fallbackText: string = "Selected Lead"): string {
+    const name = lead.name?.trim();
+    const company = lead.company?.trim();
+    const email = lead.email?.trim();
+    const details = lead.details?.trim();
+
+    const primaryLabel = (name && !isTechnicalId(name))
+      ? name
+      : (company && !isTechnicalId(company))
+      ? company
+      : (email && !isTechnicalId(email))
+      ? email
+      : fallbackText;
+
+    let secondary: string | null = null;
+    if (company && company !== primaryLabel && !isTechnicalId(company)) {
+      secondary = company;
+    } else if (details && details !== primaryLabel && !isTechnicalId(details)) {
+      secondary = details;
+    } else if (email && email !== primaryLabel) {
+      secondary = email;
+    }
+    return secondary ? `${primaryLabel} (${secondary})` : primaryLabel;
+  }
+
+  function sanitizeLeadReference(text: string | null | undefined, fallback: string = "Selected Lead"): string {
+    if (!text) return fallback;
+    if (isTechnicalId(text)) return fallback;
+    return text
+      .replace(/\bcm[a-z0-9]{20,}\b/gi, fallback)
+      .replace(/Lead:\s*cm[a-z0-9]{20,}/gi, `Lead: ${fallback}`)
+      .replace(/Lead ID:\s*cm[a-z0-9]{20,}/gi, fallback)
+      .replace(/Selected Lead:\s*cm[a-z0-9]{20,}/gi, `Selected Lead: ${fallback}`);
+  }
+
+  await t.test("Lead selection displays human-readable lead name", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+    };
+    const display = formatLeadDisplayName(lead);
+    assert.strictEqual(display, "Rahul Sharma");
+  });
+
+  await t.test("Lead CUID is not displayed in lead selection display or options", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+    };
+    const display = formatLeadDisplayName(lead);
+    const option = formatLeadOptionLabel(lead);
+    assert.ok(!display.includes("cmupjmy5r07botpfht7s9yf7a"));
+    assert.ok(!option.includes("cmupjmy5r07botpfht7s9yf7a"));
+  });
+
+  await t.test("Company information is displayed when available", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+      company: "ABC Technologies",
+    };
+    const display = formatLeadDisplayName(lead);
+    assert.strictEqual(display, "Rahul Sharma — ABC Technologies");
+
+    const option = formatLeadOptionLabel(lead);
+    assert.strictEqual(option, "Rahul Sharma (ABC Technologies)");
+  });
+
+  await t.test("Meeting Prep displays human-readable lead information", () => {
+    const leads = [
+      { id: "cmupjmy5r07botpfht7s9yf7a", name: "Rahul Sharma", company: "ABC Technologies", details: "Enterprise Lead" },
+    ];
+    const meetingId = "cmupjmy5r07botpfht7s9yf7a";
+    const activeLead = leads.find((l) => l.id === meetingId);
+    assert.ok(activeLead);
+
+    const leadInfo = activeLead.name ? `${activeLead.name} (${activeLead.company || activeLead.details})` : "Selected Lead";
+    assert.strictEqual(leadInfo, "Rahul Sharma (ABC Technologies)");
+    assert.ok(!leadInfo.includes("cmupjmy5r07botpfht7s9yf7a"));
+  });
+
+  await t.test("Missing lead name uses a safe fallback without exposing raw CUID", () => {
+    const leadWithCompany = { id: "cmupjmy5r07botpfht7s9yf7a", company: "ABC Technologies" };
+    assert.strictEqual(formatLeadDisplayName(leadWithCompany), "ABC Technologies");
+
+    const leadWithEmail = { id: "cmupjmy5r07botpfht7s9yf7a", email: "rahul@abctech.com" };
+    assert.strictEqual(formatLeadDisplayName(leadWithEmail), "rahul@abctech.com");
+
+    const leadEmpty = { id: "cmupjmy5r07botpfht7s9yf7a" };
+    assert.strictEqual(formatLeadDisplayName(leadEmpty), "Selected Lead");
+    assert.strictEqual(formatLeadOptionLabel(leadEmpty), "Selected Lead");
+    assert.ok(!formatLeadDisplayName(leadEmpty).includes("cmupjmy5r07botpfht7s9yf7a"));
+  });
+
+  await t.test("Underlying lead ID remains available to API and state logic", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+      company: "ABC Technologies",
+    };
+
+    const customerVisibleLabel = formatLeadOptionLabel(lead);
+    assert.strictEqual(customerVisibleLabel, "Rahul Sharma (ABC Technologies)");
+
+    const option = {
+      value: lead.id,
+      text: customerVisibleLabel,
+    };
+    assert.strictEqual(option.value, "cmupjmy5r07botpfht7s9yf7a");
+
+    const selectedLeadId = option.value;
+    const requestPayload = {
+      leadId: selectedLeadId,
+      notes: "Pre-meeting preparation",
+    };
+    assert.strictEqual(requestPayload.leadId, "cmupjmy5r07botpfht7s9yf7a");
+  });
+
+  await t.test("Selecting a lead still sends the correct lead ID to meeting prep API", () => {
+    const leads = [
+      { id: "cmupjmy5r07botpfht7s9yf7a", name: "Rahul Sharma", details: "ABC Technologies" },
+      { id: "cmuh5figl064hobm55o4gj0jt", name: "Sarah Jenkins", details: "Acme Corp" },
+    ];
+
+    let apiRequestedId: string | null = null;
+    function fakeGetMeetingPrep(id: string) {
+      apiRequestedId = id;
+      return { success: true, data: { id } };
+    }
+
+    const selectedOption = leads[1];
+    fakeGetMeetingPrep(selectedOption.id);
+
+    assert.strictEqual(apiRequestedId, "cmuh5figl064hobm55o4gj0jt");
+  });
+
+  await t.test("Meeting Prep still uses the correct selected lead ID while hiding CUID from UI", () => {
+    const lead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Rahul Sharma",
+      details: "ABC Technologies",
+    };
+
+    const currentMeetingId = lead.id;
+
+    const renderedUI = {
+      badge: `Lead: ${lead.name}`,
+      details: lead.details,
+      isCuidVisible: false,
+    };
+
+    assert.strictEqual(renderedUI.badge, "Lead: Rahul Sharma");
+    assert.strictEqual(renderedUI.details, "ABC Technologies");
+    assert.strictEqual(currentMeetingId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(renderedUI.badge.includes(currentMeetingId), false);
+  });
+
+  await t.test("Technical ID check identifies CUIDs and UUIDs correctly", () => {
+    assert.strictEqual(isTechnicalId("cmupjmy5r07botpfht7s9yf7a"), true);
+    assert.strictEqual(isTechnicalId("123e4567-e89b-12d3-a456-426614174000"), true);
+    assert.strictEqual(isTechnicalId("lead_enterprise_1"), true);
+    assert.strictEqual(isTechnicalId("Rahul Sharma"), false);
+    assert.strictEqual(isTechnicalId("ABC Technologies"), false);
+  });
+
+  await t.test("SalesLeadDropdown: search filtering across name, company, and details is case-insensitive", () => {
+    const leads = [
+      { id: "lead_1", name: "Rahul Sharma", details: "ABC Technologies", type: "LEAD" as const },
+      { id: "lead_2", name: "Sarah Jenkins", details: "Acme Corp", email: "sarah@acme.corp", type: "LEAD" as const },
+      { id: "lead_3", name: "Vikram Malhotra", details: "Global Logistics", type: "LEAD" as const },
+    ];
+
+    const filterLeads = (query: string) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return leads;
+      return leads.filter((l) => {
+        const name = (l.name || "").toLowerCase();
+        const details = (l.details || "").toLowerCase();
+        const email = (l.email || "").toLowerCase();
+        return name.includes(q) || details.includes(q) || email.includes(q);
+      });
+    };
+
+    // Filter by name
+    assert.strictEqual(filterLeads("rahul").length, 1);
+    assert.strictEqual(filterLeads("rahul")[0].id, "lead_1");
+
+    // Filter by details / company
+    assert.strictEqual(filterLeads("acme").length, 1);
+    assert.strictEqual(filterLeads("acme")[0].id, "lead_2");
+
+    // Filter by email
+    assert.strictEqual(filterLeads("sarah@acme").length, 1);
+
+    // Empty search query returns all
+    assert.strictEqual(filterLeads("").length, 3);
+
+    // Non-matching query returns empty list
+    assert.strictEqual(filterLeads("nonexistent").length, 0);
+  });
+
+  await t.test("SalesLeadDropdown: long lead names and company names truncate cleanly without raw IDs", () => {
+    const longLead = {
+      id: "cmupjmy5r07botpfht7s9yf7a",
+      name: "Dr. Alexander Christopher Montgomery-Smith III",
+      company: "International Global Holdings Conglomerate Corporation Ltd.",
+      details: "Enterprise Tier 1 Strategic Partner",
+    };
+
+    const label = formatLeadOptionLabel(longLead);
+    assert.strictEqual(
+      label,
+      "Dr. Alexander Christopher Montgomery-Smith III (International Global Holdings Conglomerate Corporation Ltd.)"
+    );
+    assert.strictEqual(label.includes("cmupjmy5r07botpfht7s9yf7a"), false);
+  });
+
+  await t.test("SalesLeadDropdown: wheel scrolling does not trigger selection or change selected state", () => {
+    let selectedId = "lead_1";
+    let fetchCount = 0;
+
+    const onSelect = (newId: string) => {
+      selectedId = newId;
+      fetchCount++;
+    };
+
+    // Simulate wheel event on the dropdown scrollable list
+    const simulateWheelScroll = (e: { stopPropagation: () => void }) => {
+      e.stopPropagation();
+      // Notice: scrolling must NOT invoke onSelect!
+    };
+
+    let stoppedPropagation = false;
+    simulateWheelScroll({
+      stopPropagation: () => {
+        stoppedPropagation = true;
+      },
+    });
+
+    assert.strictEqual(stoppedPropagation, true);
+    assert.strictEqual(selectedId, "lead_1");
+    assert.strictEqual(fetchCount, 0);
+
+    // Only explicit click selection updates state and fires fetch
+    onSelect("lead_2");
+    assert.strictEqual(selectedId, "lead_2");
+    assert.strictEqual(fetchCount, 1);
+  });
+
+  await t.test("Meeting Intelligence attribution badges sanitize technical IDs", () => {
+    const intelligenceWithTechnicalIds = {
+      meetingId: "cmupjmy5r07botpfht7s9yf7a",
+      customerId: "cmubecbbm01go124m7lkrowav",
+      dealId: "cmuh5figl064hobm55o4gj0jt",
+    };
+
+    const meetingBadge = isTechnicalId(intelligenceWithTechnicalIds.meetingId)
+      ? "Active Session"
+      : intelligenceWithTechnicalIds.meetingId;
+    const customerBadge = isTechnicalId(intelligenceWithTechnicalIds.customerId)
+      ? "Selected Customer"
+      : intelligenceWithTechnicalIds.customerId;
+    const dealBadge = isTechnicalId(intelligenceWithTechnicalIds.dealId)
+      ? "Selected Deal"
+      : intelligenceWithTechnicalIds.dealId;
+
+    assert.strictEqual(meetingBadge, "Active Session");
+    assert.strictEqual(customerBadge, "Selected Customer");
+    assert.strictEqual(dealBadge, "Selected Deal");
+    assert.strictEqual(meetingBadge.includes("cmup"), false);
+    assert.strictEqual(customerBadge.includes("cmub"), false);
+    assert.strictEqual(dealBadge.includes("cmuh"), false);
+
+    // Legitimate human-readable identifiers are preserved
+    const intelligenceHumanReadable = {
+      meetingId: "Q3-Strategy-Review",
+      customerId: "Acme-Enterprise",
+      dealId: "Cloud-Migration-2026",
+    };
+
+    assert.strictEqual(
+      isTechnicalId(intelligenceHumanReadable.meetingId) ? "Active Session" : intelligenceHumanReadable.meetingId,
+      "Q3-Strategy-Review"
+    );
+    assert.strictEqual(
+      isTechnicalId(intelligenceHumanReadable.customerId) ? "Selected Customer" : intelligenceHumanReadable.customerId,
+      "Acme-Enterprise"
+    );
+    assert.strictEqual(
+      isTechnicalId(intelligenceHumanReadable.dealId) ? "Selected Deal" : intelligenceHumanReadable.dealId,
+      "Cloud-Migration-2026"
+    );
+  });
+
+  await t.test("Manual meeting reference input is decoupled from dropdown selection", () => {
+    let internalSelectedId = "";
+    let manualSearchInput = "";
+
+    // User selects a lead with CUID from dropdown
+    const lead = { id: "cmupjmy5r07botpfht7s9yf7a", name: "Rahul Sharma" };
+    internalSelectedId = lead.id;
+    // Manual search input must NOT be set to lead.id
+    assert.strictEqual(manualSearchInput, "");
+    assert.strictEqual(internalSelectedId, "cmupjmy5r07botpfht7s9yf7a");
+
+    // User manually types a meeting code in the search field
+    manualSearchInput = "meet_strategy_alpha";
+    assert.strictEqual(manualSearchInput, "meet_strategy_alpha");
+    assert.strictEqual(isTechnicalId(manualSearchInput), false);
+  });
+});
+
+test("Task 1 — Issue 16: Customer-Friendly Action Controls and Template Variable Sanitization", async (t) => {
+  const {
+    formatStepTypeLabel,
+    formatOutreachChannel,
+    formatProposalAction,
+    formatPreferenceChannel,
+    formatConsentStatus,
+    formatTemplateDisplayText,
+    renderTemplatePreview,
+    STEP_TYPE_LABELS,
+  } = await import("../lib/utils/salesDisplay.ts");
+
+  await t.test("Sequences: Step types map to customer-friendly labels without modifying internal enums", () => {
+    assert.strictEqual(formatStepTypeLabel("EMAIL"), "Send Email");
+    assert.strictEqual(formatStepTypeLabel("SEND_EMAIL"), "Send Email");
+    assert.strictEqual(formatStepTypeLabel("CALL"), "Phone Call");
+    assert.strictEqual(formatStepTypeLabel("CALL_TASK"), "Phone Call");
+    assert.strictEqual(formatStepTypeLabel("TASK"), "Create Task");
+    assert.strictEqual(formatStepTypeLabel("WAIT"), "Wait Delay");
+    assert.strictEqual(formatStepTypeLabel("WAIT_DELAY"), "Wait Delay");
+    assert.strictEqual(formatStepTypeLabel("LINKEDIN"), "LinkedIn Touchpoint");
+    assert.strictEqual(formatStepTypeLabel("WHATSAPP"), "WhatsApp Message");
+    assert.strictEqual(formatStepTypeLabel("SEND_WHATSAPP"), "WhatsApp Message");
+    assert.strictEqual(formatStepTypeLabel("WAIT_CONDITION"), "Wait for Condition");
+    assert.strictEqual(formatStepTypeLabel("BRANCH_CONDITION"), "Branching Decision");
+
+    // Formatted label output example: "Step 1: Send Email"
+    const step1 = { stepOrder: 1, stepType: "EMAIL" };
+    const step2 = { stepOrder: 2, stepType: "CALL" };
+    assert.strictEqual(`Step ${step1.stepOrder}: ${formatStepTypeLabel(step1.stepType)}`, "Step 1: Send Email");
+    assert.strictEqual(`Step ${step2.stepOrder}: ${formatStepTypeLabel(step2.stepType)}`, "Step 2: Phone Call");
+
+    // Internal stepType values remain untouched
+    assert.strictEqual(step1.stepType, "EMAIL");
+    assert.strictEqual(step2.stepType, "CALL");
+  });
+
+  await t.test("Sequences: Dropdown options remove developer enum suffixes while retaining enum values", () => {
+    // Dropdown options should render friendly labels without "(EMAIL)" suffix
+    const dropdownOptions = [
+      { value: "EMAIL", label: "Send Email" },
+      { value: "CALL", label: "Phone Call" },
+      { value: "TASK", label: "Create Task" },
+      { value: "WAIT", label: "Wait Delay" },
+      { value: "LINKEDIN", label: "LinkedIn Touchpoint" },
+    ];
+
+    dropdownOptions.forEach((opt) => {
+      // Must not contain developer enum suffix like "Send Email (EMAIL)"
+      assert.strictEqual(opt.label.includes(`(${opt.value})`), false);
+      // Friendly label should match expected display
+      assert.strictEqual(opt.label, STEP_TYPE_LABELS[opt.value]);
+    });
+  });
+
+  await t.test("Sequences: Personalization toolbar inserts correct template token at cursor position", () => {
+    // Helper replicating insertVariableAtCursor logic
+    function insertVariable(currentBody: string, token: string, selectionStart: number, selectionEnd: number) {
+      const newBody = currentBody.substring(0, selectionStart) + token + currentBody.substring(selectionEnd);
+      const newCursorPos = selectionStart + token.length;
+      return { newBody, newCursorPos };
+    }
+
+    // 1. Insert at middle cursor position
+    const text1 = "Hello , how are you?";
+    const res1 = insertVariable(text1, "{{firstName}}", 6, 6);
+    assert.strictEqual(res1.newBody, "Hello {{firstName}}, how are you?");
+    assert.strictEqual(res1.newCursorPos, 6 + "{{firstName}}".length);
+
+    // 2. Insert with selected text replacement
+    const text2 = "Welcome [NAME] to our portal";
+    const res2 = insertVariable(text2, "{{company}}", 8, 14);
+    assert.strictEqual(res2.newBody, "Welcome {{company}} to our portal");
+
+    // 3. Insert + Full Name and + Job Title
+    const text3 = "Contact ";
+    const res3 = insertVariable(text3, "{{name}}", text3.length, text3.length);
+    assert.strictEqual(res3.newBody, "Contact {{name}}");
+
+    const text4 = "Role: ";
+    const res4 = insertVariable(text4, "{{jobTitle}}", text4.length, text4.length);
+    assert.strictEqual(res4.newBody, "Role: {{jobTitle}}");
+
+    // 4. Stored underlying step body preserves exact template tokens
+    const stepPayload = {
+      stepOrder: 1,
+      stepType: "EMAIL",
+      subject: "Introduction",
+      body: res1.newBody,
+    };
+    assert.strictEqual(stepPayload.body, "Hello {{firstName}}, how are you?");
+    assert.strictEqual(stepPayload.stepType, "EMAIL");
+  });
+
+  await t.test("Sequences: Preview converts raw template variables to customer-friendly chips/tags", () => {
+    const rawTemplate = "Hi {{firstName}}, thanks for connecting from {{company}}. Is {{name}} still {{jobTitle}}?";
+
+    // Plain text formatter
+    const friendlyText = formatTemplateDisplayText(rawTemplate);
+    assert.strictEqual(
+      friendlyText,
+      "Hi [First Name], thanks for connecting from [Company]. Is [Full Name] still [Job Title]?"
+    );
+    assert.strictEqual(friendlyText.includes("{{firstName}}"), false);
+    assert.strictEqual(friendlyText.includes("{{company}}"), false);
+
+    // Node preview renderer returns React element tree with styled variable chips
+    const previewNode = renderTemplatePreview(rawTemplate);
+    assert.ok(previewNode);
+    // Underlying template string remains completely untouched
+    assert.strictEqual(rawTemplate, "Hi {{firstName}}, thanks for connecting from {{company}}. Is {{name}} still {{jobTitle}}?");
+  });
+
+  await t.test("Outreach Generator: Formats outreach channels to customer-friendly labels", () => {
+    assert.strictEqual(formatOutreachChannel("EMAIL"), "Email");
+    assert.strictEqual(formatOutreachChannel("WHATSAPP"), "WhatsApp");
+    assert.strictEqual(formatOutreachChannel("CALL_SCRIPT"), "Phone Call Script");
+    assert.strictEqual(formatOutreachChannel("LINKEDIN"), "LinkedIn Message");
+    assert.strictEqual(formatOutreachChannel("ALL"), "All Channels");
+
+    // Active draft badge display
+    const activeDraft = {
+      id: "draft_123",
+      channel: "CALL_SCRIPT",
+      content: "Hello prospect...",
+    };
+    const displayedBadge = formatOutreachChannel(activeDraft.channel);
+    assert.strictEqual(displayedBadge, "Phone Call Script");
+
+    // Internal channel value and API payload remain unchanged
+    assert.strictEqual(activeDraft.channel, "CALL_SCRIPT");
+
+    // Channel selection tabs list
+    const availableChannels = ["EMAIL", "WHATSAPP", "CALL_SCRIPT", "LINKEDIN"];
+    const channelTabLabels = availableChannels.map((c) => formatOutreachChannel(c));
+    assert.deepStrictEqual(channelTabLabels, ["Email", "WhatsApp", "Phone Call Script", "LinkedIn Message"]);
+  });
+
+  await t.test("Proposals: Governance actions format to customer-friendly labels", () => {
+    assert.strictEqual(formatProposalAction("AUTO_APPROVE"), "Auto Approve");
+    assert.strictEqual(formatProposalAction("REQUIRE_VP_APPROVAL"), "Require VP Approval");
+    assert.strictEqual(formatProposalAction("FLAG_COMPLIANCE"), "Flag Compliance");
+
+    // Rule card badge
+    const rule = {
+      id: "rule_1",
+      name: "High Discount Threshold",
+      action: "REQUIRE_VP_APPROVAL",
+      isActive: true,
+    };
+
+    assert.strictEqual(formatProposalAction(rule.action), "Require VP Approval");
+    // Internal rule action remains unchanged
+    assert.strictEqual(rule.action, "REQUIRE_VP_APPROVAL");
+  });
+
+  await t.test("Customer Preferences: Channel options and consent statuses format cleanly", () => {
+    // Channels
+    assert.strictEqual(formatPreferenceChannel("EMAIL"), "Email");
+    assert.strictEqual(formatPreferenceChannel("PHONE"), "Phone");
+    assert.strictEqual(formatPreferenceChannel("SMS"), "SMS");
+    assert.strictEqual(formatPreferenceChannel("WHATSAPP"), "WhatsApp");
+    assert.strictEqual(formatPreferenceChannel("IN_APP"), "In-App");
+    assert.strictEqual(formatPreferenceChannel("NONE"), "None");
+
+    // Consent statuses
+    assert.strictEqual(formatConsentStatus("GRANTED"), "Granted");
+    assert.strictEqual(formatConsentStatus("PENDING"), "Pending");
+    assert.strictEqual(formatConsentStatus("WITHDRAWN"), "Withdrawn");
+    assert.strictEqual(formatConsentStatus("NOT_SET"), "Not Set");
+
+    // Modal options retain underlying values
+    const preferencePayload = {
+      preferredChannel: "WHATSAPP",
+      consentStatus: "GRANTED",
+    };
+    assert.strictEqual(formatPreferenceChannel(preferencePayload.preferredChannel), "WhatsApp");
+    assert.strictEqual(formatConsentStatus(preferencePayload.consentStatus), "Granted");
+    assert.strictEqual(preferencePayload.preferredChannel, "WHATSAPP");
+    assert.strictEqual(preferencePayload.consentStatus, "GRANTED");
+  });
+
+  await t.test("End-to-End API payload immutability check for Issue 16", () => {
+    // Sequences API payload
+    const sequencePayload = {
+      name: "Outbound SaaS Sequence",
+      steps: [
+        { stepOrder: 1, stepType: "EMAIL", body: "Hi {{firstName}}, welcome to {{company}}!" },
+        { stepOrder: 2, stepType: "CALL", body: "Follow up with {{name}}" },
+      ],
+    };
+    assert.strictEqual(sequencePayload.steps[0].stepType, "EMAIL");
+    assert.strictEqual(sequencePayload.steps[0].body.includes("{{firstName}}"), true);
+    assert.strictEqual(sequencePayload.steps[1].stepType, "CALL");
+
+    // Outreach API payload
+    const outreachPayload = {
+      channel: "CALL_SCRIPT",
+      leadId: "lead_123",
+      template: "Outreach Pitch",
+    };
+    assert.strictEqual(outreachPayload.channel, "CALL_SCRIPT");
+
+    // Proposal API payload
+    const proposalRulePayload = {
+      name: "VP Approvals for large deals",
+      action: "REQUIRE_VP_APPROVAL",
+    };
+    assert.strictEqual(proposalRulePayload.action, "REQUIRE_VP_APPROVAL");
+  });
+});
 

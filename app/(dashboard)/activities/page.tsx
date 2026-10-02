@@ -3,6 +3,7 @@
 
 import { ActivitiesTable } from "@/components/activities/ActivitiesUI";
 import { AddActivityModal } from "@/components/activities/AddActivityModal";
+import { ActivityDetailModal } from "@/components/activities/ActivityDetailModal";
 import { useActivities } from "@/hooks/useActivities";
 import { PER_PAGE } from "@/types/activities";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -17,6 +18,7 @@ export default function ActivitiesPage() {
         error,
         openMenu,
         confirmDelete,
+        selectedActivity,
         stats,
         overdue,
         breakdown,
@@ -25,6 +27,7 @@ export default function ActivitiesPage() {
         setPage,
         setOpenMenu,
         setConfirmDelete,
+        setSelectedActivity,
         setOpenAddModal,
         handleFiltersChange,
         handleTabChange,
@@ -78,6 +81,12 @@ export default function ActivitiesPage() {
                 confirmText="Delete"
                 onConfirm={executeDelete}
                 onCancel={() => setConfirmDelete(null)}
+            />
+
+            <ActivityDetailModal
+                isOpen={selectedActivity !== null}
+                activity={selectedActivity}
+                onClose={() => setSelectedActivity(null)}
             />
 
             <AddActivityModal

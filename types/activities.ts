@@ -18,6 +18,9 @@ export interface Activity {
     status: ActivityStatus;
     priority: ActivityPriority;
     createdAt?: string;
+    sourcePageId?: string | null;
+    sourcePageTitle?: string | null;
+    metadata?: Record<string, any> | null;
 }
 
 export interface ActivityStats {
