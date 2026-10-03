@@ -189,7 +189,7 @@ const NAV_GROUPS: NavGroup[] = [
       },
       {
         href: "/messages",
-        label: "Messages",
+        label: "Connect",
         icon: MessageSquare,
         roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS", "HR", "MANAGER", "EMPLOYEE", "USER"],
       },
@@ -614,7 +614,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       { href: "/calls",          label: "Calls",             icon: Phone },
       { href: "/tasks",          label: "Tasks",             icon: ListTodo },
       { href: "/calendar",       label: "Calendar",          icon: Calendar },
-      { href: "/messages",       label: "Messages",          icon: MessageSquare },
+      { href: "/messages",       label: "Connect",           icon: MessageSquare },
       { href: "/meetings",       label: "Meetings",          icon: Video },
     ],
   };
@@ -736,7 +736,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           { href: "/calls",          label: "Calls",             iconKey: "calls"          },
           { href: "/tasks",          label: "Tasks",             iconKey: "tasks"          },
           { href: "/calendar",       label: "Calendar",          iconKey: "calendar"       },
-          { href: "/messages",       label: "Messages",          iconKey: "messages"       },
+          { href: "/messages",       label: "Connect",           iconKey: "messages"       },
           { href: "/meetings",       label: "Meetings",          iconKey: "meetings"       },
         ],
         communications: [
@@ -746,7 +746,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           { href: "/calls",          label: "Calls",             iconKey: "calls"          },
           { href: "/tasks",          label: "Tasks",             iconKey: "tasks"          },
           { href: "/calendar",       label: "Calendar",          iconKey: "calendar"       },
-          { href: "/messages",       label: "Messages",          iconKey: "messages"       },
+          { href: "/messages",       label: "Connect",           iconKey: "messages"       },
           { href: "/meetings",       label: "Meetings",          iconKey: "meetings"       },
         ],
       };
