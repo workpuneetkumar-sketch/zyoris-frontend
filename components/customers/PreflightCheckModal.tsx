@@ -318,11 +318,6 @@ export function PreflightCheckModal({ isOpen, onClose }: PreflightCheckModalProp
                 <div className="mt-3 rounded-lg bg-white/30 dark:bg-black/20 px-3 py-2 text-xs">
                   <span className="text-[var(--color-text-muted)]">Matched: </span>
                   <span className="font-semibold text-[var(--color-text)]">{result.existingCustomerName}</span>
-                  {result.existingCustomerId && (
-                    <span className="ml-1 text-[var(--color-text-muted)] font-mono">
-                      ({result.existingCustomerId.slice(0, 8)}…)
-                    </span>
-                  )}
                 </div>
               )}
 
@@ -342,7 +337,6 @@ export function PreflightCheckModal({ isOpen, onClose }: PreflightCheckModalProp
                     >
                       <div>
                         <p className="text-xs font-semibold text-[var(--color-text)]">{m.customerName}</p>
-                        <p className="text-[10px] text-[var(--color-text-muted)] font-mono">{m.customerId.slice(0, 12)}…</p>
                         {m.matchedFields?.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-0.5">
                             {m.matchedFields.map((f) => (

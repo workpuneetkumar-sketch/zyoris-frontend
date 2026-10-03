@@ -1,5 +1,5 @@
 // components/deals/DealWinProbabilityCard.tsx
-// FE-2 Day 3: Win Probability, Confidence, Model Version, Factor Breakdown, and Historical Snapshots.
+// FE-2 Day 3: Win Probability, Confidence, Factor Breakdown, and Historical Snapshots.
 // Source of truth: GET /api/deals/:id/win-probability & GET /api/deals/:id/win-probability/snapshots
 
 "use client";
@@ -11,14 +11,9 @@ import {
   AlertCircle,
   Loader2,
   Calendar,
-  Cpu,
   History,
-  ShieldCheck,
   ChevronDown,
   ChevronUp,
-  CheckCircle2,
-  XCircle,
-  HelpCircle,
   Info,
 } from "lucide-react";
 import {
@@ -59,7 +54,7 @@ export function DealWinProbabilityCard({
       setError(
         err.response?.data?.message ||
           err.message ||
-          "Failed to load win probability prediction"
+          "Failed to load win probability assessment"
       );
     } finally {
       setLoading(false);
@@ -120,7 +115,7 @@ export function DealWinProbabilityCard({
     return (
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex flex-col items-center justify-center min-h-[220px] gap-3">
         <Loader2 className="animate-spin text-blue-600" size={24} />
-        <p className="text-xs text-gray-400 font-medium">Loading win probability model...</p>
+        <p className="text-xs text-gray-400 font-medium">Loading win probability assessment...</p>
       </div>
     );
   }
@@ -145,10 +140,10 @@ export function DealWinProbabilityCard({
           <AlertCircle size={16} className="text-amber-600 shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-xs font-semibold text-amber-900">
-              Win probability prediction currently unavailable
+              Win probability assessment currently unavailable
             </p>
             <p className="text-[11px] text-amber-700 mt-0.5">
-              {error || "Prediction features are being evaluated by the intelligence engine."}
+              {error || "Deal outcome probability is currently being evaluated."}
             </p>
           </div>
           <button
@@ -175,32 +170,35 @@ export function DealWinProbabilityCard({
 
   const predictedOutcome = (data.predictedOutcome || (probability >= 50 ? "WON" : "LOST")).toUpperCase();
 
-  // Normalize factor breakdown
-  const factors: Array<{ name: string; value: string | number; impact?: string; description?: string }> = [];
+  // Normalize factor breakdown preserving names and human-friendly impact, omitting technical model weights
+  const factors: Array<{ name: string; impact?: string; description?: string }> = [];
   if (data.factorBreakdown && typeof data.factorBreakdown === "object") {
     if (Array.isArray(data.factorBreakdown)) {
       data.factorBreakdown.forEach((f: any, idx) => {
         factors.push({
           name: f.name || f.factor || `Factor ${idx + 1}`,
-          value: f.score ?? f.value ?? f.weight ?? "—",
           impact: f.impact || f.direction,
           description: f.description,
         });
       });
     } else {
       Object.entries(data.factorBreakdown).forEach(([k, v]) => {
+        const friendlyName = k
+          .replace(/([a-z])([A-Z])/g, "$1 $2")
+          .replace(/_/g, " ")
+          .trim()
+          .replace(/^./, (s) => s.toUpperCase());
+
         if (typeof v === "object" && v !== null) {
           const obj = v as Record<string, any>;
           factors.push({
-            name: obj.name || k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()),
-            value: obj.score ?? obj.value ?? obj.weight ?? "Active",
-            impact: obj.impact,
+            name: obj.name || friendlyName,
+            impact: obj.impact || obj.direction,
             description: obj.description,
           });
         } else {
           factors.push({
-            name: k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase()),
-            value: String(v),
+            name: friendlyName,
           });
         }
       });
@@ -218,7 +216,7 @@ export function DealWinProbabilityCard({
           <div>
             <h3 className="text-sm font-bold text-gray-900">Deal Win Probability</h3>
             <p className="text-[11px] text-gray-400">
-              BE-2 Model Prediction • Evidence-Backed
+              Win Probability &amp; Forecast Assessment
             </p>
           </div>
         </div>
@@ -228,7 +226,7 @@ export function DealWinProbabilityCard({
             onClick={handleRefresh}
             disabled={refreshing}
             className="p-1.5 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 hover:border-gray-300 transition-colors disabled:opacity-50"
-            title="Refresh prediction"
+            title="Refresh assessment"
           >
             <RotateCw size={13} className={refreshing ? "animate-spin" : ""} />
           </button>
@@ -298,32 +296,26 @@ export function DealWinProbabilityCard({
           </span>
         </div>
 
-        {/* Model Transparency & Timestamps */}
-        <div className="p-4 rounded-xl bg-gray-50/70 border border-gray-100 flex flex-col justify-between text-[11px] space-y-1.5">
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400 font-medium flex items-center gap-1">
-              <Cpu size={12} className="text-blue-500" /> Model
-            </span>
-            <span className="font-semibold text-emerald-600">
-              AI Prediction Active
+        {/* Deal Assessment Status */}
+        <div className="p-4 rounded-xl bg-gradient-to-br from-gray-50 to-white border border-gray-100 flex flex-col justify-between">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+            Assessment Status
+          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-base font-bold ${
+                predictedOutcome === "WON" ? "text-emerald-700" : "text-amber-700"
+              }`}
+            >
+              {predictedOutcome === "WON" ? "Favorable Trend" : "Attention Recommended"}
             </span>
           </div>
-
-          <div className="flex items-center justify-between">
+          <div className="text-[11px] text-gray-500 mt-2 flex items-center justify-between border-t border-gray-100 pt-2">
             <span className="text-gray-400 font-medium flex items-center gap-1">
-              <Calendar size={12} className="text-emerald-500" /> Predicted
+              <Calendar size={12} className="text-blue-500" /> Evaluated
             </span>
             <span className="font-semibold text-gray-700">
               {formatTimestamp(data.predictionTimestamp)}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-gray-400 font-medium flex items-center gap-1">
-              <ShieldCheck size={12} className="text-purple-500" /> Evidence As Of
-            </span>
-            <span className="font-semibold text-gray-700">
-              {formatTimestamp(data.evidenceTimestamp)}
             </span>
           </div>
         </div>
@@ -334,7 +326,7 @@ export function DealWinProbabilityCard({
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-xs font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
             <Info size={13} className="text-blue-500" />
-            Predictive Factors & Evidence
+            Key Influencing Factors
           </h4>
           <span className="text-[11px] text-gray-400">
             {factors.length} Factor{factors.length !== 1 ? "s" : ""}
@@ -354,30 +346,31 @@ export function DealWinProbabilityCard({
                     <p className="text-[10px] text-gray-400 truncate mt-0.5">{f.description}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {f.impact && (
+                {f.impact && (
+                  <div className="shrink-0">
                     <span
-                      className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                      className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
                         String(f.impact).toUpperCase().includes("POS")
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                           : String(f.impact).toUpperCase().includes("NEG")
-                          ? "bg-red-50 text-red-700 border border-red-200"
+                          ? "bg-red-50 text-red-700 border-red-200"
                           : "bg-gray-100 text-gray-600 border border-gray-200"
                       }`}
                     >
-                      {String(f.impact).toUpperCase()}
+                      {String(f.impact).toUpperCase().includes("POS")
+                        ? "Positive Impact"
+                        : String(f.impact).toUpperCase().includes("NEG")
+                        ? "Risk Factor"
+                        : "Neutral"}
                     </span>
-                  )}
-                  <span className="text-xs font-mono font-bold text-gray-700">
-                    {typeof f.value === "number" ? f.value.toFixed(1) : String(f.value)}
-                  </span>
-                </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
         ) : (
           <p className="text-xs text-gray-400 italic p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-            No specific factor breakdown provided by the backend for this deal outcome.
+            No specific influencing factors recorded for this deal.
           </p>
         )}
       </div>
@@ -425,7 +418,6 @@ export function DealWinProbabilityCard({
                       <th className="px-3.5 py-2.5">Date / Time</th>
                       <th className="px-3.5 py-2.5">Probability</th>
                       <th className="px-3.5 py-2.5">Confidence</th>
-                      <th className="px-3.5 py-2.5">Evidence Time</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -453,9 +445,6 @@ export function DealWinProbabilityCard({
                           <td className="px-3.5 py-2.5 font-semibold text-gray-700">
                             {conf}%
                           </td>
-                          <td className="px-3.5 py-2.5 text-gray-400">
-                            {formatTimestamp(snap.evidenceTimestamp)}
-                          </td>
                         </tr>
                       );
                     })}
@@ -469,3 +458,4 @@ export function DealWinProbabilityCard({
     </div>
   );
 }
+

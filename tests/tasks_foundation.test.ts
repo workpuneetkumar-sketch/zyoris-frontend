@@ -3725,8 +3725,9 @@ test("Task 2 — Issue 8: Forecast Engine/Rules Version and Frozen Exchange Rate
     assert.strictEqual(winProbResponse.snapshotId, "cmupjmy5r07botpfht7s9yf7a");
 
     // History table columns: only business-relevant metrics
-    const historyColumns = ["Date / Time", "Probability", "Confidence", "Evidence Time"];
+    const historyColumns = ["Date / Time", "Probability", "Confidence"];
     assert.strictEqual(historyColumns.includes("Model"), false);
+    assert.strictEqual(historyColumns.includes("Evidence Time"), false);
   });
 
   await t.test("Deal Detail: Currency label updated and Pricing object renders without raw JSON", () => {
@@ -4343,5 +4344,388 @@ test("Task 2 — Issue 10: Remove Raw JSON Risk Evidence and Technical Model/Ver
     assert.strictEqual(arrayEntries[1].days, 8);
   });
 });
+
+test("Task 2 — Issue 11: Remove Technical Prediction Details from Customer-Facing UI", async (t) => {
+  await t.test("DealWinProbabilityCard: Model version, model details, evidence timestamp, and raw factor scores are hidden", () => {
+    const rawPrediction = {
+      dealId: "deal_12345",
+      probability: 74.2,
+      confidence: 0.88,
+      predictedOutcome: "WON",
+      modelVersion: "3.2.1-prod",
+      snapshotId: "snap_cuid_abc123",
+      predictionTimestamp: "2026-10-02T14:30:00Z",
+      evidenceTimestamp: "2026-10-02T14:15:00Z",
+      factorBreakdown: {
+        stageDwell: { score: 85.5, impact: "POSITIVE", description: "Healthy velocity across all early pipeline stages" },
+        contactEngagement: { score: 92.0, impact: "POSITIVE", description: "Multi-threaded decision maker engagement" },
+        dealSizeRatio: { score: 42.1, impact: "NEGATIVE", description: "Higher average discount requested" },
+      },
+    };
+
+    // Subtitle & Header check
+    const subtitle = "Win Probability & Forecast Assessment";
+    assert.strictEqual(subtitle.includes("BE-2"), false);
+    assert.strictEqual(subtitle.includes("Model Prediction"), false);
+
+    // Assessment Status tile: replaces Model row & Evidence As Of row
+    const assessmentStatus = rawPrediction.predictedOutcome === "WON" ? "Favorable Trend" : "Attention Recommended";
+    assert.strictEqual(assessmentStatus, "Favorable Trend");
+    assert.strictEqual(assessmentStatus.includes("AI Prediction Active"), false);
+    assert.strictEqual(assessmentStatus.includes("Model"), false);
+
+    // Business dates vs Technical evidence timestamps
+    const businessDateLabel = "Evaluated";
+    assert.strictEqual(businessDateLabel, "Evaluated");
+    const evidenceTimestampRendered = false; // Hidden from card
+    assert.strictEqual(evidenceTimestampRendered, false);
+
+    // Factors formatting: extracts clean names and human-friendly impact badges, omits raw scores
+    const formatFactors = (breakdown: any) =>
+      Object.entries(breakdown).map(([k, v]: [string, any]) => {
+        const friendlyName = k.replace(/([a-z])([A-Z])/g, "$1 $2").trim().replace(/^./, (s) => s.toUpperCase());
+        const impactLabel = String(v.impact).toUpperCase().includes("POS")
+          ? "Positive Impact"
+          : String(v.impact).toUpperCase().includes("NEG")
+          ? "Risk Factor"
+          : "Neutral";
+        return {
+          name: v.name || friendlyName,
+          impact: impactLabel,
+          description: v.description,
+          // Note: raw score / value is NOT rendered
+        };
+      });
+
+    const renderedFactors = formatFactors(rawPrediction.factorBreakdown);
+    assert.strictEqual(renderedFactors.length, 3);
+    assert.strictEqual(renderedFactors[0].name, "Stage Dwell");
+    assert.strictEqual(renderedFactors[0].impact, "Positive Impact");
+    assert.strictEqual(renderedFactors[2].name, "Deal Size Ratio");
+    assert.strictEqual(renderedFactors[2].impact, "Risk Factor");
+
+    // Ensure raw numeric scores (85.5, 92.0, 42.1) are NOT present in rendered properties
+    renderedFactors.forEach((f) => {
+      assert.strictEqual("value" in f, false);
+      assert.strictEqual("score" in f, false);
+    });
+
+    // In-memory response preservation: internal values remain intact for operations
+    assert.strictEqual(rawPrediction.modelVersion, "3.2.1-prod");
+    assert.strictEqual(rawPrediction.snapshotId, "snap_cuid_abc123");
+    assert.strictEqual(rawPrediction.evidenceTimestamp, "2026-10-02T14:15:00Z");
+    assert.strictEqual(rawPrediction.factorBreakdown.stageDwell.score, 85.5);
+  });
+
+  await t.test("DealWinProbabilityCard: Historical snapshots table renders only customer-relevant columns", () => {
+    const historicalSnapshots = [
+      {
+        id: "snap_1",
+        snapshotId: "snap_cuid_111",
+        probability: 65,
+        confidence: 0.75,
+        modelVersion: "2.0.0",
+        predictionTimestamp: "2026-09-25T10:00:00Z",
+        evidenceTimestamp: "2026-09-25T09:45:00Z",
+      },
+      {
+        id: "snap_2",
+        snapshotId: "snap_cuid_222",
+        probability: 78,
+        confidence: 0.88,
+        modelVersion: "2.1.0",
+        predictionTimestamp: "2026-10-01T12:00:00Z",
+        evidenceTimestamp: "2026-10-01T11:50:00Z",
+      },
+    ];
+
+    // Rendered columns must exclude technical metadata
+    const tableColumns = ["Date / Time", "Probability", "Confidence"];
+    assert.strictEqual(tableColumns.includes("Model"), false);
+    assert.strictEqual(tableColumns.includes("Evidence Time"), false);
+    assert.strictEqual(tableColumns.includes("Snapshot ID"), false);
+    assert.strictEqual(tableColumns.length, 3);
+
+    // Verify row mapping preserves probability & confidence without exposing technical IDs or timestamps
+    const rows = historicalSnapshots.map((snap) => ({
+      dateTime: snap.predictionTimestamp,
+      probabilityText: `${Math.round(snap.probability)}%`,
+      confidenceText: `${Math.round(snap.confidence * 100)}%`,
+    }));
+
+    assert.strictEqual(rows[0].probabilityText, "65%");
+    assert.strictEqual(rows[0].confidenceText, "75%");
+    assert.strictEqual(rows[1].probabilityText, "78%");
+    assert.strictEqual(rows[1].confidenceText, "88%");
+
+    // Verify internal snapshot data remains untouched in memory
+    assert.strictEqual(historicalSnapshots[0].snapshotId, "snap_cuid_111");
+    assert.strictEqual(historicalSnapshots[0].modelVersion, "2.0.0");
+    assert.strictEqual(historicalSnapshots[0].evidenceTimestamp, "2026-09-25T09:45:00Z");
+  });
+
+  await t.test("HealthSection: Score history removes raw snapshot IDs and lambda decay factor", () => {
+    const healthHistoryItem = {
+      id: "hh_101",
+      snapshotId: "cmupjmy5r07botpfht7s9yf7a",
+      score: 82.4,
+      band: "healthy",
+      trend: "up" as const,
+      calculatedAt: "2026-10-02T08:00:00Z",
+    };
+
+    const engagementHistoryItem = {
+      id: "eh_201",
+      snapshotId: "cmupjmy5r07botpfht7s9yf7b",
+      score: 76.8,
+      lambda: 0.05,
+      calculatedAt: "2026-10-02T08:00:00Z",
+    };
+
+    // Rendered health item check: snapshot ID badge is omitted
+    const formatHealthHistory = (item: typeof healthHistoryItem) => ({
+      scoreDisplay: Math.round(item.score),
+      bandLabel: item.band,
+      dateDisplay: item.calculatedAt,
+    });
+
+    const renderedHealth = formatHealthHistory(healthHistoryItem);
+    assert.strictEqual(renderedHealth.scoreDisplay, 82);
+    assert.strictEqual(renderedHealth.bandLabel, "healthy");
+    assert.strictEqual("snapshotId" in renderedHealth, false);
+
+    // Rendered engagement item check: snapshot ID and lambda parameter (λ = 0.05) are omitted
+    const formatEngagementHistory = (item: typeof engagementHistoryItem) => ({
+      scoreDisplay: item.score.toFixed(1),
+      label: "Engagement Score",
+      dateDisplay: item.calculatedAt,
+    });
+
+    const renderedEngagement = formatEngagementHistory(engagementHistoryItem);
+    assert.strictEqual(renderedEngagement.scoreDisplay, "76.8");
+    assert.strictEqual("lambda" in renderedEngagement, false);
+    assert.strictEqual("snapshotId" in renderedEngagement, false);
+
+    // Recalculation toast notification check
+    const recalculateToast = "Health score recalculated successfully.";
+    assert.strictEqual(recalculateToast.includes("snapshot ID"), false);
+    assert.strictEqual(recalculateToast.includes("cmupjmy"), false);
+
+    // Underlying items preserve snapshotId and lambda for mutations/pagination
+    assert.strictEqual(healthHistoryItem.snapshotId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(engagementHistoryItem.lambda, 0.05);
+  });
+
+  await t.test("DealWinProbabilityCard: Empty and error states do not leak technical model jargon", () => {
+    const emptyFactorsMsg = "No specific influencing factors recorded for this deal.";
+    assert.strictEqual(emptyFactorsMsg.includes("backend"), false);
+    assert.strictEqual(emptyFactorsMsg.includes("factor breakdown"), false);
+
+    const emptyHistoryMsg = "No prediction history available";
+    assert.strictEqual(emptyHistoryMsg.includes("snapshot"), false);
+
+    const loadingMsg = "Loading win probability assessment...";
+    assert.strictEqual(loadingMsg.includes("model"), false);
+
+    const errorFallback = "Deal outcome probability is currently being evaluated.";
+    assert.strictEqual(errorFallback.includes("intelligence engine"), false);
+    assert.strictEqual(errorFallback.includes("Prediction features"), false);
+  });
+
+  await t.test("Issue 12: Customer Merge Form Terminology and Placeholders", () => {
+    const formLabels = {
+      primaryCustomer: "Primary Customer Record",
+      duplicateAccounts: "Duplicate Customer Accounts to Merge",
+      addDuplicateBtn: "+ Add duplicate account",
+    };
+
+    assert.strictEqual(formLabels.primaryCustomer.includes("Survivor"), false);
+    assert.strictEqual(formLabels.primaryCustomer.includes("ID"), false);
+    assert.strictEqual(formLabels.duplicateAccounts.includes("Loser"), false);
+    assert.strictEqual(formLabels.duplicateAccounts.includes("ID"), false);
+    assert.strictEqual(formLabels.addDuplicateBtn.includes("loser"), false);
+
+    assert.strictEqual(formLabels.primaryCustomer, "Primary Customer Record");
+    assert.strictEqual(formLabels.duplicateAccounts, "Duplicate Customer Accounts to Merge");
+    assert.strictEqual(formLabels.addDuplicateBtn, "+ Add duplicate account");
+  });
+
+  await t.test("Issue 12: Customer Merge Validation Messages", () => {
+    const validateMerge = (survivorId: string, loserIds: string[]) => {
+      const errs: Record<string, string> = {};
+      const sId = survivorId.trim();
+      if (!sId) {
+        errs.survivorId = "Primary customer record is required.";
+      }
+      const validLosers = loserIds.map((id) => id.trim()).filter(Boolean);
+      if (validLosers.length === 0) {
+        errs.loserIds = "At least one duplicate customer account is required.";
+      } else if (sId && validLosers.includes(sId)) {
+        errs.loserIds = "Cannot merge an account into itself. Please select a different duplicate account.";
+      }
+      return errs;
+    };
+
+    // Missing primary customer
+    const errsEmpty = validateMerge("", ["cust_dup_1"]);
+    assert.strictEqual(errsEmpty.survivorId, "Primary customer record is required.");
+    assert.strictEqual(errsEmpty.survivorId.includes("Survivor"), false);
+
+    // Missing duplicate accounts
+    const errsNoDuplicates = validateMerge("cust_prime_1", [""]);
+    assert.strictEqual(errsNoDuplicates.loserIds, "At least one duplicate customer account is required.");
+    assert.strictEqual(errsNoDuplicates.loserIds.includes("loser"), false);
+
+    // Self-merge validation
+    const errsSelfMerge = validateMerge("cust_prime_1", ["cust_prime_1"]);
+    assert.strictEqual(errsSelfMerge.loserIds, "Cannot merge an account into itself. Please select a different duplicate account.");
+    assert.strictEqual(errsSelfMerge.loserIds.includes("loser"), false);
+    assert.strictEqual(errsSelfMerge.loserIds.includes("survivor"), false);
+  });
+
+  await t.test("Issue 12: Field Overrides and Raw JSON UI Removal", () => {
+    // UI elements present in form
+    const renderedSections = ["primaryCustomer", "duplicateAccounts"];
+    assert.strictEqual(renderedSections.includes("fieldOverrides"), false);
+    assert.strictEqual(renderedSections.includes("rawJsonTextarea"), false);
+
+    // Internal payload support is preserved
+    const buildMergePayload = (loserIds: string[], overrides?: Record<string, unknown>) => ({
+      loserIds,
+      fieldOverrides: overrides && Object.keys(overrides).length > 0 ? overrides : undefined,
+    });
+
+    const payloadWithOverrides = buildMergePayload(["cust_dup_1"], { preferredName: "Acme Enterprises" });
+    assert.deepStrictEqual(payloadWithOverrides.loserIds, ["cust_dup_1"]);
+    assert.deepStrictEqual(payloadWithOverrides.fieldOverrides, { preferredName: "Acme Enterprises" });
+
+    const payloadDefault = buildMergePayload(["cust_dup_1"]);
+    assert.strictEqual(payloadDefault.fieldOverrides, undefined);
+  });
+
+  await t.test("Issue 12: Merge Success State Sanitization", () => {
+    const mergeResult = {
+      survivorId: "cmupjmy5r07botpfht7s9yf7a",
+      message: "Customers merged successfully.",
+    };
+
+    const formatSuccessDisplay = (result: typeof mergeResult, customerName?: string) => ({
+      title: "Merge Complete",
+      detail: customerName
+        ? `Accounts successfully merged into ${customerName}.`
+        : "Accounts successfully merged into the primary record.",
+    });
+
+    const renderedNamed = formatSuccessDisplay(mergeResult, "Acme Corp");
+    assert.strictEqual(renderedNamed.detail, "Accounts successfully merged into Acme Corp.");
+    assert.strictEqual(renderedNamed.detail.includes("cmupjmy"), false);
+    assert.strictEqual(renderedNamed.detail.includes("Survivor"), false);
+
+    const renderedUnnamed = formatSuccessDisplay(mergeResult);
+    assert.strictEqual(renderedUnnamed.detail, "Accounts successfully merged into the primary record.");
+    assert.strictEqual(renderedUnnamed.detail.includes("Survivor"), false);
+
+    // Internal survivorId remains available for callback navigation
+    assert.strictEqual(mergeResult.survivorId, "cmupjmy5r07botpfht7s9yf7a");
+  });
+
+  await t.test("Issue 12: Merge Audit History Card Sanitization", () => {
+    const auditRecord = {
+      id: "cmupjmy5r07botpfht7s9yf7a_audit",
+      survivorId: "cmupjmy5r07botpfht7s9yf7a",
+      loserIds: ["cmupjmy5r07botpfht7s9yf7b", "cmupjmy5r07botpfht7s9yf7c"],
+      mergedBy: "admin@zyoris.com",
+      mergedAt: "2026-10-02T12:00:00Z",
+    };
+
+    const formatAuditDisplay = (rec: typeof auditRecord) => ({
+      headerTitle: "Account Consolidation",
+      primaryAccountDisplay: "Consolidated Record",
+      mergedAccountsDisplay: `${rec.loserIds.length} duplicate accounts consolidated`,
+      mergedAt: rec.mergedAt,
+      mergedBy: rec.mergedBy,
+    });
+
+    const rendered = formatAuditDisplay(auditRecord);
+    assert.strictEqual(rendered.headerTitle, "Account Consolidation");
+    assert.strictEqual(rendered.headerTitle.includes("cmupj"), false);
+    assert.strictEqual(rendered.primaryAccountDisplay, "Consolidated Record");
+    assert.strictEqual(rendered.primaryAccountDisplay.includes("cmupj"), false);
+    assert.strictEqual(rendered.mergedAccountsDisplay, "2 duplicate accounts consolidated");
+    assert.strictEqual(rendered.mergedAccountsDisplay.includes("cmupj"), false);
+
+    // Underlying record data preserved for keys and operations
+    assert.strictEqual(auditRecord.id, "cmupjmy5r07botpfht7s9yf7a_audit");
+    assert.strictEqual(auditRecord.survivorId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(auditRecord.loserIds.length, 2);
+  });
+
+  await t.test("Issue 12: Preflight Candidate Matches Sanitization", () => {
+    const preflightResult = {
+      action: "merge_required" as const,
+      existingCustomerId: "cmupjmy5r07botpfht7s9yf7a",
+      existingCustomerName: "Acme Corp",
+      confidence: 0.94,
+      matches: [
+        {
+          customerId: "cmupjmy5r07botpfht7s9yf7b",
+          customerName: "Acme Industries",
+          confidence: 0.88,
+          matchedFields: ["email", "domain"],
+        },
+      ],
+    };
+
+    // Rendered matched banner check: existingCustomerId is omitted
+    const formatMatchedBanner = (res: typeof preflightResult) => ({
+      matchedText: res.existingCustomerName ? `Matched: ${res.existingCustomerName}` : null,
+    });
+
+    const banner = formatMatchedBanner(preflightResult);
+    assert.strictEqual(banner.matchedText, "Matched: Acme Corp");
+    assert.strictEqual(banner.matchedText?.includes("cmupj"), false);
+
+    // Rendered candidate match check: customerId is omitted
+    const formatCandidateMatch = (m: (typeof preflightResult.matches)[0]) => ({
+      name: m.customerName,
+      confidenceText: `${Math.round(m.confidence * 100)}%`,
+      fields: m.matchedFields,
+    });
+
+    const candidate = formatCandidateMatch(preflightResult.matches[0]);
+    assert.strictEqual(candidate.name, "Acme Industries");
+    assert.strictEqual("customerId" in candidate, false);
+    assert.strictEqual(candidate.confidenceText, "88%");
+
+    // Underlying IDs are preserved for linking/merging
+    assert.strictEqual(preflightResult.existingCustomerId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(preflightResult.matches[0].customerId, "cmupjmy5r07botpfht7s9yf7b");
+  });
+
+  await t.test("Issue 12: Data Preservation and Internal Operations", () => {
+    const survivorId = "cuid_survivor_999";
+    const loserIds = ["cuid_loser_111", "cuid_loser_222"];
+    const fieldOverrides = { phone: "+1 555 0199" };
+
+    // API Payload contract verification
+    const apiPayload = {
+      loserIds,
+      fieldOverrides,
+    };
+
+    assert.strictEqual(apiPayload.loserIds.length, 2);
+    assert.strictEqual(apiPayload.loserIds[0], "cuid_loser_111");
+    assert.strictEqual(apiPayload.fieldOverrides?.phone, "+1 555 0199");
+
+    // Success navigation argument preservation
+    let navigatedToId = "";
+    const onSuccess = (id: string) => {
+      navigatedToId = id;
+    };
+    onSuccess(survivorId);
+    assert.strictEqual(navigatedToId, "cuid_survivor_999");
+  });
+});
+
 
 

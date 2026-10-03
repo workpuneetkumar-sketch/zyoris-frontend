@@ -71,22 +71,14 @@ export function MergeCustomerModal({
     const errs: Record<string, string> = {};
     const sId = survivorId.trim();
     if (!sId) {
-      errs.survivorId = "Survivor customer ID is required.";
+      errs.survivorId = "Primary customer record is required.";
     }
 
     const validLosers = loserIds.map((id) => id.trim()).filter(Boolean);
     if (validLosers.length === 0) {
-      errs.loserIds = "At least one loser customer ID is required.";
+      errs.loserIds = "At least one duplicate customer account is required.";
     } else if (sId && validLosers.includes(sId)) {
-      errs.loserIds = "Self-merge is invalid: a loser ID cannot be the same as the survivor ID.";
-    }
-
-    if (fieldOverrides.trim()) {
-      try {
-        JSON.parse(fieldOverrides);
-      } catch {
-        errs.fieldOverrides = "Field overrides must be valid JSON.";
-      }
+      errs.loserIds = "Cannot merge an account into itself. Please select a different duplicate account.";
     }
 
     setFieldErrors(errs);
@@ -99,7 +91,11 @@ export function MergeCustomerModal({
     const validLosers = loserIds.map((id) => id.trim()).filter(Boolean);
     let overrides: Record<string, unknown> = {};
     if (fieldOverrides.trim()) {
-      overrides = JSON.parse(fieldOverrides);
+      try {
+        overrides = JSON.parse(fieldOverrides);
+      } catch {
+        overrides = {};
+      }
     }
 
     setLoading(true);
@@ -124,7 +120,7 @@ export function MergeCustomerModal({
   const handleFetchAudit = async () => {
     const id = auditCustomerId.trim();
     if (!id) {
-      setAuditError("Enter a customer ID to fetch merge audit.");
+      setAuditError("Select a customer to view merge history.");
       return;
     }
     setAuditLoading(true);
@@ -158,7 +154,7 @@ export function MergeCustomerModal({
             <div>
               <h2 className="text-base font-bold text-[var(--color-text)]">Merge Customers</h2>
               <p className="text-[11px] text-[var(--color-text-muted)]">
-                Merge duplicate records into a single surviving customer
+                Merge duplicate records into a single primary account
               </p>
             </div>
           </div>
@@ -198,9 +194,11 @@ export function MergeCustomerModal({
                 <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 p-5 text-center">
                   <CheckCircle2 size={36} className="text-emerald-500 mx-auto mb-3" />
                   <p className="text-sm font-bold text-[var(--color-text)] mb-1">Merge Complete</p>
-                  <p className="text-xs text-[var(--color-text-secondary)]">{mergeResult.message}</p>
-                  <p className="text-[11px] text-[var(--color-text-muted)] font-mono mt-1">
-                    Survivor: {mergeResult.survivorId}
+                  <p className="text-xs text-[var(--color-text-secondary)]">{mergeResult.message || "Customers merged successfully."}</p>
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                    {preselectedSurvivorName
+                      ? `Accounts successfully merged into ${preselectedSurvivorName}.`
+                      : "Accounts successfully merged into the primary record."}
                   </p>
                   <button
                     onClick={() => { setMergeResult(null); setSurvivorId(""); setLoserIds([""]); setFieldOverrides(""); }}
@@ -214,36 +212,54 @@ export function MergeCustomerModal({
                 <form id="merge-form" onSubmit={handleMerge} className="space-y-4">
                   <div>
                     <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 block">
-                      Survivor Customer ID <span className="text-red-500">*</span>
+                      Primary Customer Record <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      className={INPUT_CLASS + (fieldErrors.survivorId ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
-                      placeholder="UUID of the record to keep"
-                      value={survivorId}
-                      onChange={(e) => {
-                        setSurvivorId(e.target.value);
-                        if (fieldErrors.survivorId) setFieldErrors((p) => ({ ...p, survivorId: "" }));
-                        setErrorMsg(null);
-                      }}
-                    />
-                    {fieldErrors.survivorId && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.survivorId}</p>}
-                    {preselectedSurvivorName && (
-                      <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
-                        Pre-selected: <span className="font-semibold">{preselectedSurvivorName}</span>
-                      </p>
+                    {preselectedSurvivorName && survivorId === preselectedSurvivorId ? (
+                      <div className="flex items-center justify-between p-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-background-secondary)]">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-[var(--color-primary)]/10 text-[var(--color-primary)] flex items-center justify-center font-bold text-xs">
+                            {preselectedSurvivorName.slice(0, 2).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-[var(--color-text)]">{preselectedSurvivorName}</p>
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                              Primary Record
+                            </span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSurvivorId("")}
+                          className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text)] underline"
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <input
+                        className={INPUT_CLASS + (fieldErrors.survivorId ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
+                        placeholder="Search or select primary customer..."
+                        value={survivorId}
+                        onChange={(e) => {
+                          setSurvivorId(e.target.value);
+                          if (fieldErrors.survivorId) setFieldErrors((p) => ({ ...p, survivorId: "" }));
+                          setErrorMsg(null);
+                        }}
+                      />
                     )}
+                    {fieldErrors.survivorId && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.survivorId}</p>}
                   </div>
 
                   <div>
                     <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 block">
-                      Loser Customer IDs (records to absorb) <span className="text-red-500">*</span>
+                      Duplicate Customer Accounts to Merge <span className="text-red-500">*</span>
                     </label>
                     <div className="space-y-2">
                       {loserIds.map((id, idx) => (
                         <div key={idx} className="flex items-center gap-2">
                           <input
                             className={INPUT_CLASS + (fieldErrors.loserIds ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
-                            placeholder={`Loser ID ${idx + 1}`}
+                            placeholder="Search duplicate customer by name or email..."
                             value={id}
                             onChange={(e) => setLoser(idx, e.target.value)}
                           />
@@ -265,30 +281,8 @@ export function MergeCustomerModal({
                       onClick={addLoser}
                       className="mt-2 flex items-center gap-1.5 text-xs font-medium text-[var(--color-primary)] hover:underline"
                     >
-                      <Plus size={12} /> Add another loser
+                      <Plus size={12} /> Add duplicate account
                     </button>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-semibold text-[var(--color-text-secondary)] mb-1 block">
-                      Field Overrides <span className="text-[var(--color-text-muted)] font-normal">(optional JSON)</span>
-                    </label>
-                    <textarea
-                      className={`${INPUT_CLASS} h-24 py-2 font-mono text-xs resize-none` + (fieldErrors.fieldOverrides ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
-                      placeholder={'{ "name": "Preferred Name", "email": "primary@example.com" }'}
-                      value={fieldOverrides}
-                      onChange={(e) => {
-                        setFieldOverrides(e.target.value);
-                        if (fieldErrors.fieldOverrides) setFieldErrors((p) => ({ ...p, fieldOverrides: "" }));
-                      }}
-                    />
-                    {fieldErrors.fieldOverrides ? (
-                      <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{fieldErrors.fieldOverrides}</p>
-                    ) : (
-                      <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                        Override specific fields on the surviving record. Leave blank to use survivor's existing values.
-                      </p>
-                    )}
                   </div>
 
                   {errorMsg && (
@@ -308,7 +302,7 @@ export function MergeCustomerModal({
               <div className="flex gap-2">
                 <input
                   className={`${INPUT_CLASS} flex-1`}
-                  placeholder="Customer ID to fetch audit for"
+                  placeholder="Search customer account..."
                   value={auditCustomerId}
                   onChange={(e) => { setAuditCustomerId(e.target.value); setAuditError(null); }}
                 />
@@ -333,7 +327,7 @@ export function MergeCustomerModal({
 
               {auditRecords.length === 0 && !auditLoading && !auditError && (
                 <div className="text-center py-10 text-[var(--color-text-muted)] text-sm">
-                  Enter a customer ID and click Fetch to view merge audit history.
+                  Select a customer to view merge history.
                 </div>
               )}
 
@@ -344,20 +338,18 @@ export function MergeCustomerModal({
                   style={{ borderColor: "var(--color-border-light)", background: "var(--color-background-secondary)" }}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[var(--color-text)] font-mono">{rec.id.slice(0, 16)}…</span>
+                    <span className="text-xs font-semibold text-[var(--color-text)]">Account Consolidation</span>
                     <span className="text-[11px] text-[var(--color-text-muted)]">
                       {new Date(rec.mergedAt).toLocaleString()}
                     </span>
                   </div>
                   <div className="text-xs text-[var(--color-text-secondary)]">
-                    <span className="font-medium">Survivor:</span>{" "}
-                    <span className="font-mono">{rec.survivorId.slice(0, 12)}…</span>
+                    <span className="font-medium">Primary Account:</span>{" "}
+                    <span>Consolidated Record</span>
                   </div>
                   <div className="text-xs text-[var(--color-text-secondary)]">
-                    <span className="font-medium">Absorbed:</span>{" "}
-                    {rec.loserIds.map((id) => (
-                      <span key={id} className="font-mono mr-1">{id.slice(0, 10)}…</span>
-                    ))}
+                    <span className="font-medium">Merged Accounts:</span>{" "}
+                    <span>{rec.loserIds.length} duplicate account{rec.loserIds.length === 1 ? "" : "s"} consolidated</span>
                   </div>
                   {rec.mergedBy && (
                     <div className="text-xs text-[var(--color-text-muted)]">By: {rec.mergedBy}</div>
