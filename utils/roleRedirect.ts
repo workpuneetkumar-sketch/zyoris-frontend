@@ -57,6 +57,7 @@ export const isPathAllowed = (
     "/whatsapp",
     "/calls",
     "/messages",
+    "/connect",
     "/meetings",
     "/admin",
     "/admin/rbac",

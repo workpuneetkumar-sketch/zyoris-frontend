@@ -288,69 +288,101 @@ export async function removeConversationMember(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Fetch messages for a channel or conversation with pagination
+ * Fetch messages for a channel: GET /api/communications/messages?channelId=<channelId>&limit=50
  */
-export async function getConnectMessages(params: {
-  channelId?: string;
-  conversationId?: string;
-  limit?: number;
-  cursor?: string;
-}): Promise<{ data: ConnectMessage[]; nextCursor?: string }> {
-  try {
-    const query = new URLSearchParams();
-    if (params.channelId) query.set("channelId", params.channelId);
-    if (params.conversationId) query.set("conversationId", params.conversationId);
-    query.set("limit", String(params.limit || 50));
-    if (params.cursor) query.set("cursor", params.cursor);
+export async function getChannelMessages(
+  channelId: string,
+  limit: number = 50,
+  cursor?: string,
+  signal?: AbortSignal
+): Promise<{ data: ConnectMessage[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("channelId", channelId);
+  query.set("limit", String(limit));
+  if (cursor) query.set("cursor", cursor);
 
-    const res = await api.get(`${BASE_COMM}/messages?${query.toString()}`);
-    const resData = res.data;
+  const res = await api.get(`${BASE_COMM}/messages?${query.toString()}`, { signal });
+  const resData = res.data;
 
-    let list: ConnectMessage[] = [];
-    let nextCursor: string | undefined = undefined;
+  let list: ConnectMessage[] = [];
+  let nextCursor: string | null = null;
 
-    if (Array.isArray(resData)) {
-      list = resData;
-    } else if (resData?.data && Array.isArray(resData.data)) {
-      list = resData.data;
-      nextCursor = resData.nextCursor;
-    } else if (resData?.messages && Array.isArray(resData.messages)) {
-      list = resData.messages;
-      nextCursor = resData.nextCursor;
-    }
-
-    // Sort chronologically ascending
-    list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    return { data: list, nextCursor };
-  } catch (error: any) {
-    console.warn("Failed to fetch messages:", error);
-    return { data: [] };
+  if (Array.isArray(resData)) {
+    list = resData;
+  } else if (resData?.data && Array.isArray(resData.data)) {
+    list = resData.data;
+    nextCursor = resData.nextCursor ?? null;
+  } else if (resData?.messages && Array.isArray(resData.messages)) {
+    list = resData.messages;
+    nextCursor = resData.nextCursor ?? null;
   }
+
+  // Chronological ascending order (oldest to newest)
+  list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  return { data: list, nextCursor };
 }
 
 /**
- * Post a new message to a channel or conversation
+ * Fetch messages for a conversation: GET /api/communications/messages?conversationId=<conversationId>&limit=50&cursor=<messageId>
  */
-export async function sendConnectMessage(payload: {
+export async function getConversationMessages(
+  conversationId: string,
+  limit: number = 50,
+  cursor?: string,
+  signal?: AbortSignal
+): Promise<{ data: ConnectMessage[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("conversationId", conversationId);
+  query.set("limit", String(limit));
+  if (cursor) query.set("cursor", cursor);
+
+  const res = await api.get(`${BASE_COMM}/messages?${query.toString()}`, { signal });
+  const resData = res.data;
+
+  let list: ConnectMessage[] = [];
+  let nextCursor: string | null = null;
+
+  if (Array.isArray(resData)) {
+    list = resData;
+  } else if (resData?.data && Array.isArray(resData.data)) {
+    list = resData.data;
+    nextCursor = resData.nextCursor ?? null;
+  } else if (resData?.messages && Array.isArray(resData.messages)) {
+    list = resData.messages;
+    nextCursor = resData.nextCursor ?? null;
+  }
+
+  // Chronological ascending order
+  list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  return { data: list, nextCursor };
+}
+
+/**
+ * Send a message: POST /api/communications/messages
+ */
+export async function sendMessage(payload: {
   channelId?: string;
   conversationId?: string;
   content: string;
+  parentMessageId?: string | null;
 }): Promise<ConnectMessage> {
   const body: Record<string, any> = {
     content: payload.content,
   };
   if (payload.channelId) body.channelId = payload.channelId;
   else if (payload.conversationId) body.conversationId = payload.conversationId;
+  if (payload.parentMessageId) body.parentMessageId = payload.parentMessageId;
 
   const res = await api.post(`${BASE_COMM}/messages`, body);
   return res.data?.data || res.data;
 }
 
 /**
- * Update an existing message content
+ * Update message: PATCH /api/communications/messages/:messageId
  */
-export async function updateConnectMessage(
+export async function updateMessage(
   messageId: string,
   content: string
 ): Promise<ConnectMessage> {
@@ -361,14 +393,32 @@ export async function updateConnectMessage(
 }
 
 /**
- * Delete a message
+ * Delete message: DELETE /api/communications/messages/:messageId
  */
-export async function deleteConnectMessage(messageId: string): Promise<boolean> {
-  try {
-    const res = await api.delete(`${BASE_COMM}/messages/${messageId}`);
-    return res.status === 200 || res.status === 204 || res.data?.success === true;
-  } catch (error: any) {
-    console.warn(`Failed to delete message ${messageId}:`, error);
-    return false;
-  }
+export async function deleteMessage(messageId: string): Promise<ConnectMessage | boolean> {
+  const res = await api.delete(`${BASE_COMM}/messages/${messageId}`);
+  if (res.data?.data) return res.data.data;
+  return res.status === 200 || res.status === 204 || res.data?.success === true;
 }
+
+/* Backward-compatibility aliases */
+export async function getConnectMessages(params: {
+  channelId?: string;
+  conversationId?: string;
+  limit?: number;
+  cursor?: string;
+  signal?: AbortSignal;
+}): Promise<{ data: ConnectMessage[]; nextCursor?: string | null }> {
+  if (params.channelId) {
+    return getChannelMessages(params.channelId, params.limit, params.cursor, params.signal);
+  }
+  if (params.conversationId) {
+    return getConversationMessages(params.conversationId, params.limit, params.cursor, params.signal);
+  }
+  return { data: [], nextCursor: null };
+}
+
+export const sendConnectMessage = sendMessage;
+export const updateConnectMessage = updateMessage;
+export const deleteConnectMessage = deleteMessage;
+
