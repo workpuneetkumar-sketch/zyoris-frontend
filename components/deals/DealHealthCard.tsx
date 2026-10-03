@@ -230,7 +230,7 @@ export function DealHealthCard({
           </div>
           <div>
             <h3 className="text-sm font-bold text-gray-900">Deal Health & Risk</h3>
-            <p className="text-[11px] text-gray-400">Backend AI & deterministic evaluation</p>
+            <p className="text-[11px] text-gray-400">Real-time health & risk indicators</p>
           </div>
         </div>
 

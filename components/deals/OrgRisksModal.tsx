@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import {
   ShieldAlert,
   ShieldCheck,
@@ -292,7 +293,7 @@ export function OrgRisksModal({ isOpen, onClose, onRiskResolved }: OrgRisksModal
                 typeof risk.evidence === "string"
                   ? risk.evidence
                   : (risk.evidence as any)?.summary ||
-                    "Detected AI trigger and deterministic risk signal.";
+                    "Risk signals identified for this opportunity.";
 
               return (
                 <div
@@ -331,9 +332,13 @@ export function OrgRisksModal({ isOpen, onClose, onRiskResolved }: OrgRisksModal
                         )}
 
                         {risk.dealId && (
-                          <span className="text-[11px] text-gray-400">
-                            Deal: <strong className="text-gray-700 font-mono">{risk.dealId}</strong>
-                          </span>
+                          <Link
+                            href={`/deals/${risk.dealId}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                          >
+                            View Deal
+                          </Link>
                         )}
                       </div>
 
@@ -401,7 +406,7 @@ export function OrgRisksModal({ isOpen, onClose, onRiskResolved }: OrgRisksModal
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-gray-900">Risk Evidence & Signals</h3>
-                  <p className="text-[11px] text-gray-400">ID: {inspectingRisk.id}</p>
+                  <p className="text-[11px] text-gray-400">Evidence & Detected Signals</p>
                 </div>
               </div>
               <button
@@ -440,9 +445,18 @@ export function OrgRisksModal({ isOpen, onClose, onRiskResolved }: OrgRisksModal
                     </div>
                     <div>
                       <span className="text-[10px] text-gray-400 uppercase font-bold block mb-0.5">
-                        Deal ID
+                        Deal
                       </span>
-                      <span className="font-mono text-gray-800">{inspectingRisk.dealId || "N/A"}</span>
+                      {inspectingRisk.dealId ? (
+                        <Link
+                          href={`/deals/${inspectingRisk.dealId}`}
+                          className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          View Deal
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-gray-500 font-semibold">N/A</span>
+                      )}
                     </div>
                     <div>
                       <span className="text-[10px] text-gray-400 uppercase font-bold block mb-0.5">
@@ -454,13 +468,58 @@ export function OrgRisksModal({ isOpen, onClose, onRiskResolved }: OrgRisksModal
 
                   <div>
                     <h4 className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-1.5">
-                      Structured Evidence Data
+                      Evidence & Signals
                     </h4>
-                    <pre className="p-3.5 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-mono text-gray-700 overflow-x-auto">
-                      {typeof inspectingRisk.evidence === "string"
-                        ? inspectingRisk.evidence
-                        : JSON.stringify(inspectingRisk.evidence || {}, null, 2)}
-                    </pre>
+                    <div className="p-3.5 bg-gray-50 border border-gray-100 rounded-xl text-xs">
+                      {(() => {
+                        const ev = inspectingRisk.evidence as any;
+                        if (!ev) return <p className="text-gray-500 font-medium">No additional evidence recorded.</p>;
+                        if (typeof ev === "string") return <p className="text-gray-800 font-medium">{ev}</p>;
+
+                        const summary = typeof ev.summary === "string" ? ev.summary : null;
+                        const signals = Array.isArray(ev.detectedSignals) ? ev.detectedSignals : [];
+                        const details = typeof ev.details === "string" ? ev.details : null;
+                        const entries = typeof ev === "object"
+                          ? Object.entries(ev).filter(([k, v]) => !["summary", "detectedSignals", "details"].includes(k) && v != null && typeof v !== "object")
+                          : [];
+
+                        return (
+                          <div className="space-y-2.5">
+                            {summary && <p className="text-gray-800 font-semibold leading-relaxed">{summary}</p>}
+                            {signals.length > 0 && (
+                              <div>
+                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                                  Detected Signals
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {signals.map((sig: string, idx: number) => (
+                                    <span key={idx} className="px-2 py-0.5 rounded-md bg-white border border-gray-200 text-[11px] font-medium text-gray-700">
+                                      {sig}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {details && <p className="text-gray-600 leading-relaxed">{details}</p>}
+                            {entries.length > 0 && (
+                              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200/60">
+                                {entries.map(([k, v]) => (
+                                  <div key={k}>
+                                    <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">
+                                      {k.replace(/([A-Z])/g, " $1").trim()}
+                                    </span>
+                                    <span className="text-xs font-semibold text-gray-700">{String(v)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            {!summary && signals.length === 0 && !details && entries.length === 0 && (
+                              <p className="text-gray-600">Risk signals recorded for this deal.</p>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </>
               )}

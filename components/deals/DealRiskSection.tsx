@@ -116,17 +116,74 @@ export function DealRiskSection({ dealId, onRiskResolved }: DealRiskSectionProps
   };
 
   const renderEvidence = (evidence: any) => {
-    if (!evidence) return "No structured evidence provided";
+    if (!evidence) return "No risk evidence recorded";
     if (typeof evidence === "string") return evidence;
     if (evidence.summary) return evidence.summary;
-    if (Array.isArray(evidence.detectedSignals)) {
-      return evidence.detectedSignals.join(", ");
+    if (Array.isArray(evidence.detectedSignals) && evidence.detectedSignals.length > 0) {
+      return evidence.detectedSignals.join(" • ");
     }
-    try {
-      return JSON.stringify(evidence);
-    } catch {
-      return "Structured evidence recorded";
+    if (typeof evidence.details === "string" && evidence.details) {
+      return evidence.details;
     }
+    if (typeof evidence === "object") {
+      const parts: string[] = [];
+      for (const [k, v] of Object.entries(evidence)) {
+        if (v != null && typeof v !== "object") {
+          const formattedKey = k.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase());
+          parts.push(`${formattedKey}: ${v}`);
+        }
+      }
+      if (parts.length > 0) return parts.slice(0, 3).join(" • ");
+    }
+    return "Observed deal risk signals";
+  };
+
+  const renderEvidenceContent = (evidence: any) => {
+    if (!evidence) return <p className="text-gray-500 font-medium">No additional evidence recorded.</p>;
+    if (typeof evidence === "string") return <p className="text-gray-800 font-medium">{evidence}</p>;
+
+    const summary = evidence.summary;
+    const signals = Array.isArray(evidence.detectedSignals) ? evidence.detectedSignals : [];
+    const details = typeof evidence.details === "string" ? evidence.details : null;
+    const entries = typeof evidence === "object"
+      ? Object.entries(evidence).filter(([k, v]) => !["summary", "detectedSignals", "details"].includes(k) && v != null && typeof v !== "object")
+      : [];
+
+    return (
+      <div className="space-y-2.5">
+        {summary && <p className="text-gray-800 font-semibold leading-relaxed">{summary}</p>}
+        {signals.length > 0 && (
+          <div>
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+              Detected Signals
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              {signals.map((sig: string, idx: number) => (
+                <span key={idx} className="px-2 py-0.5 rounded-md bg-white border border-gray-200 text-[11px] font-medium text-gray-700">
+                  {sig}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {details && <p className="text-gray-600 leading-relaxed">{details}</p>}
+        {entries.length > 0 && (
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-200/60">
+            {entries.map(([k, v]) => (
+              <div key={k}>
+                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider block mb-0.5">
+                  {k.replace(/([A-Z])/g, " $1").trim()}
+                </span>
+                <span className="text-xs font-semibold text-gray-700">{String(v)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {!summary && signals.length === 0 && !details && entries.length === 0 && (
+          <p className="text-gray-600">Risk signals recorded for this deal.</p>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -304,23 +361,21 @@ export function DealRiskSection({ dealId, onRiskResolved }: DealRiskSectionProps
                 >
                   {selectedRisk.severity}
                 </span>
-                <span className="text-xs text-gray-500 font-mono">ID: {selectedRisk.id}</span>
+                <span className="text-xs text-gray-500 font-medium">Risk Analysis</span>
               </div>
 
               <div>
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1.5">
-                  Structured Evidence
+                  Evidence & Signals
                 </span>
                 {inspectRiskLoading ? (
                   <div className="p-4 flex items-center justify-center">
                     <Loader2 className="animate-spin text-blue-600" size={20} />
                   </div>
                 ) : (
-                  <pre className="p-3 bg-gray-50 border border-gray-100 rounded-xl text-[11px] font-mono text-gray-800 whitespace-pre-wrap overflow-x-auto">
-                    {typeof selectedRisk.evidence === "object"
-                      ? JSON.stringify(selectedRisk.evidence, null, 2)
-                      : String(selectedRisk.evidence || "No additional evidence")}
-                  </pre>
+                  <div className="p-3.5 bg-gray-50 border border-gray-100 rounded-xl text-xs">
+                    {renderEvidenceContent(selectedRisk.evidence)}
+                  </div>
                 )}
               </div>
 

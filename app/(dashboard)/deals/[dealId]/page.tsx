@@ -85,7 +85,7 @@ export default function DealDetailPage() {
           </button>
           <div className="space-y-0.5">
             <h1 className="text-2xl font-black text-gray-900 tracking-tight">{deal.name}</h1>
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{deal.dealId}</p>
+            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Deal Opportunity</p>
           </div>
         </div>
 

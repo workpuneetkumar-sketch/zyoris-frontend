@@ -232,7 +232,13 @@ export function CommunicationIntelligenceWidget({
                     )}
                     {!data.nextBestAction.actionTitle && !data.nextBestAction.detailedRationale && (
                       <p className="text-xs font-medium text-gray-800 leading-relaxed">
-                        {JSON.stringify(data.nextBestAction)}
+                        {String(
+                          (data.nextBestAction as any).title ||
+                          (data.nextBestAction as any).summary ||
+                          (data.nextBestAction as any).action ||
+                          (data.nextBestAction as any).recommendation ||
+                          "Recommended action identified."
+                        )}
                       </p>
                     )}
                   </div>
