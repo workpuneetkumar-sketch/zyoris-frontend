@@ -34,7 +34,7 @@ async function runTests() {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      name: "Connect Org",
+      name: `Connect Org ${Date.now()}`,
       userId,
       companyAbout: "Communications",
       businessType: "B2B",

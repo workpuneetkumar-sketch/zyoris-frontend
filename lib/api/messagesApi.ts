@@ -81,124 +81,112 @@ function getCurrentUserId(): string {
 
 export async function getSessionMessages(sessionId: string): Promise<ChatMessage[]> {
     const currentUserId = getCurrentUserId();
-    const cacheKey = `chat_history_${[currentUserId, sessionId].sort().join('_')}`;
     
-    let apiMessages: ChatMessage[] = [];
+    // Server-driven authority: fetch messages from backend API
     try {
-        const res = await api.get(`/messages/get-messages?receiverId=${sessionId}`);
-        const dataArray = Array.isArray(res.data) ? res.data : (res.data?.data && Array.isArray(res.data.data) ? res.data.data : null);
+        const res = await api.get(`/api/communications/messages?conversationId=${sessionId}&limit=50`);
+        const dataArray = Array.isArray(res.data) 
+            ? res.data 
+            : (res.data?.data && Array.isArray(res.data.data) ? res.data.data : null);
         
         if (dataArray) {
-            apiMessages = dataArray.map((msg: any, index: number) => {
-                if (typeof msg === 'string') {
-                    return {
-                        id: `msg-${index}`,
-                        sessionId,
-                        text: msg,
-                        senderId: sessionId,
-                        timestamp: new Date().toISOString()
-                    };
-                }
-                return {
-                    id: msg.id || `msg-${index}`,
-                    sessionId,
-                    text: msg.content || msg.text || msg.message || "",
-                    senderId: msg.senderId || sessionId, 
-                    timestamp: msg.createdAt || msg.timestamp || new Date().toISOString()
-                };
-            });
+            return dataArray.map((msg: any) => ({
+                id: msg.id,
+                sessionId,
+                text: msg.content || "",
+                senderId: msg.senderId || sessionId, 
+                timestamp: msg.createdAt || new Date().toISOString()
+            }));
         }
     } catch (e) {
-        console.warn("API /messages/get-messages failed. Falling back to local cache.");
-    }
-
-    // Load from local storage cache
-    let localMessages: ChatMessage[] = [];
-    if (typeof window !== "undefined") {
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-            try { localMessages = JSON.parse(cached); } catch (e) {}
+        // Fallback to legacy conversation receiver query if conversationId was user ID
+        try {
+            const fallbackRes = await api.get(`/messages/get-messages?receiverId=${sessionId}`);
+            const fbArray = Array.isArray(fallbackRes.data)
+                ? fallbackRes.data
+                : (fallbackRes.data?.data && Array.isArray(fallbackRes.data.data) ? fallbackRes.data.data : null);
+            if (fbArray) {
+                return fbArray.map((msg: any, idx: number) => ({
+                    id: msg.id || `msg-${idx}`,
+                    sessionId,
+                    text: msg.content || msg.text || "",
+                    senderId: msg.senderId || sessionId,
+                    timestamp: msg.createdAt || new Date().toISOString()
+                }));
+            }
+        } catch (err) {
+            console.warn("Failed to fetch session messages from server:", err);
         }
     }
 
-    // Merge logic: use API messages if they exist and are longer, else local
-    const finalMessages = apiMessages.length >= localMessages.length ? apiMessages : localMessages;
-    
-    // Save merged to cache just in case
-    if (typeof window !== "undefined" && finalMessages.length > 0) {
-        localStorage.setItem(cacheKey, JSON.stringify(finalMessages));
-    }
-
-    return finalMessages;
+    return [];
 }
 
 export async function sendMessage(sessionId: string, text: string, senderId?: string): Promise<ChatMessage[]> {
     const currentUserId = senderId || getCurrentUserId();
     
-    // Optimistic user message
-    const userMsg: ChatMessage = {
-        id: `msg-${Date.now()}-user`,
-        sessionId,
-        text,
-        senderId: currentUserId,
-        timestamp: new Date().toISOString()
-    };
-
-    // Save to local cache instantly
-    if (typeof window !== "undefined") {
-        const cacheKey = `chat_history_${[currentUserId, sessionId].sort().join('_')}`;
-        let localMessages: ChatMessage[] = [];
-        const cached = localStorage.getItem(cacheKey);
-        if (cached) {
-            try { localMessages = JSON.parse(cached); } catch (e) {}
-        }
-        localMessages.push(userMsg);
-        localStorage.setItem(cacheKey, JSON.stringify(localMessages));
-    }
-
+    // Server is authoritative: send to canonical backend endpoint
     try {
-        const payload = {
-            receiverId: sessionId,
-            content: text
-        };
-        // Hit the actual endpoint required by the spec
-        await api.post("/messages/send", payload);
+        const res = await api.post("/api/communications/messages", {
+            conversationId: sessionId,
+            content: text,
+        });
+        const sent = res.data?.data || res.data;
+        return [{
+            id: sent.id,
+            sessionId,
+            text: sent.content,
+            senderId: sent.senderId || currentUserId,
+            timestamp: sent.createdAt || new Date().toISOString(),
+        }];
     } catch (e) {
-        console.warn("API /messages/send returned an error. Optimistically kept in cache.");
-    }
+        // Fallback to /messages/send if sessionId is a legacy direct user ID
+        try {
+            await api.post("/messages/send", {
+                receiverId: sessionId,
+                content: text
+            });
+        } catch (err) {
+            console.warn("Failed to send message to backend:", err);
+            throw err;
+        }
 
-    return [userMsg];
+        return [{
+            id: `msg-${Date.now()}`,
+            sessionId,
+            text,
+            senderId: currentUserId,
+            timestamp: new Date().toISOString()
+        }];
+    }
 }
 
 export async function updateMessage(messageId: string, text: string): Promise<ChatMessage | null> {
     try {
-        const payload = {
-            messageId,
-            content: text
+        const res = await api.patch(`/api/communications/messages/${messageId}`, {
+            content: text,
+        });
+        const msg = res.data?.data || res.data;
+        return {
+            id: msg.id,
+            sessionId: msg.conversationId || "",
+            text: msg.content || "",
+            senderId: msg.senderId || "",
+            timestamp: msg.editedAt || msg.createdAt || new Date().toISOString()
         };
-        const res = await api.put(`/messages/update`, payload);
-        if (res.data?.success && res.data.data) {
-            const msg = res.data.data;
-            return {
-                id: msg.id,
-                sessionId: msg.sessionId || "",
-                text: msg.content || msg.text || "",
-                senderId: msg.senderId || "",
-                timestamp: msg.createdAt || msg.timestamp || new Date().toISOString()
-            };
-        }
     } catch (error) {
-        console.warn("API /messages/update returned an error:", error);
+        console.warn("Failed to update message via canonical API:", error);
+        return null;
     }
-    return null;
 }
 
 export async function deleteMessage(messageId: string): Promise<boolean> {
     try {
-        const res = await api.delete(`/messages/delete/${messageId}`);
-        return res.data?.success || false;
+        const res = await api.delete(`/api/communications/messages/${messageId}`);
+        return res.status === 200 || res.status === 204 || res.data?.success === true;
     } catch (error) {
-        console.warn("API /messages/delete returned an error:", error);
+        console.warn("Failed to delete message via canonical API:", error);
         return false;
     }
 }
+

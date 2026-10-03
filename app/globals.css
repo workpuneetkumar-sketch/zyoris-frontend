@@ -2531,3 +2531,88 @@ a {
 .dark .zyoris-chart-scope {
   --chart-grid: oklch(0.2674 0.0047 248.0045);     /* dark mode grid lines    */
 }
+
+/* ── Connect Workspace Canonical Messages System ──────────────────────────── */
+.msg-bubble-self {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+  border-radius: 1rem;
+  border-top-right-radius: 0.25rem;
+}
+
+.msg-bubble-peer {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: 1rem;
+  border-top-left-radius: 0.25rem;
+}
+
+.msg-action-bar {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.msg-action-btn {
+  color: var(--color-text-muted);
+  transition: all 150ms ease;
+  border-radius: 0.375rem;
+}
+
+.msg-action-btn:hover {
+  color: var(--color-primary);
+  background-color: var(--color-surface-hover);
+}
+
+.msg-action-btn-danger:hover {
+  color: var(--color-error);
+  background-color: var(--color-error-light);
+}
+
+.msg-context-menu {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+  z-index: 50;
+}
+
+.msg-context-item {
+  color: var(--color-text);
+  transition: all 150ms ease;
+  border-radius: 0.5rem;
+}
+
+.msg-context-item:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-primary);
+}
+
+.msg-context-item-danger {
+  color: var(--color-error);
+}
+
+.msg-context-item-danger:hover {
+  background-color: var(--color-error-light);
+  color: var(--color-error);
+}
+
+.msg-reply-banner {
+  background-color: var(--color-surface-hover);
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.msg-reply-quote {
+  border-left: 3px solid var(--color-primary);
+  background-color: var(--color-surface-hover);
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.msg-edit-banner {
+  background-color: var(--color-warning-light);
+  color: var(--color-warning-foreground);
+  border-bottom: 1px solid var(--color-border-light);
+}
+

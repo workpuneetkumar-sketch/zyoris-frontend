@@ -2,27 +2,19 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
-  Send,
   Hash,
   Lock,
   MessageSquare,
   Users,
-  Settings,
-  MoreVertical,
-  Edit2,
-  Trash2,
   ChevronLeft,
-  Loader2,
-  AlertCircle,
-  Sparkles,
-  Info,
-  CheckCheck,
 } from "lucide-react";
 import ConnectSidebar from "./ConnectSidebar";
 import CreateChannelModal from "./CreateChannelModal";
 import ChannelMembersModal from "./ChannelMembersModal";
 import CreateDirectMessageModal from "./CreateDirectMessageModal";
 import CreateGroupConversationModal from "./CreateGroupConversationModal";
+import MessageList from "./MessageList";
+import MessageComposer from "./MessageComposer";
 import {
   Channel,
   Conversation,
@@ -33,14 +25,16 @@ import {
   SocketMessageDeletePayload,
   SocketChannelUpdatedPayload,
   SocketConversationUpdatedPayload,
+  SendMessagePayload,
 } from "@/types/connect";
 import {
   getChannels,
   getConversations,
-  getConnectMessages,
-  sendConnectMessage,
-  updateConnectMessage,
-  deleteConnectMessage,
+  getChannelMessages,
+  getConversationMessages,
+  sendMessage,
+  updateMessage,
+  deleteMessage,
 } from "@/lib/api/connectApi";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { getEmployees } from "@/lib/api/hrApi";
@@ -56,9 +50,8 @@ export default function ConnectWorkspace() {
   // Messages State
   const [messages, setMessages] = useState<ConnectMessage[]>([]);
   const [messagesLoading, setMessagesLoading] = useState(false);
-  const [inputText, setInputText] = useState("");
+  const [messagesError, setMessagesError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   // Unread badge tracking
   const [unreadMap, setUnreadMap] = useState<Record<string, number>>({});
@@ -72,13 +65,15 @@ export default function ConnectWorkspace() {
   const [isCreateDirectOpen, setIsCreateDirectOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
-  // Message Editing
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editText, setEditText] = useState("");
+  // Message Editing & Replying Modes
+  const [editingMessage, setEditingMessage] = useState<ConnectMessage | null>(null);
+  const [replyingToMessage, setReplyingToMessage] = useState<ConnectMessage | null>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeTargetRef = useRef<ActiveTarget | null>(null);
   activeTargetRef.current = activeTarget;
+
+  // Stale request prevention: AbortController ref
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Current user ID resolution
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -100,7 +95,6 @@ export default function ConnectWorkspace() {
   // Fetch all initial server-backed data
   const loadInitialData = async () => {
     try {
-      setError(null);
       const [channelsData, convsData, teamData, empData] = await Promise.all([
         getChannels(),
         getConversations(),
@@ -140,20 +134,58 @@ export default function ConnectWorkspace() {
       }
     } catch (err: any) {
       console.error("Failed to load initial Connect data:", err);
-      setError("Failed to load workspace data. Please check your connection.");
     }
   };
 
-  // Scroll to bottom when messages update
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+  /* -------------------------------------------------------------------------- */
+  /*                        SERVER-DRIVEN MESSAGE FETCHING                      */
+  /* -------------------------------------------------------------------------- */
 
-  // Load messages whenever active target changes
-  useEffect(() => {
-    if (!activeTarget) return;
+  const loadMessagesForTarget = useCallback(async (target: ActiveTarget) => {
+    // Prevent stale requests: cancel previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
-    // Clear unread count for opened target
+    setMessagesLoading(true);
+    setMessagesError(null);
+    setEditingMessage(null);
+    setReplyingToMessage(null);
+
+    try {
+      let res: { data: ConnectMessage[]; nextCursor?: string | null };
+      if (target.type === "channel") {
+        res = await getChannelMessages(target.id, 50, undefined, controller.signal);
+      } else {
+        res = await getConversationMessages(target.id, 50, undefined, controller.signal);
+      }
+
+      if (!controller.signal.aborted) {
+        setMessages(res.data);
+      }
+    } catch (err: any) {
+      if (err.name === "CanceledError" || err.name === "AbortError" || controller.signal.aborted) {
+        return; // Ignore aborted stale request
+      }
+      console.error("Failed to load messages for target:", err);
+      setMessagesError("Unable to load message history. Please check your network connection.");
+    } finally {
+      if (!controller.signal.aborted) {
+        setMessagesLoading(false);
+      }
+    }
+  }, []);
+
+  // Reload messages whenever active context changes
+  useEffect(() => {
+    if (!activeTarget) {
+      setMessages([]);
+      return;
+    }
+
+    // Clear unread count for opened context
     setUnreadMap((prev) => {
       if (!prev[activeTarget.id]) return prev;
       const copy = { ...prev };
@@ -162,109 +194,132 @@ export default function ConnectWorkspace() {
     });
 
     loadMessagesForTarget(activeTarget);
-  }, [activeTarget?.id, activeTarget?.type]);
 
-  const loadMessagesForTarget = async (target: ActiveTarget) => {
-    setMessagesLoading(true);
-    try {
-      const params =
-        target.type === "channel"
-          ? { channelId: target.id }
-          : { conversationId: target.id };
-
-      const res = await getConnectMessages(params);
-      setMessages(res.data);
-    } catch (err) {
-      console.error("Failed to load messages for target:", err);
-    } finally {
-      setMessagesLoading(false);
-    }
-  };
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [activeTarget?.id, activeTarget?.type, loadMessagesForTarget]);
 
   /* -------------------------------------------------------------------------- */
   /*                          SOCKET EVENT HANDLERS                             */
   /* -------------------------------------------------------------------------- */
 
-  const handleSocketNewMessage = useCallback((payload: SocketMessageNewPayload) => {
-    const targetChannelId = payload.channelId;
-    const targetConvId = payload.conversationId;
-    const msgId = payload.id || payload.messageId || `socket-${Date.now()}`;
+  const handleSocketNewMessage = useCallback(
+    (payload: SocketMessageNewPayload) => {
+      if (!payload) return;
 
-    const newMsg: ConnectMessage = {
-      id: msgId,
-      organizationId: "",
-      senderId: payload.senderId || "",
-      channelId: targetChannelId,
-      conversationId: targetConvId,
-      content: payload.content || "",
-      createdAt: payload.createdAt || new Date().toISOString(),
-      sender: payload.sender,
-    };
+      const targetChannelId =
+        payload.channelId ||
+        (payload.channel && channels.find((c) => c.name === payload.channel || c.id === payload.channel)?.id);
+      const targetConvId = payload.conversationId || payload.receiverId;
+      const msgId = payload.id || payload.messageId || `socket-${Date.now()}`;
 
-    const current = activeTargetRef.current;
-    const isForActiveTarget =
-      (current?.type === "channel" && current.id === targetChannelId) ||
-      (current?.type === "conversation" && current.id === targetConvId);
+      const newMsg: ConnectMessage = {
+        id: msgId,
+        organizationId: payload.organizationId || "",
+        senderId: payload.senderId || payload.sender?.id || "",
+        channelId: targetChannelId,
+        conversationId: targetConvId,
+        parentMessageId: payload.parentMessageId || null,
+        content: payload.content || "",
+        type: payload.type || "TEXT",
+        createdAt: payload.createdAt || new Date().toISOString(),
+        sender: payload.sender,
+        status: "sent",
+      };
 
-    if (isForActiveTarget) {
-      setMessages((prev) => {
-        // Prevent duplicate if sent optimistically
-        if (prev.some((m) => m.id === newMsg.id || (m.content === newMsg.content && m.senderId === newMsg.senderId && m.id.startsWith("opt-")))) {
-          return prev.map((m) =>
-            m.content === newMsg.content && m.senderId === newMsg.senderId && m.id.startsWith("opt-")
-              ? newMsg
-              : m
+      const current = activeTargetRef.current;
+      const isForActiveTarget =
+        (current?.type === "channel" &&
+          (current.id === targetChannelId ||
+            current.id === payload.channelId ||
+            (current.item as Channel)?.name === payload.channel)) ||
+        (current?.type === "conversation" &&
+          (current.id === targetConvId || current.id === payload.conversationId));
+
+      if (isForActiveTarget) {
+        setMessages((prev) => {
+          // Deduplicate: If message already present by canonical ID, do nothing
+          if (prev.some((m) => m.id === newMsg.id)) {
+            return prev;
+          }
+
+          // Reconcile optimistic message: if tempId or sending matches same content & sender
+          const optIndex = prev.findIndex(
+            (m) =>
+              m.id.startsWith("opt-") &&
+              (m.clientMessageId === payload.clientMessageId ||
+                (m.content === newMsg.content && m.senderId === newMsg.senderId))
           );
-        }
-        return [...prev, newMsg];
-      });
-    } else {
-      // Mark as unread in sidebar!
-      const targetId = targetChannelId || targetConvId;
-      if (targetId) {
-        setUnreadMap((prev) => ({
-          ...prev,
-          [targetId]: (prev[targetId] || 0) + 1,
-        }));
-      }
-    }
 
-    // Update last message in channels / conversations list
-    if (targetChannelId) {
-      setChannels((prev) =>
-        prev.map((c) =>
-          c.id === targetChannelId
-            ? { ...c, lastMessage: newMsg.content, lastMessageAt: newMsg.createdAt }
-            : c
-        )
-      );
-    } else if (targetConvId) {
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === targetConvId
-            ? { ...c, lastMessage: newMsg.content, lastMessageAt: newMsg.createdAt }
-            : c
-        )
-      );
-    }
-  }, []);
+          if (optIndex !== -1) {
+            const copy = [...prev];
+            copy[optIndex] = newMsg;
+            return copy;
+          }
+
+          return [...prev, newMsg];
+        });
+      } else {
+        // Mark as unread in sidebar for inactive channels/conversations
+        const targetId = targetChannelId || targetConvId;
+        if (targetId) {
+          setUnreadMap((prev) => ({
+            ...prev,
+            [targetId]: (prev[targetId] || 0) + 1,
+          }));
+        }
+      }
+
+      // Update last message in channels / conversations list
+      if (targetChannelId) {
+        setChannels((prev) =>
+          prev.map((c) =>
+            c.id === targetChannelId
+              ? { ...c, lastMessage: newMsg.content, lastMessageAt: newMsg.createdAt }
+              : c
+          )
+        );
+      } else if (targetConvId) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.id === targetConvId
+              ? { ...c, lastMessage: newMsg.content, lastMessageAt: newMsg.createdAt }
+              : c
+          )
+        );
+      }
+    },
+    [channels]
+  );
 
   const handleSocketUpdateMessage = useCallback((payload: SocketMessageUpdatePayload) => {
+    const targetMsgId = payload.messageId || payload.id;
+    if (!targetMsgId) return;
+
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === payload.messageId
-          ? { ...m, content: payload.content, editedAt: payload.updatedAt || new Date().toISOString() }
+        m.id === targetMsgId
+          ? {
+              ...m,
+              content: payload.content,
+              editedAt: payload.editedAt || payload.updatedAt || new Date().toISOString(),
+            }
           : m
       )
     );
   }, []);
 
   const handleSocketDeleteMessage = useCallback((payload: SocketMessageDeletePayload) => {
-    setMessages((prev) => prev.filter((m) => m.id !== payload.messageId));
+    const targetMsgId = payload.messageId || payload.id;
+    if (!targetMsgId) return;
+
+    setMessages((prev) => prev.filter((m) => m.id !== targetMsgId));
   }, []);
 
   const handleSocketChannelUpdated = useCallback((payload: SocketChannelUpdatedPayload) => {
-    // Refetch channels to stay in sync
     getChannels().then((data) => setChannels(data));
   }, []);
 
@@ -275,9 +330,19 @@ export default function ConnectWorkspace() {
     []
   );
 
+  // Active channel name for socket room subscription
+  const activeChannelName = useMemo(() => {
+    if (activeTarget?.type === "channel") {
+      const ch = channels.find((c) => c.id === activeTarget.id) || (activeTarget.item as Channel);
+      return ch?.name || null;
+    }
+    return null;
+  }, [activeTarget, channels]);
+
   // Hook into real-time socket
-  const { status: socketStatus, emitSendMessage } = useConnectSocket({
+  const { status: socketStatus } = useConnectSocket({
     activeChannelId: activeTarget?.type === "channel" ? activeTarget.id : null,
+    activeChannelName,
     activeConversationId: activeTarget?.type === "conversation" ? activeTarget.id : null,
     onNewMessage: handleSocketNewMessage,
     onUpdateMessage: handleSocketUpdateMessage,
@@ -328,26 +393,31 @@ export default function ConnectWorkspace() {
   };
 
   /* -------------------------------------------------------------------------- */
-  /*                             MESSAGING ACTIONS                              */
+  /*                      CANONICAL MESSAGE ACTIONS & LIFECYCLE                 */
   /* -------------------------------------------------------------------------- */
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputText.trim() || !activeTarget || sending) return;
+  /**
+   * Send Message: POST /api/communications/messages
+   * Flow: types -> optimistic message (status: sending) -> POST API -> server response -> reconcile
+   */
+  const handleSendMessage = async (content: string, parentMessageId?: string | null) => {
+    const target = activeTargetRef.current;
+    if (!target || !content.trim() || sending) return;
 
-    const content = inputText.trim();
-    setInputText("");
     setSending(true);
 
-    const tempId = `opt-${Date.now()}`;
+    const tempId = `opt-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const optimisticMessage: ConnectMessage = {
       id: tempId,
       organizationId: "",
       senderId: currentUserId || "me",
-      channelId: activeTarget.type === "channel" ? activeTarget.id : null,
-      conversationId: activeTarget.type === "conversation" ? activeTarget.id : null,
+      channelId: target.type === "channel" ? target.id : null,
+      conversationId: target.type === "conversation" ? target.id : null,
+      parentMessageId: parentMessageId || null,
       content,
+      type: "TEXT",
       createdAt: new Date().toISOString(),
+      status: "sending",
       sender: {
         id: currentUserId || "me",
         name: "You",
@@ -355,99 +425,173 @@ export default function ConnectWorkspace() {
       },
     };
 
+    // Optimistic UI display
     setMessages((prev) => [...prev, optimisticMessage]);
+    setReplyingToMessage(null);
 
     try {
-      const payload =
-        activeTarget.type === "channel"
-          ? { channelId: activeTarget.id, content }
-          : { conversationId: activeTarget.id, content };
+      const payload: SendMessagePayload = {
+        channelId: target.type === "channel" ? target.id : undefined,
+        conversationId: target.type === "conversation" ? target.id : undefined,
+        content,
+        parentMessageId: parentMessageId || undefined,
+      };
 
-      const sent = await sendConnectMessage(payload);
+      const canonicalMsg = await sendMessage(payload);
 
-      // Emit to Sakshi's Socket.IO server
-      emitSendMessage({
-        messageId: sent.id,
-        channelId: sent.channelId,
-        conversationId: sent.conversationId,
-        content: sent.content,
-      });
-
-      // Replace optimistic message with actual persisted record
+      // Reconcile temporary message with canonical server response
       setMessages((prev) =>
-        prev.map((m) => (m.id === tempId ? sent : m))
+        prev.map((m) =>
+          m.id === tempId
+            ? { ...canonicalMsg, status: "sent" }
+            : m
+        )
       );
 
       // Update sidebar preview
-      if (activeTarget.type === "channel") {
+      if (target.type === "channel") {
         setChannels((prev) =>
           prev.map((c) =>
-            c.id === activeTarget.id
-              ? { ...c, lastMessage: content, lastMessageAt: sent.createdAt }
+            c.id === target.id
+              ? { ...c, lastMessage: content, lastMessageAt: canonicalMsg.createdAt }
               : c
           )
         );
       } else {
         setConversations((prev) =>
           prev.map((c) =>
-            c.id === activeTarget.id
-              ? { ...c, lastMessage: content, lastMessageAt: sent.createdAt }
+            c.id === target.id
+              ? { ...c, lastMessage: content, lastMessageAt: canonicalMsg.createdAt }
               : c
           )
         );
       }
     } catch (err: any) {
       console.error("Failed to send message:", err);
-      // Remove failed optimistic message
-      setMessages((prev) => prev.filter((m) => m.id !== tempId));
-      alert("Failed to send message. Please try again.");
+      // Mark as failed and preserve content so user can Retry
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId
+            ? { ...m, status: "failed", error: "Failed to send message" }
+            : m
+        )
+      );
     } finally {
       setSending(false);
     }
   };
 
-  const handleStartEdit = (msg: ConnectMessage) => {
-    setEditingMessageId(msg.id);
-    setEditText(msg.content);
-  };
+  /**
+   * Retry failed message send
+   */
+  const handleRetrySend = async (failedMsg: ConnectMessage) => {
+    const target = activeTargetRef.current;
+    if (!target) return;
 
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditText("");
-  };
+    // Guard against retrying stale requests if user switched context
+    const isCurrentContext =
+      (target.type === "channel" && failedMsg.channelId === target.id) ||
+      (target.type === "conversation" && failedMsg.conversationId === target.id);
+    if (!isCurrentContext) return;
 
-  const handleSaveEdit = async (msgId: string) => {
-    if (!editText.trim()) {
-      handleCancelEdit();
-      return;
-    }
+    setMessages((prev) =>
+      prev.map((m) => (m.id === failedMsg.id ? { ...m, status: "sending", error: undefined } : m))
+    );
 
     try {
-      const updated = await updateConnectMessage(msgId, editText.trim());
+      const payload: SendMessagePayload = {
+        channelId: target.type === "channel" ? target.id : undefined,
+        conversationId: target.type === "conversation" ? target.id : undefined,
+        content: failedMsg.content,
+        parentMessageId: failedMsg.parentMessageId || undefined,
+      };
+
+      const canonicalMsg = await sendMessage(payload);
+
       setMessages((prev) =>
-        prev.map((m) => (m.id === msgId ? updated : m))
+        prev.map((m) => (m.id === failedMsg.id ? { ...canonicalMsg, status: "sent" } : m))
       );
-      handleCancelEdit();
     } catch (err) {
-      console.error("Failed to update message:", err);
+      console.error("Failed to retry send:", err);
+      setMessages((prev) =>
+        prev.map((m) => (m.id === failedMsg.id ? { ...m, status: "failed", error: "Retry failed" } : m))
+      );
     }
   };
 
-  const handleDeleteMessage = async (msgId: string) => {
+  /**
+   * Edit Message: PATCH /api/communications/messages/:messageId
+   */
+  const handleStartEdit = (msg: ConnectMessage) => {
+    setReplyingToMessage(null);
+    setEditingMessage(msg);
+  };
+
+  const handleSaveEdit = async (messageId: string, newContent: string) => {
+    if (!newContent.trim()) return;
+
+    try {
+      const updated = await updateMessage(messageId, newContent.trim());
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? { ...m, ...updated, content: newContent.trim() } : m))
+      );
+      setEditingMessage(null);
+    } catch (err) {
+      console.error("Failed to update message:", err);
+      alert("Failed to update message. Please check your connection and try again.");
+    }
+  };
+
+  /**
+   * Reply foundation
+   */
+  const handleStartReply = (msg: ConnectMessage) => {
+    setEditingMessage(null);
+    setReplyingToMessage(msg);
+  };
+
+  /**
+   * Delete Message: DELETE /api/communications/messages/:messageId
+   */
+  const handleDeleteMessage = async (msg: ConnectMessage) => {
     if (!confirm("Are you sure you want to delete this message?")) return;
 
     try {
-      const ok = await deleteConnectMessage(msgId);
+      const ok = await deleteMessage(msg.id);
       if (ok) {
-        setMessages((prev) => prev.filter((m) => m.id !== msgId));
+        setMessages((prev) => prev.filter((m) => m.id !== msg.id));
       }
     } catch (err) {
       console.error("Failed to delete message:", err);
+      alert("Failed to delete message. Please try again.");
     }
   };
 
+  /**
+   * Extensible Action Handlers
+   */
+  const handleReact = (msg: ConnectMessage, reaction: string) => {
+    // Prepared for future reactions API
+    console.info(`[Action Architecture] Reaction ${reaction} on message ${msg.id}`);
+  };
+
+  const handleMention = (msg: ConnectMessage) => {
+    // Prepared for future mentions API
+    console.info(`[Action Architecture] Mention author of message ${msg.id}`);
+  };
+
+  const handlePin = (msg: ConnectMessage) => {
+    // Prepared for future pin API
+    console.info(`[Action Architecture] Pin message ${msg.id}`);
+  };
+
+  const handleSave = (msg: ConnectMessage) => {
+    // Prepared for future save API
+    console.info(`[Action Architecture] Save bookmark for message ${msg.id}`);
+  };
+
   /* -------------------------------------------------------------------------- */
-  /*                            ACTIVE TARGET TITLE                             */
+  /*                            ACTIVE TARGET DETAILS                           */
   /* -------------------------------------------------------------------------- */
 
   const activeHeaderDetails = useMemo(() => {
@@ -457,7 +601,7 @@ export default function ConnectWorkspace() {
       const ch = channels.find((c) => c.id === activeTarget.id) || (activeTarget.item as Channel);
       return {
         title: `#${ch?.name || "channel"}`,
-        subtitle: ch?.description || "Public/Private Channel for team discussions",
+        subtitle: ch?.description || "Channel for team discussions",
         isPrivate: ch?.visibility === "PRIVATE",
         type: "channel" as const,
         channel: ch,
@@ -496,9 +640,23 @@ export default function ConnectWorkspace() {
     return null;
   }, [activeTarget, channels]);
 
+  const canManageCurrent = useMemo(() => {
+    if (activeTarget?.type === "channel") {
+      const ch = channels.find((c) => c.id === activeTarget.id);
+      return (
+        ch?.createdById === currentUserId ||
+        ch?.members?.some((m) => m.userId === currentUserId && (m.role === "OWNER" || m.role === "ADMIN"))
+      );
+    }
+    return false;
+  }, [activeTarget, channels, currentUserId]);
+
   return (
-    <div className="flex h-[calc(100vh-theme(spacing.16))] p-0 md:p-3 lg:p-6 bg-gray-50/60 font-sans">
-      <div className="w-full max-w-7xl mx-auto flex bg-white md:rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 overflow-hidden relative">
+    <div
+      id="connect-workspace-root"
+      className="flex h-[calc(100vh-theme(spacing.16))] p-0 md:p-3 lg:p-6 bg-background font-sans"
+    >
+      <div className="w-full max-w-7xl mx-auto flex bg-surface md:rounded-3xl shadow-xl border border-border overflow-hidden relative">
         {/* Left Structured Connect Navigation */}
         <ConnectSidebar
           channels={channels}
@@ -521,21 +679,26 @@ export default function ConnectWorkspace() {
           }`}
         />
 
-        {/* Right Message Area (Tithi's Message Area Component) */}
+        {/* Right Message Area */}
         <div
-          className={`flex-1 flex-col bg-white overflow-hidden ${
+          id="connect-message-area"
+          className={`flex-1 flex-col bg-surface overflow-hidden ${
             showMobileChat ? "flex" : "hidden md:flex"
           }`}
         >
           {activeHeaderDetails ? (
             <>
               {/* Header */}
-              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white shrink-0">
+              <div
+                id="connect-chat-header"
+                className="px-6 py-4 border-b border-border flex items-center justify-between bg-surface shrink-0"
+              >
                 <div className="flex items-center gap-3">
                   {/* Mobile Back Button */}
                   <button
+                    id="mobile-back-to-sidebar-btn"
                     onClick={() => setShowMobileChat(false)}
-                    className="p-1.5 -ml-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg md:hidden"
+                    className="p-1.5 -ml-1 text-text-muted hover:text-text hover:bg-surface-hover rounded-lg md:hidden"
                   >
                     <ChevronLeft size={20} />
                   </button>
@@ -545,11 +708,11 @@ export default function ConnectWorkspace() {
                       className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${
                         activeHeaderDetails.type === "channel"
                           ? activeHeaderDetails.isPrivate
-                            ? "bg-amber-50 text-amber-600"
-                            : "bg-blue-50 text-blue-600"
+                            ? "bg-warning-light text-warning"
+                            : "bg-surface-hover text-primary"
                           : activeHeaderDetails.type === "group"
-                          ? "bg-purple-50 text-purple-600"
-                          : "bg-emerald-50 text-emerald-600"
+                          ? "bg-surface-hover text-text"
+                          : "bg-surface-hover text-success"
                       }`}
                     >
                       {activeHeaderDetails.type === "channel" ? (
@@ -566,22 +729,22 @@ export default function ConnectWorkspace() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-bold text-gray-900 tracking-tight">
+                        <h3 className="text-base font-bold text-text tracking-tight">
                           {activeHeaderDetails.title}
                         </h3>
                         {activeHeaderDetails.type === "channel" && (
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                               activeHeaderDetails.isPrivate
-                                ? "bg-amber-50 text-amber-700 border border-amber-200"
-                                : "bg-blue-50 text-blue-700 border border-blue-200"
+                                ? "bg-warning-light text-warning border border-border"
+                                : "bg-surface-hover text-primary border border-border"
                             }`}
                           >
                             {activeHeaderDetails.isPrivate ? "Private" : "Public"}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 truncate max-w-md">
+                      <p className="text-xs text-text-muted truncate max-w-md">
                         {activeHeaderDetails.subtitle}
                       </p>
                     </div>
@@ -592,8 +755,9 @@ export default function ConnectWorkspace() {
                 <div className="flex items-center gap-2">
                   {activeHeaderDetails.type === "channel" && (
                     <button
+                      id="manage-channel-members-btn"
                       onClick={() => setIsChannelMembersOpen(true)}
-                      className="px-3 py-1.5 text-xs font-semibold text-gray-600 hover:text-blue-600 hover:bg-blue-50 border border-gray-200 hover:border-blue-200 rounded-xl transition-all flex items-center gap-1.5"
+                      className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5"
                     >
                       <Users size={14} />
                       <span>Manage Members</span>
@@ -602,165 +766,56 @@ export default function ConnectWorkspace() {
                 </div>
               </div>
 
-              {/* Message Feed */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50/30">
-                {messagesLoading ? (
-                  <div className="h-full flex flex-col items-center justify-center gap-3 text-gray-400">
-                    <Loader2 size={28} className="animate-spin text-blue-600" />
-                    <p className="text-xs font-medium">Loading conversations...</p>
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-                    <div className="w-16 h-16 rounded-3xl bg-blue-50 text-blue-600 flex items-center justify-center mb-4 shadow-sm">
-                      {activeHeaderDetails.type === "channel" ? (
-                        <Hash size={30} />
-                      ) : (
-                        <MessageSquare size={30} />
-                      )}
-                    </div>
-                    <h4 className="text-base font-bold text-gray-800 mb-1">
-                      Welcome to {activeHeaderDetails.title}
-                    </h4>
-                    <p className="text-xs text-gray-500 max-w-sm mb-4">
-                      This is the very start of the conversation. Send a message below to connect with your team!
-                    </p>
-                  </div>
-                ) : (
-                  messages.map((msg) => {
-                    const isSelf = msg.senderId === currentUserId;
-                    const isEditing = editingMessageId === msg.id;
-                    const senderName =
-                      msg.sender?.name || (isSelf ? "You" : `User ${msg.senderId?.slice(-4) || ""}`);
-                    const time = new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    });
-
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`group flex items-start gap-3 transition-colors ${
-                          isSelf ? "flex-row-reverse" : "flex-row"
-                        }`}
-                      >
-                        {/* Avatar */}
-                        <div
-                          className={`w-8 h-8 rounded-full text-xs font-bold flex items-center justify-center shrink-0 ${
-                            isSelf
-                              ? "bg-blue-600 text-white"
-                              : "bg-gray-200 text-gray-700"
-                          }`}
-                        >
-                          {senderName.slice(0, 2).toUpperCase()}
-                        </div>
-
-                        {/* Content Bubble */}
-                        <div
-                          className={`max-w-[75%] space-y-1 ${
-                            isSelf ? "items-end text-right" : "items-start text-left"
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 text-[11px] text-gray-400 px-1">
-                            <span className="font-semibold text-gray-700">{senderName}</span>
-                            <span>{time}</span>
-                            {msg.editedAt && <span className="text-[10px] italic">(edited)</span>}
-                          </div>
-
-                          {isEditing ? (
-                            <div className="p-3 bg-white border border-blue-200 rounded-2xl shadow-md space-y-2 text-left">
-                              <input
-                                type="text"
-                                value={editText}
-                                onChange={(e) => setEditText(e.target.value)}
-                                className="w-full text-xs text-gray-900 border border-gray-200 rounded-lg p-2 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                autoFocus
-                              />
-                              <div className="flex justify-end gap-2 text-xs">
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="px-2.5 py-1 text-gray-500 hover:bg-gray-100 rounded"
-                                >
-                                  Cancel
-                                </button>
-                                <button
-                                  onClick={() => handleSaveEdit(msg.id)}
-                                  className="px-3 py-1 bg-blue-600 text-white font-semibold rounded hover:bg-blue-700"
-                                >
-                                  Save
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div
-                              className={`p-3.5 rounded-2xl text-xs leading-relaxed break-words relative shadow-xs ${
-                                isSelf
-                                  ? "bg-blue-600 text-white rounded-tr-xs"
-                                  : "bg-white text-gray-800 border border-gray-100 rounded-tl-xs"
-                              }`}
-                            >
-                              {msg.content}
-
-                              {/* Hover actions for author */}
-                              {isSelf && (
-                                <div className="absolute top-1 -left-16 hidden group-hover:flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-0.5 shadow-md">
-                                  <button
-                                    onClick={() => handleStartEdit(msg)}
-                                    title="Edit Message"
-                                    className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                                  >
-                                    <Edit2 size={12} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteMessage(msg.id)}
-                                    title="Delete Message"
-                                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                                  >
-                                    <Trash2 size={12} />
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                <div ref={messagesEndRef} />
-              </div>
+              {/* Message List Stream */}
+              <MessageList
+                channelId={activeTarget.type === "channel" ? activeTarget.id : null}
+                conversationId={activeTarget.type === "conversation" ? activeTarget.id : null}
+                messages={messages}
+                loading={messagesLoading}
+                error={messagesError}
+                currentUserId={currentUserId}
+                canManage={canManageCurrent}
+                emptyTitle={`Welcome to ${activeHeaderDetails.title}`}
+                emptySubtitle={
+                  activeHeaderDetails.type === "channel"
+                    ? "This is the very start of the channel. Send a message below to connect with your team!"
+                    : "This is the start of your direct conversation."
+                }
+                onRetryFetch={() => loadMessagesForTarget(activeTarget)}
+                onReply={handleStartReply}
+                onEdit={handleStartEdit}
+                onDelete={handleDeleteMessage}
+                onRetrySend={handleRetrySend}
+                onReact={handleReact}
+                onMention={handleMention}
+                onPin={handlePin}
+                onSave={handleSave}
+              />
 
               {/* Message Composer */}
-              <div className="p-4 bg-white border-t border-gray-100">
-                <form
-                  onSubmit={handleSendMessage}
-                  className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-2xl px-4 py-2 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 focus-within:bg-white transition-all shadow-inner"
-                >
-                  <input
-                    type="text"
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    placeholder={`Message ${activeHeaderDetails.title}...`}
-                    disabled={sending}
-                    className="flex-1 bg-transparent text-xs font-medium text-gray-900 placeholder-gray-400 focus:outline-none py-1.5"
-                  />
-                  <button
-                    type="submit"
-                    disabled={sending || !inputText.trim()}
-                    className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0"
-                  >
-                    {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
-                  </button>
-                </form>
-              </div>
+              <MessageComposer
+                placeholder={`Message ${activeHeaderDetails.title}...`}
+                disabled={messagesLoading}
+                sending={sending}
+                editingMessage={editingMessage}
+                replyingToMessage={replyingToMessage}
+                onSendMessage={handleSendMessage}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={() => setEditingMessage(null)}
+                onCancelReply={() => setReplyingToMessage(null)}
+              />
             </>
           ) : (
             /* Empty State when no conversation or channel is selected */
-            <div className="h-full flex flex-col items-center justify-center p-8 text-center text-gray-400">
-              <div className="w-16 h-16 rounded-3xl bg-gray-50 flex items-center justify-center mb-4 border border-gray-100">
-                <MessageSquare size={32} className="text-gray-400" />
+            <div
+              id="no-selection-empty-state"
+              className="h-full flex flex-col items-center justify-center p-8 text-center text-text-muted"
+            >
+              <div className="w-16 h-16 rounded-3xl bg-surface-hover flex items-center justify-center mb-4 border border-border">
+                <MessageSquare size={32} className="text-text-muted" />
               </div>
-              <h3 className="text-base font-bold text-gray-800 mb-1">Connect Workspace</h3>
-              <p className="text-xs text-gray-500 max-w-sm">
+              <h3 className="text-base font-bold text-text mb-1">Connect Workspace</h3>
+              <p className="text-xs text-text-muted max-w-sm">
                 Select a channel or direct conversation on the left, or create a new one to start messaging.
               </p>
             </div>
