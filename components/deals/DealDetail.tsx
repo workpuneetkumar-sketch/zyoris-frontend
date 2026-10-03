@@ -2,6 +2,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   Calendar,
   User,
@@ -180,6 +181,55 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
 
   const formatCurrency = (amount: number | undefined, currency?: string): string => {
     return formatCurrencyWithSnapshot(amount, currency || deal.currency || "USD", true);
+  };
+
+  const formatPricingInfo = (pricing: any, amount?: number): string => {
+    if (!pricing) {
+      return `Total Contract Value: ${formatCurrency(amount)}`;
+    }
+    if (typeof pricing === "string") {
+      return pricing;
+    }
+    if (typeof pricing === "number") {
+      return formatCurrency(pricing);
+    }
+    if (typeof pricing === "object") {
+      const parts: string[] = [];
+      if (pricing.tier || pricing.plan) parts.push(String(pricing.tier || pricing.plan));
+      if (pricing.terms || pricing.term) parts.push(String(pricing.terms || pricing.term));
+      if (pricing.billingFrequency || pricing.cadence || pricing.frequency) {
+        parts.push(String(pricing.billingFrequency || pricing.cadence || pricing.frequency));
+      }
+      if (pricing.amount != null || pricing.value != null || pricing.total != null) {
+        const val = pricing.amount ?? pricing.value ?? pricing.total;
+        parts.push(typeof val === "number" ? formatCurrency(val) : String(val));
+      }
+      if (parts.length > 0) {
+        return parts.join(" • ");
+      }
+      return "Pricing details available";
+    }
+    return "Pricing details available";
+  };
+
+  const formatCompetitionInfo = (competition: any): string => {
+    if (!competition) return "No critical competitor threat flagged for this deal.";
+    if (typeof competition === "string") return competition;
+    if (typeof competition === "object") {
+      const parts: string[] = [];
+      if (competition.primaryCompetitor || competition.competitor || competition.name) {
+        parts.push(String(competition.primaryCompetitor || competition.competitor || competition.name));
+      }
+      if (competition.threatLevel || competition.level) {
+        parts.push(`Threat: ${competition.threatLevel || competition.level}`);
+      }
+      if (competition.notes || competition.strategy || competition.advantage) {
+        parts.push(String(competition.notes || competition.strategy || competition.advantage));
+      }
+      if (parts.length > 0) return parts.join(" • ");
+      return "Competitor monitoring active";
+    }
+    return "Competitor monitoring active";
   };
 
   const formatDate = (dateString: string | null | undefined): string => {
@@ -458,14 +508,10 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                           <span>Pricing & Commercials</span>
                         </div>
                         <p className="text-xs text-gray-600 leading-relaxed">
-                          {deal.pricing
-                            ? typeof deal.pricing === "object"
-                              ? JSON.stringify(deal.pricing)
-                              : String(deal.pricing)
-                            : `Total Contract Value: ${formatCurrency(deal.amount)}`}
+                          {formatPricingInfo(deal.pricing, deal.amount)}
                         </p>
                       </div>
-                      <span className="text-[10px] text-gray-400 mt-3 block">Verified BE-2 Contract Value</span>
+                      <span className="text-[10px] text-gray-400 mt-3 block">Verified Contract Value</span>
                     </div>
 
                     {/* Competition */}
@@ -476,11 +522,7 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                           <span>Competitive Intel</span>
                         </div>
                         <p className="text-xs text-gray-600 leading-relaxed">
-                          {deal.competition
-                            ? typeof deal.competition === "object"
-                              ? JSON.stringify(deal.competition)
-                              : String(deal.competition)
-                            : "No critical competitor threat flagged for this deal."}
+                          {formatCompetitionInfo(deal.competition)}
                         </p>
                       </div>
                       <span className="text-[10px] text-gray-400 mt-3 block">Risk-monitored</span>
@@ -602,19 +644,21 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
             </h3>
 
             <div className="space-y-4 text-xs">
-              <div className="p-3 bg-gray-50 rounded-xl">
-                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-0.5">
-                  Internal Deal ID
-                </span>
-                <span className="font-mono text-gray-700 font-semibold break-all">{deal.dealId}</span>
-              </div>
-
               {deal.leadId && (
                 <div className="p-3 bg-blue-50/60 border border-blue-100 rounded-xl">
                   <span className="text-[10px] font-bold text-blue-400 uppercase tracking-wider block mb-0.5">
                     Converted from Lead
                   </span>
-                  <span className="font-mono text-blue-700 font-semibold">{deal.leadId}</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-blue-900">Converted Lead</span>
+                    <Link
+                      href={`/leads/${deal.leadId}`}
+                      className="text-[11px] font-bold text-blue-600 hover:text-blue-800 hover:underline inline-flex items-center gap-1"
+                    >
+                      View Original Lead
+                      <ArrowRight size={11} />
+                    </Link>
+                  </div>
                 </div>
               )}
 
@@ -629,8 +673,8 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
               </div>
 
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
-                <span className="text-gray-400 font-medium">Pipeline ID</span>
-                <span className="font-mono text-gray-700">{deal.pipelineId || "Default"}</span>
+                <span className="text-gray-400 font-medium">Pipeline</span>
+                <span className="font-semibold text-gray-700">{(deal as any).pipelineName || "Sales Pipeline"}</span>
               </div>
 
               <div className="flex justify-between items-center py-2 border-b border-gray-50">
@@ -743,7 +787,7 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Currency Snapshot
+                    Deal Currency
                   </label>
                   <select
                     value={editForm.currency}

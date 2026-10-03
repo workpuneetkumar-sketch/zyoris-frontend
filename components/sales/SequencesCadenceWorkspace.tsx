@@ -1318,7 +1318,7 @@ export const SequencesCadenceWorkspace: React.FC<SequencesCadenceWorkspaceProps>
                       className="sales-input"
                       value={enrollEntityId}
                       onChange={(e) => setEnrollEntityId(e.target.value)}
-                      placeholder={`Enter ${enrollEntityType.toLowerCase()} UUID...`}
+                      placeholder={`Enter ${enrollEntityType.toLowerCase()} identifier...`}
                       required
                     />
                   )}

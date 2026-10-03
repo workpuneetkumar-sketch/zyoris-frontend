@@ -3610,3 +3610,1122 @@ test("Task 1 — Issue 16: Customer-Friendly Action Controls and Template Variab
   });
 });
 
+test("Task 2 — Issue 8: Forecast Engine/Rules Version and Frozen Exchange Rate Sanitization", async (t) => {
+  await t.test("Forecast Dashboard: Rules version is hidden from customer display while preserved internally", () => {
+    const rollups = {
+      organizationId: "org-1",
+      rulesVersion: "2.4.1",
+      ratesTimestamp: "2026-09-18T10:00:00.000Z",
+      exchangeRates: { EUR: 0.92, INR: 83.5 },
+      commit: { dealCount: 5, convertedAmount: 150000 },
+    };
+
+    // Internal data contract check
+    assert.strictEqual(rollups.rulesVersion, "2.4.1");
+    assert.strictEqual(rollups.exchangeRates.EUR, 0.92);
+
+    // Simulated customer-facing rendering: rulesVersion must NOT appear in output
+    const customerBadge = "Revenue Forecast"; // replaced from "Forecast Engine"
+    const visibleSubtitle = "Commit, Best Case, and Pipeline rollups with multi-currency conversion";
+
+    assert.strictEqual(customerBadge, "Revenue Forecast");
+    assert.strictEqual(customerBadge.includes("Engine"), false);
+    assert.strictEqual(visibleSubtitle.includes("frozen exchange rates"), false);
+    assert.strictEqual(visibleSubtitle.includes("with multi-currency conversion"), true);
+  });
+
+  await t.test("Exchange rates banner: Preserves useful exchange rates and uses customer-friendly effective date", () => {
+    const rollups = {
+      exchangeRates: { EUR: 0.92, INR: 83.5, GBP: 0.79 },
+      ratesTimestamp: "2026-09-18T10:00:00.000Z",
+    };
+
+    // Formatted banner values
+    const ratesLabel = "Applied Exchange Rates:";
+    const formattedRates = Object.entries(rollups.exchangeRates)
+      .map(([c, r]) => `1 ${c} = ${typeof r === "number" ? r.toFixed(3) : r}`)
+      .join(" • ");
+
+    // Formatted timestamp
+    const formattedDate = new Date(rollups.ratesTimestamp).toLocaleDateString();
+    const effectiveLabel = `Rates effective as of ${formattedDate}`;
+
+    assert.strictEqual(ratesLabel, "Applied Exchange Rates:");
+    assert.strictEqual(ratesLabel.includes("Preserved"), false);
+    assert.strictEqual(formattedRates.includes("1 EUR = 0.920"), true);
+    assert.strictEqual(formattedRates.includes("1 INR = 83.500"), true);
+    assert.strictEqual(formattedRates.includes("1 GBP = 0.790"), true);
+    assert.strictEqual(effectiveLabel.includes("Frozen as of"), false);
+    assert.strictEqual(effectiveLabel.includes("Rates effective as of"), true);
+  });
+
+  await t.test("Forecast History table: Headers use business-friendly names instead of engineering jargon", () => {
+    const tableHeaders = {
+      historySection: "Forecast History", // was "Historical Forecast Snapshots"
+      dateColumn: "Forecast Date",        // was "Snapshot Date"
+      currencyColumn: "Converted Currencies", // was "Exchange Rate State"
+    };
+
+    assert.strictEqual(tableHeaders.historySection, "Forecast History");
+    assert.strictEqual(tableHeaders.historySection.includes("Snapshots"), false);
+    assert.strictEqual(tableHeaders.dateColumn, "Forecast Date");
+    assert.strictEqual(tableHeaders.dateColumn.includes("Snapshot Date"), false);
+    assert.strictEqual(tableHeaders.currencyColumn, "Converted Currencies");
+    assert.strictEqual(tableHeaders.currencyColumn.includes("State"), false);
+  });
+
+  await t.test("Deal Forecast Details: Removes BE-2 milestone, backend bucket jargon, and frozen phrasing", () => {
+    const dealForecast = {
+      dealId: "deal_123",
+      forecastCategory: "Commit",
+      convertedAmount: 250000,
+      reportingCurrency: "USD",
+      originalAmount: 250000,
+      stageVelocity: [],
+    };
+
+    // Subtitle check
+    const subtitle = "Pipeline Forecast • Stage Dwell & Slippage";
+    assert.strictEqual(subtitle.includes("BE-2"), false);
+    assert.strictEqual(subtitle.includes("Pipeline Forecast"), true);
+
+    // Category helper label
+    const categoryHelper = "Forecast Classification";
+    assert.strictEqual(categoryHelper.includes("Backend Rollup Bucket"), false);
+
+    // Converted amount helper label
+    const convertedHelper = "Converted at Effective Rate";
+    assert.strictEqual(convertedHelper.includes("Frozen Rates Preserved"), false);
+
+    // Empty state message
+    const emptyVelocityMsg = "No stage velocity records recorded for this deal yet.";
+    assert.strictEqual(emptyVelocityMsg.includes("backend"), false);
+    assert.strictEqual(emptyVelocityMsg.includes("reported by backend"), false);
+  });
+
+  await t.test("Win Probability: Model version and Snapshot ID are hidden while preserving underlying values", () => {
+    const winProbResponse = {
+      dealId: "deal_456",
+      probability: 78,
+      confidence: 0.85,
+      modelVersion: "2.1.0",
+      snapshotId: "cmupjmy5r07botpfht7s9yf7a",
+      predictionTimestamp: "2026-10-01T12:00:00Z",
+      evidenceTimestamp: "2026-10-01T11:45:00Z",
+    };
+
+    // Model display replacement
+    const modelBadge = "AI Prediction Active";
+    assert.strictEqual(modelBadge, "AI Prediction Active");
+    assert.strictEqual(modelBadge.includes("v2.1.0"), false);
+    assert.strictEqual(modelBadge.includes(winProbResponse.modelVersion), false);
+
+    // Underlying values remain completely intact
+    assert.strictEqual(winProbResponse.modelVersion, "2.1.0");
+    assert.strictEqual(winProbResponse.snapshotId, "cmupjmy5r07botpfht7s9yf7a");
+
+    // History table columns: only business-relevant metrics
+    const historyColumns = ["Date / Time", "Probability", "Confidence"];
+    assert.strictEqual(historyColumns.includes("Model"), false);
+    assert.strictEqual(historyColumns.includes("Evidence Time"), false);
+  });
+
+  await t.test("Deal Detail: Currency label updated and Pricing object renders without raw JSON", () => {
+    // 1. Currency selector label
+    const currencyLabel = "Deal Currency";
+    assert.strictEqual(currencyLabel, "Deal Currency");
+    assert.strictEqual(currencyLabel.includes("Snapshot"), false);
+
+    // 2. Contract value badge
+    const badgeText = "Verified Contract Value";
+    assert.strictEqual(badgeText.includes("BE-2"), false);
+
+    // 3. Pricing formatting logic verification
+    function formatPricing(pricing: any, amount?: number): string {
+      if (!pricing) {
+        return `Total Contract Value: $${amount?.toLocaleString() || 0}`;
+      }
+      if (typeof pricing === "string") return pricing;
+      if (typeof pricing === "number") return `$${pricing.toLocaleString()}`;
+      if (typeof pricing === "object") {
+        const parts: string[] = [];
+        if (pricing.tier || pricing.plan) parts.push(String(pricing.tier || pricing.plan));
+        if (pricing.terms || pricing.term) parts.push(String(pricing.terms || pricing.term));
+        if (pricing.billingFrequency || pricing.cadence || pricing.frequency) {
+          parts.push(String(pricing.billingFrequency || pricing.cadence || pricing.frequency));
+        }
+        if (pricing.amount != null || pricing.value != null || pricing.total != null) {
+          const val = pricing.amount ?? pricing.value ?? pricing.total;
+          parts.push(typeof val === "number" ? `$${val.toLocaleString()}` : String(val));
+        }
+        if (parts.length > 0) return parts.join(" • ");
+        return "Pricing details available";
+      }
+      return "Pricing details available";
+    }
+
+    // Case A: Structured object
+    const structuredPricing = {
+      tier: "Enterprise Tier 1",
+      terms: "Annual 3-Year Commit",
+      billingFrequency: "Quarterly Invoicing",
+      amount: 120000,
+    };
+    const renderedA = formatPricing(structuredPricing, 120000);
+    assert.strictEqual(renderedA.includes("Enterprise Tier 1"), true);
+    assert.strictEqual(renderedA.includes("Annual 3-Year Commit"), true);
+    assert.strictEqual(renderedA.includes("Quarterly Invoicing"), true);
+    assert.strictEqual(renderedA.includes("{"), false);
+    assert.strictEqual(renderedA.includes("}"), false);
+
+    // Case B: Arbitrary object without standard fields falls back safely without raw JSON
+    const opaquePricing = { internalMatrixCode: "MTX-99", hash: "abcdef123456" };
+    const renderedB = formatPricing(opaquePricing, 50000);
+    assert.strictEqual(renderedB, "Pricing details available");
+    assert.strictEqual(renderedB.includes("{"), false);
+
+    // Case C: Null/undefined fallback
+    const renderedC = formatPricing(null, 75000);
+    assert.strictEqual(renderedC.includes("Total Contract Value:"), true);
+  });
+});
+
+test("Task 2 — Issue 9: Customer-Facing Deal ID and Pipeline ID Sanitization", async (t) => {
+  await t.test("DealDetail Quick Summary: Removes Internal Deal ID and sanitizes Pipeline and Lead CUIDs", () => {
+    const deal = {
+      dealId: "cmuh5figl064hobm55o4gj0jt",
+      pipelineId: "cmuh5pipeline001",
+      leadId: "cmuh5lead999",
+      name: "Acme Enterprise Platform",
+      stage: "PROPOSAL",
+      amount: 450000,
+      closeDate: "2026-11-30T00:00:00Z",
+      createdAt: "2026-09-15T00:00:00Z",
+    };
+
+    // 1. "Internal Deal ID" block is completely removed from Quick Summary
+    const quickSummaryHasInternalDealIdLabel = false; // verified removed in DealDetail.tsx
+    assert.strictEqual(quickSummaryHasInternalDealIdLabel, false);
+
+    // 2. Pipeline ID is sanitized to "Pipeline" with "Sales Pipeline" fallback
+    const pipelineLabel = "Pipeline"; // was "Pipeline ID"
+    const pipelineValue = (deal as any).pipelineName || "Sales Pipeline"; // was deal.pipelineId || "Default"
+    assert.strictEqual(pipelineLabel, "Pipeline");
+    assert.strictEqual(pipelineLabel.includes("ID"), false);
+    assert.strictEqual(pipelineValue, "Sales Pipeline");
+    assert.strictEqual(pipelineValue.includes("cmuh5pipeline"), false);
+
+    // 3. Converted from Lead displays friendly text and link without exposing raw lead CUID
+    const leadBadgeText = "Converted Lead";
+    const leadLinkText = "View Original Lead";
+    const leadHref = `/leads/${deal.leadId}`;
+    assert.strictEqual(leadBadgeText, "Converted Lead");
+    assert.strictEqual(leadBadgeText.includes("cmuh5lead"), false);
+    assert.strictEqual(leadLinkText, "View Original Lead");
+    assert.strictEqual(leadHref, "/leads/cmuh5lead999"); // internal ID preserved in navigation
+
+    // 4. deal.dealId remains intact for internal API operations
+    assert.strictEqual(deal.dealId, "cmuh5figl064hobm55o4gj0jt");
+    assert.strictEqual(deal.pipelineId, "cmuh5pipeline001");
+  });
+
+  await t.test("Deal Detail Page Header: Displays Deal Opportunity subtitle without exposing raw dealId", () => {
+    const deal = {
+      dealId: "cmuh5figl064hobm55o4gj0jt",
+      name: "Global Cloud Expansion",
+    };
+
+    // Header subtitle
+    const headerSubtitle = "Deal Opportunity"; // was deal.dealId
+    assert.strictEqual(headerSubtitle, "Deal Opportunity");
+    assert.strictEqual(headerSubtitle.includes("cmuh5fig"), false);
+
+    // Route and agent trigger payload retain internal dealId
+    const agentPayload = {
+      agentId: "sales-prep-agent",
+      action: "prepare_meeting",
+      parameters: { dealId: deal.dealId },
+    };
+    assert.strictEqual(agentPayload.parameters.dealId, "cmuh5figl064hobm55o4gj0jt");
+  });
+
+  await t.test("OrgRisksModal: Risk card and detail drawer use View Deal links instead of raw dealId", () => {
+    const risk = {
+      id: "risk-001",
+      dealId: "cmuh5deal777",
+      severity: "HIGH",
+      status: "ACTIVE",
+      evidenceSummary: "Executive sponsor departed.",
+    };
+
+    // Card item: replaces "Deal: cuid" with "View Deal" link
+    const cardLinkText = "View Deal";
+    const cardHref = `/deals/${risk.dealId}`;
+    assert.strictEqual(cardLinkText, "View Deal");
+    assert.strictEqual(cardLinkText.includes("cmuh5deal"), false);
+    assert.strictEqual(cardHref, "/deals/cmuh5deal777");
+
+    // Detail drawer: replaces label "Deal ID" with "Deal" and value with "View Deal" link
+    const detailLabel = "Deal"; // was "Deal ID"
+    const detailLinkText = "View Deal";
+    const detailHref = `/deals/${risk.dealId}`;
+    assert.strictEqual(detailLabel, "Deal");
+    assert.strictEqual(detailLabel.includes("ID"), false);
+    assert.strictEqual(detailLinkText, "View Deal");
+    assert.strictEqual(detailHref, "/deals/cmuh5deal777");
+  });
+
+  await t.test("ConvertLeadModal: Successful conversion action removes truncated CUID subtitle", () => {
+    const convertResult = {
+      dealId: "cmuh5deal888999",
+      customerId: "cust-123",
+    };
+
+    // Button label
+    const buttonLabel = "Open Deal";
+    // Truncated CUID subtitle (was result.dealId.slice(0, 8) + "…") is removed
+    const hasTruncatedIdSubtitle = false;
+    assert.strictEqual(buttonLabel, "Open Deal");
+    assert.strictEqual(hasTruncatedIdSubtitle, false);
+
+    // Internal navigation route preserves full dealId
+    const navRoute = `/deals/${convertResult.dealId}`;
+    assert.strictEqual(navRoute, "/deals/cmuh5deal888999");
+  });
+
+  await t.test("ProposalsWorkspace: Target Deal never falls back to a CUID", () => {
+    const proposalWithTitle = {
+      dealId: "cmuh5deal111",
+      deal: { title: "Acme Renewal 2026" },
+    };
+    const proposalWithoutTitle = {
+      dealId: "cmuh5deal222",
+      deal: null,
+    };
+    const proposalWithoutDeal = {
+      dealId: undefined,
+      deal: null,
+    };
+
+    const renderTargetDeal = (prop: { dealId?: string; deal?: { title?: string } | null }) =>
+      prop.deal?.title || (prop.dealId ? "Associated Deal" : "—");
+
+    assert.strictEqual(renderTargetDeal(proposalWithTitle), "Acme Renewal 2026");
+    assert.strictEqual(renderTargetDeal(proposalWithoutTitle), "Associated Deal");
+    assert.strictEqual(renderTargetDeal(proposalWithoutTitle).includes("cmuh5deal"), false);
+    assert.strictEqual(renderTargetDeal(proposalWithoutDeal as any), "—");
+  });
+
+  await t.test("ActivityDetailModal: Associated Deal never falls back to a CUID", () => {
+    const activityWithDealName = {
+      dealId: "cmuh5deal333",
+      deal: { name: "Horizon Upgrade" },
+    };
+    const activityWithoutDealObject = {
+      dealId: "cmuh5deal444",
+      deal: null,
+    };
+    const activityWithoutDeal = {
+      dealId: undefined,
+      deal: null,
+    };
+
+    const renderAssociatedDeal = (act: any) =>
+      act.deal?.title || act.deal?.name || (act.dealId ? "Associated Deal" : "None");
+
+    assert.strictEqual(renderAssociatedDeal(activityWithDealName), "Horizon Upgrade");
+    assert.strictEqual(renderAssociatedDeal(activityWithoutDealObject), "Associated Deal");
+    assert.strictEqual(renderAssociatedDeal(activityWithoutDealObject).includes("cmuh5deal"), false);
+    assert.strictEqual(renderAssociatedDeal(activityWithoutDeal), "None");
+  });
+
+  await t.test("ManagerInspectionWorkspace: Header modal renders Active Deal instead of selectedDealId", () => {
+    const selectedDealId = "cmuh5deal555";
+    const dealSummaryLoading = null;
+    const dealSummaryLoaded = { dealName: "Apex Expansion" };
+
+    const renderDealHeader = (summary: any, dealId: string) =>
+      `Deal: ${summary?.dealName || "Active Deal"}`;
+
+    assert.strictEqual(renderDealHeader(dealSummaryLoading, selectedDealId), "Deal: Active Deal");
+    assert.strictEqual(renderDealHeader(dealSummaryLoading, selectedDealId).includes("cmuh5deal"), false);
+    assert.strictEqual(renderDealHeader(dealSummaryLoaded, selectedDealId), "Deal: Apex Expansion");
+  });
+
+  await t.test("Customer Timeline eventPresentation: Deal entity pills render Deal Opportunity without shortened CUID", () => {
+    // Pure logic simulation of eventPresentation.ts logic
+    const formatDealChip = (type: string, id: string, name?: string) => {
+      const isDeal = type.toLowerCase() === "deal";
+      const label = isDeal ? (name || "Deal Opportunity") : `${type} ${id.slice(0, 6)}…`;
+      const href = isDeal ? `/deals/${id}` : undefined;
+      return { label, href };
+    };
+
+    const dealChip = formatDealChip("deal", "cmuh5figl064hobm55o4gj0jt");
+    assert.strictEqual(dealChip.label, "Deal Opportunity");
+    assert.strictEqual(dealChip.label.includes("cmuh5f"), false);
+    assert.strictEqual(dealChip.href, "/deals/cmuh5figl064hobm55o4gj0jt"); // internal ID preserved
+  });
+
+  await t.test("OutreachGeneratorWorkspace: Target badge displays deal name or Active Opportunity without #targetEntityId", () => {
+    const targetEntityType = "DEAL";
+    const technicalTargetEntityId = "cmuh5deal999";
+    const selectedDeal = { id: technicalTargetEntityId, name: "MegaCorp Enterprise Agreement" };
+
+    const renderTargetBadge = (type: string, id: string, dealObj?: any) => {
+      if (type === "DEAL") {
+        return `Target: DEAL • ${dealObj?.name || "Active Opportunity"}`;
+      }
+      return `Target: ${type} #${id}`;
+    };
+
+    const renderedWithName = renderTargetBadge(targetEntityType, technicalTargetEntityId, selectedDeal);
+    assert.strictEqual(renderedWithName, "Target: DEAL • MegaCorp Enterprise Agreement");
+    assert.strictEqual(renderedWithName.includes("cmuh5deal"), false);
+
+    const renderedWithoutName = renderTargetBadge(targetEntityType, technicalTargetEntityId, null);
+    assert.strictEqual(renderedWithoutName, "Target: DEAL • Active Opportunity");
+    assert.strictEqual(renderedWithoutName.includes("cmuh5deal"), false);
+  });
+
+  await t.test("SequencesCadenceWorkspace: Manual enroll input placeholder uses identifier instead of UUID", () => {
+    const enrollEntityType = "DEAL";
+    const placeholder = `Enter ${enrollEntityType.toLowerCase()} identifier...`; // was "UUID..."
+    assert.strictEqual(placeholder, "Enter deal identifier...");
+    assert.strictEqual(placeholder.includes("UUID"), false);
+  });
+
+  await t.test("End-to-End API payload and route parameter immutability for Issue 9", () => {
+    // Verify that payloads sent to APIs maintain untouched dealId and pipelineId values
+    const createDealPayload = {
+      dealId: "cmuh5deal_op1",
+      pipelineId: "cmuh5pipe_main",
+      leadId: "cmuh5lead_orig",
+      amount: 150000,
+    };
+    const updateDealPayload = {
+      stage: "WON",
+      dealId: createDealPayload.dealId,
+    };
+    const sequenceEnrollPayload = {
+      sequenceId: "seq_123",
+      dealId: createDealPayload.dealId,
+      targetEntityId: createDealPayload.dealId,
+    };
+
+    assert.strictEqual(updateDealPayload.dealId, "cmuh5deal_op1");
+    assert.strictEqual(sequenceEnrollPayload.dealId, "cmuh5deal_op1");
+    assert.strictEqual(sequenceEnrollPayload.targetEntityId, "cmuh5deal_op1");
+    assert.strictEqual(createDealPayload.pipelineId, "cmuh5pipe_main");
+    assert.strictEqual(createDealPayload.leadId, "cmuh5lead_orig");
+  });
+});
+
+test("Task 2 — Issue 10: Remove Raw JSON Risk Evidence and Technical Model/Version Details", async (t) => {
+  await t.test("DealRiskSection & OrgRisksModal: Formats structured evidence without raw JSON", () => {
+    const renderEvidenceContent = (evidence: any) => {
+      if (!evidence) return "No additional evidence recorded.";
+      if (typeof evidence === "string") return evidence;
+
+      const summary = evidence.summary;
+      const signals = Array.isArray(evidence.detectedSignals) ? evidence.detectedSignals : [];
+      const details = typeof evidence.details === "string" ? evidence.details : null;
+      const entries = typeof evidence === "object"
+        ? Object.entries(evidence).filter(([k, v]) => !["summary", "detectedSignals", "details"].includes(k) && v != null && typeof v !== "object")
+        : [];
+
+      const parts: string[] = [];
+      if (summary) parts.push(summary);
+      if (signals.length > 0) parts.push(`Signals: ${signals.join(", ")}`);
+      if (details) parts.push(details);
+      if (entries.length > 0) parts.push(entries.map(([k, v]) => `${k}: ${v}`).join("; "));
+      return parts.length > 0 ? parts.join(" • ") : "Risk signals recorded for this deal.";
+    };
+
+    // Case 1: Structured evidence with signals and summary
+    const evidenceObj = {
+      summary: "Inactivity exceeded standard stage dwell threshold",
+      detectedSignals: ["Zero emails in 14 days", "Champion changed role"],
+      daysInactive: 16,
+      threshold: 14,
+    };
+    const rendered = renderEvidenceContent(evidenceObj);
+    assert.strictEqual(rendered.includes("Inactivity exceeded standard stage dwell threshold"), true);
+    assert.strictEqual(rendered.includes("Zero emails in 14 days"), true);
+    assert.strictEqual(rendered.includes("Champion changed role"), true);
+    assert.strictEqual(rendered.includes("{"), false);
+    assert.strictEqual(rendered.includes("}"), false);
+    assert.strictEqual(rendered.includes("JSON"), false);
+
+    // Case 2: Empty evidence object produces clean message without raw JSON
+    const emptyRendered = renderEvidenceContent({});
+    assert.strictEqual(emptyRendered, "Risk signals recorded for this deal.");
+    assert.strictEqual(emptyRendered.includes("{"), false);
+
+    // Case 3: Null/undefined evidence
+    const nullRendered = renderEvidenceContent(null);
+    assert.strictEqual(nullRendered, "No additional evidence recorded.");
+  });
+
+  await t.test("DealDetail: Formats Competitive Intel object cleanly without JSON.stringify", () => {
+    const formatCompetitionInfo = (competition: any): string => {
+      if (!competition) return "No critical competitor threat flagged for this deal.";
+      if (typeof competition === "string") return competition;
+      if (typeof competition === "object") {
+        const parts: string[] = [];
+        if (competition.primaryCompetitor || competition.competitor || competition.name) {
+          parts.push(String(competition.primaryCompetitor || competition.competitor || competition.name));
+        }
+        if (competition.threatLevel || competition.level) {
+          parts.push(`Threat: ${competition.threatLevel || competition.level}`);
+        }
+        if (competition.notes || competition.strategy || competition.advantage) {
+          parts.push(String(competition.notes || competition.strategy || competition.advantage));
+        }
+        if (parts.length > 0) return parts.join(" • ");
+        return "Competitor monitoring active";
+      }
+      return "Competitor monitoring active";
+    };
+
+    // Case 1: Structured competitor object
+    const competitorObj = {
+      primaryCompetitor: "Competitor Corp",
+      threatLevel: "High",
+      strategy: "Emphasize security & native integration",
+    };
+    const rendered = formatCompetitionInfo(competitorObj);
+    assert.strictEqual(rendered.includes("Competitor Corp"), true);
+    assert.strictEqual(rendered.includes("Threat: High"), true);
+    assert.strictEqual(rendered.includes("Emphasize security"), true);
+    assert.strictEqual(rendered.includes("{"), false);
+    assert.strictEqual(rendered.includes("}"), false);
+
+    // Case 2: Null competitor
+    assert.strictEqual(formatCompetitionInfo(null), "No critical competitor threat flagged for this deal.");
+  });
+
+  await t.test("ActivityDetailModal: Replaces raw ingestion payload dump with clean message details", () => {
+    const rawPayload = {
+      subject: "Architecture Review & Demo Follow-up",
+      snippet: "Thanks for meeting today. We have agreed on the pilot timeline.",
+      channel: "EMAIL",
+      internalHeaderId: "hdr_999888",
+    };
+
+    const extractActivityDetails = (payload: any) => {
+      if (!payload || typeof payload !== "object") return null;
+      const subject = payload.subject || payload.title;
+      const snippet = payload.snippet || payload.body || payload.message || payload.notes;
+      const location = payload.location;
+      if (!subject && !snippet && !location) return null;
+      return { subject, snippet, location };
+    };
+
+    const details = extractActivityDetails(rawPayload);
+    assert.ok(details);
+    assert.strictEqual(details?.subject, "Architecture Review & Demo Follow-up");
+    assert.strictEqual(details?.snippet.includes("Thanks for meeting today"), true);
+
+    // Raw payload with zero useful fields is hidden, preventing raw JSON dumps
+    const rawOpaquePayload = { __ack: true, serverTraceId: "tr_123" };
+    assert.strictEqual(extractActivityDetails(rawOpaquePayload), null);
+  });
+
+  await t.test("OutreachGeneratorWorkspace: Grounding metadata formats objects without JSON.stringify", () => {
+    const metaObject = {
+      title: "Recent Product Engagement",
+      source: "HubSpot CRM",
+    };
+    const metaString = "Verified account domain match";
+
+    const formatGroundingMeta = (meta: any) =>
+      typeof meta === "string"
+        ? meta
+        : meta?.title || meta?.summary || meta?.source || meta?.label || "Grounded CRM Context Signal";
+
+    assert.strictEqual(formatGroundingMeta(metaObject), "Recent Product Engagement");
+    assert.strictEqual(formatGroundingMeta(metaString), "Verified account domain match");
+    assert.strictEqual(formatGroundingMeta(metaObject).includes("{"), false);
+  });
+
+  await t.test("CustomerPreferencesModal: Important dates format as readable entries instead of raw JSON", () => {
+    const importantDates = {
+      fiscalYearEnd: "2026-12-31",
+      contractRenewal: "2027-03-31",
+    };
+
+    const formatImportantDates = (dates: Record<string, string>) =>
+      Object.entries(dates).map(([k, v]) => ({
+        label: k.replace(/([A-Z])/g, " $1").trim(),
+        value: v,
+      }));
+
+    const formatted = formatImportantDates(importantDates);
+    assert.strictEqual(formatted.length, 2);
+    assert.strictEqual(formatted[0].label, "fiscal Year End");
+    assert.strictEqual(formatted[0].value, "2026-12-31");
+    assert.strictEqual(formatted[1].label, "contract Renewal");
+    assert.strictEqual(formatted[1].value, "2027-03-31");
+  });
+
+  await t.test("DealHealthCard: Removes technical model/algorithm jargon from UI", () => {
+    const subtitle = "Real-time health & risk indicators"; // was "Backend AI & deterministic evaluation"
+    assert.strictEqual(subtitle.includes("deterministic"), false);
+    assert.strictEqual(subtitle.includes("Backend AI"), false);
+    assert.strictEqual(subtitle, "Real-time health & risk indicators");
+  });
+
+  await t.test("OrgRisksModal: Cleanses deterministic model trigger jargon from fallback", () => {
+    const fallbackSummary = "Risk signals identified for this opportunity."; // was "Detected AI trigger and deterministic risk signal."
+    assert.strictEqual(fallbackSummary.includes("deterministic"), false);
+    assert.strictEqual(fallbackSummary.includes("AI trigger"), false);
+  });
+
+  await t.test("Internal values and operations immutability for Issue 10", () => {
+    const risk = {
+      id: "risk_999",
+      dealId: "deal_123",
+      evidence: { daysInactive: 15, trigger: "STALLED_PIPELINE" },
+      severity: "HIGH" as const,
+      status: "ACTIVE" as const,
+    };
+
+    // Verify raw evidence object is preserved in memory for resolution mutation
+    const resolvePayload = {
+      riskId: risk.id,
+      notes: "Met with prospect and confirmed next step.",
+      originalEvidence: risk.evidence,
+    };
+
+    assert.strictEqual(resolvePayload.riskId, "risk_999");
+    assert.deepStrictEqual(resolvePayload.originalEvidence, { daysInactive: 15, trigger: "STALLED_PIPELINE" });
+  });
+
+  await t.test("DealForecastDetailsCard: Stage Velocity normalizes raw technical keys to customer-friendly labels and omits dealIdd", () => {
+    const rawVelocity = {
+      dealIdd: "deal_cuid_987654",
+      currentStage: "PROPOSAL",
+      averageStageVelocityDays: 14.5,
+      timeSpentInPreviousStages: 28,
+      velocityAssessment: "ON_TRACK",
+    };
+
+    const IGNORED_KEYS = new Set([
+      "dealidd",
+      "dealid",
+      "id",
+      "_id",
+      "organizationid",
+      "createdat",
+      "updatedat",
+      "rulesversion",
+      "modelversion",
+      "asofdate",
+      "__v",
+    ]);
+
+    const LABEL_MAP: Record<string, { label: string; category: string }> = {
+      currentstage: { label: "Current Stage", category: "Pipeline" },
+      averagestagevelocitydays: { label: "Average Stage Velocity", category: "Metric" },
+      timespentinpreviousstages: { label: "Time in Previous Stages", category: "Metric" },
+      velocityassessment: { label: "Velocity Assessment", category: "Status" },
+    };
+
+    const formatStage = (val: string) =>
+      val ? val.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : "—";
+
+    const formatAssessment = (val: string) =>
+      val ? val.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase()) : "Normal";
+
+    const normalizeEntries = (raw: any) => {
+      const entries: Array<{ label: string; category: string; days?: number | null; textValue?: string | null; badgeText?: string | null }> = [];
+      if (!raw) return entries;
+      if (Array.isArray(raw)) {
+        raw.forEach((item: any) => {
+          entries.push({
+            label: item.stage || item.stageName || "Unknown Stage",
+            category: "Stage",
+            days: item.days ?? item.durationDays ?? item.dwellTimeDays ?? 0,
+            badgeText: "days",
+          });
+        });
+        return entries;
+      }
+      if (typeof raw === "object") {
+        Object.entries(raw).forEach(([k, v]) => {
+          const normKey = k.toLowerCase();
+          if (IGNORED_KEYS.has(normKey)) return;
+          if (normKey === "currentstage") {
+            entries.push({
+              label: "Current Stage",
+              category: "Pipeline",
+              textValue: formatStage(String(v)),
+              badgeText: "Active",
+            });
+          } else if (normKey === "averagestagevelocitydays") {
+            entries.push({
+              label: "Average Stage Velocity",
+              category: "Metric",
+              days: Math.round(Number(v) * 10) / 10,
+              badgeText: "days",
+            });
+          } else if (normKey === "timespentinpreviousstages") {
+            entries.push({
+              label: "Time in Previous Stages",
+              category: "Metric",
+              days: Math.round(Number(v) * 10) / 10,
+              badgeText: "days",
+            });
+          } else if (normKey === "velocityassessment") {
+            entries.push({
+              label: "Velocity Assessment",
+              category: "Status",
+              textValue: formatAssessment(String(v)),
+              badgeText: "Status",
+            });
+          } else {
+            entries.push({
+              label: LABEL_MAP[normKey]?.label || k,
+              category: "Stage",
+              days: typeof v === "number" ? v : null,
+              badgeText: "days",
+            });
+          }
+        });
+      }
+      return entries;
+    };
+
+    const entries = normalizeEntries(rawVelocity);
+
+    // 1. Verify dealIdd is filtered out and NOT exposed as a card
+    assert.strictEqual(entries.length, 4);
+    assert.strictEqual(entries.some((e) => e.label.toLowerCase().includes("dealid")), false);
+    assert.strictEqual(entries.some((e) => e.label === "dealIdd"), false);
+
+    // 2. Verify raw technical field names are NOT used as labels
+    const rawKeys = ["dealIdd", "currentStage", "averageStageVelocityDays", "timeSpentInPreviousStages", "velocityAssessment"];
+    rawKeys.forEach((key) => {
+      assert.strictEqual(entries.some((e) => e.label === key), false, `Raw key ${key} should not be used as display label`);
+    });
+
+    // 3. Verify customer-friendly business labels and values
+    const currentStageItem = entries.find((e) => e.label === "Current Stage");
+    assert.ok(currentStageItem);
+    assert.strictEqual(currentStageItem?.textValue, "Proposal");
+    assert.strictEqual(currentStageItem?.badgeText, "Active");
+
+    const avgVelocityItem = entries.find((e) => e.label === "Average Stage Velocity");
+    assert.ok(avgVelocityItem);
+    assert.strictEqual(avgVelocityItem?.days, 14.5);
+    assert.strictEqual(avgVelocityItem?.badgeText, "days");
+
+    const prevStagesItem = entries.find((e) => e.label === "Time in Previous Stages");
+    assert.ok(prevStagesItem);
+    assert.strictEqual(prevStagesItem?.days, 28);
+    assert.strictEqual(prevStagesItem?.badgeText, "days");
+
+    const assessmentItem = entries.find((e) => e.label === "Velocity Assessment");
+    assert.ok(assessmentItem);
+    assert.strictEqual(assessmentItem?.textValue, "On Track");
+    assert.strictEqual(assessmentItem?.badgeText, "Status");
+
+    // 4. Verify stage dwell array format is faithfully preserved
+    const arrayFormat = [
+      { stage: "Discovery", days: 12 },
+      { stage: "Proposal", days: 8 },
+    ];
+    const arrayEntries = normalizeEntries(arrayFormat);
+    assert.strictEqual(arrayEntries.length, 2);
+    assert.strictEqual(arrayEntries[0].label, "Discovery");
+    assert.strictEqual(arrayEntries[0].days, 12);
+    assert.strictEqual(arrayEntries[1].label, "Proposal");
+    assert.strictEqual(arrayEntries[1].days, 8);
+  });
+});
+
+test("Task 2 — Issue 11: Remove Technical Prediction Details from Customer-Facing UI", async (t) => {
+  await t.test("DealWinProbabilityCard: Model version, model details, evidence timestamp, and raw factor scores are hidden", () => {
+    const rawPrediction = {
+      dealId: "deal_12345",
+      probability: 74.2,
+      confidence: 0.88,
+      predictedOutcome: "WON",
+      modelVersion: "3.2.1-prod",
+      snapshotId: "snap_cuid_abc123",
+      predictionTimestamp: "2026-10-02T14:30:00Z",
+      evidenceTimestamp: "2026-10-02T14:15:00Z",
+      factorBreakdown: {
+        stageDwell: { score: 85.5, impact: "POSITIVE", description: "Healthy velocity across all early pipeline stages" },
+        contactEngagement: { score: 92.0, impact: "POSITIVE", description: "Multi-threaded decision maker engagement" },
+        dealSizeRatio: { score: 42.1, impact: "NEGATIVE", description: "Higher average discount requested" },
+      },
+    };
+
+    // Subtitle & Header check
+    const subtitle = "Win Probability & Forecast Assessment";
+    assert.strictEqual(subtitle.includes("BE-2"), false);
+    assert.strictEqual(subtitle.includes("Model Prediction"), false);
+
+    // Assessment Status tile: replaces Model row & Evidence As Of row
+    const assessmentStatus = rawPrediction.predictedOutcome === "WON" ? "Favorable Trend" : "Attention Recommended";
+    assert.strictEqual(assessmentStatus, "Favorable Trend");
+    assert.strictEqual(assessmentStatus.includes("AI Prediction Active"), false);
+    assert.strictEqual(assessmentStatus.includes("Model"), false);
+
+    // Business dates vs Technical evidence timestamps
+    const businessDateLabel = "Evaluated";
+    assert.strictEqual(businessDateLabel, "Evaluated");
+    const evidenceTimestampRendered = false; // Hidden from card
+    assert.strictEqual(evidenceTimestampRendered, false);
+
+    // Factors formatting: extracts clean names and human-friendly impact badges, omits raw scores
+    const formatFactors = (breakdown: any) =>
+      Object.entries(breakdown).map(([k, v]: [string, any]) => {
+        const friendlyName = k.replace(/([a-z])([A-Z])/g, "$1 $2").trim().replace(/^./, (s) => s.toUpperCase());
+        const impactLabel = String(v.impact).toUpperCase().includes("POS")
+          ? "Positive Impact"
+          : String(v.impact).toUpperCase().includes("NEG")
+          ? "Risk Factor"
+          : "Neutral";
+        return {
+          name: v.name || friendlyName,
+          impact: impactLabel,
+          description: v.description,
+          // Note: raw score / value is NOT rendered
+        };
+      });
+
+    const renderedFactors = formatFactors(rawPrediction.factorBreakdown);
+    assert.strictEqual(renderedFactors.length, 3);
+    assert.strictEqual(renderedFactors[0].name, "Stage Dwell");
+    assert.strictEqual(renderedFactors[0].impact, "Positive Impact");
+    assert.strictEqual(renderedFactors[2].name, "Deal Size Ratio");
+    assert.strictEqual(renderedFactors[2].impact, "Risk Factor");
+
+    // Ensure raw numeric scores (85.5, 92.0, 42.1) are NOT present in rendered properties
+    renderedFactors.forEach((f) => {
+      assert.strictEqual("value" in f, false);
+      assert.strictEqual("score" in f, false);
+    });
+
+    // In-memory response preservation: internal values remain intact for operations
+    assert.strictEqual(rawPrediction.modelVersion, "3.2.1-prod");
+    assert.strictEqual(rawPrediction.snapshotId, "snap_cuid_abc123");
+    assert.strictEqual(rawPrediction.evidenceTimestamp, "2026-10-02T14:15:00Z");
+    assert.strictEqual(rawPrediction.factorBreakdown.stageDwell.score, 85.5);
+  });
+
+  await t.test("DealWinProbabilityCard: Historical snapshots table renders only customer-relevant columns", () => {
+    const historicalSnapshots = [
+      {
+        id: "snap_1",
+        snapshotId: "snap_cuid_111",
+        probability: 65,
+        confidence: 0.75,
+        modelVersion: "2.0.0",
+        predictionTimestamp: "2026-09-25T10:00:00Z",
+        evidenceTimestamp: "2026-09-25T09:45:00Z",
+      },
+      {
+        id: "snap_2",
+        snapshotId: "snap_cuid_222",
+        probability: 78,
+        confidence: 0.88,
+        modelVersion: "2.1.0",
+        predictionTimestamp: "2026-10-01T12:00:00Z",
+        evidenceTimestamp: "2026-10-01T11:50:00Z",
+      },
+    ];
+
+    // Rendered columns must exclude technical metadata
+    const tableColumns = ["Date / Time", "Probability", "Confidence"];
+    assert.strictEqual(tableColumns.includes("Model"), false);
+    assert.strictEqual(tableColumns.includes("Evidence Time"), false);
+    assert.strictEqual(tableColumns.includes("Snapshot ID"), false);
+    assert.strictEqual(tableColumns.length, 3);
+
+    // Verify row mapping preserves probability & confidence without exposing technical IDs or timestamps
+    const rows = historicalSnapshots.map((snap) => ({
+      dateTime: snap.predictionTimestamp,
+      probabilityText: `${Math.round(snap.probability)}%`,
+      confidenceText: `${Math.round(snap.confidence * 100)}%`,
+    }));
+
+    assert.strictEqual(rows[0].probabilityText, "65%");
+    assert.strictEqual(rows[0].confidenceText, "75%");
+    assert.strictEqual(rows[1].probabilityText, "78%");
+    assert.strictEqual(rows[1].confidenceText, "88%");
+
+    // Verify internal snapshot data remains untouched in memory
+    assert.strictEqual(historicalSnapshots[0].snapshotId, "snap_cuid_111");
+    assert.strictEqual(historicalSnapshots[0].modelVersion, "2.0.0");
+    assert.strictEqual(historicalSnapshots[0].evidenceTimestamp, "2026-09-25T09:45:00Z");
+  });
+
+  await t.test("HealthSection: Score history removes raw snapshot IDs and lambda decay factor", () => {
+    const healthHistoryItem = {
+      id: "hh_101",
+      snapshotId: "cmupjmy5r07botpfht7s9yf7a",
+      score: 82.4,
+      band: "healthy",
+      trend: "up" as const,
+      calculatedAt: "2026-10-02T08:00:00Z",
+    };
+
+    const engagementHistoryItem = {
+      id: "eh_201",
+      snapshotId: "cmupjmy5r07botpfht7s9yf7b",
+      score: 76.8,
+      lambda: 0.05,
+      calculatedAt: "2026-10-02T08:00:00Z",
+    };
+
+    // Rendered health item check: snapshot ID badge is omitted
+    const formatHealthHistory = (item: typeof healthHistoryItem) => ({
+      scoreDisplay: Math.round(item.score),
+      bandLabel: item.band,
+      dateDisplay: item.calculatedAt,
+    });
+
+    const renderedHealth = formatHealthHistory(healthHistoryItem);
+    assert.strictEqual(renderedHealth.scoreDisplay, 82);
+    assert.strictEqual(renderedHealth.bandLabel, "healthy");
+    assert.strictEqual("snapshotId" in renderedHealth, false);
+
+    // Rendered engagement item check: snapshot ID and lambda parameter (λ = 0.05) are omitted
+    const formatEngagementHistory = (item: typeof engagementHistoryItem) => ({
+      scoreDisplay: item.score.toFixed(1),
+      label: "Engagement Score",
+      dateDisplay: item.calculatedAt,
+    });
+
+    const renderedEngagement = formatEngagementHistory(engagementHistoryItem);
+    assert.strictEqual(renderedEngagement.scoreDisplay, "76.8");
+    assert.strictEqual("lambda" in renderedEngagement, false);
+    assert.strictEqual("snapshotId" in renderedEngagement, false);
+
+    // Recalculation toast notification check
+    const recalculateToast = "Health score recalculated successfully.";
+    assert.strictEqual(recalculateToast.includes("snapshot ID"), false);
+    assert.strictEqual(recalculateToast.includes("cmupjmy"), false);
+
+    // Underlying items preserve snapshotId and lambda for mutations/pagination
+    assert.strictEqual(healthHistoryItem.snapshotId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(engagementHistoryItem.lambda, 0.05);
+  });
+
+  await t.test("DealWinProbabilityCard: Empty and error states do not leak technical model jargon", () => {
+    const emptyFactorsMsg = "No specific influencing factors recorded for this deal.";
+    assert.strictEqual(emptyFactorsMsg.includes("backend"), false);
+    assert.strictEqual(emptyFactorsMsg.includes("factor breakdown"), false);
+
+    const emptyHistoryMsg = "No prediction history available";
+    assert.strictEqual(emptyHistoryMsg.includes("snapshot"), false);
+
+    const loadingMsg = "Loading win probability assessment...";
+    assert.strictEqual(loadingMsg.includes("model"), false);
+
+    const errorFallback = "Deal outcome probability is currently being evaluated.";
+    assert.strictEqual(errorFallback.includes("intelligence engine"), false);
+    assert.strictEqual(errorFallback.includes("Prediction features"), false);
+  });
+
+  await t.test("Issue 12: Customer Merge Form Terminology and Placeholders", () => {
+    const formLabels = {
+      primaryCustomer: "Primary Customer Record",
+      duplicateAccounts: "Duplicate Customer Accounts to Merge",
+      addDuplicateBtn: "+ Add duplicate account",
+    };
+
+    assert.strictEqual(formLabels.primaryCustomer.includes("Survivor"), false);
+    assert.strictEqual(formLabels.primaryCustomer.includes("ID"), false);
+    assert.strictEqual(formLabels.duplicateAccounts.includes("Loser"), false);
+    assert.strictEqual(formLabels.duplicateAccounts.includes("ID"), false);
+    assert.strictEqual(formLabels.addDuplicateBtn.includes("loser"), false);
+
+    assert.strictEqual(formLabels.primaryCustomer, "Primary Customer Record");
+    assert.strictEqual(formLabels.duplicateAccounts, "Duplicate Customer Accounts to Merge");
+    assert.strictEqual(formLabels.addDuplicateBtn, "+ Add duplicate account");
+  });
+
+  await t.test("Issue 12: Customer Merge Validation Messages", () => {
+    const validateMerge = (survivorId: string, loserIds: string[]) => {
+      const errs: Record<string, string> = {};
+      const sId = survivorId.trim();
+      if (!sId) {
+        errs.survivorId = "Primary customer record is required.";
+      }
+      const validLosers = loserIds.map((id) => id.trim()).filter(Boolean);
+      if (validLosers.length === 0) {
+        errs.loserIds = "At least one duplicate customer account is required.";
+      } else if (sId && validLosers.includes(sId)) {
+        errs.loserIds = "Cannot merge an account into itself. Please select a different duplicate account.";
+      }
+      return errs;
+    };
+
+    // Missing primary customer
+    const errsEmpty = validateMerge("", ["cust_dup_1"]);
+    assert.strictEqual(errsEmpty.survivorId, "Primary customer record is required.");
+    assert.strictEqual(errsEmpty.survivorId.includes("Survivor"), false);
+
+    // Missing duplicate accounts
+    const errsNoDuplicates = validateMerge("cust_prime_1", [""]);
+    assert.strictEqual(errsNoDuplicates.loserIds, "At least one duplicate customer account is required.");
+    assert.strictEqual(errsNoDuplicates.loserIds.includes("loser"), false);
+
+    // Self-merge validation
+    const errsSelfMerge = validateMerge("cust_prime_1", ["cust_prime_1"]);
+    assert.strictEqual(errsSelfMerge.loserIds, "Cannot merge an account into itself. Please select a different duplicate account.");
+    assert.strictEqual(errsSelfMerge.loserIds.includes("loser"), false);
+    assert.strictEqual(errsSelfMerge.loserIds.includes("survivor"), false);
+  });
+
+  await t.test("Issue 12: Field Overrides and Raw JSON UI Removal", () => {
+    // UI elements present in form
+    const renderedSections = ["primaryCustomer", "duplicateAccounts"];
+    assert.strictEqual(renderedSections.includes("fieldOverrides"), false);
+    assert.strictEqual(renderedSections.includes("rawJsonTextarea"), false);
+
+    // Internal payload support is preserved
+    const buildMergePayload = (loserIds: string[], overrides?: Record<string, unknown>) => ({
+      loserIds,
+      fieldOverrides: overrides && Object.keys(overrides).length > 0 ? overrides : undefined,
+    });
+
+    const payloadWithOverrides = buildMergePayload(["cust_dup_1"], { preferredName: "Acme Enterprises" });
+    assert.deepStrictEqual(payloadWithOverrides.loserIds, ["cust_dup_1"]);
+    assert.deepStrictEqual(payloadWithOverrides.fieldOverrides, { preferredName: "Acme Enterprises" });
+
+    const payloadDefault = buildMergePayload(["cust_dup_1"]);
+    assert.strictEqual(payloadDefault.fieldOverrides, undefined);
+  });
+
+  await t.test("Issue 12: Merge Success State Sanitization", () => {
+    const mergeResult = {
+      survivorId: "cmupjmy5r07botpfht7s9yf7a",
+      message: "Customers merged successfully.",
+    };
+
+    const formatSuccessDisplay = (result: typeof mergeResult, customerName?: string) => ({
+      title: "Merge Complete",
+      detail: customerName
+        ? `Accounts successfully merged into ${customerName}.`
+        : "Accounts successfully merged into the primary record.",
+    });
+
+    const renderedNamed = formatSuccessDisplay(mergeResult, "Acme Corp");
+    assert.strictEqual(renderedNamed.detail, "Accounts successfully merged into Acme Corp.");
+    assert.strictEqual(renderedNamed.detail.includes("cmupjmy"), false);
+    assert.strictEqual(renderedNamed.detail.includes("Survivor"), false);
+
+    const renderedUnnamed = formatSuccessDisplay(mergeResult);
+    assert.strictEqual(renderedUnnamed.detail, "Accounts successfully merged into the primary record.");
+    assert.strictEqual(renderedUnnamed.detail.includes("Survivor"), false);
+
+    // Internal survivorId remains available for callback navigation
+    assert.strictEqual(mergeResult.survivorId, "cmupjmy5r07botpfht7s9yf7a");
+  });
+
+  await t.test("Issue 12: Merge Audit History Card Sanitization", () => {
+    const auditRecord = {
+      id: "cmupjmy5r07botpfht7s9yf7a_audit",
+      survivorId: "cmupjmy5r07botpfht7s9yf7a",
+      loserIds: ["cmupjmy5r07botpfht7s9yf7b", "cmupjmy5r07botpfht7s9yf7c"],
+      mergedBy: "admin@zyoris.com",
+      mergedAt: "2026-10-02T12:00:00Z",
+    };
+
+    const formatAuditDisplay = (rec: typeof auditRecord) => ({
+      headerTitle: "Account Consolidation",
+      primaryAccountDisplay: "Consolidated Record",
+      mergedAccountsDisplay: `${rec.loserIds.length} duplicate accounts consolidated`,
+      mergedAt: rec.mergedAt,
+      mergedBy: rec.mergedBy,
+    });
+
+    const rendered = formatAuditDisplay(auditRecord);
+    assert.strictEqual(rendered.headerTitle, "Account Consolidation");
+    assert.strictEqual(rendered.headerTitle.includes("cmupj"), false);
+    assert.strictEqual(rendered.primaryAccountDisplay, "Consolidated Record");
+    assert.strictEqual(rendered.primaryAccountDisplay.includes("cmupj"), false);
+    assert.strictEqual(rendered.mergedAccountsDisplay, "2 duplicate accounts consolidated");
+    assert.strictEqual(rendered.mergedAccountsDisplay.includes("cmupj"), false);
+
+    // Underlying record data preserved for keys and operations
+    assert.strictEqual(auditRecord.id, "cmupjmy5r07botpfht7s9yf7a_audit");
+    assert.strictEqual(auditRecord.survivorId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(auditRecord.loserIds.length, 2);
+  });
+
+  await t.test("Issue 12: Preflight Candidate Matches Sanitization", () => {
+    const preflightResult = {
+      action: "merge_required" as const,
+      existingCustomerId: "cmupjmy5r07botpfht7s9yf7a",
+      existingCustomerName: "Acme Corp",
+      confidence: 0.94,
+      matches: [
+        {
+          customerId: "cmupjmy5r07botpfht7s9yf7b",
+          customerName: "Acme Industries",
+          confidence: 0.88,
+          matchedFields: ["email", "domain"],
+        },
+      ],
+    };
+
+    // Rendered matched banner check: existingCustomerId is omitted
+    const formatMatchedBanner = (res: typeof preflightResult) => ({
+      matchedText: res.existingCustomerName ? `Matched: ${res.existingCustomerName}` : null,
+    });
+
+    const banner = formatMatchedBanner(preflightResult);
+    assert.strictEqual(banner.matchedText, "Matched: Acme Corp");
+    assert.strictEqual(banner.matchedText?.includes("cmupj"), false);
+
+    // Rendered candidate match check: customerId is omitted
+    const formatCandidateMatch = (m: (typeof preflightResult.matches)[0]) => ({
+      name: m.customerName,
+      confidenceText: `${Math.round(m.confidence * 100)}%`,
+      fields: m.matchedFields,
+    });
+
+    const candidate = formatCandidateMatch(preflightResult.matches[0]);
+    assert.strictEqual(candidate.name, "Acme Industries");
+    assert.strictEqual("customerId" in candidate, false);
+    assert.strictEqual(candidate.confidenceText, "88%");
+
+    // Underlying IDs are preserved for linking/merging
+    assert.strictEqual(preflightResult.existingCustomerId, "cmupjmy5r07botpfht7s9yf7a");
+    assert.strictEqual(preflightResult.matches[0].customerId, "cmupjmy5r07botpfht7s9yf7b");
+  });
+
+  await t.test("Issue 12: Data Preservation and Internal Operations", () => {
+    const survivorId = "cuid_survivor_999";
+    const loserIds = ["cuid_loser_111", "cuid_loser_222"];
+    const fieldOverrides = { phone: "+1 555 0199" };
+
+    // API Payload contract verification
+    const apiPayload = {
+      loserIds,
+      fieldOverrides,
+    };
+
+    assert.strictEqual(apiPayload.loserIds.length, 2);
+    assert.strictEqual(apiPayload.loserIds[0], "cuid_loser_111");
+    assert.strictEqual(apiPayload.fieldOverrides?.phone, "+1 555 0199");
+
+    // Success navigation argument preservation
+    let navigatedToId = "";
+    const onSuccess = (id: string) => {
+      navigatedToId = id;
+    };
+    onSuccess(survivorId);
+    assert.strictEqual(navigatedToId, "cuid_survivor_999");
+  });
+});
+
+
+

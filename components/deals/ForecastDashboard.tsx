@@ -223,19 +223,14 @@ export function ForecastDashboard({ initialDeals }: ForecastDashboardProps) {
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2.5 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              Forecast Engine
+              Revenue Forecast
             </span>
-            {rollups?.rulesVersion && (
-              <span className="text-[10px] text-gray-400 font-mono">
-                Rules: v{rollups.rulesVersion}
-              </span>
-            )}
           </div>
           <h2 className="text-xl font-black text-gray-900 tracking-tight">
             Revenue & Pipeline Forecast
           </h2>
           <p className="text-xs text-gray-400 mt-0.5">
-            Commit, Best Case, and Pipeline rollups reconciling with frozen exchange rates
+            Commit, Best Case, and Pipeline rollups with multi-currency conversion
           </p>
         </div>
 
@@ -405,7 +400,7 @@ export function ForecastDashboard({ initialDeals }: ForecastDashboardProps) {
           <div className="flex items-center gap-2">
             <Coins size={15} className="text-amber-600 shrink-0" />
             <div>
-              <span className="font-bold text-gray-800">Preserved Exchange Rates:</span>
+              <span className="font-bold text-gray-800">Applied Exchange Rates:</span>
               <span className="text-gray-500 ml-1.5 font-mono">
                 {Object.entries(rollups.exchangeRates)
                   .map(([c, r]) => `1 ${c} = ${typeof r === "number" ? r.toFixed(3) : r}`)
@@ -415,7 +410,7 @@ export function ForecastDashboard({ initialDeals }: ForecastDashboardProps) {
           </div>
           {rollups.ratesTimestamp && (
             <span className="text-[11px] text-gray-400 shrink-0">
-              Frozen as of {formatTimestamp(rollups.ratesTimestamp)}
+              Rates effective as of {formatTimestamp(rollups.ratesTimestamp)}
             </span>
           )}
         </div>
@@ -540,7 +535,7 @@ export function ForecastDashboard({ initialDeals }: ForecastDashboardProps) {
           <div className="flex items-center gap-2">
             <History size={16} className="text-blue-600" />
             <h3 className="text-base font-bold text-gray-900">
-              Historical Forecast Snapshots
+              Forecast History
             </h3>
             {snapshots.length > 0 && (
               <span className="px-2 py-0.5 text-[10px] font-bold bg-blue-50 text-blue-600 rounded-full">
@@ -571,13 +566,13 @@ export function ForecastDashboard({ initialDeals }: ForecastDashboardProps) {
                 <table className="w-full text-xs text-left">
                   <thead className="bg-gray-50/80 text-gray-400 font-bold uppercase tracking-wider text-[10px] border-b border-gray-100">
                     <tr>
-                      <th className="px-4 py-3">Snapshot Date</th>
+                      <th className="px-4 py-3">Forecast Date</th>
                       <th className="px-4 py-3">Reporting Currency</th>
                       <th className="px-4 py-3">Commit Converted</th>
                       <th className="px-4 py-3">Best Case Converted</th>
                       <th className="px-4 py-3">Pipeline Converted</th>
                       <th className="px-4 py-3">Total Converted</th>
-                      <th className="px-4 py-3">Exchange Rate State</th>
+                      <th className="px-4 py-3">Converted Currencies</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">

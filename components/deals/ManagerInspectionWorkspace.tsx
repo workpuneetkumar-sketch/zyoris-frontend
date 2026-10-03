@@ -489,7 +489,7 @@ export function ManagerInspectionWorkspace({
                     Manager Inspection & Next Best Actions
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Deal: {dealSummary?.dealName || selectedDealId}
+                    Deal: {dealSummary?.dealName || "Active Deal"}
                   </p>
                 </div>
               </div>

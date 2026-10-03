@@ -1003,7 +1003,7 @@ export const ProposalsWorkspace: React.FC<ProposalsWorkspaceProps> = ({
                     <div className="sales-meta-card">
                       <div className="sales-meta-card-label">Target Deal</div>
                       <div className="sales-meta-card-value">
-                        {selectedProposal.deal?.title || selectedProposal.dealId || "—"}
+                        {selectedProposal.deal?.title || (selectedProposal.dealId ? "Associated Deal" : "—")}
                       </div>
                     </div>
 

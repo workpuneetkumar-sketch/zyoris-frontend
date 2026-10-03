@@ -255,8 +255,7 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                   <div className="sales-meta-card-value">
                     {activity.deal?.title ||
                       activity.deal?.name ||
-                      activity.dealId ||
-                      "None"}
+                      (activity.dealId ? "Associated Deal" : "None")}
                   </div>
                 </div>
               </div>
@@ -303,15 +302,24 @@ export const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({
                 </div>
               )}
 
-              {/* Raw Payload Inspection */}
-              {activity.rawPayload && (
-                <div>
-                  <label className="sales-label">Raw Ingestion Payload</label>
-                  <pre className="sales-raw-payload-box">
-                    {JSON.stringify(activity.rawPayload, null, 2)}
-                  </pre>
-                </div>
-              )}
+              {/* Activity Ingestion Metadata / Details */}
+              {activity.rawPayload && typeof activity.rawPayload === "object" && (() => {
+                const p = activity.rawPayload as Record<string, any>;
+                const subject = p.subject || p.title;
+                const snippet = p.snippet || p.body || p.message || p.notes;
+                const location = p.location;
+                if (!subject && !snippet && !location) return null;
+                return (
+                  <div className="space-y-1.5">
+                    <label className="sales-label">Activity Details</label>
+                    <div className="sales-meta-card p-3 space-y-1">
+                      {subject && <p className="font-semibold text-xs text-slate-800">{String(subject)}</p>}
+                      {location && <p className="text-[11px] text-slate-500">📍 {String(location)}</p>}
+                      {snippet && <p className="text-xs text-slate-600 leading-relaxed">{String(snippet)}</p>}
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           )}
         </div>

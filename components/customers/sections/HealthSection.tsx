@@ -104,9 +104,7 @@ export function HealthSection({
     try {
       const res = await triggerRecalculate();
       if (isHealthAsync) health.reload();
-      const snapshotMsg = res?.snapshotId
-        ? `Recalculation complete! Persisted snapshot ID: ${res.snapshotId}`
-        : "Health score recalculated and snapshot persisted successfully.";
+      const snapshotMsg = "Health score recalculated successfully.";
       setRecalculateMessage(snapshotMsg);
       setTimeout(() => setRecalculateMessage(null), 5000);
     } catch (err: any) {
@@ -694,11 +692,6 @@ function HealthHistoryList({
               </div>
 
               <div className="flex items-center gap-3 text-xs text-text-muted">
-                {item.snapshotId && (
-                  <span className="font-mono text-[10px] text-text-secondary bg-background-secondary px-1.5 py-0.5 rounded">
-                    ID: {item.snapshotId.slice(0, 8)}
-                  </span>
-                )}
                 {dateStr && (
                   <span>{new Date(dateStr).toLocaleString()}</span>
                 )}
@@ -788,19 +781,9 @@ function EngagementHistoryList({
                   {score != null ? score.toFixed(1) : "—"}
                 </span>
                 <span className="text-xs text-text-muted uppercase">Engagement Score</span>
-                {lambda != null && (
-                  <span className="text-xs font-semibold text-text-secondary bg-background-secondary px-2 py-0.5 rounded">
-                    λ = {lambda}
-                  </span>
-                )}
               </div>
 
               <div className="flex items-center gap-3 text-xs text-text-muted">
-                {item.snapshotId && (
-                  <span className="font-mono text-[10px] text-text-secondary bg-background-secondary px-1.5 py-0.5 rounded">
-                    ID: {item.snapshotId.slice(0, 8)}
-                  </span>
-                )}
                 {dateStr && (
                   <span>{new Date(dateStr).toLocaleString()}</span>
                 )}

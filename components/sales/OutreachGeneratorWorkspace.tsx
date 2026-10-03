@@ -718,7 +718,13 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
                   <div className="sales-pill sales-pill-customer" style={{ maxWidth: "100%" }}>
                     <ShieldCheck size={12} />
-                    <span>Target: {targetEntityType} #{targetEntityId}</span>
+                    <span>
+                      {targetEntityType === "DEAL"
+                        ? `Target: DEAL • ${selectedDeal?.name || "Active Opportunity"}`
+                        : isTechnicalId(targetEntityId)
+                        ? `Target: ${targetEntityType} • ${selectedLead?.name || selectedContact?.name || "Active Target"}`
+                        : `Target: ${targetEntityType} #${targetEntityId}`}
+                    </span>
                   </div>
 
                   {((activeDraft.groundingMetadata && activeDraft.groundingMetadata.length > 0) ||
@@ -733,7 +739,15 @@ export const OutreachGeneratorWorkspace: React.FC<OutreachGeneratorWorkspaceProp
                       {(activeDraft.groundingMetadata || []).map((meta, i) => (
                         <div key={`meta-${i}`} className="sales-pill sales-pill-customer" style={{ maxWidth: "100%" }}>
                           <ShieldCheck size={12} />
-                          <span>{typeof meta === "string" ? meta : JSON.stringify(meta)}</span>
+                          <span>
+                            {typeof meta === "string"
+                              ? meta
+                              : (meta as any).title ||
+                                (meta as any).summary ||
+                                (meta as any).source ||
+                                (meta as any).label ||
+                                "Grounded CRM Context Signal"}
+                          </span>
                         </div>
                       ))}
                     </>

@@ -321,10 +321,16 @@ export function relatedEntitiesOf(event: CustomerTimelineEvent): RelatedEntityRe
       if (!id) continue;
       const type = e.type ?? e.entityType ?? e.kind;
       const typeStr = type ? String(type) : undefined;
+      const fallbackLabel =
+        typeStr?.toLowerCase() === "deal"
+          ? "Deal Opportunity"
+          : typeStr
+          ? `${titleCase(typeStr)} ${shortenId(id)}`
+          : shortenId(id);
       push({
         id,
         type: typeStr,
-        label: String(e.label ?? e.name ?? (typeStr ? `${titleCase(typeStr)} ${shortenId(id)}` : shortenId(id))),
+        label: String(e.label ?? e.name ?? fallbackLabel),
         href: hrefFor(typeStr, id),
       });
     }
@@ -346,10 +352,14 @@ export function relatedEntitiesOf(event: CustomerTimelineEvent): RelatedEntityRe
     if (!m) continue;
     const type = m[1];
     const id = String(value);
+    const label =
+      type.toLowerCase() === "deal"
+        ? "Deal Opportunity"
+        : `${titleCase(type)} ${shortenId(id)}`;
     push({
       id,
       type,
-      label: `${titleCase(type)} ${shortenId(id)}`,
+      label,
       href: hrefFor(type, id),
     });
   }

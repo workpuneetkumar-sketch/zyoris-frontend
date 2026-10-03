@@ -235,9 +235,18 @@ export function CustomerPreferencesModal({
                   icon={<Calendar size={14} className="text-amber-500" />}
                   label="Important Dates"
                   value={
-                    <pre className="text-[10px] font-mono text-[var(--color-text-secondary)] whitespace-pre-wrap">
-                      {JSON.stringify(prefs.importantDates, null, 2)}
-                    </pre>
+                    <div className="flex flex-col gap-1 text-xs">
+                      {Object.entries(prefs.importantDates).map(([k, v]) => (
+                        <div key={k} className="flex justify-between items-center py-0.5 border-b border-[var(--color-border)] last:border-0">
+                          <span className="text-[var(--color-text-muted)] font-medium capitalize">
+                            {k.replace(/([A-Z])/g, " $1").replace(/[_-]/g, " ").trim()}
+                          </span>
+                          <span className="font-semibold text-[var(--color-text)]">
+                            {typeof v === "string" ? v : String(v)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   }
                 />
               )}

@@ -231,7 +231,6 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                     >
                       <Briefcase size={18} />
                       <div>Open Deal</div>
-                      <div className="text-[10px] font-normal text-[var(--color-text-muted)] truncate max-w-full">{result.dealId.slice(0, 8)}…</div>
                     </button>
                   )}
                 </div>
