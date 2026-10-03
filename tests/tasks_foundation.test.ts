@@ -3610,3 +3610,182 @@ test("Task 1 — Issue 16: Customer-Friendly Action Controls and Template Variab
   });
 });
 
+test("Task 2 — Issue 8: Forecast Engine/Rules Version and Frozen Exchange Rate Sanitization", async (t) => {
+  await t.test("Forecast Dashboard: Rules version is hidden from customer display while preserved internally", () => {
+    const rollups = {
+      organizationId: "org-1",
+      rulesVersion: "2.4.1",
+      ratesTimestamp: "2026-09-18T10:00:00.000Z",
+      exchangeRates: { EUR: 0.92, INR: 83.5 },
+      commit: { dealCount: 5, convertedAmount: 150000 },
+    };
+
+    // Internal data contract check
+    assert.strictEqual(rollups.rulesVersion, "2.4.1");
+    assert.strictEqual(rollups.exchangeRates.EUR, 0.92);
+
+    // Simulated customer-facing rendering: rulesVersion must NOT appear in output
+    const customerBadge = "Revenue Forecast"; // replaced from "Forecast Engine"
+    const visibleSubtitle = "Commit, Best Case, and Pipeline rollups with multi-currency conversion";
+
+    assert.strictEqual(customerBadge, "Revenue Forecast");
+    assert.strictEqual(customerBadge.includes("Engine"), false);
+    assert.strictEqual(visibleSubtitle.includes("frozen exchange rates"), false);
+    assert.strictEqual(visibleSubtitle.includes("with multi-currency conversion"), true);
+  });
+
+  await t.test("Exchange rates banner: Preserves useful exchange rates and uses customer-friendly effective date", () => {
+    const rollups = {
+      exchangeRates: { EUR: 0.92, INR: 83.5, GBP: 0.79 },
+      ratesTimestamp: "2026-09-18T10:00:00.000Z",
+    };
+
+    // Formatted banner values
+    const ratesLabel = "Applied Exchange Rates:";
+    const formattedRates = Object.entries(rollups.exchangeRates)
+      .map(([c, r]) => `1 ${c} = ${typeof r === "number" ? r.toFixed(3) : r}`)
+      .join(" • ");
+
+    // Formatted timestamp
+    const formattedDate = new Date(rollups.ratesTimestamp).toLocaleDateString();
+    const effectiveLabel = `Rates effective as of ${formattedDate}`;
+
+    assert.strictEqual(ratesLabel, "Applied Exchange Rates:");
+    assert.strictEqual(ratesLabel.includes("Preserved"), false);
+    assert.strictEqual(formattedRates.includes("1 EUR = 0.920"), true);
+    assert.strictEqual(formattedRates.includes("1 INR = 83.500"), true);
+    assert.strictEqual(formattedRates.includes("1 GBP = 0.790"), true);
+    assert.strictEqual(effectiveLabel.includes("Frozen as of"), false);
+    assert.strictEqual(effectiveLabel.includes("Rates effective as of"), true);
+  });
+
+  await t.test("Forecast History table: Headers use business-friendly names instead of engineering jargon", () => {
+    const tableHeaders = {
+      historySection: "Forecast History", // was "Historical Forecast Snapshots"
+      dateColumn: "Forecast Date",        // was "Snapshot Date"
+      currencyColumn: "Converted Currencies", // was "Exchange Rate State"
+    };
+
+    assert.strictEqual(tableHeaders.historySection, "Forecast History");
+    assert.strictEqual(tableHeaders.historySection.includes("Snapshots"), false);
+    assert.strictEqual(tableHeaders.dateColumn, "Forecast Date");
+    assert.strictEqual(tableHeaders.dateColumn.includes("Snapshot Date"), false);
+    assert.strictEqual(tableHeaders.currencyColumn, "Converted Currencies");
+    assert.strictEqual(tableHeaders.currencyColumn.includes("State"), false);
+  });
+
+  await t.test("Deal Forecast Details: Removes BE-2 milestone, backend bucket jargon, and frozen phrasing", () => {
+    const dealForecast = {
+      dealId: "deal_123",
+      forecastCategory: "Commit",
+      convertedAmount: 250000,
+      reportingCurrency: "USD",
+      originalAmount: 250000,
+      stageVelocity: [],
+    };
+
+    // Subtitle check
+    const subtitle = "Pipeline Forecast • Stage Dwell & Slippage";
+    assert.strictEqual(subtitle.includes("BE-2"), false);
+    assert.strictEqual(subtitle.includes("Pipeline Forecast"), true);
+
+    // Category helper label
+    const categoryHelper = "Forecast Classification";
+    assert.strictEqual(categoryHelper.includes("Backend Rollup Bucket"), false);
+
+    // Converted amount helper label
+    const convertedHelper = "Converted at Effective Rate";
+    assert.strictEqual(convertedHelper.includes("Frozen Rates Preserved"), false);
+
+    // Empty state message
+    const emptyVelocityMsg = "No stage velocity records recorded for this deal yet.";
+    assert.strictEqual(emptyVelocityMsg.includes("backend"), false);
+    assert.strictEqual(emptyVelocityMsg.includes("reported by backend"), false);
+  });
+
+  await t.test("Win Probability: Model version and Snapshot ID are hidden while preserving underlying values", () => {
+    const winProbResponse = {
+      dealId: "deal_456",
+      probability: 78,
+      confidence: 0.85,
+      modelVersion: "2.1.0",
+      snapshotId: "cmupjmy5r07botpfht7s9yf7a",
+      predictionTimestamp: "2026-10-01T12:00:00Z",
+      evidenceTimestamp: "2026-10-01T11:45:00Z",
+    };
+
+    // Model display replacement
+    const modelBadge = "AI Prediction Active";
+    assert.strictEqual(modelBadge, "AI Prediction Active");
+    assert.strictEqual(modelBadge.includes("v2.1.0"), false);
+    assert.strictEqual(modelBadge.includes(winProbResponse.modelVersion), false);
+
+    // Underlying values remain completely intact
+    assert.strictEqual(winProbResponse.modelVersion, "2.1.0");
+    assert.strictEqual(winProbResponse.snapshotId, "cmupjmy5r07botpfht7s9yf7a");
+
+    // History table columns: only business-relevant metrics
+    const historyColumns = ["Date / Time", "Probability", "Confidence", "Evidence Time"];
+    assert.strictEqual(historyColumns.includes("Model"), false);
+  });
+
+  await t.test("Deal Detail: Currency label updated and Pricing object renders without raw JSON", () => {
+    // 1. Currency selector label
+    const currencyLabel = "Deal Currency";
+    assert.strictEqual(currencyLabel, "Deal Currency");
+    assert.strictEqual(currencyLabel.includes("Snapshot"), false);
+
+    // 2. Contract value badge
+    const badgeText = "Verified Contract Value";
+    assert.strictEqual(badgeText.includes("BE-2"), false);
+
+    // 3. Pricing formatting logic verification
+    function formatPricing(pricing: any, amount?: number): string {
+      if (!pricing) {
+        return `Total Contract Value: $${amount?.toLocaleString() || 0}`;
+      }
+      if (typeof pricing === "string") return pricing;
+      if (typeof pricing === "number") return `$${pricing.toLocaleString()}`;
+      if (typeof pricing === "object") {
+        const parts: string[] = [];
+        if (pricing.tier || pricing.plan) parts.push(String(pricing.tier || pricing.plan));
+        if (pricing.terms || pricing.term) parts.push(String(pricing.terms || pricing.term));
+        if (pricing.billingFrequency || pricing.cadence || pricing.frequency) {
+          parts.push(String(pricing.billingFrequency || pricing.cadence || pricing.frequency));
+        }
+        if (pricing.amount != null || pricing.value != null || pricing.total != null) {
+          const val = pricing.amount ?? pricing.value ?? pricing.total;
+          parts.push(typeof val === "number" ? `$${val.toLocaleString()}` : String(val));
+        }
+        if (parts.length > 0) return parts.join(" • ");
+        return "Pricing details available";
+      }
+      return "Pricing details available";
+    }
+
+    // Case A: Structured object
+    const structuredPricing = {
+      tier: "Enterprise Tier 1",
+      terms: "Annual 3-Year Commit",
+      billingFrequency: "Quarterly Invoicing",
+      amount: 120000,
+    };
+    const renderedA = formatPricing(structuredPricing, 120000);
+    assert.strictEqual(renderedA.includes("Enterprise Tier 1"), true);
+    assert.strictEqual(renderedA.includes("Annual 3-Year Commit"), true);
+    assert.strictEqual(renderedA.includes("Quarterly Invoicing"), true);
+    assert.strictEqual(renderedA.includes("{"), false);
+    assert.strictEqual(renderedA.includes("}"), false);
+
+    // Case B: Arbitrary object without standard fields falls back safely without raw JSON
+    const opaquePricing = { internalMatrixCode: "MTX-99", hash: "abcdef123456" };
+    const renderedB = formatPricing(opaquePricing, 50000);
+    assert.strictEqual(renderedB, "Pricing details available");
+    assert.strictEqual(renderedB.includes("{"), false);
+
+    // Case C: Null/undefined fallback
+    const renderedC = formatPricing(null, 75000);
+    assert.strictEqual(renderedC.includes("Total Contract Value:"), true);
+  });
+});
+

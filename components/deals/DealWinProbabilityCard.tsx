@@ -304,8 +304,8 @@ export function DealWinProbabilityCard({
             <span className="text-gray-400 font-medium flex items-center gap-1">
               <Cpu size={12} className="text-blue-500" /> Model
             </span>
-            <span className="font-bold text-gray-800 font-mono">
-              v{data.modelVersion || "1.0.0"}
+            <span className="font-semibold text-emerald-600">
+              AI Prediction Active
             </span>
           </div>
 
@@ -326,15 +326,6 @@ export function DealWinProbabilityCard({
               {formatTimestamp(data.evidenceTimestamp)}
             </span>
           </div>
-
-          {data.snapshotId && (
-            <div className="pt-1 border-t border-gray-200/50 flex items-center justify-between text-[10px]">
-              <span className="text-gray-400">Snapshot ID</span>
-              <span className="font-mono text-gray-500 truncate max-w-[120px]" title={data.snapshotId}>
-                {data.snapshotId}
-              </span>
-            </div>
-          )}
         </div>
       </div>
 
@@ -434,7 +425,6 @@ export function DealWinProbabilityCard({
                       <th className="px-3.5 py-2.5">Date / Time</th>
                       <th className="px-3.5 py-2.5">Probability</th>
                       <th className="px-3.5 py-2.5">Confidence</th>
-                      <th className="px-3.5 py-2.5">Model</th>
                       <th className="px-3.5 py-2.5">Evidence Time</th>
                     </tr>
                   </thead>
@@ -462,9 +452,6 @@ export function DealWinProbabilityCard({
                           </td>
                           <td className="px-3.5 py-2.5 font-semibold text-gray-700">
                             {conf}%
-                          </td>
-                          <td className="px-3.5 py-2.5 font-mono text-gray-500">
-                            v{snap.modelVersion || "1.0.0"}
                           </td>
                           <td className="px-3.5 py-2.5 text-gray-400">
                             {formatTimestamp(snap.evidenceTimestamp)}

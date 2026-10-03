@@ -182,6 +182,35 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
     return formatCurrencyWithSnapshot(amount, currency || deal.currency || "USD", true);
   };
 
+  const formatPricingInfo = (pricing: any, amount?: number): string => {
+    if (!pricing) {
+      return `Total Contract Value: ${formatCurrency(amount)}`;
+    }
+    if (typeof pricing === "string") {
+      return pricing;
+    }
+    if (typeof pricing === "number") {
+      return formatCurrency(pricing);
+    }
+    if (typeof pricing === "object") {
+      const parts: string[] = [];
+      if (pricing.tier || pricing.plan) parts.push(String(pricing.tier || pricing.plan));
+      if (pricing.terms || pricing.term) parts.push(String(pricing.terms || pricing.term));
+      if (pricing.billingFrequency || pricing.cadence || pricing.frequency) {
+        parts.push(String(pricing.billingFrequency || pricing.cadence || pricing.frequency));
+      }
+      if (pricing.amount != null || pricing.value != null || pricing.total != null) {
+        const val = pricing.amount ?? pricing.value ?? pricing.total;
+        parts.push(typeof val === "number" ? formatCurrency(val) : String(val));
+      }
+      if (parts.length > 0) {
+        return parts.join(" • ");
+      }
+      return "Pricing details available";
+    }
+    return "Pricing details available";
+  };
+
   const formatDate = (dateString: string | null | undefined): string => {
     if (!dateString) return "N/A";
     try {
@@ -458,14 +487,10 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
                           <span>Pricing & Commercials</span>
                         </div>
                         <p className="text-xs text-gray-600 leading-relaxed">
-                          {deal.pricing
-                            ? typeof deal.pricing === "object"
-                              ? JSON.stringify(deal.pricing)
-                              : String(deal.pricing)
-                            : `Total Contract Value: ${formatCurrency(deal.amount)}`}
+                          {formatPricingInfo(deal.pricing, deal.amount)}
                         </p>
                       </div>
-                      <span className="text-[10px] text-gray-400 mt-3 block">Verified BE-2 Contract Value</span>
+                      <span className="text-[10px] text-gray-400 mt-3 block">Verified Contract Value</span>
                     </div>
 
                     {/* Competition */}
@@ -743,7 +768,7 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
 
                 <div>
                   <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Currency Snapshot
+                    Deal Currency
                   </label>
                   <select
                     value={editForm.currency}

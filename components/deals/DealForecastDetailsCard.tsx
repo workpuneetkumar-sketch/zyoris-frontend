@@ -211,7 +211,7 @@ export function DealForecastDetailsCard({
           <div>
             <h3 className="text-sm font-bold text-gray-900">Forecast & Deal Velocity</h3>
             <p className="text-[11px] text-gray-400">
-              BE-2 Forecast Rollups • Stage Dwell & Slippage
+              Pipeline Forecast • Stage Dwell & Slippage
             </p>
           </div>
         </div>
@@ -263,7 +263,7 @@ export function DealForecastDetailsCard({
             </span>
           </div>
           <span className="text-[10px] text-gray-400 mt-2 block">
-            Backend Rollup Bucket
+            Forecast Classification
           </span>
         </div>
 
@@ -325,7 +325,7 @@ export function DealForecastDetailsCard({
             )}
           </div>
           <span className="text-[10px] text-gray-400 mt-1 block">
-            Frozen Rates Preserved
+            Converted at Effective Rate
           </span>
         </div>
       </div>
@@ -364,7 +364,7 @@ export function DealForecastDetailsCard({
           </div>
         ) : (
           <p className="text-xs text-gray-400 italic p-3 bg-gray-50/50 rounded-xl border border-gray-100">
-            No stage velocity dwell records reported by backend for this deal yet.
+            No stage velocity records recorded for this deal yet.
           </p>
         )}
       </div>
