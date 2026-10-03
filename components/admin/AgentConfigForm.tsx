@@ -8,8 +8,6 @@
  * Allows admins to configure:
  *   - System prompt (textarea with character count)
  *   - Tool access scope (checklist against AVAILABLE_TOOLS)
- *   - Trusted-content boundaries (add/remove/edit trust level)
- *   - Safety controls (maxTokens, promptInjectionDefence, minConfidence)
  *
  * Non-negotiables:
  * - Backend rejections of out-of-scope tools are SURFACED prominently,
@@ -23,23 +21,15 @@ import { useState } from "react";
 import classNames from "classnames";
 import {
   Wrench,
-  ShieldCheck,
-  AlertTriangle,
-  Plus,
-  Trash2,
   RefreshCw,
   CheckCircle2,
   XCircle,
   Info,
-  Lock,
-  ChevronDown,
 } from "lucide-react";
 import { AVAILABLE_TOOLS } from "@/lib/api/agentConfigApi";
 import type {
   AgentConfig,
   SaveAgentConfigPayload,
-  TrustedContentBoundary,
-  ContentTrustLevel,
 } from "@/lib/types/day7.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,26 +44,6 @@ export interface AgentConfigFormProps {
   rejectedToolIds?: string[];
   /** Success message after a clean save */
   saveSuccessMessage?: string;
-}
-
-// ─── Trust level badge ────────────────────────────────────────────────────────
-
-const TRUST_STYLES: Record<ContentTrustLevel, { pill: string; label: string }> = {
-  TRUSTED:   { pill: "bg-[color:var(--color-success-light)] text-[color:var(--color-success-foreground)] border-[color:var(--color-success-light)]",  label: "Trusted"   },
-  VERIFIED:  { pill: "bg-[color:var(--color-warning-light)] text-[color:var(--color-warning-foreground)] border-[color:var(--color-warning-light)]",  label: "Verified"  },
-  UNTRUSTED: { pill: "bg-[color:var(--color-error-light)]   text-[color:var(--color-error-foreground)]   border-[color:var(--color-error-light)]",    label: "Untrusted" },
-};
-
-function TrustBadge({ level }: { level: ContentTrustLevel }) {
-  const s = TRUST_STYLES[level] ?? TRUST_STYLES.UNTRUSTED;
-  return (
-    <span className={classNames(
-      "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border",
-      s.pill
-    )}>
-      {s.label}
-    </span>
-  );
 }
 
 // ─── Section wrapper ──────────────────────────────────────────────────────────
@@ -111,8 +81,8 @@ function Section({
 
 function RejectedToolsBanner({ toolIds }: { toolIds: string[] }) {
   const labels = toolIds.map(
-    (id) => AVAILABLE_TOOLS.find((t) => t.id === id)?.label ?? id
-  );
+    (id) => AVAILABLE_TOOLS.find((t) => t.id === id)?.label.replace(/^KB —/, "Knowledge Base —")
+  ).filter((label): label is string => Boolean(label));
   return (
     <div
       className="flex items-start gap-3 px-4 py-3 rounded-xl bg-[color:var(--color-error-light)] border border-[color:var(--color-error-light)]"
@@ -122,23 +92,27 @@ function RejectedToolsBanner({ toolIds }: { toolIds: string[] }) {
       <XCircle size={16} className="text-[color:var(--color-error)] shrink-0 mt-0.5" />
       <div>
         <p className="text-xs font-bold text-[color:var(--color-error-foreground)]">
-          {toolIds.length} tool{toolIds.length !== 1 ? "s" : ""} rejected by the backend
+          {toolIds.length} tool{toolIds.length !== 1 ? "s" : ""} couldn't be added
         </p>
         <p className="text-xs text-[color:var(--color-error-foreground)] opacity-80 mt-1 leading-relaxed">
-          The following tools were removed from this agent's scope because they exceed its
-          permission tier or are not registered in the Tool Registry:
+          These tools aren't available for this agent:
         </p>
-        <ul className="mt-1.5 space-y-0.5">
-          {labels.map((l) => (
-            <li key={l} className="text-xs font-semibold text-[color:var(--color-error-foreground)] flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--color-error)] shrink-0" />
-              {l}
-            </li>
-          ))}
-        </ul>
+        {labels.length > 0 ? (
+          <ul className="mt-1.5 space-y-0.5">
+            {labels.map((l) => (
+              <li key={l} className="text-xs font-semibold text-[color:var(--color-error-foreground)] flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--color-error)] shrink-0" />
+                {l}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-xs font-semibold text-[color:var(--color-error-foreground)] mt-1.5">
+            Some tools were removed from this agent's scope.
+          </p>
+        )}
         <p className="text-xs text-[color:var(--color-error-foreground)] opacity-70 mt-2">
-          To grant access to these tools, raise the agent's permission tier in the
-          Agent Registry first, then re-save this configuration.
+          Contact your administrator if this agent needs access to these tools.
         </p>
       </div>
     </div>
@@ -151,13 +125,6 @@ function RejectedToolsBanner({ toolIds }: { toolIds: string[] }) {
 const TOOL_CATEGORIES = Array.from(
   new Set(AVAILABLE_TOOLS.map((t) => t.category))
 );
-
-const RISK_DOT: Record<string, string> = {
-  LOW:      "bg-[color:var(--color-success)]",
-  MEDIUM:   "bg-[color:var(--color-warning)]",
-  HIGH:     "bg-[color:var(--color-error)]",
-  CRITICAL: "bg-[color:var(--color-error)]",
-};
 
 function ToolScopeSelector({
   selected,
@@ -181,7 +148,7 @@ function ToolScopeSelector({
         return (
           <div key={cat}>
             <p className="text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)] mb-2">
-              {cat}
+              {cat === "CRM" ? cat : cat.charAt(0) + cat.slice(1).toLowerCase()}
             </p>
             <div className="space-y-1.5">
               {tools.map((tool) => {
@@ -207,19 +174,9 @@ function ToolScopeSelector({
                       className="accent-[color:var(--color-primary)] w-3.5 h-3.5 shrink-0"
                     />
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <span
-                        className={classNames(
-                          "w-2 h-2 rounded-full shrink-0",
-                          RISK_DOT[tool.riskTier] ?? "bg-[color:var(--color-text-muted)]"
-                        )}
-                        title={`Risk: ${tool.riskTier}`}
-                      />
                       <span className="text-xs font-semibold text-[color:var(--color-text)] truncate">
-                        {tool.label}
+                        {tool.label.replace(/^KB —/, "Knowledge Base —")}
                       </span>
-                      <code className="text-[10px] font-mono text-[color:var(--color-text-muted)] shrink-0">
-                        {tool.id}
-                      </code>
                     </div>
                     {isRejected && (
                       <span className="text-[10px] font-bold text-[color:var(--color-error-foreground)] shrink-0">
@@ -233,71 +190,6 @@ function ToolScopeSelector({
           </div>
         );
       })}
-      <p className="text-[10px] text-[color:var(--color-text-muted)] flex items-center gap-1.5 mt-2">
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-[color:var(--color-success)]" /> LOW
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-[color:var(--color-warning)]" /> MEDIUM
-        </span>
-        <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-[color:var(--color-error)]" /> HIGH / CRITICAL
-        </span>
-        <span className="ml-1">— risk tiers</span>
-      </p>
-    </div>
-  );
-}
-
-// ─── Trusted content boundaries ───────────────────────────────────────────────
-
-function BoundaryRow({
-  boundary,
-  onChange,
-  onRemove,
-}: {
-  boundary: TrustedContentBoundary;
-  onChange: (b: TrustedContentBoundary) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 p-2.5 rounded-xl border border-[color:var(--color-border-light)] bg-[color:var(--color-background-secondary)]">
-      <input
-        type="text"
-        value={boundary.label}
-        onChange={(e) => onChange({ ...boundary, label: e.target.value })}
-        placeholder="Label…"
-        className="flex-1 min-w-0 text-xs font-semibold bg-transparent text-[color:var(--color-text)] focus:outline-none placeholder:text-[color:var(--color-text-muted)]"
-      />
-      <input
-        type="text"
-        value={boundary.pattern}
-        onChange={(e) => onChange({ ...boundary, pattern: e.target.value })}
-        placeholder="*.domain.com"
-        className="flex-1 min-w-0 text-xs font-mono bg-transparent text-[color:var(--color-text-secondary)] focus:outline-none placeholder:text-[color:var(--color-text-muted)]"
-      />
-      <div className="relative">
-        <select
-          value={boundary.trustLevel}
-          onChange={(e) =>
-            onChange({ ...boundary, trustLevel: e.target.value as ContentTrustLevel })
-          }
-          className="appearance-none text-xs font-semibold pr-5 bg-transparent text-[color:var(--color-text)] focus:outline-none cursor-pointer"
-        >
-          <option value="TRUSTED">Trusted</option>
-          <option value="VERIFIED">Verified</option>
-          <option value="UNTRUSTED">Untrusted</option>
-        </select>
-        <ChevronDown size={11} className="absolute right-0 top-1/2 -translate-y-1/2 pointer-events-none text-[color:var(--color-text-muted)]" />
-      </div>
-      <TrustBadge level={boundary.trustLevel} />
-      <button
-        onClick={onRemove}
-        className="w-6 h-6 rounded-lg flex items-center justify-center hover:bg-[color:var(--color-error-light)] transition-colors shrink-0"
-        title="Remove boundary"
-      >
-        <Trash2 size={11} className="text-[color:var(--color-error)]" />
-      </button>
     </div>
   );
 }
@@ -313,32 +205,18 @@ export function AgentConfigForm({
 }: AgentConfigFormProps) {
   const [systemPrompt,      setSystemPrompt]      = useState(config.systemPrompt);
   const [allowedToolIds,    setAllowedToolIds]     = useState<string[]>(config.allowedToolIds);
-  const [boundaries,        setBoundaries]         = useState<TrustedContentBoundary[]>(
-    config.trustedContentBoundaries
-  );
-  const [maxTokens,         setMaxTokens]          = useState(config.maxTokensPerCall);
-  const [injectionDefence,  setInjectionDefence]   = useState(config.promptInjectionDefenceEnabled);
-  const [minConfidence,     setMinConfidence]       = useState(config.minConfidenceThreshold);
   const [dirty,             setDirty]              = useState(false);
 
   const markDirty = () => setDirty(true);
-
-  const addBoundary = () => {
-    setBoundaries((prev) => [
-      ...prev,
-      { label: "", pattern: "", trustLevel: "VERIFIED" },
-    ]);
-    markDirty();
-  };
 
   const handleSave = async () => {
     await onSave({
       systemPrompt,
       allowedToolIds,
-      trustedContentBoundaries: boundaries,
-      maxTokensPerCall: maxTokens,
-      promptInjectionDefenceEnabled: injectionDefence,
-      minConfidenceThreshold: minConfidence,
+      trustedContentBoundaries: config.trustedContentBoundaries,
+      maxTokensPerCall: config.maxTokensPerCall,
+      promptInjectionDefenceEnabled: config.promptInjectionDefenceEnabled,
+      minConfidenceThreshold: config.minConfidenceThreshold,
     });
     setDirty(false);
   };
@@ -359,16 +237,6 @@ export function AgentConfigForm({
           </p>
         </div>
       )}
-
-      {/* Safety controls note */}
-      <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl bg-[color:var(--color-background-secondary)] border border-[color:var(--color-border-light)]">
-        <Lock size={14} className="text-[color:var(--color-text-muted)] shrink-0 mt-0.5" />
-        <p className="text-xs text-[color:var(--color-text-secondary)] leading-relaxed">
-          This form configures advisory parameters. Backend safety controls, permission
-          enforcement, and tool-scope validation are <strong>always enforced server-side</strong> —
-          the UI never bypasses them. Rejected tools will be surfaced here after save.
-        </p>
-      </div>
 
       {/* ── System Prompt ────────────────────────────────────────────── */}
       <Section icon={Info} title="System Prompt" description="Defines the agent's behaviour and constraints for every invocation.">
@@ -396,7 +264,7 @@ export function AgentConfigForm({
       <Section
         icon={Wrench}
         title="Tool Access Scope"
-        description="Select which tools this agent may invoke. Backend validates against the Tool Registry and the agent's permission tier."
+        description="Choose which tools this agent can use. Availability depends on the agent's access settings."
       >
         <ToolScopeSelector
           selected={allowedToolIds}
@@ -405,136 +273,8 @@ export function AgentConfigForm({
         />
       </Section>
 
-      {/* ── Trusted Content Boundaries ───────────────────────────────── */}
-      <Section
-        icon={ShieldCheck}
-        title="Trusted-Content Boundaries"
-        description="Define which sources the agent may treat as trusted, verified, or untrusted for prompt injection defence."
-      >
-        <div className="space-y-2">
-          {boundaries.length === 0 && (
-            <p className="text-xs text-[color:var(--color-text-muted)] py-3 text-center">
-              No boundaries configured. All external content will be treated as UNTRUSTED.
-            </p>
-          )}
-          {boundaries.map((b, i) => (
-            <BoundaryRow
-              key={i}
-              boundary={b}
-              onChange={(updated) => {
-                setBoundaries((prev) => prev.map((x, j) => (j === i ? updated : x)));
-                markDirty();
-              }}
-              onRemove={() => {
-                setBoundaries((prev) => prev.filter((_, j) => j !== i));
-                markDirty();
-              }}
-            />
-          ))}
-          <button
-            onClick={addBoundary}
-            className={classNames(
-              "inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all",
-              "text-[color:var(--color-primary)] border-[color:var(--color-primary)]",
-              "hover:bg-[color:var(--color-info-light)]"
-            )}
-          >
-            <Plus size={12} /> Add Boundary
-          </button>
-        </div>
-      </Section>
-
-      {/* ── Safety Controls ──────────────────────────────────────────── */}
-      <Section
-        icon={AlertTriangle}
-        title="Safety Controls"
-        description="These parameters are advisory — the backend enforces its own hard limits regardless of these values."
-      >
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Max tokens */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wide">
-              Max Tokens / Call
-            </label>
-            <input
-              type="number"
-              min={256}
-              max={32768}
-              step={256}
-              value={maxTokens}
-              data-testid="max-tokens-input"
-              onChange={(e) => { setMaxTokens(Number(e.target.value)); markDirty(); }}
-              className={classNames(
-                "w-full px-3 py-2 text-sm font-semibold rounded-xl border",
-                "bg-[color:var(--color-background-secondary)] text-[color:var(--color-text)]",
-                "border-[color:var(--color-border)] focus:outline-none focus:ring-2",
-                "focus:ring-[color:var(--color-info-light)] focus:border-[color:var(--color-primary)]"
-              )}
-            />
-          </div>
-
-          {/* Min confidence */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wide">
-              Min Confidence (0–100)
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="range"
-                min={0}
-                max={100}
-                step={5}
-                value={minConfidence}
-                data-testid="min-confidence-slider"
-                onChange={(e) => { setMinConfidence(Number(e.target.value)); markDirty(); }}
-                className="flex-1 accent-[color:var(--color-primary)]"
-              />
-              <span className="text-sm font-bold text-[color:var(--color-text)] w-8 text-right">
-                {minConfidence}
-              </span>
-            </div>
-            <p className="text-[10px] text-[color:var(--color-text-muted)]">
-              Responses below this threshold are flagged for human review.
-            </p>
-          </div>
-
-          {/* Prompt injection defence */}
-          <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-[color:var(--color-text-muted)] uppercase tracking-wide">
-              Prompt Injection Defence
-            </label>
-            <button
-              onClick={() => { setInjectionDefence((v) => !v); markDirty(); }}
-              data-testid="injection-defence-toggle"
-              className={classNames(
-                "flex items-center gap-2 px-4 py-2 rounded-xl border text-xs font-semibold transition-all w-full",
-                injectionDefence
-                  ? "bg-[color:var(--color-success-light)] text-[color:var(--color-success-foreground)] border-[color:var(--color-success-light)]"
-                  : "bg-[color:var(--color-error-light)] text-[color:var(--color-error-foreground)] border-[color:var(--color-error-light)]"
-              )}
-            >
-              {injectionDefence
-                ? <><CheckCircle2 size={13} /> Enabled</>
-                : <><XCircle size={13} /> Disabled</>}
-            </button>
-            {!injectionDefence && (
-              <p className="text-[10px] text-[color:var(--color-error-foreground)] font-semibold">
-                ⚠ Disabling injection defence is a security risk.
-              </p>
-            )}
-          </div>
-        </div>
-      </Section>
-
       {/* ── Save button ───────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between pt-2">
-        <p className="text-xs text-[color:var(--color-text-muted)]">
-          Last saved by{" "}
-          <span className="font-semibold text-[color:var(--color-text-secondary)]">
-            {config.updatedBy ?? "unknown"}
-          </span>{" "}
-          · {new Date(config.updatedAt).toLocaleString()}
-        </p>
+      <div className="flex items-center justify-end pt-2">
         <button
           onClick={handleSave}
           disabled={saving || !dirty}

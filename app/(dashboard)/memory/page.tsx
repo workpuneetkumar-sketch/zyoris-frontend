@@ -60,6 +60,24 @@ function relativeDate(iso?: string | null): string {
   } catch { return "—"; }
 }
 
+function formatMemoryLabel(value: string): string {
+  const label = value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return label ? label[0].toUpperCase() + label.slice(1) : label;
+}
+
+function getMemoryTargetLabel(scope: MemoryScope): string {
+  switch (scope) {
+    case "ORGANIZATION": return "Organization-wide";
+    case "USER": return "User-specific";
+    case "CUSTOMER": return "Customer-specific";
+    case "AGENT": return "Agent-specific";
+  }
+}
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 function SkeletonRow() {
@@ -166,7 +184,7 @@ function DeleteModal({ memory, onConfirm, onCancel, submitting, result }: Delete
             <div className="bg-[color:var(--color-background-secondary)] rounded-xl p-4 space-y-1.5 text-xs">
               <div className="flex justify-between gap-2">
                 <span className="text-[color:var(--color-text-muted)]">Key</span>
-                <span className="font-mono font-semibold text-[color:var(--color-text)]">{memory.memoryKey}</span>
+                <span className="font-semibold text-[color:var(--color-text)]">{formatMemoryLabel(memory.memoryKey)}</span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-[color:var(--color-text-muted)]">Scope</span>
@@ -499,9 +517,6 @@ function MemoryRow({
   memory: AgentMemory;
   onDelete: (m: AgentMemory) => void;
 }) {
-  const scopeId =
-    memory.userId ?? memory.customerId ?? memory.agentId ?? "—";
-
   return (
     <tr className="border-b border-[color:var(--color-border-light)] hover:bg-[color:var(--color-surface-hover)] transition-colors group">
       {/* Scope */}
@@ -511,7 +526,7 @@ function MemoryRow({
 
       {/* Key */}
       <td className="px-5 py-4 whitespace-nowrap">
-        <span className="text-xs font-mono font-semibold text-[color:var(--color-text)]">{memory.memoryKey}</span>
+        <span className="text-xs font-semibold text-[color:var(--color-text)]">{formatMemoryLabel(memory.memoryKey)}</span>
       </td>
 
       {/* Value */}
@@ -523,7 +538,7 @@ function MemoryRow({
       <td className="px-5 py-4 whitespace-nowrap">
         {memory.category ? (
           <span className="text-[11px] px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)] font-medium">
-            {memory.category}
+            {formatMemoryLabel(memory.category)}
           </span>
         ) : (
           <span className="text-xs text-[color:var(--color-text-muted)]">—</span>
@@ -532,7 +547,7 @@ function MemoryRow({
 
       {/* Scope target */}
       <td className="px-5 py-4 whitespace-nowrap">
-        <span className="text-[11px] font-mono text-[color:var(--color-text-muted)]">{scopeId}</span>
+        <span className="text-[11px] text-[color:var(--color-text-muted)]">{getMemoryTargetLabel(memory.scope)}</span>
       </td>
 
       {/* Retention / expiry */}
@@ -829,7 +844,7 @@ export default function MemorySettingsPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-active)]">
-                  {["Scope", "Key", "Value", "Category", "Target ID", "Retention", ""].map((h) => (
+                  {["Scope", "Memory", "Value", "Category", "Applies to", "Retention", ""].map((h) => (
                     <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold text-[color:var(--color-text-muted)] uppercase tracking-wider whitespace-nowrap">
                       {h}
                     </th>

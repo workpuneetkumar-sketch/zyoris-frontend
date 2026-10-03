@@ -106,10 +106,6 @@ export function GmailConnectScreen({ connecting, error, onConnect }: GmailConnec
                         )}
                     </button>
                 </div>
-
-                <p className="text-[11px] text-gray-400 font-medium">
-                    Endpoint: <code className="bg-white/80 px-1.5 py-0.5 rounded border text-[10px]">POST /email/oauth/gmail/connect</code>
-                </p>
             </div>
         </div>
     );
