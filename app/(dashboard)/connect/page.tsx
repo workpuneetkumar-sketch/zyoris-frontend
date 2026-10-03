@@ -3,6 +3,6 @@
 import React from "react";
 import ConnectWorkspace from "@/components/connect/ConnectWorkspace";
 
-export default function MessagesPage() {
+export default function ConnectPage() {
   return <ConnectWorkspace />;
 }
