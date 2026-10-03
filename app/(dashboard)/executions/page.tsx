@@ -82,10 +82,11 @@ function formatDuration(ms?: number): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SkeletonRow() {
+function SkeletonRow({ isAdmin }: { isAdmin: boolean }) {
+  const widths = isAdmin ? [30, 35, 15, 15, 15, 10] : [30, 45, 15, 15, 10];
   return (
     <tr className="border-b border-[color:var(--color-border-light)]">
-      {[30, 35, 15, 15, 15, 10].map((w, i) => (
+      {widths.map((w, i) => (
         <td key={i} className="px-5 py-4">
           <div
             className="h-4 bg-[color:var(--color-background-secondary)] rounded-lg animate-pulse"
@@ -97,10 +98,10 @@ function SkeletonRow() {
   );
 }
 
-function EmptyState({ hasFilters, onClear }: { hasFilters: boolean; onClear: () => void }) {
+function EmptyState({ hasFilters, onClear, isAdmin }: { hasFilters: boolean; onClear: () => void; isAdmin: boolean }) {
   return (
     <tr>
-      <td colSpan={7}>
+      <td colSpan={isAdmin ? 7 : 5}>
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-14 h-14 bg-[color:var(--color-background-secondary)] rounded-2xl flex items-center justify-center mb-4">
             <ScrollText size={28} className="text-[color:var(--color-text-muted)]" />
@@ -178,7 +179,15 @@ function SelectPill<T extends string>({ label, value, options, onChange }: Selec
 
 // ─── Execution row ────────────────────────────────────────────────────────────
 
-function ExecutionRow({ execution, onClick }: { execution: Execution; onClick: () => void }) {
+function ExecutionRow({
+  execution,
+  isAdmin,
+  onClick,
+}: {
+  execution: Execution;
+  isAdmin: boolean;
+  onClick: () => void;
+}) {
   return (
     <tr
       onClick={onClick}
@@ -192,9 +201,9 @@ function ExecutionRow({ execution, onClick }: { execution: Execution; onClick: (
           </div>
           <div>
             <p className="text-sm font-medium text-[color:var(--color-text)]">
-              {execution.agentName || execution.agentId}
+              {execution.agentName || (isAdmin ? execution.agentId : "AI Assistant")}
             </p>
-            {execution.agentName && (
+            {isAdmin && execution.agentName && (
               <p className="text-[10px] font-mono text-[color:var(--color-text-muted)]">
                 {execution.agentId}
               </p>
@@ -215,30 +224,34 @@ function ExecutionRow({ execution, onClick }: { execution: Execution; onClick: (
         <ExecutionStatusBadge status={execution.status} />
       </td>
 
-      {/* Initiator */}
-      <td className="px-5 py-4 whitespace-nowrap">
-        <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-secondary)] border border-[color:var(--color-border)]">
-          {execution.initiatorType}
-        </span>
-      </td>
+      {/* Initiator — only for authorized administrators/developers */}
+      {isAdmin && (
+        <td className="px-5 py-4 whitespace-nowrap">
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-secondary)] border border-[color:var(--color-border)]">
+            {execution.initiatorType}
+          </span>
+        </td>
+      )}
 
-      {/* Model */}
-      <td className="px-5 py-4 whitespace-nowrap">
-        {execution.modelUsed ? (
-          <div>
-            <p className="text-xs font-mono text-[color:var(--color-text-secondary)]">
-              {execution.modelUsed}
-            </p>
-            {execution.modelVersion && (
-              <p className="text-[10px] text-[color:var(--color-text-muted)]">
-                v{execution.modelVersion}
+      {/* Model — only for authorized administrators/developers */}
+      {isAdmin && (
+        <td className="px-5 py-4 whitespace-nowrap">
+          {execution.modelUsed ? (
+            <div>
+              <p className="text-xs font-mono text-[color:var(--color-text-secondary)]">
+                {execution.modelUsed}
               </p>
-            )}
-          </div>
-        ) : (
-          <span className="text-xs text-[color:var(--color-text-muted)]">—</span>
-        )}
-      </td>
+              {execution.modelVersion && (
+                <p className="text-[10px] text-[color:var(--color-text-muted)]">
+                  v{execution.modelVersion}
+                </p>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-[color:var(--color-text-muted)]">—</span>
+          )}
+        </td>
+      )}
 
       {/* Started / duration */}
       <td className="px-5 py-4 whitespace-nowrap">
@@ -265,7 +278,8 @@ function ExecutionRow({ execution, onClick }: { execution: Execution; onClick: (
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ExecutionListPage() {
-  const { user, token, isInitializing } = useAuth();
+  const { user, token, isInitializing, hasPermission } = useAuth();
+  const isAdmin = user?.role === "ADMIN" || (hasPermission && (hasPermission("admin") || hasPermission("developer")));
   const router      = useRouter();
   const searchParams = useSearchParams();
   const pathnameRaw  = usePathname();
@@ -288,7 +302,6 @@ export default function ExecutionListPage() {
   useEffect(() => {
     if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") router.replace("/dashboard");
   }, [user, isInitializing, router]);
 
   const syncUrl = useCallback((overrides?: Partial<Record<string, string>>) => {
@@ -430,7 +443,7 @@ export default function ExecutionListPage() {
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[color:var(--color-text-muted)] pointer-events-none" />
             <input
               type="text"
-              placeholder="Filter by agent ID or name…"
+              placeholder={isAdmin ? "Filter by agent ID or name…" : "Filter by agent name…"}
               value={agentId}
               onChange={(e) => setAgentId(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 text-xs font-medium rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] text-[color:var(--color-text)] focus:border-[color:var(--color-primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-info-light)] transition-all"
@@ -450,12 +463,14 @@ export default function ExecutionListPage() {
               options={STATUS_OPTIONS}
               onChange={(v) => { setStatus(v); applyFilter({ status: v || undefined }); }}
             />
-            <SelectPill
-              label="Initiator"
-              value={initiatorType}
-              options={INITIATOR_OPTIONS}
-              onChange={(v) => { setInitiatorType(v); applyFilter({ initiatorType: v || undefined }); }}
-            />
+            {isAdmin && (
+              <SelectPill
+                label="Initiator"
+                value={initiatorType}
+                options={INITIATOR_OPTIONS}
+                onChange={(v) => { setInitiatorType(v); applyFilter({ initiatorType: v || undefined }); }}
+              />
+            )}
             {hasFilters && (
               <button
                 onClick={clearAll}
@@ -474,7 +489,10 @@ export default function ExecutionListPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-[color:var(--color-border)] bg-[color:var(--color-surface-active)]">
-                {["Agent", "Plan", "Status", "Initiator", "Model", "Started", ""].map((h) => (
+                {(isAdmin
+                  ? ["Agent", "Plan", "Status", "Initiator", "Model", "Started", ""]
+                  : ["Agent", "Plan", "Status", "Started", ""]
+                ).map((h) => (
                   <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold text-[color:var(--color-text-muted)] uppercase tracking-wider whitespace-nowrap">
                     {h}
                   </th>
@@ -483,13 +501,14 @@ export default function ExecutionListPage() {
             </thead>
             <tbody>
               {loading
-                ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
+                ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} isAdmin={!!isAdmin} />)
                 : executions.length === 0
-                  ? <EmptyState hasFilters={hasFilters} onClear={clearAll} />
+                  ? <EmptyState hasFilters={hasFilters} onClear={clearAll} isAdmin={!!isAdmin} />
                   : executions.map((e) => (
                       <ExecutionRow
                         key={e.id}
                         execution={e}
+                        isAdmin={!!isAdmin}
                         onClick={() => router.push(`/executions/${e.id}`)}
                       />
                     ))

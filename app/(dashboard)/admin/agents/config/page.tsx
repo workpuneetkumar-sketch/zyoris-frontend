@@ -57,6 +57,7 @@ export default function AgentConfigPage() {
   const { user, token } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isAdmin = user?.role === "ADMIN";
 
   const [agents, setAgents]                   = useState<{ id: string; name: string }[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(searchParams?.get("agentId") ?? "");
@@ -76,22 +77,22 @@ export default function AgentConfigPage() {
 
   // Load agent list
   useEffect(() => {
-    if (!token) return;
+    if (!token || !isAdmin) return;
     setAgentsLoading(true);
     listConfigurableAgents()
       .then((list) => {
         setAgents(list);
-        if (!selectedAgentId && list.length > 0) {
-          setSelectedAgentId(list[0].id);
+        if (list.length > 0) {
+          setSelectedAgentId((current) => current || list[0].id);
         }
       })
       .catch((err: any) => toast.error(err.message ?? "Failed to load agents."))
       .finally(() => setAgentsLoading(false));
-  }, [token]);
+  }, [token, isAdmin]);
 
   // Load config whenever selected agent changes
   const loadConfig = useCallback(async () => {
-    if (!selectedAgentId || !token) return;
+    if (!selectedAgentId || !token || !isAdmin) return;
     setLoading(true);
     setError(null);
     setConfig(null);
@@ -109,7 +110,7 @@ export default function AgentConfigPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAgentId, token, router]);
+  }, [selectedAgentId, token, isAdmin, router]);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
 
@@ -136,7 +137,7 @@ export default function AgentConfigPage() {
     }
   };
 
-  if (!user) return null;
+  if (!user || !isAdmin) return null;
 
   return (
     <div className="space-y-6 max-w-[900px] mx-auto">

@@ -279,7 +279,8 @@ function ApprovalRefCard({ ref: approval }: { ref: ExecutionApprovalRef }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ExecutionDetailPage() {
-  const { user, token, isInitializing } = useAuth();
+  const { user, token, isInitializing, hasPermission } = useAuth();
+  const isAdmin = user?.role === "ADMIN" || (hasPermission && (hasPermission("admin") || hasPermission("developer")));
   const router = useRouter();
   const params = useParams();
   const executionId =
@@ -297,7 +298,6 @@ export default function ExecutionDetailPage() {
   useEffect(() => {
     if (isInitializing) return;
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") router.replace("/dashboard");
   }, [user, isInitializing, router]);
 
   const fetchDetail = useCallback(async () => {
@@ -345,11 +345,13 @@ export default function ExecutionDetailPage() {
   const hasApprovals = execution.approvals && execution.approvals.length > 0;
 
   const metaRows = [
-    { label: "Execution ID",  value: execution.id,            mono: true  },
-    { label: "Agent",         value: execution.agentName || execution.agentId },
-    { label: "Initiator",     value: execution.initiatorType  },
-    { label: "Model",         value: execution.modelUsed,      mono: true  },
-    { label: "Model version", value: execution.modelVersion ? `v${execution.modelVersion}` : undefined, mono: true },
+    ...(isAdmin ? [{ label: "Execution ID", value: execution.id, mono: true }] : []),
+    { label: "Agent",         value: execution.agentName || (isAdmin ? execution.agentId : "AI Assistant") },
+    ...(isAdmin ? [{ label: "Initiator",     value: execution.initiatorType }] : []),
+    ...(isAdmin ? [
+      { label: "Model",         value: execution.modelUsed,      mono: true  },
+      { label: "Model version", value: execution.modelVersion ? `v${execution.modelVersion}` : undefined, mono: true },
+    ] : []),
     { label: "Tool calls",    value: execution.toolCalls?.length ?? execution.toolCallCount ?? 0 },
     { label: "Started",       value: execution.startedAt ? new Date(execution.startedAt).toLocaleString() : undefined },
     { label: "Completed",     value: execution.completedAt ? new Date(execution.completedAt).toLocaleString() : undefined },
@@ -382,18 +384,22 @@ export default function ExecutionDetailPage() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap mb-1">
               <h1 className="text-xl font-bold text-[color:var(--color-text)] tracking-tight">
-                {execution.agentName || execution.agentId}
+                {execution.agentName || (isAdmin ? execution.agentId : "AI Assistant")}
               </h1>
-              <span className="text-[11px] font-mono text-[color:var(--color-text-muted)] bg-[color:var(--color-background-secondary)] px-2 py-0.5 rounded-md border border-[color:var(--color-border)]">
-                {execution.id}
-              </span>
+              {isAdmin && (
+                <span className="text-[11px] font-mono text-[color:var(--color-text-muted)] bg-[color:var(--color-background-secondary)] px-2 py-0.5 rounded-md border border-[color:var(--color-border)]">
+                  {execution.id}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 flex-wrap mt-2">
               <ExecutionStatusBadge status={execution.status} />
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-secondary)] border border-[color:var(--color-border)]">
-                {execution.initiatorType}
-              </span>
-              {execution.modelUsed && (
+              {isAdmin && (
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-secondary)] border border-[color:var(--color-border)]">
+                  {execution.initiatorType}
+                </span>
+              )}
+              {isAdmin && execution.modelUsed && (
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)]">
                   {execution.modelUsed}
                 </span>
