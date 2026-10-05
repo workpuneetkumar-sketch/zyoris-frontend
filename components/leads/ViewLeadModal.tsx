@@ -226,6 +226,56 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
           {/* TAB 1: OVERVIEW & SCORE */}
           {activeTab === "OVERVIEW" && (
             <div className="space-y-6 animate-in fade-in duration-200">
+
+              {/* ── TOP HIGHLIGHT: Custom Attributes & Schema Intelligence Card ───────────── */}
+              {lead.customFields && Object.keys(lead.customFields).length > 0 && (
+                <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-blue-400/30 relative overflow-hidden transform transition-all hover:shadow-2xl">
+                  {/* Background Decorative Glow Spheres */}
+                  <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-400/20 rounded-full blur-3xl pointer-events-none" />
+                  <div className="absolute -bottom-10 -left-10 w-44 h-44 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
+
+                  <div className="relative z-10 space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 text-blue-200 shadow-inner">
+                          <Sparkles size={20} className="text-amber-300 animate-pulse" />
+                        </div>
+                        <div>
+                          <h3 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
+                            Custom Attributes & Extracted Schema Intelligence
+                          </h3>
+                          <p className="text-xs text-blue-100/80 font-medium">
+                            Auto-captured from imported spreadsheet & custom schema properties
+                          </p>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-white/15 backdrop-blur-md border border-white/25 text-amber-200 shadow-xs">
+                        {Object.keys(lead.customFields).length} Custom Field{Object.keys(lead.customFields).length !== 1 ? "s" : ""} Preserved
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+                      {Object.entries(lead.customFields).map(([key, value]) => (
+                        <div
+                          key={key}
+                          className="bg-white/10 backdrop-blur-md border border-white/15 hover:border-white/40 rounded-2xl p-4 transition-all hover:bg-white/15 group shadow-xs"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <p className="text-[11px] font-extrabold text-blue-200 uppercase tracking-wider truncate">
+                              {key.replace(/([A-Z])/g, ' $1').trim()}
+                            </p>
+                            <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
+                          </div>
+                          <p className="text-sm font-extrabold text-white leading-snug break-words">
+                            {safeString(value)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Score + Estimated Value Hero Row */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Score Card */}
@@ -415,9 +465,11 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                         {lead.note}
                       </p>
                     </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
+
+
             </div>
           )}
 

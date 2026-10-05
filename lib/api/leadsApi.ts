@@ -317,13 +317,24 @@ export async function fetchLeadById(leadId: string): Promise<any> {
             email: lead.email || lead.Email || "",
             phone: lead.phone || lead.Phone || "",
             company: lead.company || lead.Company || "",
+            industry: lead.industry || lead.Industry || "",
+            companySize: lead.companySize || lead.CompanySize || "",
+            jobTitle: lead.jobTitle || lead.JobTitle || "",
             city: lead.city || lead.City || "",
+            state: lead.state || lead.State || "",
+            country: lead.country || lead.Country || "",
+            language: lead.language || lead.Language || "",
+            pinCode: lead.pinCode || lead.PinCode || "",
+            territory: lead.territory || lead.Territory || "",
+            product: lead.product || lead.Product || "",
+            externalId: lead.externalId || lead.ExternalId || "",
             source: lead.source || lead.Source || "Unknown",
             status: lead.status || lead.Status || "NEW",
             score: score,
             tags: Array.isArray(lead.tags) ? lead.tags : [],
             note: lead.note || lead.Note || "",
-            estimatedValue: typeof lead.estimatedValue === 'number' ? lead.estimatedValue : 0,
+            customFields: lead.customFields || lead.CustomFields || {},
+            estimatedValue: typeof lead.estimatedValue === 'number' ? lead.estimatedValue : (typeof lead.budget === 'number' ? lead.budget : 0),
             assignedTo: lead.assignedTo || null,
             assignedToId: lead.assignedToId || lead.assignedTo?.id || null,
             owner: lead.owner || "Unassigned",
@@ -390,13 +401,17 @@ export async function startLeadImport(file: File): Promise<LeadImportStartRespon
     });
     
     const formData = new FormData();
-    // Always send as "file" with an explicit MIME type of text/csv so the server's
+    // Always send as "file" with an explicit MIME type for CSV/XLSX/XLS so the server's
     // multer/busboy parser correctly recognises it, even when the OS sets an empty
-    // or wrong MIME type (common on Windows / some browsers).
-    const csvFile = file.type === "text/csv" || file.name.endsWith(".csv")
-        ? new File([file], file.name, { type: "text/csv" })
-        : file;
-    formData.append("file", csvFile);
+    // or generic MIME type (common on Windows / some browsers).
+    let mimeType = file.type;
+    if (!mimeType || mimeType === "application/octet-stream") {
+        if (file.name.endsWith(".csv")) mimeType = "text/csv";
+        else if (file.name.endsWith(".xlsx")) mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        else if (file.name.endsWith(".xls")) mimeType = "application/vnd.ms-excel";
+    }
+    const fileToSend = new File([file], file.name, { type: mimeType || "text/csv" });
+    formData.append("file", fileToSend);
     
     try {
         // Use a longer timeout for file uploads — Render.com cold starts can add 10-30s

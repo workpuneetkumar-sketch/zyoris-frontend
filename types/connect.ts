@@ -146,7 +146,7 @@ export type MessageActionType =
 export interface MessageActionItem {
   id: MessageActionType;
   label: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
+  icon: React.ElementType;
   isDestructive?: boolean;
   disabled?: boolean;
   hidden?: boolean;

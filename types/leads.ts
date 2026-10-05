@@ -109,6 +109,9 @@ export interface Lead {
     id: string;
     name: string;
     company?: string;      // Made optional
+    industry?: string;
+    companySize?: string;
+    jobTitle?: string;
     source?: LeadSource | string;  // Made optional
     owner?: string;        // Made optional
     ownerAvatar?: string;  // Made optional
@@ -118,6 +121,13 @@ export interface Lead {
     email?: string;
     phone?: string;
     city?: string;
+    state?: string;
+    country?: string;
+    language?: string;
+    pinCode?: string;
+    territory?: string;
+    product?: string;
+    externalId?: string;
     estimatedValue?: number;
     assignedToId?: string | null;
     assignedTo?: {

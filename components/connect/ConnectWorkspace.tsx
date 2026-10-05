@@ -768,8 +768,8 @@ export default function ConnectWorkspace() {
 
               {/* Message List Stream */}
               <MessageList
-                channelId={activeTarget.type === "channel" ? activeTarget.id : null}
-                conversationId={activeTarget.type === "conversation" ? activeTarget.id : null}
+                channelId={activeTarget?.type === "channel" ? activeTarget.id : null}
+                conversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
                 messages={messages}
                 loading={messagesLoading}
                 error={messagesError}
@@ -781,7 +781,7 @@ export default function ConnectWorkspace() {
                     ? "This is the very start of the channel. Send a message below to connect with your team!"
                     : "This is the start of your direct conversation."
                 }
-                onRetryFetch={() => loadMessagesForTarget(activeTarget)}
+                onRetryFetch={() => { if (activeTarget) loadMessagesForTarget(activeTarget); }}
                 onReply={handleStartReply}
                 onEdit={handleStartEdit}
                 onDelete={handleDeleteMessage}

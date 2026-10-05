@@ -85,21 +85,44 @@ function parsePreviewRows(
 }
 
 function detectDuplicates(rows: PreviewRow[]): number {
-  const seen = new Set<string>();
+  const seenEmail = new Set<string>();
+  const seenPhone = new Set<string>();
   let count = 0;
   for (const row of rows) {
-    const key =
-      (row["email"] || row["Email"] || row["EMAIL"] || "") + "|" +
-      (row["name"]  || row["Name"]  || row["NAME"]  || "");
-    if (key !== "|") { if (seen.has(key)) count++; else seen.add(key); }
+    const keys = Object.keys(row);
+    const emailKey = keys.find(k => k.toLowerCase().includes("email"));
+    const phoneKey = keys.find(k => k.toLowerCase().includes("phone") || k.toLowerCase().includes("mobile"));
+    
+    const emailVal = emailKey ? row[emailKey].toLowerCase().trim() : "";
+    const phoneVal = phoneKey ? row[phoneKey].replace(/\D/g, "") : "";
+    
+    let isDup = false;
+    if (emailVal && seenEmail.has(emailVal)) isDup = true;
+    else if (emailVal) seenEmail.add(emailVal);
+    
+    if (phoneVal && phoneVal.length >= 7 && seenPhone.has(phoneVal)) isDup = true;
+    else if (phoneVal && phoneVal.length >= 7) seenPhone.add(phoneVal);
+
+    if (isDup) count++;
   }
   return count;
 }
 
 function validateHeaders(headers: string[]): string[] {
-  const required = ["name", "email"];
-  const lower = headers.map((h) => h.toLowerCase());
-  return required.filter((r) => !lower.includes(r));
+  const lower = headers.map((h) => h.toLowerCase().trim());
+  const missing: string[] = [];
+
+  const hasName = lower.some(h =>
+    h === "name" || h.includes("name") || h.includes("fullname") || h.includes("first")
+  );
+  if (!hasName) missing.push("name");
+
+  const hasEmail = lower.some(h =>
+    h === "email" || h.includes("email") || h.includes("e-mail")
+  );
+  if (!hasEmail) missing.push("email");
+
+  return missing;
 }
 
 // ─── Status label helper ───────────────────────────────────────────────────
@@ -372,47 +395,58 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                 {showFormatGuide && (
                   <div className="px-4 py-4 space-y-4 bg-white">
 
-                    {/* Required / Optional columns */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
-                          Required columns
-                        </p>
-                        <div className="space-y-1.5">
-                          {[
-                            { col: "name",  desc: "Full name of the lead" },
-                            { col: "email", desc: "Email address" },
-                          ].map(({ col, desc }) => (
-                            <div key={col} className="flex items-start gap-2">
-                              <span className="font-mono text-[11px] bg-red-50 text-red-600 border border-red-100 rounded px-1.5 py-0.5 shrink-0">
-                                {col}
-                              </span>
-                              <span className="text-[11px] text-gray-500 leading-tight pt-0.5">{desc}</span>
+                    {/* All 21 Schema Attributes breakdown */}
+                    <div>
+                      <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
+                        Supported Import Fields (21 Lead Attributes)
+                      </p>
+                      
+                      <div className="space-y-3 text-xs">
+                        {/* Required */}
+                        <div className="bg-red-50/60 border border-red-100 rounded-xl p-2.5">
+                          <p className="text-[10px] font-bold text-red-700 uppercase tracking-wide mb-1.5">Required Fields</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="flex items-center gap-1.5 font-mono text-[11px] text-red-800">
+                              <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-red-200">name</span>
+                              <span className="text-red-600 font-sans text-[10px]">(or Full Name, Contact Name)</span>
                             </div>
-                          ))}
+                            <div className="flex items-center gap-1.5 font-mono text-[11px] text-red-800">
+                              <span className="font-bold bg-white px-1.5 py-0.5 rounded border border-red-200">email</span>
+                              <span className="text-red-600 font-sans text-[10px]">(or Email Address, Contact Email)</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
-                          Optional columns
-                        </p>
-                        <div className="space-y-1.5">
-                          {[
-                            { col: "phone",          desc: "Phone number" },
-                            { col: "company",        desc: "Company name" },
-                            { col: "owner",          desc: "Assigned rep name" },
-                            { col: "status",         desc: "NEW · WARM · HOT · COLD · DEAD" },
-                            { col: "source",         desc: "Website · LinkedIn · Referral…" },
-                            { col: "estimatedValue", desc: "Deal value (number)" },
-                            { col: "score",          desc: "Lead score 0–100" },
-                          ].map(({ col, desc }) => (
-                            <div key={col} className="flex items-start gap-2">
-                              <span className="font-mono text-[11px] bg-gray-50 text-gray-600 border border-gray-200 rounded px-1.5 py-0.5 shrink-0">
-                                {col}
-                              </span>
-                              <span className="text-[11px] text-gray-500 leading-tight pt-0.5">{desc}</span>
-                            </div>
-                          ))}
+
+                        {/* Optional categories */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                          <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 space-y-1">
+                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide mb-1">Contact & Location</p>
+                            <p><span className="font-mono font-bold text-slate-700">phone</span> · Mobile / Phone number</p>
+                            <p><span className="font-mono font-bold text-slate-700">city</span>, <span className="font-mono font-bold text-slate-700">state</span>, <span className="font-mono font-bold text-slate-700">country</span></p>
+                            <p><span className="font-mono font-bold text-slate-700">pinCode</span> (Zip), <span className="font-mono font-bold text-slate-700">language</span>, <span className="font-mono font-bold text-slate-700">territory</span></p>
+                          </div>
+
+                          <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 space-y-1">
+                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide mb-1">Company & Position</p>
+                            <p><span className="font-mono font-bold text-slate-700">company</span> · Company / Org name</p>
+                            <p><span className="font-mono font-bold text-slate-700">industry</span> · Tech, Healthcare, Retail…</p>
+                            <p><span className="font-mono font-bold text-slate-700">companySize</span> · 10-50, 100-500…</p>
+                            <p><span className="font-mono font-bold text-slate-700">jobTitle</span> · Designation / Title</p>
+                          </div>
+
+                          <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 space-y-1">
+                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide mb-1">Pipeline & Assignee</p>
+                            <p><span className="font-mono font-bold text-slate-700">status</span> · NEW, WARM, HOT, COLD, DEAD, QUALIFIED, PROPOSAL, NEGOTIATION, CLOSED</p>
+                            <p><span className="font-mono font-bold text-slate-700">owner</span> / <span className="font-mono font-bold text-slate-700">assignedToId</span> · Rep name / ID</p>
+                            <p><span className="font-mono font-bold text-slate-700">source</span> · Website, LinkedIn, Referral…</p>
+                          </div>
+
+                          <div className="bg-slate-50 border border-slate-200/70 rounded-xl p-2.5 space-y-1">
+                            <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wide mb-1">Value & Intelligence</p>
+                            <p><span className="font-mono font-bold text-slate-700">estimatedValue</span> (budget) · Deal amount</p>
+                            <p><span className="font-mono font-bold text-slate-700">product</span> · Interested product/service</p>
+                            <p><span className="font-mono font-bold text-slate-700">externalId</span>, <span className="font-mono font-bold text-slate-700">tags</span>, <span className="font-mono font-bold text-slate-700">note</span>, <span className="font-mono font-bold text-slate-700">score</span></p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -423,14 +457,14 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                     {/* Sample row */}
                     <div>
                       <p className="text-[10px] font-extrabold text-gray-500 uppercase tracking-widest mb-2">
-                        Sample row
+                        Sample Header Row (CSV / XLSX / XLS)
                       </p>
                       <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
                         <table className="w-full text-[11px] min-w-max">
                           <thead>
-                            <tr className="bg-gray-50 border-b border-gray-100">
-                              {["name","email","phone","company","owner","status","source","estimatedValue","score"].map((h) => (
-                                <th key={h} className="text-left px-2.5 py-1.5 font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                            <tr className="bg-gray-50 border-b border-gray-100 font-mono text-[10px]">
+                              {["name","email","phone","company","industry","jobTitle","city","status","source","estimatedValue","externalId","tags","note"].map((h) => (
+                                <th key={h} className="text-left px-2.5 py-1.5 font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                                   {h}
                                 </th>
                               ))}
@@ -438,15 +472,19 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                           </thead>
                           <tbody>
                             <tr>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">John Smith</td>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">john@techcorp.com</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap font-medium">Jane Doe</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">jane@acme.com</td>
                               <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">+1-555-0192</td>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">TechCorp Inc.</td>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Sarah Johnson</td>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">HOT</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Acme Corp</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Software</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">CTO</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Austin</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap text-amber-600 font-bold">HOT</td>
                               <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Website</td>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">15000</td>
-                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">85</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">50000</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap font-mono">EXT-101</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">enterprise, vip</td>
+                              <td className="px-2.5 py-1.5 text-gray-600 whitespace-nowrap">Q4 Rollout candidate</td>
                             </tr>
                           </tbody>
                         </table>
@@ -456,16 +494,17 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                     {/* Rules list */}
                     <div className="bg-amber-50 border border-amber-100 rounded-xl px-3 py-2.5 space-y-1">
                       <p className="text-[10px] font-extrabold text-amber-700 uppercase tracking-widest mb-1">
-                        Good to know
+                        Backend Validation & Ingestion Features
                       </p>
                       {[
-                        "Column headers are case-insensitive (Name, name, NAME all work).",
-                        "Duplicate rows (same email) are detected and skipped automatically.",
-                        "The owner column must match an existing team member's name.",
-                        "status must be one of: NEW, WARM, HOT, COLD, DEAD, QUALIFIED, PROPOSAL, NEGOTIATION, CLOSED.",
-                        "Maximum 5 000 rows and 10 MB per file.",
+                        "Supports .CSV, .XLSX, and .XLS file formats up to 10 MB / 5,000 rows.",
+                        "Dynamic header resolution maps aliases like 'Email Address', 'Full Name', 'Deal Value', 'Zip Code' automatically.",
+                        "Tenant-isolated deduplication on normalized Email & Phone within your organization.",
+                        "Preserves explicit assignee (owner / assignedToId); auto-assignment rule applies when empty.",
+                        "Data normalization standardizes emails, phones, numeric budgets, tags, and status values.",
+                        "Error CSV download report preserves all 21 fields with row numbers and exact failure reasons.",
                       ].map((rule, i) => (
-                        <p key={i} className="text-[11px] text-amber-700 leading-snug flex items-start gap-1.5">
+                        <p key={i} className="text-[11px] text-amber-800 leading-snug flex items-start gap-1.5">
                           <span className="shrink-0 mt-0.5">•</span>
                           <span>{rule}</span>
                         </p>

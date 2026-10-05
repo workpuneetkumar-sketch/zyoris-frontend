@@ -1,0 +1,13 @@
+Full Name,Contact Email,Security Clearance,Project Codename,Annual Research Budget,Preferred Operating System,Primary Data Center,Hardware Architecture
+Dr. Aris Thorne,aris.thorne@quantum-nexus.io,Level 5 (Top Secret),Project Hyperion,4500000,Linux Arch,US-East-DC1,ARM64 Neoverse
+Elena Vance,elena.vance@cyber-dynamics.org,Level 4 (Secret),Project Chronos,2100000,Ubuntu Server,EU-Central-DC2,x86_64 EPYC
+Marcus Brody,marcus.brody@deepmind-labs.dev,Level 3 (Confidential),Project Aegis,1800000,Fedora Core,US-West-DC3,RISC-V Vector
+Sophia Chen,sophia.chen@stellar-biotech.io,Level 5 (Top Secret),Project Astra,6200000,Debian Stable,AP-South-DC1,GPU H100 Cluster
+David Miller,david.miller@apex-robotics.com,Level 2 (Internal),Project Vulcan,950000,RedHat Enterprise,US-East-DC2,x86_64 Xeon
+Amara Okafor,amara.okafor@helios-energy.org,Level 4 (Secret),Project Sol,3400000,Alpine Linux,EU-West-DC1,ARM64 Ampere
+Lucas Sterling,lucas.sterling@orbital-defense.co,Level 5 (Top Secret),Project Valkyrie,8900000,Linux Arch,US-Gov-DC1,GPU B200 NVLink
+Isabella Rossi,isabella.rossi@milano-aero.it,Level 3 (Confidential),Project DaVinci,1400000,macOS Sonoma,EU-South-DC1,Apple Silicon M3
+Julian Thorne,julian.thorne@synapse-ai.co,Level 4 (Secret),Project Cortex,5100000,Ubuntu Server,AP-East-DC2,GPU H200 SuperPOD
+Clara Oswald,clara.oswald@temporal-dynamics.uk,Level 5 (Top Secret),Project TARDIS,7500000,Custom RTOS,UK-London-DC1,Quantum Processing Unit
+Gabriel Santos,gabriel.santos@amazonas-tech.br,Level 2 (Internal),Project Anaconda,820000,Rocky Linux,SA-East-DC1,x86_64 EPYC
+Vikram Patel,vikram.patel@bharat-semicon.in,Level 4 (Secret),Project Shakti,4100000,CentOS Stream,AP-South-DC2,RISC-V Shakti
