@@ -465,9 +465,9 @@ export default function ViewLeadModal({ lead, onClose }: ViewLeadModalProps) {
                         {lead.note}
                       </p>
                     </div>
-                    )}
-                  </div>
-                )}
+                  )}
+                </div>
+              )}
 
 
             </div>
