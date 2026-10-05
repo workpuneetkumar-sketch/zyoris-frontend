@@ -3,11 +3,9 @@
  * ─────────────────────────────────────────────────────────────
  * Typed API service layer for the Execution Ledger (Day 3).
  *
- * Mock fallback: since Ayush's /api/agent-ledger endpoints may
- * not be merged into dev yet, every function catches 404 / 503
- * and returns realistic mock data so the UI can be built and
- * reviewed independently. Set NEXT_PUBLIC_USE_MOCK_LEDGER=false
- * (or remove the env var) once the real endpoints are live.
+ * Mock data is available for local UI work when
+ * NEXT_PUBLIC_USE_MOCK_LEDGER=true. Real execution details use the
+ * backend's /executions/:id endpoint by default.
  *
  * Uses the shared axios instance — auth headers, token refresh,
  * and retry logic are all handled centrally in lib/api/api.ts.
@@ -24,6 +22,7 @@ import type {
 } from "@/types/executions";
 
 const BASE = "/api/agent-ledger";
+const DETAIL_BASE = "/executions";
 
 // ─── Mock flag ────────────────────────────────────────────────────────────────
 // Flip to false (or delete the env var) once the real endpoint is live.
@@ -166,6 +165,13 @@ const MOCK_DETAIL: ExecutionDetail = {
   metadata: { triggeredBy: "user-darsh", workspaceId: "ws-zyoris" },
 };
 
+export class ExecutionApiError extends Error {
+  constructor(readonly status?: number) {
+    super("Unable to load execution details.");
+    this.name = "ExecutionApiError";
+  }
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function unwrap<T>(raw: unknown): T {
@@ -219,6 +225,27 @@ function isMockableMiss(err: unknown): boolean {
   return status === 404 || status === 503 || status === 502 || !(err as any)?.response;
 }
 
+function hasExecutionDetailShape(value: unknown): value is ExecutionDetail {
+  if (!value || typeof value !== "object") return false;
+  const detail = value as Record<string, unknown>;
+  return (
+    typeof detail.id === "string" &&
+    typeof detail.agentId === "string" &&
+    typeof detail.status === "string" &&
+    typeof detail.initiatorType === "string" &&
+    typeof detail.startedAt === "string" &&
+    Array.isArray(detail.toolCalls)
+  );
+}
+
+function getResponseStatus(err: unknown): number | undefined {
+  if (!err || typeof err !== "object" || !("response" in err)) return undefined;
+  const response = (err as { response?: unknown }).response;
+  if (!response || typeof response !== "object" || !("status" in response)) return undefined;
+  const status = (response as { status?: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -256,27 +283,25 @@ export async function getExecutions(
 }
 
 /**
- * GET /api/agent-ledger/:id
+ * GET /executions/:id
  * Full detail for a single execution.
  */
 export async function getExecution(id: string): Promise<ExecutionDetail> {
   if (USE_MOCK) {
     const found = MOCK_EXECUTIONS.find((e) => e.id === id);
-    if (!found) throw new Error(`Execution "${id}" not found.`);
+    if (!found) throw new ExecutionApiError(404);
     return { ...MOCK_DETAIL, ...found, toolCalls: MOCK_TOOL_CALLS, approvals: [MOCK_APPROVAL] };
   }
 
   try {
-    const res = await api.get(`${BASE}/${id}`);
-    return unwrap<ExecutionDetail>(res.data);
-  } catch (err: any) {
-    if (isMockableMiss(err)) {
-      console.warn("[executionsApi] Endpoint not reachable, using mock data.");
-      return MOCK_DETAIL;
-    }
-    throw new Error(
-      err.response?.data?.message || err.message || `Failed to load execution "${id}".`
-    );
+    const res = await api.get(`${DETAIL_BASE}/${encodeURIComponent(id)}`);
+    const detail = unwrap<unknown>(res.data);
+    if (!hasExecutionDetailShape(detail)) throw new ExecutionApiError(500);
+    return detail;
+  } catch (err: unknown) {
+    if (err instanceof ExecutionApiError) throw err;
+    const status = getResponseStatus(err);
+    throw new ExecutionApiError(status);
   }
 }
 

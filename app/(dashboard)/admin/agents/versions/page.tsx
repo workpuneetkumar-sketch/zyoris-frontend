@@ -150,20 +150,24 @@ let _versionsFetchInFlight = false;
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AgentVersionsPage() {
-  const { user, token } = useAuth();
+  const { user, token, hasPermission } = useAuth();
   const router = useRouter();
+  const canViewManagement =
+    user?.role === "ADMIN" ||
+    hasPermission("admin") ||
+    hasPermission("developer");
 
   const [versions, setVersions] = useState<AgentVersion[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
+  const [showRestriction, setShowRestriction] = useState(false);
 
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") { router.replace("/dashboard"); }
   }, [user, router]);
 
   const fetchVersions = useCallback(async () => {
-    if (!token) return;
+    if (!token || !canViewManagement) return;
     setLoading(true);
     setError(null);
     try {
@@ -176,17 +180,63 @@ export default function AgentVersionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [token, canViewManagement]);
 
   useEffect(() => {
     if (!token) return;
+    if (!canViewManagement) {
+      setLoading(false);
+      return;
+    }
     if (_versionsFetchInFlight) return;
     _versionsFetchInFlight = true;
     fetchVersions().finally(() => { _versionsFetchInFlight = false; });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, canViewManagement]);
 
   if (!user) return null;
+
+  if (!canViewManagement) {
+    return (
+      <div className="space-y-6 max-w-[1100px] mx-auto">
+        <div>
+          <h1 className="text-2xl font-bold text-[color:var(--color-text)] tracking-tight">
+            Model Versions
+          </h1>
+          <p className="text-sm text-[color:var(--color-text-secondary)] mt-1">
+            Detailed model-management information is restricted.
+          </p>
+        </div>
+
+        <div className="bg-[color:var(--color-surface)] rounded-2xl border border-[color:var(--color-border)] p-5">
+          <button
+            type="button"
+            onClick={() => setShowRestriction((shown) => !shown)}
+            aria-expanded={showRestriction}
+            aria-controls="model-version-restriction"
+            className="text-sm font-semibold text-[color:var(--color-primary)] hover:underline"
+          >
+            {showRestriction ? "Hide Details" : "View Details"}
+          </button>
+          {showRestriction && (
+            <div
+              id="model-version-restriction"
+              role="status"
+              className="mt-4 rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-background-secondary)] p-4"
+            >
+              <h2 className="text-sm font-bold text-[color:var(--color-text)]">
+                Restricted Information
+              </h2>
+              <p className="text-sm text-[color:var(--color-text-secondary)] mt-1">
+                Detailed model-management information is available only to
+                authorized administrators and developers.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // Group by agent
   const agentGroups = versions.reduce<Record<string, AgentVersion[]>>((acc, v) => {

@@ -110,7 +110,7 @@ export interface Execution {
 }
 
 /**
- * Full execution record returned by GET /api/agent-ledger/:id.
+ * Full execution record returned by GET /executions/:id.
  * Extends the list shape with the full lifecycle detail.
  */
 export interface ExecutionDetail extends Execution {

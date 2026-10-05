@@ -14,8 +14,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
-import { getExecution } from "@/lib/api/executionsApi";
-import { toast } from "react-toastify";
+import { ExecutionApiError, getExecution } from "@/lib/api/executionsApi";
 import {
   ArrowLeft,
   ChevronRight,
@@ -36,6 +35,36 @@ import {
 } from "lucide-react";
 import { ExecutionStatusBadge } from "@/components/executions/ExecutionStatusBadge";
 import type { ExecutionDetail, ToolCallEntry, ExecutionApprovalRef } from "@/types/executions";
+
+type DetailErrorKind = "not-found" | "forbidden" | "server-error" | "unavailable";
+
+function getDetailErrorKind(error: unknown): DetailErrorKind {
+  if (error instanceof ExecutionApiError) {
+    if (error.status === 404) return "not-found";
+    if (error.status === 403) return "forbidden";
+    if (error.status === 500) return "server-error";
+  }
+  return "unavailable";
+}
+
+const DETAIL_ERROR_COPY: Record<DetailErrorKind, { title: string; message: string }> = {
+  "not-found": {
+    title: "Execution Not Found",
+    message: "We couldn't find this execution. It may have been removed or the link may be incorrect.",
+  },
+  forbidden: {
+    title: "Access Denied",
+    message: "You don't have permission to view this execution.",
+  },
+  "server-error": {
+    title: "Execution Unavailable",
+    message: "The server couldn't load this execution right now. Please try again in a moment.",
+  },
+  unavailable: {
+    title: "Unable to Load Execution",
+    message: "We couldn't load this execution right now. Please try again in a moment.",
+  },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -292,7 +321,7 @@ export default function ExecutionDetailPage() {
 
   const [execution, setExecution] = useState<ExecutionDetail | null>(null);
   const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
+  const [error, setError]         = useState<DetailErrorKind | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -301,20 +330,31 @@ export default function ExecutionDetailPage() {
   }, [user, isInitializing, router]);
 
   const fetchDetail = useCallback(async () => {
-    if (!token || !executionId) return;
+    if (!executionId) {
+      setExecution(null);
+      setError("not-found");
+      setLoading(false);
+      return;
+    }
+    if (!token) {
+      if (isInitializing || !user) return;
+      setExecution(null);
+      setError("unavailable");
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
-      const data = await getExecution(executionId as string);
+      const data = await getExecution(executionId);
       setExecution(data);
-    } catch (err: any) {
-      const msg = err.message ?? "Failed to load execution.";
-      setError(msg);
-      toast.error(msg);
+    } catch (err: unknown) {
+      setExecution(null);
+      setError(getDetailErrorKind(err));
     } finally {
       setLoading(false);
     }
-  }, [token, executionId]);
+  }, [token, executionId, isInitializing, user]);
 
   useEffect(() => { fetchDetail(); }, [fetchDetail]);
 
@@ -322,11 +362,12 @@ export default function ExecutionDetailPage() {
   if (loading) return <DetailSkeleton />;
 
   if (error && !execution) {
+    const copy = DETAIL_ERROR_COPY[error];
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 max-w-[1400px] mx-auto">
         <AlertCircle size={48} className="text-[color:var(--color-error)] mb-4" />
-        <h3 className="text-lg font-bold text-[color:var(--color-text)] mb-2">Failed to Load Execution</h3>
-        <p className="text-sm text-[color:var(--color-text-secondary)] max-w-md mb-6">{error}</p>
+        <h3 className="text-lg font-bold text-[color:var(--color-text)] mb-2">{copy.title}</h3>
+        <p className="text-sm text-[color:var(--color-text-secondary)] max-w-md mb-6">{copy.message}</p>
         <div className="flex gap-3">
           <button onClick={fetchDetail} className="inline-flex items-center gap-2 px-4 py-2 bg-[color:var(--color-primary)] hover:bg-[color:var(--color-primary-dark)] text-[color:var(--color-primary-foreground)] text-sm font-semibold rounded-xl transition-all">
             <RefreshCw size={14} /> Retry

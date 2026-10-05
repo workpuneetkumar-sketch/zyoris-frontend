@@ -25,17 +25,23 @@ import {
   CheckCircle2,
   XCircle,
   Info,
+  ShieldCheck,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import { AVAILABLE_TOOLS } from "@/lib/api/agentConfigApi";
 import type {
   AgentConfig,
   SaveAgentConfigPayload,
+  TrustedContentBoundary,
 } from "@/lib/types/day7.ts";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface AgentConfigFormProps {
   config: AgentConfig;
+  /** Whether privileged technical security settings may be shown */
+  canViewSecurityControls: boolean;
   /** Called when the admin clicks "Save Configuration" */
   onSave: (payload: SaveAgentConfigPayload) => Promise<void>;
   /** Whether a save is in progress */
@@ -198,6 +204,7 @@ function ToolScopeSelector({
 
 export function AgentConfigForm({
   config,
+  canViewSecurityControls,
   onSave,
   saving,
   rejectedToolIds = [],
@@ -205,6 +212,13 @@ export function AgentConfigForm({
 }: AgentConfigFormProps) {
   const [systemPrompt,      setSystemPrompt]      = useState(config.systemPrompt);
   const [allowedToolIds,    setAllowedToolIds]     = useState<string[]>(config.allowedToolIds);
+  const [trustedContentBoundaries, setTrustedContentBoundaries] =
+    useState<TrustedContentBoundary[]>(config.trustedContentBoundaries);
+  const [maxTokensPerCall, setMaxTokensPerCall] = useState(config.maxTokensPerCall);
+  const [promptInjectionDefenceEnabled, setPromptInjectionDefenceEnabled] =
+    useState(config.promptInjectionDefenceEnabled);
+  const [minConfidenceThreshold, setMinConfidenceThreshold] =
+    useState(config.minConfidenceThreshold);
   const [dirty,             setDirty]              = useState(false);
 
   const markDirty = () => setDirty(true);
@@ -213,10 +227,16 @@ export function AgentConfigForm({
     await onSave({
       systemPrompt,
       allowedToolIds,
-      trustedContentBoundaries: config.trustedContentBoundaries,
-      maxTokensPerCall: config.maxTokensPerCall,
-      promptInjectionDefenceEnabled: config.promptInjectionDefenceEnabled,
-      minConfidenceThreshold: config.minConfidenceThreshold,
+      trustedContentBoundaries: canViewSecurityControls
+        ? trustedContentBoundaries
+        : config.trustedContentBoundaries,
+      maxTokensPerCall: canViewSecurityControls ? maxTokensPerCall : config.maxTokensPerCall,
+      promptInjectionDefenceEnabled: canViewSecurityControls
+        ? promptInjectionDefenceEnabled
+        : config.promptInjectionDefenceEnabled,
+      minConfidenceThreshold: canViewSecurityControls
+        ? minConfidenceThreshold
+        : config.minConfidenceThreshold,
     });
     setDirty(false);
   };
@@ -272,6 +292,193 @@ export function AgentConfigForm({
           onChange={(ids) => { setAllowedToolIds(ids); markDirty(); }}
         />
       </Section>
+
+      {canViewSecurityControls && (
+        <>
+          {/* ── Trusted-content boundaries ─────────────────────────────── */}
+          <Section
+            icon={ShieldCheck}
+            title="Trusted-Content Boundaries"
+            description="Define which sources the agent may treat as trusted, verified, or untrusted for prompt injection defence."
+          >
+            <div className="space-y-2">
+              {trustedContentBoundaries.map((boundary, index) => (
+                <div
+                  key={`${boundary.label}-${index}`}
+                  className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px_auto_auto] gap-2 items-center rounded-xl bg-[color:var(--color-background-secondary)] p-2"
+                >
+                  <input
+                    aria-label={`Boundary ${index + 1} label`}
+                    value={boundary.label}
+                    onChange={(event) => {
+                      setTrustedContentBoundaries((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, label: event.target.value } : item
+                        )
+                      );
+                      markDirty();
+                    }}
+                    placeholder="Source name"
+                    className="min-w-0 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2.5 py-2 text-xs text-[color:var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-info-light)]"
+                  />
+                  <input
+                    aria-label={`Boundary ${index + 1} pattern`}
+                    value={boundary.pattern}
+                    onChange={(event) => {
+                      setTrustedContentBoundaries((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, pattern: event.target.value } : item
+                        )
+                      );
+                      markDirty();
+                    }}
+                    placeholder="Domain or URL pattern"
+                    className="min-w-0 rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2.5 py-2 text-xs font-mono text-[color:var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-info-light)]"
+                  />
+                  <select
+                    aria-label={`Boundary ${index + 1} trust level`}
+                    value={boundary.trustLevel}
+                    onChange={(event) => {
+                      const trustLevel =
+                        event.target.value === "TRUSTED"
+                          ? "TRUSTED"
+                          : event.target.value === "UNTRUSTED"
+                          ? "UNTRUSTED"
+                          : "VERIFIED";
+                      setTrustedContentBoundaries((current) =>
+                        current.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, trustLevel } : item
+                        )
+                      );
+                      markDirty();
+                    }}
+                    className="rounded-lg border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-2.5 py-2 text-xs text-[color:var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-info-light)]"
+                  >
+                    <option value="TRUSTED">Trusted</option>
+                    <option value="VERIFIED">Verified</option>
+                    <option value="UNTRUSTED">Untrusted</option>
+                  </select>
+                  <span
+                    className={classNames(
+                      "rounded-full px-2.5 py-1 text-center text-[10px] font-bold",
+                      boundary.trustLevel === "TRUSTED" &&
+                        "bg-[color:var(--color-success-light)] text-[color:var(--color-success-foreground)]",
+                      boundary.trustLevel === "VERIFIED" &&
+                        "bg-[color:var(--color-warning-light)] text-[color:var(--color-warning-foreground)]",
+                      boundary.trustLevel === "UNTRUSTED" &&
+                        "bg-[color:var(--color-error-light)] text-[color:var(--color-error-foreground)]"
+                    )}
+                  >
+                    {boundary.trustLevel}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Remove boundary ${index + 1}`}
+                    onClick={() => {
+                      setTrustedContentBoundaries((current) =>
+                        current.filter((_, itemIndex) => itemIndex !== index)
+                      );
+                      markDirty();
+                    }}
+                    className="rounded-lg p-2 text-[color:var(--color-error)] transition-colors hover:bg-[color:var(--color-error-light)]"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setTrustedContentBoundaries((current) => [
+                    ...current,
+                    { label: "", pattern: "", trustLevel: "VERIFIED" },
+                  ]);
+                  markDirty();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[color:var(--color-primary)] px-3 py-2 text-xs font-semibold text-[color:var(--color-primary)] transition-colors hover:bg-[color:var(--color-info-light)]"
+              >
+                <Plus size={13} /> Add Boundary
+              </button>
+            </div>
+          </Section>
+
+          {/* ── Safety controls ───────────────────────────────────────── */}
+          <Section
+            icon={ShieldCheck}
+            title="Safety Controls"
+            description="These parameters are advisory — the backend enforces its own hard limits regardless of these values."
+          >
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <label className="space-y-2">
+                <span className="block text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                  Max tokens / call
+                </span>
+                <input
+                  aria-label="Max tokens per call"
+                  type="number"
+                  min={256}
+                  max={32768}
+                  step={256}
+                  value={maxTokensPerCall}
+                  onChange={(event) => {
+                    setMaxTokensPerCall(Number(event.target.value));
+                    markDirty();
+                  }}
+                  className="w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-background-secondary)] px-3 py-2.5 text-sm font-semibold text-[color:var(--color-text)] focus:outline-none focus:ring-2 focus:ring-[color:var(--color-info-light)]"
+                />
+              </label>
+              <label className="space-y-2">
+                <span className="block text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                  Min confidence (0–100)
+                </span>
+                <div className="flex items-center gap-3">
+                  <input
+                    aria-label="Minimum confidence threshold"
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={minConfidenceThreshold}
+                    onChange={(event) => {
+                      setMinConfidenceThreshold(Number(event.target.value));
+                      markDirty();
+                    }}
+                    className="min-w-0 flex-1 accent-[color:var(--color-primary)]"
+                  />
+                  <span className="w-8 text-right text-sm font-bold text-[color:var(--color-text)]">
+                    {minConfidenceThreshold}
+                  </span>
+                </div>
+                <span className="block text-[10px] text-[color:var(--color-text-muted)]">
+                  Responses below this threshold are flagged for human review.
+                </span>
+              </label>
+              <div className="space-y-2">
+                <span className="block text-[10px] font-extrabold uppercase tracking-widest text-[color:var(--color-text-muted)]">
+                  Prompt injection defence
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={promptInjectionDefenceEnabled}
+                  onClick={() => {
+                    setPromptInjectionDefenceEnabled((enabled) => !enabled);
+                    markDirty();
+                  }}
+                  className={classNames(
+                    "flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-left text-xs font-semibold transition-colors",
+                    promptInjectionDefenceEnabled
+                      ? "bg-[color:var(--color-success-light)] text-[color:var(--color-success-foreground)]"
+                      : "bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)]"
+                  )}
+                >
+                  <CheckCircle2 size={14} />
+                  {promptInjectionDefenceEnabled ? "Enabled" : "Disabled"}
+                </button>
+              </div>
+            </div>
+          </Section>
+        </>
+      )}
 
       {/* ── Save button ───────────────────────────────────────────────── */}
       <div className="flex items-center justify-end pt-2">
