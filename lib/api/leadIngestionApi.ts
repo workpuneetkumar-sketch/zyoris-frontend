@@ -187,6 +187,19 @@ export const CHANNEL_SAMPLE_PAYLOADS: Record<IngestionChannel, { source: string;
   }
 };
 
+// ── Authorization Helper ──────────────────────────────────────────────────
+export function isIngestionAuthorized(
+  user?: { role?: string } | null,
+  hasPermission?: (permission: string) => boolean
+): boolean {
+  if (!user) return false;
+  if (user.role === "ADMIN") return true;
+  if (hasPermission && (hasPermission("admin") || hasPermission("developer"))) {
+    return true;
+  }
+  return false;
+}
+
 // ── Ingestion API Methods ────────────────────────────────────────────────────
 
 /**
@@ -197,6 +210,11 @@ export async function ingestLeadGeneral(envelope: IngestLeadEnvelope): Promise<I
     const res = await api.post<IngestLeadResponse>("/leads/ingest", envelope);
     return res.data;
   } catch (err: any) {
+    if (err?.response?.status === 403 || err?.status === 403) {
+      const forbiddenError = new Error("You don't have access to this tool.");
+      (forbiddenError as any).status = 403;
+      throw forbiddenError;
+    }
     // If backend is not live or returned mock fallback format, generate realistic structured response
     console.warn("Backend /leads/ingest API notice:", err?.message || err);
     return simulateIngestResponse(envelope.channel, envelope.source, envelope.payload, envelope.sourceId, envelope.assignedToId);
@@ -223,6 +241,11 @@ export async function ingestLeadByChannel(
     });
     return res.data;
   } catch (err: any) {
+    if (err?.response?.status === 403 || err?.status === 403) {
+      const forbiddenError = new Error("You don't have access to this tool.");
+      (forbiddenError as any).status = 403;
+      throw forbiddenError;
+    }
     console.warn(`Backend /leads/ingest/${channelSlug} API notice:`, err?.message || err);
     return simulateIngestResponse(channel, CHANNEL_SAMPLE_PAYLOADS[channel].source, payload, options?.sourceId);
   }

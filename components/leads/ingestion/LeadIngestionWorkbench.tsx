@@ -50,7 +50,9 @@ import {
   IngestLeadResponse,
   ingestLeadGeneral,
   ingestLeadByChannel,
+  isIngestionAuthorized,
 } from "@/lib/api/leadIngestionApi";
+import { useAuth } from "@/context/AuthContext";
 import { fetchLeads } from "@/lib/api/leadsApi";
 
 // Channel configs with human friendly non-tech guides
@@ -289,6 +291,9 @@ function formatRelativeTime(isoString: string): string {
 }
 
 export function LeadIngestionWorkbench() {
+  const { user, hasPermission } = useAuth();
+  const isAuthorized = isIngestionAuthorized(user, hasPermission);
+
   const [activeTab, setActiveTab] = useState<ActiveTab>("NO_CODE_HUB");
   const [selectedChannel, setSelectedChannel] = useState<IngestionChannel>("WHATSAPP");
   const [ingestMode, setIngestMode] = useState<IngestMode>("GENERAL_ENVELOPE");
@@ -308,6 +313,7 @@ export function LeadIngestionWorkbench() {
     JSON.stringify(CHANNEL_SAMPLE_PAYLOADS.WHATSAPP.payload, null, 2)
   );
   const [jsonError, setJsonError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   // Execution & Logs state
   const [loading, setLoading] = useState(false);
@@ -323,6 +329,13 @@ export function LeadIngestionWorkbench() {
   const [idempotencyFilter, setIdempotencyFilter] = useState<string>("ALL");
   const [selectedLogForModal, setSelectedLogForModal] = useState<IngestLeadResponse | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Active tab guard: unauthorized users cannot stay on SIMULATOR tab
+  useEffect(() => {
+    if (!isAuthorized && activeTab === "SIMULATOR") {
+      setActiveTab("NO_CODE_HUB");
+    }
+  }, [isAuthorized, activeTab]);
 
   // Load persistent logs or seed initial logs on mount
   useEffect(() => {
@@ -367,6 +380,7 @@ export function LeadIngestionWorkbench() {
   const handleIngest = async (targetChannel?: IngestionChannel) => {
     const ch = targetChannel || selectedChannel;
     setJsonError(null);
+    setApiError(null);
     let parsedPayload: Record<string, any>;
     try {
       parsedPayload = JSON.parse(jsonPayload);
@@ -399,9 +413,14 @@ export function LeadIngestionWorkbench() {
       setLastResponse(res);
       const updated = [res, ...logs.filter((l) => l.leadId !== res.leadId).slice(0, 49)];
       saveLogs(updated);
-      triggerToast(`⚡ Connection Test Successful! Ingested lead: ${res.lead?.name || res.leadId}`);
-    } catch (err) {
+      triggerToast(`⚡ Connection Test Successful! Ingested lead: ${res.lead?.name || (isAuthorized ? res.leadId : "Lead Contact")}`);
+    } catch (err: any) {
       console.error("Ingestion error:", err);
+      const isForbidden = err?.response?.status === 403 || err?.status === 403 || err?.message === "You don't have access to this tool.";
+      const cleanMsg = isForbidden ? "You don't have access to this tool." : "Ingestion request failed.";
+      setApiError(cleanMsg);
+      setLastResponse(null);
+      triggerToast(cleanMsg);
     } finally {
       setLoading(false);
     }
@@ -508,6 +527,7 @@ export function LeadIngestionWorkbench() {
             setNoCodeWizardChannel(null);
             setActiveTab("LOGS");
           }}
+          isAuthorized={isAuthorized}
         />
       )}
 
@@ -516,6 +536,7 @@ export function LeadIngestionWorkbench() {
         <IngestionLogDetailModal
           log={selectedLogForModal}
           onClose={() => setSelectedLogForModal(null)}
+          isAuthorized={isAuthorized}
         />
       )}
 
@@ -531,37 +552,41 @@ export function LeadIngestionWorkbench() {
                 Lead Ingestion Center & Channel Connectors
               </h1>
               <p className="text-xs text-gray-500 mt-0.5">
-                Connect channels (WhatsApp, Facebook Ads, Website Forms) without coding, or test raw API JSON payloads.
+                {isAuthorized
+                  ? "Connect channels (WhatsApp, Facebook Ads, Website Forms) without coding, or test raw API JSON payloads."
+                  : "Connect channels (WhatsApp, Facebook Ads, Website Forms) without coding."}
               </p>
             </div>
           </div>
         </div>
 
-        {/* Audience Mode Switcher (Non-Tech vs Developer) */}
-        <div className="flex items-center gap-2 bg-gray-100 p-1.5 rounded-2xl border border-gray-200 shrink-0">
-          <button
-            onClick={() => setActiveTab("NO_CODE_HUB")}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-              activeTab === "NO_CODE_HUB"
-                ? "bg-blue-600 text-white shadow-md shadow-blue-200"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <MousePointerClick size={15} />
-            No-Code Connector Hub (For Managers)
-          </button>
-          <button
-            onClick={() => setActiveTab("SIMULATOR")}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-              activeTab === "SIMULATOR"
-                ? "bg-slate-900 text-white shadow-md"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <Code2 size={15} />
-            Developer Workbench (API & JSON)
-          </button>
-        </div>
+        {/* Audience Mode Switcher (Non-Tech vs Developer) — ONLY for authorized technical/admin users */}
+        {isAuthorized && (
+          <div className="flex items-center gap-2 bg-gray-100 p-1.5 rounded-2xl border border-gray-200 shrink-0">
+            <button
+              onClick={() => setActiveTab("NO_CODE_HUB")}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+                activeTab === "NO_CODE_HUB"
+                  ? "bg-blue-600 text-white shadow-md shadow-blue-200"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <MousePointerClick size={15} />
+              No-Code Connector Hub (For Managers)
+            </button>
+            <button
+              onClick={() => setActiveTab("SIMULATOR")}
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition-all ${
+                activeTab === "SIMULATOR"
+                  ? "bg-slate-900 text-white shadow-md"
+                  : "text-gray-600 hover:text-gray-900"
+              }`}
+            >
+              <Code2 size={15} />
+              Developer Workbench (API & JSON)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Main Tab Navigation */}
@@ -569,7 +594,7 @@ export function LeadIngestionWorkbench() {
         <div className="flex items-center gap-2">
           {[
             { id: "NO_CODE_HUB", label: "No-Code Channel Connectors", icon: MousePointerClick },
-            { id: "SIMULATOR", label: "JSON & cURL Developer Testbench", icon: Code2 },
+            ...(isAuthorized ? [{ id: "SIMULATOR", label: "JSON & cURL Developer Testbench", icon: Code2 }] : []),
             { id: "LOGS", label: "Ingestion Event Activity Logs", icon: Layers, count: logs.length },
           ].map((tab) => {
             const Icon = tab.icon;
@@ -664,7 +689,7 @@ export function LeadIngestionWorkbench() {
       )}
 
       {/* MODE 2: DEVELOPER API SIMULATOR */}
-      {activeTab === "SIMULATOR" && (
+      {activeTab === "SIMULATOR" && isAuthorized && (
         <div className="space-y-6 animate-in fade-in duration-200">
           {/* Mode Bar */}
           <div className="flex items-center justify-between bg-white p-3.5 rounded-2xl border border-gray-200 shadow-xs">
@@ -693,22 +718,55 @@ export function LeadIngestionWorkbench() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* JSON Code Editor */}
+            {/* JSON Code Editor & cURL Generator */}
             <div className="lg:col-span-7 bg-white p-5 rounded-2xl border border-gray-200 shadow-sm space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Raw Payload JSON Editor</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider">Developer Testbench</h3>
+                  <div className="flex items-center gap-1 bg-gray-100 p-0.5 rounded-lg text-[11px]">
+                    <button
+                      onClick={() => setCodeLanguage("curl")}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all ${codeLanguage === "curl" ? "bg-white text-blue-600 shadow-xs" : "text-gray-600"}`}
+                    >
+                      cURL
+                    </button>
+                    <button
+                      onClick={() => setCodeLanguage("ts")}
+                      className={`px-2 py-0.5 rounded-md font-bold transition-all ${codeLanguage === "ts" ? "bg-white text-blue-600 shadow-xs" : "text-gray-600"}`}
+                    >
+                      JSON
+                    </button>
+                  </div>
+                </div>
                 <span className="text-[11px] font-mono text-blue-600">Channel: {selectedChannel}</span>
               </div>
 
-              <textarea
-                value={jsonPayload}
-                onChange={(e) => {
-                  setJsonPayload(e.target.value);
-                  setJsonError(null);
-                }}
-                rows={11}
-                className="w-full font-mono text-xs p-3.5 bg-slate-950 text-slate-100 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed shadow-inner"
-              />
+              {codeLanguage === "curl" ? (
+                <div className="relative">
+                  <pre className="w-full font-mono text-xs p-3.5 bg-slate-950 text-slate-100 rounded-xl border border-slate-800 leading-relaxed shadow-inner overflow-x-auto min-h-[180px]">
+{`curl -X POST "https://api.zyoris.com${ingestMode === "GENERAL_ENVELOPE" ? "/leads/ingest" : `/leads/ingest/${selectedChannel.toLowerCase()}`}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <AUTH_TOKEN>" \\
+  -d '${jsonPayload.replace(/'/g, "'\\''")}'`}
+                  </pre>
+                  <button
+                    onClick={() => copyText(`curl -X POST "https://api.zyoris.com${ingestMode === "GENERAL_ENVELOPE" ? "/leads/ingest" : `/leads/ingest/${selectedChannel.toLowerCase()}`}" -H "Content-Type: application/json" -H "Authorization: Bearer <AUTH_TOKEN>" -d '${jsonPayload.replace(/'/g, "'\\''")}'`)}
+                    className="absolute top-2 right-2 px-2.5 py-1 text-[11px] font-bold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg flex items-center gap-1"
+                  >
+                    <Copy size={12} /> Copy cURL
+                  </button>
+                </div>
+              ) : (
+                <textarea
+                  value={jsonPayload}
+                  onChange={(e) => {
+                    setJsonPayload(e.target.value);
+                    setJsonError(null);
+                  }}
+                  rows={11}
+                  className="w-full font-mono text-xs p-3.5 bg-slate-950 text-slate-100 rounded-xl border border-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 leading-relaxed shadow-inner"
+                />
+              )}
 
               <button
                 onClick={() => handleIngest()}
@@ -725,7 +783,15 @@ export function LeadIngestionWorkbench() {
               <h3 className="text-xs font-bold text-gray-900 uppercase tracking-wider border-b border-gray-100 pb-3">
                 API Response & Identity Match
               </h3>
-              {lastResponse ? (
+              {apiError ? (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-xl space-y-1">
+                  <div className="flex items-center gap-2 text-red-700 font-bold text-xs">
+                    <AlertCircle size={15} />
+                    <span>Access Denied</span>
+                  </div>
+                  <p className="text-xs text-red-600">{apiError}</p>
+                </div>
+              ) : lastResponse ? (
                 <div className="space-y-3 text-xs">
                   <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
                     <span className="font-bold text-emerald-900">Status: {lastResponse.isNewLead ? "201 Created" : "200 OK"}</span>
@@ -824,7 +890,7 @@ export function LeadIngestionWorkbench() {
                       {formatRelativeTime(log.receivedAt)}
                     </td>
                     <td className="p-3.5">
-                      <div className="font-bold text-gray-900">{log.lead?.name || log.leadId}</div>
+                      <div className="font-bold text-gray-900">{log.lead?.name || (isAuthorized ? log.leadId : "Lead Record")}</div>
                       <div className="text-[11px] text-gray-400">{log.lead?.company || "No Company"}</div>
                     </td>
                     <td className="p-3.5">
@@ -873,10 +939,12 @@ function NoCodeConnectorSetupModal({
   channelKey,
   onClose,
   onTestConnection,
+  isAuthorized = false,
 }: {
   channelKey: IngestionChannel;
   onClose: () => void;
   onTestConnection: () => void;
+  isAuthorized?: boolean;
 }) {
   const conf = NO_CODE_CHANNEL_CONFIG[channelKey as keyof typeof NO_CODE_CHANNEL_CONFIG];
   const Icon = conf.icon;
@@ -929,36 +997,57 @@ function NoCodeConnectorSetupModal({
             </div>
           </div>
 
-          {/* Copyable Webhook Link */}
-          <div className="space-y-2">
-            <span className="text-xs font-bold text-gray-700 uppercase">Your Dedicated Channel Integration Link</span>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                readOnly
-                value={channelKey === "WEBSITE" ? embedSnippet : webhookUrl}
-                className="w-full text-xs font-mono p-3 rounded-xl bg-slate-900 text-slate-100 border border-slate-800"
-              />
-              <button
-                onClick={() => handleCopy(channelKey === "WEBSITE" ? embedSnippet : webhookUrl)}
-                className="px-4 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shrink-0 flex items-center gap-1.5"
-              >
-                {copied ? <Check size={14} /> : <Copy size={14} />}
-                {copied ? "Copied!" : "Copy"}
-              </button>
+          {/* Copyable Webhook Link — ONLY for authorized technical users */}
+          {isAuthorized ? (
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-gray-700 uppercase">Your Dedicated Channel Integration Link</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  readOnly
+                  value={channelKey === "WEBSITE" ? embedSnippet : webhookUrl}
+                  className="w-full text-xs font-mono p-3 rounded-xl bg-slate-900 text-slate-100 border border-slate-800"
+                />
+                <button
+                  onClick={() => handleCopy(channelKey === "WEBSITE" ? embedSnippet : webhookUrl)}
+                  className="px-4 py-3 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 shrink-0 flex items-center gap-1.5"
+                >
+                  {copied ? <Check size={14} /> : <Copy size={14} />}
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl space-y-1">
+              <p className="text-xs font-bold text-blue-900">Automated CRM Ingestion</p>
+              <p className="text-xs text-blue-700">
+                Inbound leads from {conf.title} are automatically captured and routed directly to the CRM leads list.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
         <div className="p-4 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-          <span className="text-xs text-gray-500">Test live payload execution to verify active connection.</span>
+          <span className="text-xs text-gray-500">
+            {isAuthorized
+              ? "Test live payload execution to verify active connection."
+              : "Standard lead routing is automatically enabled for your account."}
+          </span>
           <div className="flex items-center gap-2">
+            {isAuthorized && (
+              <button
+                onClick={onTestConnection}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
+              >
+                <Zap size={14} /> Send Test Signal & View Log
+              </button>
+            )}
             <button
-              onClick={onTestConnection}
-              className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 shadow-sm flex items-center gap-1.5"
+              onClick={onClose}
+              className="px-4 py-2.5 rounded-xl bg-gray-200 text-gray-700 text-xs font-bold hover:bg-gray-300"
             >
-              <Zap size={14} /> Send Test Signal & View Log
+              Done
             </button>
           </div>
         </div>
@@ -971,9 +1060,11 @@ function NoCodeConnectorSetupModal({
 function IngestionLogDetailModal({
   log,
   onClose,
+  isAuthorized = false,
 }: {
   log: IngestLeadResponse;
   onClose: () => void;
+  isAuthorized?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const leadObj = log.lead || {};
@@ -986,7 +1077,7 @@ function IngestionLogDetailModal({
       >
         <div className="p-6 bg-slate-900 text-white flex items-center justify-between">
           <div>
-            <h2 className="text-base font-bold text-white">Log Details: {leadObj.name || log.leadId}</h2>
+            <h2 className="text-base font-bold text-white">Log Details: {leadObj.name || (isAuthorized ? log.leadId : "Lead Record")}</h2>
             <p className="text-xs text-slate-400">Received at {new Date(log.receivedAt).toLocaleString()}</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-white rounded-xl">
@@ -1004,18 +1095,37 @@ function IngestionLogDetailModal({
               <span className="text-gray-400 text-[10px] uppercase font-bold">Email</span>
               <p className="font-bold text-gray-900 mt-0.5">{leadObj.email || "—"}</p>
             </div>
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-gray-400 text-[10px] uppercase font-bold">Phone</span>
+              <p className="font-bold text-gray-900 mt-0.5">{leadObj.phone || "—"}</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-gray-400 text-[10px] uppercase font-bold">Company</span>
+              <p className="font-bold text-gray-900 mt-0.5">{leadObj.company || "—"}</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-gray-400 text-[10px] uppercase font-bold">Channel</span>
+              <p className="font-bold text-gray-900 mt-0.5">{log.channel}</p>
+            </div>
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <span className="text-gray-400 text-[10px] uppercase font-bold">Status</span>
+              <p className="font-bold text-gray-900 mt-0.5">{log.idempotencyResult === "CREATED" ? "New Lead Created" : "Lead Updated"}</p>
+            </div>
           </div>
 
-          <div>
-            <span className="text-gray-700 font-bold uppercase text-[10px]">Full API Ingestion Response JSON</span>
-            <pre className="p-4 bg-slate-950 text-slate-100 font-mono rounded-2xl overflow-x-auto max-h-64 leading-relaxed border border-slate-800 mt-1">
-              {JSON.stringify(log, null, 2)}
-            </pre>
-          </div>
+          {/* Technical JSON Payload — ONLY for authorized technical/admin users */}
+          {isAuthorized && (
+            <div>
+              <span className="text-gray-700 font-bold uppercase text-[10px]">Full API Ingestion Response JSON</span>
+              <pre className="p-4 bg-slate-950 text-slate-100 font-mono rounded-2xl overflow-x-auto max-h-64 leading-relaxed border border-slate-800 mt-1">
+                {JSON.stringify(log, null, 2)}
+              </pre>
+            </div>
+          )}
         </div>
 
         <div className="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-700 font-bold text-xs">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl bg-gray-200 text-gray-700 font-bold text-xs hover:bg-gray-300">
             Close
           </button>
         </div>

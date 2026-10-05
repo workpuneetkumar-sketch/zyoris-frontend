@@ -94,6 +94,9 @@ export const isPathAllowed = (
     "/support",
     "/revops",
     "/reports",
+    // Ingestion Center routes (gated at page level)
+    "/ingestion",
+    "/leads/ingest",
   ];
 
   if (ALWAYS_ALLOWED.some((p) => path === p || path.startsWith(`${p}/`))) {
