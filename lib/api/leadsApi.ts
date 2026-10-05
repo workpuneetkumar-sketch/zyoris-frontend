@@ -409,6 +409,7 @@ export async function startLeadImport(file: File): Promise<LeadImportStartRespon
         if (file.name.endsWith(".csv")) mimeType = "text/csv";
         else if (file.name.endsWith(".xlsx")) mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
         else if (file.name.endsWith(".xls")) mimeType = "application/vnd.ms-excel";
+        else if (file.name.endsWith(".pdf")) mimeType = "application/pdf";
     }
     const fileToSend = new File([file], file.name, { type: mimeType || "text/csv" });
     formData.append("file", fileToSend);
