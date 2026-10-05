@@ -27,6 +27,7 @@ import {
     Search,
     BadgeCheck,
     Sparkles,
+    SlidersHorizontal,
 } from "lucide-react";
 import { AgentTriggerButton } from "@/components/agents/AgentResultModal";
 import { Lead, computeLeadScore } from "@/types/leads";
@@ -63,6 +64,32 @@ function formatDate(dateString: string | undefined) {
 function safeString(value: any): string {
     if (value === null || value === undefined || value === "") return "—";
     return String(value);
+}
+
+function formatFieldKey(key: string): string {
+    if (!key) return "";
+    let result = key.replace(/[-_]+/g, " ");
+    result = result.replace(/([a-z])([A-Z])/g, "$1 $2");
+    
+    const wordReplacements: [RegExp, string][] = [
+        [/PROJECTCODENAME/i, "Project Code Name"],
+        [/PRIMARYDATACENTER/i, "Primary Data Center"],
+        [/SECURITYCLEARANCE/i, "Security Clearance"],
+        [/ANNUALRESEARCHBUDGET/i, "Annual Research Budget"],
+        [/HARDWAREARCHITECTURE/i, "Hardware Architecture"],
+        [/PREFERREDOPERATINGSYSTEM/i, "Preferred Operating System"]
+    ];
+
+    for (const [regex, replacement] of wordReplacements) {
+        if (regex.test(result)) {
+            return replacement;
+        }
+    }
+
+    return result
+        .split(/\s+/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
 }
 
 function getInitials(name: string): string {
@@ -386,51 +413,42 @@ export default function LeadDetailPage() {
                 </div>
             </div>
 
-            {/* ── TOP HIGHLIGHT: Custom Attributes & Schema Intelligence Card ───────────── */}
+            {/* ── Custom Attributes Section (Clean White Light Theme) ───────────── */}
             {hasCustomFields && (
-                <div className="bg-gradient-to-r from-blue-700 via-indigo-700 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-blue-400/30 relative overflow-hidden transform transition-all hover:shadow-2xl">
-                    {/* Background Decorative Glow Spheres */}
-                    <div className="absolute -top-16 -right-16 w-56 h-56 bg-blue-400/20 rounded-full blur-3xl pointer-events-none" />
-                    <div className="absolute -bottom-10 -left-10 w-44 h-44 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
-
-                    <div className="relative z-10 space-y-4">
-                        <div className="flex items-center justify-between flex-wrap gap-2">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-2xl bg-white/15 backdrop-blur-md flex items-center justify-center border border-white/20 text-blue-200 shadow-inner">
-                                    <Sparkles size={20} className="text-amber-300 animate-pulse" />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-                                        Custom Attributes & Extracted Schema Intelligence
-                                    </h3>
-                                    <p className="text-xs text-blue-100/80 font-medium">
-                                        Auto-captured from imported spreadsheet & custom schema properties
-                                    </p>
-                                </div>
+                <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm space-y-4">
+                    <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-gray-100">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center border border-blue-100 text-blue-600">
+                                <SlidersHorizontal size={18} />
                             </div>
-                            <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-extrabold bg-white/15 backdrop-blur-md border border-white/25 text-amber-200 shadow-xs">
-                                {Object.keys(lead.customFields!).length} Custom Field{Object.keys(lead.customFields!).length !== 1 ? "s" : ""} Preserved
-                            </span>
+                            <div>
+                                <h3 className="text-base font-bold text-gray-900 tracking-tight">
+                                    Custom Attributes
+                                </h3>
+                                <p className="text-xs text-gray-500 font-medium">
+                                    Custom properties and metadata captured for this lead
+                                </p>
+                            </div>
                         </div>
+                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700 border border-gray-200">
+                            {Object.keys(lead.customFields!).length} Custom Field{Object.keys(lead.customFields!).length !== 1 ? "s" : ""}
+                        </span>
+                    </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-                            {Object.entries(lead.customFields!).map(([key, value]) => (
-                                <div
-                                    key={key}
-                                    className="bg-white/10 backdrop-blur-md border border-white/15 hover:border-white/40 rounded-2xl p-4 transition-all hover:bg-white/15 group shadow-xs"
-                                >
-                                    <div className="flex items-center justify-between gap-2 mb-1">
-                                        <p className="text-[11px] font-extrabold text-blue-200 uppercase tracking-wider truncate">
-                                            {key.replace(/([A-Z])/g, ' $1').trim()}
-                                        </p>
-                                        <span className="w-2 h-2 rounded-full bg-emerald-400 group-hover:scale-125 transition-transform" />
-                                    </div>
-                                    <p className="text-sm font-extrabold text-white leading-snug break-words">
-                                        {safeString(value)}
-                                    </p>
-                                </div>
-                            ))}
-                        </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {Object.entries(lead.customFields!).map(([key, value]) => (
+                            <div
+                                key={key}
+                                className="bg-gray-50/80 hover:bg-gray-50 border border-gray-200/80 rounded-xl p-3.5 transition-all"
+                            >
+                                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider mb-1 truncate">
+                                    {formatFieldKey(key)}
+                                </p>
+                                <p className="text-sm font-semibold text-gray-900 leading-snug break-words">
+                                    {safeString(value)}
+                                </p>
+                            </div>
+                        ))}
                     </div>
                 </div>
             )}
