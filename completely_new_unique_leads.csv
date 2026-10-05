@@ -1,0 +1,13 @@
+Email,SYSTEMIDENTIFIER,DEPLOYMENTREGION,COMPLIANCEAUDIT,BANDWIDTHLIMIT,ACTIVEFEATUREFLAG,SERVERLATENCYMS
+karan.malhotra.unique01@techmatrix.io,SYS-9001,ap-south-mumbai,ISO27001-PASSED,10Gbps Dedicated,FLAG_REALTIME_SYNC,14ms
+elena.rostova.unique02@nordiccloud.se,SYS-9002,eu-central-frankfurt,SOC2_TYPE_II,50Gbps Fiber,FLAG_ZERO_TRUST,28ms
+marcus.vance.unique03@apexdatacenter.us,SYS-9003,us-east-virginia,HIPAA_COMPLIANT,100Gbps Direct,FLAG_QUANTUM_ENCRYPT,9ms
+priya.deshmukh.unique04@solarpower.in,SYS-9004,ap-south-bangalore,ISO14001_VERIFIED,5Gbps Burst,FLAG_AI_AUTOSCALE,18ms
+takahASHI.kenji.unique05@tokyoneural.jp,SYS-9005,ap-northeast-tokyo,FISMA_HIGH,40Gbps Dedicated,FLAG_NEURAL_ROUTING,12ms
+sophia.martinez.unique06@iberia-sys.es,SYS-9006,eu-west-madrid,GDPR_AUDITED_OK,20Gbps Fiber,FLAG_GEO_REDUNDANCY,32ms
+liam.o.connor.unique07@celticnet.ie,SYS-9007,eu-west-dublin,SOC1_VERIFIED,10Gbps Dedicated,FLAG_EDGE_CACHING,21ms
+zara.hassan.unique08@dubai-fintech.ae,SYS-9008,me-central-dubai,DIFC_FINANCIAL_REG,50Gbps Dedicated,FLAG_HIGH_THROUGHPUT,16ms
+nicolas.dubois.unique09@parisdata.fr,SYS-9009,eu-west-paris,ISO27001-PASSED,30Gbps Fiber,FLAG_FAILOVER_ACTIVE,25ms
+siddharth.patel.unique10@bengaluru-dev.in,SYS-9010,ap-south-hyderabad,SOC2_TYPE_II,100Gbps Direct,FLAG_AUTO_SHARDING,11ms
+chloe.bennett.unique11@aussiecloud.au,SYS-9011,ap-southeast-sydney,IRAP_PROTECTED,15Gbps Dedicated,FLAG_LOAD_BALANCED,35ms
+david.kim.unique12@seoul-cyber.kr,SYS-9012,ap-northeast-seoul,K-ISMS_CERTIFIED,25Gbps Fiber,FLAG_MULTI_REGION,19ms

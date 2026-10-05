@@ -1,0 +1,13 @@
+Name,Email,PROJECTCODENAME,PRIMARYDATACENTER,SECURITYCLEARANCE,ANNUALRESEARCHBUDGET,HARDWAREARCHITECTURE,PREFERREDOPERATINGSYSTEM
+Dr. Alexander Vance 9901,alexander.vance.9901@quantumlab.io,Project Shakti,AP-South-DC2,Level 4 (Secret),4100000,RISC-V Shakti,CentOS Stream
+Elena Rostova 9902,elena.rostova.9902@nordictech.se,Project Orion,EU-Central-DC1,Level 3 (Confidential),8500000,ARM Neoverse V2,Ubuntu Server LTS
+Marcus Sterling 9903,marcus.sterling.9903@apexdatacenter.us,Project Titan,US-East-DC4,Level 5 (Top Secret),12000000,x86 AMD EPYC 9004,Red Hat Enterprise Linux
+Dr. Priya Sharma 9904,priya.sharma.9904@indiasystems.in,Project Garuda,AP-South-DC1,Level 2 (Internal),3200000,RISC-V C-Class,Debian GNU Linux
+Kenji Takahashi 9905,kenji.takahashi.9905@tokyoneural.jp,Project Raijin,AP-Northeast-DC3,Level 4 (Secret),9800000,NVIDIA GH200 Grace,Rocky Linux
+Sofia Benitez 9906,sofia.benitez.9906@iberiacloud.es,Project Helios,EU-West-DC2,Level 3 (Confidential),5400000,ARM Ampere Altra,AlmaLinux
+Liam O'Connor 9907,liam.oconnor.9907@celticsystems.ie,Project Epona,EU-West-DC1,Level 2 (Internal),2900000,x86 Intel Xeon 6,Fedora Server
+Fatima Al-Hassan 9908,fatima.alhassan.9908@dubaifintech.ae,Project Oasis,ME-Central-DC1,Level 4 (Secret),15000000,Custom ASIC Matrix,Ubuntu Server LTS
+Jean-Luc Dubois 9909,jeanluc.dubois.9909@pariscomputing.fr,Project Louvre,EU-West-DC3,Level 3 (Confidential),6700000,ARM Neoverse N2,Debian GNU Linux
+Siddharth Nair 9910,siddharth.nair.9910@bengaluru-ai.in,Project Agni,AP-South-DC3,Level 5 (Top Secret),18500000,RISC-V E-Class,CentOS Stream
+Chloe Bennett 9911,chloe.bennett.9911@aussiecloud.au,Project Boomerang,AP-Southeast-DC2,Level 2 (Internal),4100000,x86 AMD EPYC 8004,SUSE Linux Enterprise
+David Kim 9912,david.kim.9912@seoulcyber.kr,Project Hwan,AP-Northeast-DC1,Level 4 (Secret),11200000,NVIDIA H100 NVLink,Rocky Linux
