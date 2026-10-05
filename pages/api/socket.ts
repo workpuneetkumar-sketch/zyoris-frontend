@@ -21,9 +21,6 @@ export default function SocketHandler(req: NextApiRequest, res: any) {
     });
     res.socket.server.io = io;
     
-    // In-memory chat history for cross-browser local testing
-    res.socket.server.chatHistory = res.socket.server.chatHistory || [];
-
     io.on("connection", (socket) => {
       console.log("Client connected", socket.id);
 
@@ -31,21 +28,15 @@ export default function SocketHandler(req: NextApiRequest, res: any) {
         if (!msg.createdAt) msg.createdAt = new Date().toISOString();
         if (!msg.id) msg.id = `msg-${Date.now()}-${Math.random()}`;
         
-        res.socket.server.chatHistory.push(msg);
-        // Broadcast the message to all other connected clients
+        // Broadcast message to other connected clients without storing permanent mock state
         socket.broadcast.emit("newMessage", msg);
       });
 
       socket.on("fetchHistory", (data) => {
-        const { user1, user2 } = data;
-        if (!user1 || !user2) return;
-        
-        const history = res.socket.server.chatHistory.filter((m: any) => 
-            (m.senderId === user1 && m.receiverId === user2) ||
-            (m.senderId === user2 && m.receiverId === user1)
-        );
-        socket.emit("historyResponse", { user1, user2, history });
+        // Mock history removed in favor of backend authority
+        socket.emit("historyResponse", { ...data, history: [] });
       });
+
 
       socket.on("disconnect", () => {
         console.log("Client disconnected", socket.id);

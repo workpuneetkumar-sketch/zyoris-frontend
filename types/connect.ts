@@ -76,6 +76,8 @@ export interface Conversation {
   unreadCount?: number;
 }
 
+export type MessageDeliveryStatus = "sending" | "sent" | "failed";
+
 export interface ConnectMessage {
   id: string;
   organizationId: string;
@@ -83,6 +85,16 @@ export interface ConnectMessage {
   channelId?: string | null;
   conversationId?: string | null;
   parentMessageId?: string | null;
+  parentMessage?: {
+    id: string;
+    content: string;
+    senderId?: string;
+    sender?: {
+      id?: string;
+      name?: string;
+      avatarUrl?: string | null;
+    };
+  } | null;
   content: string;
   type?: string;
   createdAt: string;
@@ -96,6 +108,50 @@ export interface ConnectMessage {
     avatarUrl?: string | null;
   };
   attachments?: any[];
+  // Optimistic client fields
+  status?: MessageDeliveryStatus;
+  error?: string;
+  clientMessageId?: string;
+}
+
+export interface SendMessagePayload {
+  channelId?: string;
+  conversationId?: string;
+  content: string;
+  parentMessageId?: string | null;
+}
+
+export interface GetMessagesParams {
+  channelId?: string;
+  conversationId?: string;
+  limit?: number;
+  cursor?: string;
+  signal?: AbortSignal;
+}
+
+export interface GetMessagesResponse {
+  data: ConnectMessage[];
+  nextCursor?: string | null;
+}
+
+export type MessageActionType =
+  | "reply"
+  | "edit"
+  | "delete"
+  | "react"
+  | "mention"
+  | "pin"
+  | "save";
+
+export interface MessageActionItem {
+  id: MessageActionType;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  isDestructive?: boolean;
+  disabled?: boolean;
+  hidden?: boolean;
+  badge?: string;
+  onClick: (message: ConnectMessage) => void;
 }
 
 export type ActiveTargetType = "channel" | "conversation";
@@ -109,31 +165,50 @@ export interface ActiveTarget {
 export interface SocketMessageNewPayload {
   id?: string;
   messageId?: string;
+  organizationId?: string;
   channelId?: string | null;
   conversationId?: string | null;
+  channel?: string | null;
+  receiverId?: string | null;
   senderId?: string;
   content: string;
+  type?: string;
+  parentMessageId?: string | null;
   createdAt?: string;
+  clientMessageId?: string;
   sender?: {
     id: string;
     name: string;
     email?: string;
     avatarUrl?: string | null;
   };
+  receiver?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatarUrl?: string | null;
+  } | null;
 }
 
 export interface SocketMessageUpdatePayload {
+  id?: string;
   messageId: string;
   channelId?: string | null;
   conversationId?: string | null;
+  channel?: string | null;
   content: string;
+  isEdited?: boolean;
+  editedAt?: string;
   updatedAt?: string;
 }
 
 export interface SocketMessageDeletePayload {
+  id?: string;
   messageId: string;
   channelId?: string | null;
   conversationId?: string | null;
+  channel?: string | null;
+  deletedAt?: string;
 }
 
 export interface SocketChannelUpdatedPayload {
@@ -151,3 +226,4 @@ export interface SocketConversationUpdatedPayload {
   metadata?: Record<string, any>;
   updatedAt?: string;
 }
+

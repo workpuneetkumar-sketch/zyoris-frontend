@@ -17,6 +17,7 @@ export type SocketStatus = "connected" | "connecting" | "offline";
 
 interface UseConnectSocketOptions {
   activeChannelId?: string | null;
+  activeChannelName?: string | null;
   activeConversationId?: string | null;
   onNewMessage?: (payload: SocketMessageNewPayload) => void;
   onUpdateMessage?: (payload: SocketMessageUpdatePayload) => void;
@@ -27,6 +28,7 @@ interface UseConnectSocketOptions {
 
 export function useConnectSocket({
   activeChannelId,
+  activeChannelName,
   activeConversationId,
   onNewMessage,
   onUpdateMessage,
@@ -82,7 +84,10 @@ export function useConnectSocket({
       setStatus("connected");
       // Re-join active room if set
       if (activeChannelId) {
-        socket.emit("channel:join", { channelId: activeChannelId });
+        socket.emit("channel:join", {
+          channel: activeChannelName || activeChannelId,
+          channelId: activeChannelId,
+        });
       }
       if (activeConversationId) {
         socket.emit("conversation:join", { conversationId: activeConversationId });
@@ -124,7 +129,8 @@ export function useConnectSocket({
         channelId: payload.channelId,
         conversationId: payload.conversationId,
         content: payload.content || payload.text,
-        updatedAt: payload.updatedAt,
+        updatedAt: payload.updatedAt || payload.editedAt,
+        editedAt: payload.editedAt || payload.updatedAt,
       });
     });
 
@@ -160,15 +166,21 @@ export function useConnectSocket({
     if (!socket || !socket.connected) return;
 
     if (prevChannelRef.current && prevChannelRef.current !== activeChannelId) {
-      socket.emit("channel:leave", { channelId: prevChannelRef.current });
+      socket.emit("channel:leave", {
+        channel: prevChannelRef.current,
+        channelId: prevChannelRef.current,
+      });
     }
 
     if (activeChannelId) {
-      socket.emit("channel:join", { channelId: activeChannelId });
+      socket.emit("channel:join", {
+        channel: activeChannelName || activeChannelId,
+        channelId: activeChannelId,
+      });
     }
 
-    prevChannelRef.current = activeChannelId || null;
-  }, [activeChannelId, status]);
+    prevChannelRef.current = activeChannelName || activeChannelId || null;
+  }, [activeChannelId, activeChannelName, status]);
 
   // Manage room subscription for active conversation
   const prevConversationRef = useRef<string | null>(null);
@@ -189,13 +201,28 @@ export function useConnectSocket({
 
   // Client emission: message:send
   const emitSendMessage = useCallback((payload: {
-    messageId: string;
+    messageId?: string;
+    clientMessageId?: string;
     channelId?: string | null;
+    channel?: string | null;
     conversationId?: string | null;
+    receiverId?: string | null;
     content: string;
   }) => {
     if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit("message:send", payload);
+      const socketPayload: Record<string, any> = {
+        content: payload.content,
+      };
+      if (payload.channel || payload.channelId) {
+        socketPayload.channel = payload.channel || payload.channelId;
+      }
+      if (payload.receiverId || payload.conversationId) {
+        socketPayload.receiverId = payload.receiverId || payload.conversationId;
+      }
+      if (payload.clientMessageId || payload.messageId) {
+        socketPayload.clientMessageId = payload.clientMessageId || payload.messageId;
+      }
+      socketRef.current.emit("message:send", socketPayload);
     }
   }, []);
 
@@ -204,3 +231,4 @@ export function useConnectSocket({
     emitSendMessage,
   };
 }
+
