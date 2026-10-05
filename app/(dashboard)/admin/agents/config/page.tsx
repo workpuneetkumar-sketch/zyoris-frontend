@@ -6,7 +6,7 @@
  * Day 7 — Admin Agent Configuration Dashboard
  * Route: /admin/agents/config
  *
- * Allows ADMIN users to select an agent and configure its:
+ * Allows ADMIN and developer users to select an agent and configure its:
  * - System prompt
  * - Tool access scope (with backend-rejection surfacing)
  * - Trusted-content boundaries
@@ -54,10 +54,13 @@ function Skeleton() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AgentConfigPage() {
-  const { user, token } = useAuth();
+  const { user, token, hasPermission, permissionsLoaded } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const isAdmin = user?.role === "ADMIN";
+  const canManageConfig =
+    user?.role === "ADMIN" ||
+    hasPermission("admin") ||
+    hasPermission("developer");
 
   const [agents, setAgents]                   = useState<{ id: string; name: string }[]>([]);
   const [selectedAgentId, setSelectedAgentId] = useState(searchParams?.get("agentId") ?? "");
@@ -72,12 +75,19 @@ export default function AgentConfigPage() {
   // Auth + role guard
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") { router.replace("/dashboard"); }
-  }, [user, router]);
+    if (!permissionsLoaded) return;
+    if (
+      user.role !== "ADMIN" &&
+      !hasPermission("admin") &&
+      !hasPermission("developer")
+    ) {
+      router.replace("/dashboard");
+    }
+  }, [user, permissionsLoaded, hasPermission, router]);
 
   // Load agent list
   useEffect(() => {
-    if (!token || !isAdmin) return;
+    if (!token || !permissionsLoaded || !canManageConfig) return;
     setAgentsLoading(true);
     listConfigurableAgents()
       .then((list) => {
@@ -88,11 +98,11 @@ export default function AgentConfigPage() {
       })
       .catch((err: any) => toast.error(err.message ?? "Failed to load agents."))
       .finally(() => setAgentsLoading(false));
-  }, [token, isAdmin]);
+  }, [token, permissionsLoaded, canManageConfig]);
 
   // Load config whenever selected agent changes
   const loadConfig = useCallback(async () => {
-    if (!selectedAgentId || !token || !isAdmin) return;
+    if (!selectedAgentId || !token || !permissionsLoaded || !canManageConfig) return;
     setLoading(true);
     setError(null);
     setConfig(null);
@@ -110,7 +120,7 @@ export default function AgentConfigPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedAgentId, token, isAdmin, router]);
+  }, [selectedAgentId, token, permissionsLoaded, canManageConfig, router]);
 
   useEffect(() => { loadConfig(); }, [loadConfig]);
 
@@ -137,7 +147,7 @@ export default function AgentConfigPage() {
     }
   };
 
-  if (!user || !isAdmin) return null;
+  if (!user || !permissionsLoaded || !canManageConfig) return null;
 
   return (
     <div className="space-y-6 max-w-[900px] mx-auto">
@@ -215,6 +225,7 @@ export default function AgentConfigPage() {
           config={config}
           onSave={handleSave}
           saving={saving}
+          canViewSecurityControls={canManageConfig}
           rejectedToolIds={rejectedToolIds}
           saveSuccessMessage={saveMessage}
         />
