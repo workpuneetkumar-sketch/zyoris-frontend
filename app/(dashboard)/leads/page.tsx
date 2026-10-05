@@ -35,6 +35,8 @@ import type {
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import api from "@/lib/api/api";
 import { toast } from "react-toastify";
+import { useAuth } from "@/context/AuthContext";
+import { isIngestionAuthorized } from "@/lib/api/leadIngestionApi";
 
 type LeadsTab = "leads" | "assignment-rules" | "assignment-history" | "assignment-analytics" | "duplicates";
 
@@ -167,6 +169,9 @@ function activeFilterCount(f: AdvancedLeadsFilters): number {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LeadsPage() {
+  const { user, hasPermission } = useAuth();
+  const canAccessIngestion = isIngestionAuthorized(user, hasPermission);
+
   const [activeTab, setActiveTab] = useState<LeadsTab>("leads");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [advFilters, setAdvFilters] = useState<AdvancedLeadsFilters>(DEFAULT_ADVANCED_FILTERS);
@@ -466,15 +471,19 @@ export default function LeadsPage() {
               <UserPlus size={15} />
               New Customer
             </Link>
-            <div className="w-px h-6 bg-gray-200 mx-1" />
-            <Link
-              href="/leads/ingest"
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors shadow-sm"
-              title="Open Lead Ingestion & Normalized Contract Workbench"
-            >
-              <Zap size={15} />
-              Ingestion Workbench
-            </Link>
+            {canAccessIngestion && (
+              <>
+                <div className="w-px h-6 bg-gray-200 mx-1" />
+                <Link
+                  href="/leads/ingest"
+                  className="flex items-center gap-2 h-9 px-4 rounded-lg border border-blue-200 bg-blue-50 text-sm font-semibold text-blue-700 hover:bg-blue-100 transition-colors shadow-sm"
+                  title="Open Lead Ingestion & Normalized Contract Workbench"
+                >
+                  <Zap size={15} />
+                  Ingestion Workbench
+                </Link>
+              </>
+            )}
             <button
               onClick={() => setIsUploadOpen(true)}
               className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"

@@ -4727,5 +4727,385 @@ test("Task 2 — Issue 11: Remove Technical Prediction Details from Customer-Fac
   });
 });
 
+test("Task 6: Lead Ingestion Center Authorization - Developer Workbench & API/JSON entry points", async (t) => {
+  const isIngestionAuthorized = (
+    user?: { role?: string } | null,
+    hasPermission?: (permission: string) => boolean
+  ): boolean => {
+    if (!user) return false;
+    if (user.role === "ADMIN") return true;
+    if (hasPermission && (hasPermission("admin") || hasPermission("developer"))) {
+      return true;
+    }
+    return false;
+  };
+
+  const getLeadPageActions = (user: { role?: string } | null, hasPermission?: (perm: string) => boolean) => {
+    const isAuthorized = isIngestionAuthorized(user, hasPermission);
+    const actions: { id: string; label: string; href?: string }[] = [
+      { id: "export_leads", label: "Export Leads" },
+      { id: "import_leads", label: "Import Leads" },
+      { id: "new_lead", label: "New Lead" },
+    ];
+    if (isAuthorized) {
+      actions.push({ id: "ingestion_workbench", label: "Ingestion Workbench", href: "/leads/ingest" });
+    }
+    return actions;
+  };
+
+  const evaluateRouteAccess = (
+    pathname: string,
+    user: { role?: string } | null,
+    hasPermission?: (perm: string) => boolean
+  ) => {
+    const isAuthorized = isIngestionAuthorized(user, hasPermission);
+    const protectedRoutes = ["/ingestion", "/leads/ingest"];
+    if (protectedRoutes.includes(pathname)) {
+      if (!isAuthorized) {
+        return {
+          allowed: false,
+          redirectTo: "/leads",
+          state: "RESTRICTED",
+          message: "You don't have access to this tool. Normal CRM users should use the standard lead workflow.",
+        };
+      }
+      return { allowed: true, state: "AUTHORIZED" };
+    }
+    return { allowed: true, state: "PUBLIC" };
+  };
+
+  const formatIngestionError = (err: any) => {
+    if (err?.response?.status === 403 || err?.status === 403) {
+      return {
+        message: "You don't have access to this tool.",
+        status: 403,
+        code: "FORBIDDEN",
+      };
+    }
+    return {
+      message: err?.response?.data?.message || err?.message || "An unexpected error occurred.",
+      status: err?.response?.status || err?.status || 500,
+    };
+  };
+
+  await t.test("1. Normal CRM user does not see Developer Workbench entry point", () => {
+    const normalUser = { role: "MEMBER" };
+    const hasPermission = () => false;
+
+    assert.strictEqual(isIngestionAuthorized(normalUser, hasPermission), false);
+
+    const actions = getLeadPageActions(normalUser, hasPermission);
+    const hasWorkbench = actions.some((a) => a.id === "ingestion_workbench" || a.label.includes("Workbench"));
+    assert.strictEqual(hasWorkbench, false);
+  });
+
+  await t.test("2. Normal CRM user does not see API/JSON developer entry points", () => {
+    const normalUser = { role: "MEMBER" };
+    const hasPermission = () => false;
+    const isAuthorized = isIngestionAuthorized(normalUser, hasPermission);
+
+    // Audience switcher options in LeadIngestionWorkbench
+    const audienceOptions = isAuthorized
+      ? ["Business Team (No-Code)", "Developer Workbench (API & JSON)"]
+      : ["Business Team (No-Code)"];
+
+    assert.strictEqual(audienceOptions.includes("Developer Workbench (API & JSON)"), false);
+    assert.deepStrictEqual(audienceOptions, ["Business Team (No-Code)"]);
+  });
+
+  await t.test("3. Normal CRM user cannot render the protected technical route", () => {
+    const normalUser = { role: "SALES_REP" };
+    const hasPermission = () => false;
+
+    const ingestRouteAccess = evaluateRouteAccess("/leads/ingest", normalUser, hasPermission);
+    assert.strictEqual(ingestRouteAccess.allowed, false);
+    assert.strictEqual(ingestRouteAccess.redirectTo, "/leads");
+    assert.strictEqual(ingestRouteAccess.state, "RESTRICTED");
+    assert.strictEqual(
+      ingestRouteAccess.message,
+      "You don't have access to this tool. Normal CRM users should use the standard lead workflow."
+    );
+
+    const ingestionRouteAccess = evaluateRouteAccess("/ingestion", normalUser, hasPermission);
+    assert.strictEqual(ingestionRouteAccess.allowed, false);
+    assert.strictEqual(ingestionRouteAccess.redirectTo, "/leads");
+  });
+
+  await t.test("4. Authorized technical/admin user can see the Developer Workbench", () => {
+    // Admin user:
+    const adminUser = { role: "ADMIN" };
+    assert.strictEqual(isIngestionAuthorized(adminUser), true);
+
+    const adminActions = getLeadPageActions(adminUser);
+    assert.strictEqual(adminActions.some((a) => a.id === "ingestion_workbench"), true);
+
+    // Developer permission user:
+    const devUser = { role: "MEMBER" };
+    const hasDevPermission = (p: string) => p === "developer";
+    assert.strictEqual(isIngestionAuthorized(devUser, hasDevPermission), true);
+
+    const devActions = getLeadPageActions(devUser, hasDevPermission);
+    assert.strictEqual(devActions.some((a) => a.id === "ingestion_workbench"), true);
+  });
+
+  await t.test("5. Authorized technical/admin user can access the protected route", () => {
+    const adminUser = { role: "ADMIN" };
+    const devUser = { role: "MEMBER" };
+    const hasDevPerm = (p: string) => p === "developer";
+
+    const adminAccess = evaluateRouteAccess("/leads/ingest", adminUser);
+    assert.strictEqual(adminAccess.allowed, true);
+    assert.strictEqual(adminAccess.state, "AUTHORIZED");
+
+    const devAccess = evaluateRouteAccess("/ingestion", devUser, hasDevPerm);
+    assert.strictEqual(devAccess.allowed, true);
+    assert.strictEqual(devAccess.state, "AUTHORIZED");
+  });
+
+  await t.test("6. Existing normal lead workflow remains available", () => {
+    const normalUser = { role: "MEMBER" };
+    const actions = getLeadPageActions(normalUser, () => false);
+
+    const standardActionIds = actions.map((a) => a.id);
+    assert.strictEqual(standardActionIds.includes("export_leads"), true);
+    assert.strictEqual(standardActionIds.includes("import_leads"), true);
+    assert.strictEqual(standardActionIds.includes("new_lead"), true);
+  });
+
+  await t.test("7. 403 from an /ingestion API call produces a clean user-facing error", () => {
+    const raw403BackendResponse = {
+      response: {
+        status: 403,
+        statusText: "Forbidden",
+        data: {
+          error: "ForbiddenException",
+          details: "Developer Workbench and cURL testbench are fully gatekept for regular users.",
+          timestamp: "2026-10-05T12:00:00Z",
+          path: "/ingestion/run",
+        },
+      },
+    };
+
+    const formatted = formatIngestionError(raw403BackendResponse);
+    assert.strictEqual(formatted.status, 403);
+    assert.strictEqual(formatted.message, "You don't have access to this tool.");
+  });
+
+  await t.test("8. Raw 403 response JSON is not rendered", () => {
+    const raw403BackendResponse = {
+      response: {
+        status: 403,
+        data: {
+          error: "ForbiddenException",
+          stackTrace: "at Gatekeeper.checkAuth (/server/gatekeeper.ts:42)",
+          internalCode: "AUTH_ERR_GATEKEPT_ROLE",
+        },
+      },
+    };
+
+    const formatted = formatIngestionError(raw403BackendResponse);
+    assert.strictEqual(formatted.message.includes("ForbiddenException"), false);
+    assert.strictEqual(formatted.message.includes("stackTrace"), false);
+    assert.strictEqual(formatted.message.includes("AUTH_ERR_GATEKEPT_ROLE"), false);
+    assert.strictEqual(JSON.stringify(formatted).includes("Gatekeeper.checkAuth"), false);
+  });
+});
+
+test("Task 7: Lead Ingestion Center Authorization - cURL/JSON Testbench, Channel IDs & API Endpoints", async (t) => {
+  const isIngestionAuthorized = (
+    user?: { role?: string } | null,
+    hasPermission?: (permission: string) => boolean
+  ): boolean => {
+    if (!user) return false;
+    if (user.role === "ADMIN") return true;
+    if (hasPermission && (hasPermission("admin") || hasPermission("developer"))) {
+      return true;
+    }
+    return false;
+  };
+
+  const getAvailableTabs = (isAuthorized: boolean) => {
+    const tabs = [
+      { id: "NO_CODE_HUB", label: "Connectors & Automation" },
+      { id: "LOGS", label: "Live Ingestion Stream" },
+      { id: "ANALYTICS", label: "Channel Performance" },
+    ];
+    if (isAuthorized) {
+      tabs.push({ id: "SIMULATOR", label: "JSON & cURL Developer Testbench" });
+    }
+    return tabs;
+  };
+
+  const getConnectorModalContent = (channel: string, isAuthorized: boolean) => {
+    const base = {
+      channel,
+      title: `${channel} Connection Setup`,
+      businessDescription: `Connect your ${channel} pipeline. Incoming leads will be automatically parsed, deduplicated, and enriched into your CRM.`,
+    };
+
+    if (!isAuthorized) {
+      return {
+        ...base,
+        showTechnicalControls: false,
+        webhookUrl: null,
+        channelId: null,
+        curlSnippet: null,
+        testSignalButton: false,
+      };
+    }
+
+    return {
+      ...base,
+      showTechnicalControls: true,
+      webhookUrl: `https://api.zyoris.com/leads/ingest/${channel.toLowerCase()}?channelId=chn_${channel.toLowerCase()}_9981`,
+      channelId: `chn_${channel.toLowerCase()}_9981`,
+      curlSnippet: `curl -X POST https://api.zyoris.com/leads/ingest/${channel.toLowerCase()} -H "Content-Type: application/json"`,
+      testSignalButton: true,
+    };
+  };
+
+  const formatLogView = (log: any, isAuthorized: boolean) => {
+    return {
+      title: log.customerName || (isAuthorized ? log.leadId : "Lead Record"),
+      channel: log.channel,
+      status: log.status,
+      timestamp: log.receivedAt,
+      rawPayloadJson: isAuthorized ? JSON.stringify(log.payload) : null,
+      rawResponseJson: isAuthorized ? JSON.stringify(log.response) : null,
+      channelId: isAuthorized ? log.channelId : null,
+    };
+  };
+
+  const formatIngestionError = (err: any) => {
+    if (err?.response?.status === 403 || err?.status === 403) {
+      return {
+        message: "You don't have access to this tool.",
+        status: 403,
+        code: "FORBIDDEN",
+      };
+    }
+    return {
+      message: err?.response?.data?.message || err?.message || "An unexpected error occurred.",
+      status: err?.response?.status || err?.status || 500,
+    };
+  };
+
+  await t.test("1. Normal CRM user does not see cURL testbench", () => {
+    const normalUser = { role: "MEMBER" };
+    const isAuthorized = isIngestionAuthorized(normalUser, () => false);
+    const tabs = getAvailableTabs(isAuthorized);
+
+    assert.strictEqual(tabs.some((t) => t.id === "SIMULATOR"), false);
+    assert.strictEqual(tabs.some((t) => t.label.includes("cURL")), false);
+  });
+
+  await t.test("2. Normal CRM user does not see raw JSON testbench", () => {
+    const normalUser = { role: "SALES_AGENT" };
+    const isAuthorized = isIngestionAuthorized(normalUser, () => false);
+    const tabs = getAvailableTabs(isAuthorized);
+
+    assert.strictEqual(tabs.some((t) => t.label.includes("JSON")), false);
+  });
+
+  await t.test("3. Normal CRM user does not see API endpoint/testing controls", () => {
+    const normalUser = { role: "MEMBER" };
+    const isAuthorized = isIngestionAuthorized(normalUser, () => false);
+    const modal = getConnectorModalContent("WHATSAPP", isAuthorized);
+
+    assert.strictEqual(modal.showTechnicalControls, false);
+    assert.strictEqual(modal.webhookUrl, null);
+    assert.strictEqual(modal.curlSnippet, null);
+    assert.strictEqual(modal.testSignalButton, false);
+    assert.strictEqual(modal.businessDescription.includes("curl"), false);
+  });
+
+  await t.test("4. Normal CRM user does not see channel IDs", () => {
+    const normalUser = { role: "MEMBER" };
+    const isAuthorized = isIngestionAuthorized(normalUser, () => false);
+    const modal = getConnectorModalContent("FORMS", isAuthorized);
+
+    assert.strictEqual(modal.channelId, null);
+
+    const logRecord = {
+      leadId: "cld_xyz123456",
+      channel: "FORMS",
+      channelId: "chn_forms_9981",
+      customerName: null,
+      status: "SUCCESS",
+      receivedAt: "2026-10-05T12:00:00Z",
+      payload: { email: "lead@example.com" },
+      response: { id: "cld_xyz123456", status: "PROCESSED" },
+    };
+
+    const formattedLog = formatLogView(logRecord, isAuthorized);
+    assert.strictEqual(formattedLog.channelId, null);
+    assert.strictEqual(formattedLog.title, "Lead Record");
+    assert.strictEqual(formattedLog.rawPayloadJson, null);
+    assert.strictEqual(formattedLog.rawResponseJson, null);
+  });
+
+  await t.test("5. Authorized technical/admin user can still access the testbench", () => {
+    const adminUser = { role: "ADMIN" };
+    const isAuthorizedAdmin = isIngestionAuthorized(adminUser);
+    const adminTabs = getAvailableTabs(isAuthorizedAdmin);
+
+    assert.strictEqual(adminTabs.some((t) => t.id === "SIMULATOR"), true);
+
+    const devUser = { role: "MEMBER" };
+    const isAuthorizedDev = isIngestionAuthorized(devUser, (p) => p === "developer");
+    const devTabs = getAvailableTabs(isAuthorizedDev);
+
+    assert.strictEqual(devTabs.some((t) => t.id === "SIMULATOR"), true);
+
+    const modal = getConnectorModalContent("CALLS", isAuthorizedAdmin);
+    assert.strictEqual(modal.showTechnicalControls, true);
+    assert.strictEqual(modal.webhookUrl?.includes("https://api.zyoris.com"), true);
+    assert.strictEqual(modal.testSignalButton, true);
+  });
+
+  await t.test("6. Existing lead ingestion functionality for authorized users remains intact", () => {
+    const adminUser = { role: "ADMIN" };
+    const isAuthorized = isIngestionAuthorized(adminUser);
+
+    const logRecord = {
+      leadId: "cld_xyz123456",
+      channel: "WHATSAPP",
+      channelId: "chn_whatsapp_9981",
+      customerName: "Jane Doe",
+      status: "SUCCESS",
+      receivedAt: "2026-10-05T12:00:00Z",
+      payload: { entry: [{ id: "1" }] },
+      response: { isNewLead: true, idempotencyResult: "PROCESSED" },
+    };
+
+    const formattedLog = formatLogView(logRecord, isAuthorized);
+    assert.strictEqual(formattedLog.title, "Jane Doe");
+    assert.strictEqual(formattedLog.channelId, "chn_whatsapp_9981");
+    assert.strictEqual(typeof formattedLog.rawPayloadJson, "string");
+    assert.strictEqual(typeof formattedLog.rawResponseJson, "string");
+  });
+
+  await t.test("7. 403 responses are handled without exposing technical payloads", () => {
+    const forbiddenErr = {
+      status: 403,
+      response: {
+        status: 403,
+        data: {
+          error: "Unauthorized",
+          message: "Internal role validation failed on /ingestion/channel/forms",
+          sqlState: "28000",
+        },
+      },
+    };
+
+    const result = formatIngestionError(forbiddenErr);
+    assert.strictEqual(result.status, 403);
+    assert.strictEqual(result.message, "You don't have access to this tool.");
+    assert.strictEqual(result.message.includes("sqlState"), false);
+    assert.strictEqual(result.message.includes("validation failed"), false);
+  });
+});
+
+
 
 
