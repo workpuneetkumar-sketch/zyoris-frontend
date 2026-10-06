@@ -5,43 +5,44 @@ import {
   Reply,
   Edit2,
   Trash2,
-  Smile,
-  AtSign,
   Pin,
   Bookmark,
+  Link as LinkIcon,
 } from "lucide-react";
 import { ConnectMessage, MessageActionItem } from "@/types/connect";
 
 interface MessageContextMenuProps {
   isOpen: boolean;
   onClose: () => void;
-  position?: { x: number; y: number } | null;
   message: ConnectMessage;
   isSelf: boolean;
   canManage?: boolean;
+  canPin?: boolean;
   onReply: (message: ConnectMessage) => void;
   onEdit: (message: ConnectMessage) => void;
   onDelete: (message: ConnectMessage) => void;
-  onReact?: (message: ConnectMessage, reaction: string) => void;
-  onMention?: (message: ConnectMessage) => void;
+  onReact?: (message: ConnectMessage, emoji: string) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onOpenLinkModal?: (message: ConnectMessage) => void;
 }
+
+const QUICK_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂", "👀", "🙌"];
 
 export default function MessageContextMenu({
   isOpen,
   onClose,
-  position,
   message,
   isSelf,
   canManage = false,
+  canPin = true,
   onReply,
   onEdit,
   onDelete,
   onReact,
-  onMention,
   onPin,
   onSave,
+  onOpenLinkModal,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -70,7 +71,6 @@ export default function MessageContextMenu({
 
   if (!isOpen) return null;
 
-  // Extensible Message Action Architecture
   const primaryActions: MessageActionItem[] = [
     {
       id: "reply",
@@ -78,6 +78,34 @@ export default function MessageContextMenu({
       icon: Reply,
       onClick: (msg) => {
         onReply(msg);
+        onClose();
+      },
+    },
+    {
+      id: message.isPinned ? "unpin" : "pin",
+      label: message.isPinned ? "Unpin Message" : "Pin Message",
+      icon: Pin,
+      hidden: !canPin,
+      onClick: (msg) => {
+        onPin?.(msg);
+        onClose();
+      },
+    },
+    {
+      id: message.isSaved ? "unsave" : "save",
+      label: message.isSaved ? "Remove Bookmark" : "Save Message",
+      icon: Bookmark,
+      onClick: (msg) => {
+        onSave?.(msg);
+        onClose();
+      },
+    },
+    {
+      id: "link",
+      label: "Link to Business Record",
+      icon: LinkIcon,
+      onClick: (msg) => {
+        onOpenLinkModal?.(msg);
         onClose();
       },
     },
@@ -104,60 +132,30 @@ export default function MessageContextMenu({
     },
   ];
 
-  const futureActions: MessageActionItem[] = [
-    {
-      id: "react",
-      label: "Add Reaction",
-      icon: Smile,
-      badge: "Soon",
-      disabled: false,
-      onClick: (msg) => {
-        onReact?.(msg, "👍");
-        onClose();
-      },
-    },
-    {
-      id: "mention",
-      label: "Mention Author",
-      icon: AtSign,
-      badge: "Soon",
-      disabled: false,
-      onClick: (msg) => {
-        onMention?.(msg);
-        onClose();
-      },
-    },
-    {
-      id: "pin",
-      label: "Pin to Channel",
-      icon: Pin,
-      badge: "Soon",
-      disabled: false,
-      onClick: (msg) => {
-        onPin?.(msg);
-        onClose();
-      },
-    },
-    {
-      id: "save",
-      label: "Save Bookmark",
-      icon: Bookmark,
-      badge: "Soon",
-      disabled: false,
-      onClick: (msg) => {
-        onSave?.(msg);
-        onClose();
-      },
-    },
-  ];
-
   return (
     <div
       ref={menuRef}
       id={`msg-context-menu-${message.id}`}
-      className="msg-context-menu absolute right-0 top-full mt-1 w-52 p-1.5 shadow-xl rounded-xl z-50 text-xs"
+      className="msg-context-menu absolute right-0 top-full mt-1 w-56 p-1.5 shadow-xl rounded-xl z-50 text-xs bg-surface border border-border"
     >
-      {/* Primary Actions */}
+      {/* Quick emoji reactions bar */}
+      <div className="px-2 py-1.5 mb-1 bg-surface-hover rounded-lg flex items-center justify-between border border-border/50">
+        {QUICK_EMOJIS.map((emoji) => (
+          <button
+            key={emoji}
+            onClick={() => {
+              onReact?.(message, emoji);
+              onClose();
+            }}
+            className="p-1 text-sm hover:scale-125 transition-transform"
+            title={`React with ${emoji}`}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+
+      {/* Menu Actions */}
       <div className="space-y-0.5">
         {primaryActions
           .filter((a) => !a.hidden)
@@ -169,10 +167,10 @@ export default function MessageContextMenu({
                 id={`context-action-${action.id}-${message.id}`}
                 onClick={() => action.onClick(message)}
                 disabled={action.disabled}
-                className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2 text-left rounded-lg transition-colors ${
                   action.isDestructive
-                    ? "msg-context-item-danger font-medium"
-                    : "msg-context-item font-medium"
+                    ? "text-error hover:bg-error-light hover:text-error-foreground font-medium"
+                    : "text-text hover:bg-surface-hover font-medium"
                 }`}
               >
                 <div className="flex items-center gap-2.5">
@@ -182,37 +180,6 @@ export default function MessageContextMenu({
               </button>
             );
           })}
-      </div>
-
-      {/* Separator */}
-      <div className="h-px bg-border my-1.5" />
-
-      {/* Extensible Future Foundation Actions */}
-      <div className="space-y-0.5">
-        <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Quick Actions
-        </div>
-        {futureActions.map((action) => {
-          const Icon = action.icon;
-          return (
-            <button
-              key={action.id}
-              id={`context-action-${action.id}-${message.id}`}
-              onClick={() => action.onClick(message)}
-              className="msg-context-item w-full flex items-center justify-between px-3 py-1.5 text-left transition-colors"
-            >
-              <div className="flex items-center gap-2.5 text-text-secondary">
-                <Icon size={14} className="shrink-0 text-text-muted" />
-                <span>{action.label}</span>
-              </div>
-              {action.badge && (
-                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-surface-hover text-text-muted border border-border-light">
-                  {action.badge}
-                </span>
-              )}
-            </button>
-          );
-        })}
       </div>
     </div>
   );

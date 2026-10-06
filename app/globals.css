@@ -2616,3 +2616,101 @@ a {
   border-bottom: 1px solid var(--color-border-light);
 }
 
+/* Day 2 Message Reactions */
+.msg-reaction-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.45rem;
+  border-radius: 9999px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  transition: all 150ms ease;
+  user-select: none;
+}
+
+.msg-reaction-pill:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-primary-light);
+  color: var(--color-primary);
+}
+
+.msg-reaction-pill-active {
+  background-color: var(--color-info-light);
+  color: var(--color-info-foreground);
+  border-color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* Day 2 Message Attachments */
+.msg-attachment-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  transition: all 150ms ease;
+  max-width: 20rem;
+}
+
+.msg-attachment-card:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-primary-light);
+}
+
+.msg-attachment-image {
+  border-radius: 0.75rem;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  max-width: 18rem;
+  max-height: 14rem;
+  cursor: pointer;
+  transition: opacity 150ms ease;
+}
+
+.msg-attachment-image:hover {
+  opacity: 0.95;
+}
+
+/* Day 2 Business Entity Links */
+.msg-link-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  background-color: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  transition: all 150ms ease;
+}
+
+.msg-link-badge:hover {
+  background-color: var(--color-surface);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* Search Highlight Animation */
+.msg-highlight-pulse {
+  animation: highlightPulse 2.5s ease-out forwards;
+}
+
+@keyframes highlightPulse {
+  0% {
+    box-shadow: 0 0 0 4px var(--color-primary);
+    background-color: var(--color-info-light);
+  }
+  100% {
+    box-shadow: none;
+  }
+}
+
+

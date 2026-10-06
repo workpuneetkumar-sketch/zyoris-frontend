@@ -11,6 +11,13 @@ import {
   ConversationMember,
   ConnectMessage,
   MemberRole,
+  SendMessagePayload,
+  SendReplyPayload,
+  SearchCommunicationsParams,
+  SearchMessageResult,
+  BusinessEntityLink,
+  UnreadStateResponse,
+  MessageAttachment,
 } from "@/types/connect";
 
 const BASE_COMM = "/api/communications";
@@ -362,18 +369,15 @@ export async function getConversationMessages(
 /**
  * Send a message: POST /api/communications/messages
  */
-export async function sendMessage(payload: {
-  channelId?: string;
-  conversationId?: string;
-  content: string;
-  parentMessageId?: string | null;
-}): Promise<ConnectMessage> {
+export async function sendMessage(payload: SendMessagePayload): Promise<ConnectMessage> {
   const body: Record<string, any> = {
     content: payload.content,
   };
   if (payload.channelId) body.channelId = payload.channelId;
   else if (payload.conversationId) body.conversationId = payload.conversationId;
   if (payload.parentMessageId) body.parentMessageId = payload.parentMessageId;
+  if (payload.attachments && payload.attachments.length > 0) body.attachments = payload.attachments;
+  if (payload.mentionedUserIds && payload.mentionedUserIds.length > 0) body.mentionedUserIds = payload.mentionedUserIds;
 
   const res = await api.post(`${BASE_COMM}/messages`, body);
   return res.data?.data || res.data;
@@ -401,6 +405,426 @@ export async function deleteMessage(messageId: string): Promise<ConnectMessage |
   return res.status === 200 || res.status === 204 || res.data?.success === true;
 }
 
+/* -------------------------------------------------------------------------- */
+/*                           THREADS & REPLIES                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Send a reply to a thread: POST /api/communications/messages/:messageId/replies
+ */
+export async function sendReply(
+  messageId: string,
+  payload: SendReplyPayload
+): Promise<ConnectMessage> {
+  const body: Record<string, any> = {
+    content: payload.content,
+  };
+  if (payload.attachments && payload.attachments.length > 0) body.attachments = payload.attachments;
+  if (payload.mentionedUserIds && payload.mentionedUserIds.length > 0) body.mentionedUserIds = payload.mentionedUserIds;
+
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/replies`, body);
+  return res.data?.data || res.data;
+}
+
+/**
+ * Fetch thread replies: GET /api/communications/messages/:messageId/replies?limit=50&cursor=<messageId>
+ */
+export async function getMessageReplies(
+  messageId: string,
+  limit: number = 50,
+  cursor?: string
+): Promise<{ data: ConnectMessage[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (cursor) query.set("cursor", cursor);
+
+  const res = await api.get(`${BASE_COMM}/messages/${messageId}/replies?${query.toString()}`);
+  const resData = res.data;
+
+  let list: ConnectMessage[] = [];
+  let nextCursor: string | null = null;
+
+  if (Array.isArray(resData)) {
+    list = resData;
+  } else if (resData?.data && Array.isArray(resData.data)) {
+    list = resData.data;
+    nextCursor = resData.nextCursor ?? null;
+  } else if (resData?.replies && Array.isArray(resData.replies)) {
+    list = resData.replies;
+    nextCursor = resData.nextCursor ?? null;
+  }
+
+  // Sort chronological ascending
+  list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  return { data: list, nextCursor };
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                 REACTIONS                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Add reaction: POST /api/communications/messages/:messageId/reactions
+ */
+export async function addReaction(
+  messageId: string,
+  emoji: string
+): Promise<any> {
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/reactions`, { emoji });
+  return res.data?.data || res.data;
+}
+
+/**
+ * Remove reaction: DELETE /api/communications/messages/:messageId/reactions/:emoji
+ */
+export async function removeReaction(
+  messageId: string,
+  emoji: string
+): Promise<boolean> {
+  try {
+    const res = await api.delete(`${BASE_COMM}/messages/${messageId}/reactions/${encodeURIComponent(emoji)}`);
+    return res.status === 200 || res.status === 204 || res.data?.success === true;
+  } catch (error: any) {
+    console.warn(`Failed to remove reaction ${emoji} from ${messageId}:`, error);
+    return false;
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           READ STATE & UNREAD                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Mark channel read: POST /api/communications/channels/:id/read
+ */
+export async function markChannelRead(channelId: string): Promise<boolean> {
+  try {
+    const res = await api.post(`${BASE_COMM}/channels/${channelId}/read`, {});
+    return res.status === 200 || res.status === 204 || res.data?.success === true;
+  } catch (error: any) {
+    console.warn(`Failed to mark channel ${channelId} as read:`, error);
+    return false;
+  }
+}
+
+/**
+ * Mark conversation read: POST /api/communications/conversations/:id/read
+ */
+export async function markConversationRead(conversationId: string): Promise<boolean> {
+  try {
+    const res = await api.post(`${BASE_COMM}/conversations/${conversationId}/read`, {});
+    return res.status === 200 || res.status === 204 || res.data?.success === true;
+  } catch (error: any) {
+    console.warn(`Failed to mark conversation ${conversationId} as read:`, error);
+    return false;
+  }
+}
+
+/**
+ * Fetch unread counts: GET /api/communications/unread
+ */
+export async function getUnreadCounts(): Promise<UnreadStateResponse> {
+  try {
+    const res = await api.get(`${BASE_COMM}/unread`);
+    const data = res.data?.data || res.data || {};
+    return {
+      channels: data.channels || {},
+      conversations: data.conversations || {},
+      total: data.total || data.totalUnread || 0,
+    };
+  } catch (error: any) {
+    console.warn("Failed to fetch unread counts:", error);
+    return { channels: {}, conversations: {}, total: 0 };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           PINS & SAVED MESSAGES                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Pin message: POST /api/communications/messages/:messageId/pin
+ */
+export async function pinMessage(messageId: string): Promise<any> {
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/pin`, {});
+  return res.data?.data || res.data;
+}
+
+/**
+ * Unpin message: DELETE /api/communications/messages/:messageId/pin
+ */
+export async function unpinMessage(messageId: string): Promise<boolean> {
+  try {
+    const res = await api.delete(`${BASE_COMM}/messages/${messageId}/pin`);
+    return res.status === 200 || res.status === 204 || res.data?.success === true;
+  } catch (error: any) {
+    console.warn(`Failed to unpin message ${messageId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Get channel pinned messages: GET /api/communications/channels/:id/pins
+ */
+export async function getChannelPins(channelId: string): Promise<ConnectMessage[]> {
+  try {
+    const res = await api.get(`${BASE_COMM}/channels/${channelId}/pins`);
+    const data = res.data;
+    if (Array.isArray(data)) return data;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    if (data?.pins && Array.isArray(data.pins)) return data.pins;
+    return [];
+  } catch (error: any) {
+    console.warn(`Failed to fetch pins for channel ${channelId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Get conversation pinned messages: GET /api/communications/conversations/:id/pins
+ */
+export async function getConversationPins(conversationId: string): Promise<ConnectMessage[]> {
+  try {
+    const res = await api.get(`${BASE_COMM}/conversations/${conversationId}/pins`);
+    const data = res.data;
+    if (Array.isArray(data)) return data;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    if (data?.pins && Array.isArray(data.pins)) return data.pins;
+    return [];
+  } catch (error: any) {
+    console.warn(`Failed to fetch pins for conversation ${conversationId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Save / bookmark message: POST /api/communications/messages/:messageId/save
+ */
+export async function saveMessage(messageId: string): Promise<any> {
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/save`, {});
+  return res.data?.data || res.data;
+}
+
+/**
+ * Delete saved message bookmark: DELETE /api/communications/messages/:messageId/save
+ */
+export async function unsaveMessage(messageId: string): Promise<boolean> {
+  try {
+    const res = await api.delete(`${BASE_COMM}/messages/${messageId}/save`);
+    return res.status === 200 || res.status === 204 || res.data?.success === true;
+  } catch (error: any) {
+    console.warn(`Failed to unsave message ${messageId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Get user saved messages: GET /api/communications/saved?limit=50&cursor=<savedMessageId>
+ */
+export async function getSavedMessages(
+  limit: number = 50,
+  cursor?: string
+): Promise<{ data: ConnectMessage[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (cursor) query.set("cursor", cursor);
+
+  try {
+    const res = await api.get(`${BASE_COMM}/saved?${query.toString()}`);
+    const resData = res.data;
+
+    let list: ConnectMessage[] = [];
+    let nextCursor: string | null = null;
+
+    if (Array.isArray(resData)) {
+      list = resData;
+    } else if (resData?.data && Array.isArray(resData.data)) {
+      list = resData.data;
+      nextCursor = resData.nextCursor ?? null;
+    } else if (resData?.saved && Array.isArray(resData.saved)) {
+      list = resData.saved.map((s: any) => s.message || s);
+      nextCursor = resData.nextCursor ?? null;
+    }
+
+    return { data: list, nextCursor };
+  } catch (error: any) {
+    console.warn("Failed to fetch saved messages:", error);
+    return { data: [], nextCursor: null };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                   SEARCH                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Search communications:
+ * GET /api/communications/search?q=<query>&limit=50&cursor=<messageId>
+ * (with optional channelId or conversationId scope)
+ */
+export async function searchCommunications(
+  params: SearchCommunicationsParams
+): Promise<{ data: SearchMessageResult[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("q", params.q.trim());
+  query.set("limit", String(params.limit || 50));
+  if (params.channelId) query.set("channelId", params.channelId);
+  if (params.conversationId) query.set("conversationId", params.conversationId);
+  if (params.cursor) query.set("cursor", params.cursor);
+
+  try {
+    const res = await api.get(`${BASE_COMM}/search?${query.toString()}`);
+    const resData = res.data;
+
+    let list: SearchMessageResult[] = [];
+    let nextCursor: string | null = null;
+
+    if (Array.isArray(resData)) {
+      list = resData;
+    } else if (resData?.data && Array.isArray(resData.data)) {
+      list = resData.data;
+      nextCursor = resData.nextCursor ?? null;
+    } else if (resData?.results && Array.isArray(resData.results)) {
+      list = resData.results;
+      nextCursor = resData.nextCursor ?? null;
+    }
+
+    return { data: list, nextCursor };
+  } catch (error: any) {
+    console.warn("Failed to search communications:", error);
+    return { data: [], nextCursor: null };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           BUSINESS ENTITY LINKS                            */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Link message to business entity: POST /api/communications/messages/:messageId/links
+ */
+export async function createMessageLink(
+  messageId: string,
+  payload: {
+    targetType: string;
+    targetId: string;
+    metadata?: any;
+  }
+): Promise<BusinessEntityLink> {
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/links`, payload);
+  return res.data?.data || res.data;
+}
+
+/**
+ * Get links for a message: GET /api/communications/messages/:messageId/links
+ */
+export async function getMessageLinks(
+  messageId: string
+): Promise<BusinessEntityLink[]> {
+  try {
+    const res = await api.get(`${BASE_COMM}/messages/${messageId}/links`);
+    const data = res.data;
+    if (Array.isArray(data)) return data;
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    if (data?.links && Array.isArray(data.links)) return data.links;
+    return [];
+  } catch (error: any) {
+    console.warn(`Failed to fetch links for message ${messageId}:`, error);
+    return [];
+  }
+}
+
+/**
+ * Delete a message business link: DELETE /api/communications/messages/:messageId/links/:linkId
+ */
+export async function deleteMessageLink(
+  messageId: string,
+  linkId: string
+): Promise<boolean> {
+  try {
+    const res = await api.delete(`${BASE_COMM}/messages/${messageId}/links/${linkId}`);
+    return res.status === 200 || res.status === 204 || res.data?.success === true;
+  } catch (error: any) {
+    console.warn(`Failed to delete link ${linkId} from message ${messageId}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Get links for an entity: GET /api/communications/links?targetType=<targetType>&targetId=<targetId>&limit=50&cursor=<linkId>
+ */
+export async function getLinksByEntity(
+  targetType: string,
+  targetId: string,
+  limit: number = 50,
+  cursor?: string
+): Promise<{ data: any[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("targetType", targetType);
+  query.set("targetId", targetId);
+  query.set("limit", String(limit));
+  if (cursor) query.set("cursor", cursor);
+
+  try {
+    const res = await api.get(`${BASE_COMM}/links?${query.toString()}`);
+    const data = res.data;
+    if (Array.isArray(data)) return { data, nextCursor: null };
+    return {
+      data: data?.data || data?.links || [],
+      nextCursor: data?.nextCursor ?? null,
+    };
+  } catch (error: any) {
+    console.warn(`Failed to fetch links for entity ${targetType}:${targetId}:`, error);
+    return { data: [], nextCursor: null };
+  }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                            ATTACHMENT UPLOADS                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Upload an attachment file using existing storage contracts (/uploads/file)
+ * Supports progress tracking and returns standard MessageAttachment object
+ */
+export async function uploadMessageAttachment(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<MessageAttachment> {
+  // Validate file size (max 25MB)
+  const MAX_SIZE = 25 * 1024 * 1024;
+  if (file.size > MAX_SIZE) {
+    throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed is 25MB.`);
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await api.post("/documents/upload", formData, {
+    onUploadProgress: (progressEvent) => {
+      if (onProgress && progressEvent.total) {
+        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+        onProgress(percent);
+      }
+    },
+  });
+
+  const serverData = res.data?.data || res.data;
+  const fileId = serverData?.id || serverData?.fileUploadId || `upload-${Date.now()}`;
+  const downloadUrl = serverData?.url || serverData?.s3Url || `/documents/download/${fileId}`;
+
+  return {
+    id: fileId,
+    fileUploadId: fileId,
+    name: file.name,
+    size: file.size,
+    type: file.type,
+    mimeType: file.type,
+    url: downloadUrl,
+  };
+}
+
 /* Backward-compatibility aliases */
 export async function getConnectMessages(params: {
   channelId?: string;
@@ -421,4 +845,5 @@ export async function getConnectMessages(params: {
 export const sendConnectMessage = sendMessage;
 export const updateConnectMessage = updateMessage;
 export const deleteConnectMessage = deleteMessage;
+
 
