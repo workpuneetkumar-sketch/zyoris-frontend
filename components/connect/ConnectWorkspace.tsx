@@ -7,6 +7,9 @@ import {
   MessageSquare,
   Users,
   ChevronLeft,
+  Pin,
+  Bookmark,
+  Search,
 } from "lucide-react";
 import ConnectSidebar from "./ConnectSidebar";
 import CreateChannelModal from "./CreateChannelModal";
@@ -15,6 +18,11 @@ import CreateDirectMessageModal from "./CreateDirectMessageModal";
 import CreateGroupConversationModal from "./CreateGroupConversationModal";
 import MessageList from "./MessageList";
 import MessageComposer from "./MessageComposer";
+import ThreadDrawer from "./ThreadDrawer";
+import PinnedMessagesModal from "./PinnedMessagesModal";
+import SavedMessagesModal from "./SavedMessagesModal";
+import CommunicationSearchModal from "./CommunicationSearchModal";
+import BusinessLinkModal from "./BusinessLinkModal";
 import {
   Channel,
   Conversation,
@@ -25,7 +33,15 @@ import {
   SocketMessageDeletePayload,
   SocketChannelUpdatedPayload,
   SocketConversationUpdatedPayload,
+  SocketChannelReadPayload,
+  SocketConversationReadPayload,
+  SocketMessageReadPayload,
+  SocketReactionPayload,
+  SocketPinPayload,
   SendMessagePayload,
+  MessageAttachment,
+  BusinessEntityLink,
+  SearchMessageResult,
 } from "@/types/connect";
 import {
   getChannels,
@@ -35,6 +51,15 @@ import {
   sendMessage,
   updateMessage,
   deleteMessage,
+  addReaction,
+  removeReaction,
+  pinMessage,
+  unpinMessage,
+  saveMessage,
+  unsaveMessage,
+  markChannelRead,
+  markConversationRead,
+  getUnreadCounts,
 } from "@/lib/api/connectApi";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { getEmployees } from "@/lib/api/hrApi";
@@ -64,6 +89,14 @@ export default function ConnectWorkspace() {
   const [isChannelMembersOpen, setIsChannelMembersOpen] = useState(false);
   const [isCreateDirectOpen, setIsCreateDirectOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+
+  // Day 2 Modals, Drawers & Navigation
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSavedOpen, setIsSavedOpen] = useState(false);
+  const [isPinnedOpen, setIsPinnedOpen] = useState(false);
+  const [activeThreadMessage, setActiveThreadMessage] = useState<ConnectMessage | null>(null);
+  const [selectedMessageForLinks, setSelectedMessageForLinks] = useState<ConnectMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   // Message Editing & Replying Modes
   const [editingMessage, setEditingMessage] = useState<ConnectMessage | null>(null);
@@ -95,15 +128,30 @@ export default function ConnectWorkspace() {
   // Fetch all initial server-backed data
   const loadInitialData = async () => {
     try {
-      const [channelsData, convsData, teamData, empData] = await Promise.all([
+      const [channelsData, convsData, teamData, empData, unreadData] = await Promise.all([
         getChannels(),
         getConversations(),
         getTeamMembers().catch(() => []),
         getEmployees().catch(() => []),
+        getUnreadCounts().catch(() => ({ channels: {}, conversations: {}, total: 0 })),
       ]);
 
       setChannels(channelsData);
       setConversations(convsData);
+
+      // Populate unread map from server
+      const newUnreadMap: Record<string, number> = {};
+      if (unreadData.channels) {
+        Object.entries(unreadData.channels).forEach(([k, v]) => {
+          if (v > 0) newUnreadMap[k] = v;
+        });
+      }
+      if (unreadData.conversations) {
+        Object.entries(unreadData.conversations).forEach(([k, v]) => {
+          if (v > 0) newUnreadMap[k] = v;
+        });
+      }
+      setUnreadMap(newUnreadMap);
 
       // Merge and deduplicate team members and employees
       const memberMap = new Map<string, TeamMember>();
@@ -185,6 +233,13 @@ export default function ConnectWorkspace() {
       return;
     }
 
+    // Call server read state API
+    if (activeTarget.type === "channel") {
+      markChannelRead(activeTarget.id).catch(() => {});
+    } else if (activeTarget.type === "conversation") {
+      markConversationRead(activeTarget.id).catch(() => {});
+    }
+
     // Clear unread count for opened context
     setUnreadMap((prev) => {
       if (!prev[activeTarget.id]) return prev;
@@ -246,7 +301,7 @@ export default function ConnectWorkspace() {
             return prev;
           }
 
-          // Reconcile optimistic message: if tempId or sending matches same content & sender
+          // Reconcile optimistic message
           const optIndex = prev.findIndex(
             (m) =>
               m.id.startsWith("opt-") &&
@@ -271,6 +326,21 @@ export default function ConnectWorkspace() {
             [targetId]: (prev[targetId] || 0) + 1,
           }));
         }
+      }
+
+      // If this is a reply to an active message, update parent message's replyCount
+      if (payload.parentMessageId) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === payload.parentMessageId
+              ? {
+                  ...m,
+                  replyCount: (m.replyCount || 0) + 1,
+                  lastReplyAt: newMsg.createdAt,
+                }
+              : m
+          )
+        );
       }
 
       // Update last message in channels / conversations list
@@ -330,6 +400,133 @@ export default function ConnectWorkspace() {
     []
   );
 
+  // Sakshi's Live Read Events
+  const handleSocketChannelRead = useCallback(
+    (payload: SocketChannelReadPayload) => {
+      if (!payload?.channelId) return;
+      if (!payload.userId || payload.userId === currentUserId || activeTargetRef.current?.id === payload.channelId) {
+        setUnreadMap((prev) => {
+          if (!prev[payload.channelId]) return prev;
+          const copy = { ...prev };
+          delete copy[payload.channelId];
+          return copy;
+        });
+      }
+    },
+    [currentUserId]
+  );
+
+  const handleSocketConversationRead = useCallback(
+    (payload: SocketConversationReadPayload) => {
+      if (!payload?.conversationId) return;
+      if (!payload.userId || payload.userId === currentUserId || activeTargetRef.current?.id === payload.conversationId) {
+        setUnreadMap((prev) => {
+          if (!prev[payload.conversationId]) return prev;
+          const copy = { ...prev };
+          delete copy[payload.conversationId];
+          return copy;
+        });
+      }
+    },
+    [currentUserId]
+  );
+
+  const handleSocketMessageRead = useCallback(
+    (payload: SocketMessageReadPayload) => {
+      const targetId = payload.channelId || payload.conversationId;
+      if (targetId && (!payload.userId || payload.userId === currentUserId || activeTargetRef.current?.id === targetId)) {
+        setUnreadMap((prev) => {
+          if (!prev[targetId]) return prev;
+          const copy = { ...prev };
+          delete copy[targetId];
+          return copy;
+        });
+      }
+    },
+    [currentUserId]
+  );
+
+  // Sakshi's Live Reaction Events
+  const handleSocketReaction = useCallback(
+    (payload: SocketReactionPayload) => {
+      if (!payload?.messageId) return;
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== payload.messageId) return m;
+
+          if (payload.reactions) {
+            return { ...m, reactions: payload.reactions };
+          }
+
+          const existing = m.reactions || [];
+          const match = existing.find((r) => r.emoji === payload.emoji);
+          const isUser = payload.userId === currentUserId;
+
+          if (payload.action === "remove") {
+            if (!match) return m;
+            if (match.count <= 1) {
+              return { ...m, reactions: existing.filter((r) => r.emoji !== payload.emoji) };
+            }
+            return {
+              ...m,
+              reactions: existing.map((r) =>
+                r.emoji === payload.emoji
+                  ? {
+                      ...r,
+                      count: Math.max(0, r.count - 1),
+                      hasReacted: isUser ? false : r.hasReacted,
+                      userIds: r.userIds.filter((id) => id !== payload.userId),
+                    }
+                  : r
+              ),
+            };
+          } else {
+            if (match) {
+              const userAlreadyIn = match.userIds.includes(payload.userId);
+              return {
+                ...m,
+                reactions: existing.map((r) =>
+                  r.emoji === payload.emoji
+                    ? {
+                        ...r,
+                        count: userAlreadyIn ? r.count : r.count + 1,
+                        hasReacted: isUser ? true : r.hasReacted,
+                        userIds: userAlreadyIn ? r.userIds : [...r.userIds, payload.userId],
+                      }
+                    : r
+                ),
+              };
+            } else {
+              return {
+                ...m,
+                reactions: [
+                  ...existing,
+                  {
+                    emoji: payload.emoji,
+                    count: 1,
+                    hasReacted: isUser,
+                    userIds: [payload.userId],
+                  },
+                ],
+              };
+            }
+          }
+        })
+      );
+    },
+    [currentUserId]
+  );
+
+  // Sakshi's Live Pin / Unpin Events
+  const handleSocketPinUpdated = useCallback((payload: SocketPinPayload) => {
+    if (!payload?.messageId) return;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === payload.messageId ? { ...m, isPinned: payload.isPinned } : m
+      )
+    );
+  }, []);
+
   // Active channel name for socket room subscription
   const activeChannelName = useMemo(() => {
     if (activeTarget?.type === "channel") {
@@ -349,6 +546,11 @@ export default function ConnectWorkspace() {
     onDeleteMessage: handleSocketDeleteMessage,
     onChannelUpdated: handleSocketChannelUpdated,
     onConversationUpdated: handleSocketConversationUpdated,
+    onChannelRead: handleSocketChannelRead,
+    onConversationRead: handleSocketConversationRead,
+    onMessageRead: handleSocketMessageRead,
+    onReaction: handleSocketReaction,
+    onPinUpdated: handleSocketPinUpdated,
   });
 
   /* -------------------------------------------------------------------------- */
@@ -398,11 +600,15 @@ export default function ConnectWorkspace() {
 
   /**
    * Send Message: POST /api/communications/messages
-   * Flow: types -> optimistic message (status: sending) -> POST API -> server response -> reconcile
    */
-  const handleSendMessage = async (content: string, parentMessageId?: string | null) => {
+  const handleSendMessage = async (
+    content: string,
+    parentMessageId?: string | null,
+    attachments?: MessageAttachment[],
+    mentionedUserIds?: string[]
+  ) => {
     const target = activeTargetRef.current;
-    if (!target || !content.trim() || sending) return;
+    if (!target || (!content.trim() && (!attachments || attachments.length === 0)) || sending) return;
 
     setSending(true);
 
@@ -416,6 +622,8 @@ export default function ConnectWorkspace() {
       parentMessageId: parentMessageId || null,
       content,
       type: "TEXT",
+      attachments,
+      mentionedUserIds,
       createdAt: new Date().toISOString(),
       status: "sending",
       sender: {
@@ -433,8 +641,10 @@ export default function ConnectWorkspace() {
       const payload: SendMessagePayload = {
         channelId: target.type === "channel" ? target.id : undefined,
         conversationId: target.type === "conversation" ? target.id : undefined,
-        content,
+        content: content.trim(),
         parentMessageId: parentMessageId || undefined,
+        attachments: attachments && attachments.length > 0 ? attachments : undefined,
+        mentionedUserIds: mentionedUserIds && mentionedUserIds.length > 0 ? mentionedUserIds : undefined,
       };
 
       const canonicalMsg = await sendMessage(payload);
@@ -467,12 +677,12 @@ export default function ConnectWorkspace() {
         );
       }
     } catch (err: any) {
-      console.error("Failed to send message:", err);
+      console.error("Failed to send message:", err?.response?.data || err.message, err);
       // Mark as failed and preserve content so user can Retry
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
-            ? { ...m, status: "failed", error: "Failed to send message" }
+            ? { ...m, status: "failed", error: err?.response?.data?.message || "Failed to send message" }
             : m
         )
       );
@@ -488,7 +698,6 @@ export default function ConnectWorkspace() {
     const target = activeTargetRef.current;
     if (!target) return;
 
-    // Guard against retrying stale requests if user switched context
     const isCurrentContext =
       (target.type === "channel" && failedMsg.channelId === target.id) ||
       (target.type === "conversation" && failedMsg.conversationId === target.id);
@@ -504,6 +713,8 @@ export default function ConnectWorkspace() {
         conversationId: target.type === "conversation" ? target.id : undefined,
         content: failedMsg.content,
         parentMessageId: failedMsg.parentMessageId || undefined,
+        attachments: failedMsg.attachments,
+        mentionedUserIds: failedMsg.mentionedUserIds,
       };
 
       const canonicalMsg = await sendMessage(payload);
@@ -511,10 +722,14 @@ export default function ConnectWorkspace() {
       setMessages((prev) =>
         prev.map((m) => (m.id === failedMsg.id ? { ...canonicalMsg, status: "sent" } : m))
       );
-    } catch (err) {
-      console.error("Failed to retry send:", err);
+    } catch (err: any) {
+      console.error("Failed to retry message:", err?.response?.data || err.message, err);
       setMessages((prev) =>
-        prev.map((m) => (m.id === failedMsg.id ? { ...m, status: "failed", error: "Retry failed" } : m))
+        prev.map((m) =>
+          m.id === failedMsg.id
+            ? { ...m, status: "failed", error: err?.response?.data?.message || "Failed to send message" }
+            : m
+        )
       );
     }
   };
@@ -543,7 +758,7 @@ export default function ConnectWorkspace() {
   };
 
   /**
-   * Reply foundation
+   * Reply in thread foundation
    */
   const handleStartReply = (msg: ConnectMessage) => {
     setEditingMessage(null);
@@ -567,27 +782,209 @@ export default function ConnectWorkspace() {
     }
   };
 
+  /* -------------------------------------------------------------------------- */
+  /*                            DAY 2 ACTIONS                                   */
+  /* -------------------------------------------------------------------------- */
+
   /**
-   * Extensible Action Handlers
+   * Reactions: POST /api/communications/messages/:messageId/reactions
+   * DELETE /api/communications/messages/:messageId/reactions/:emoji
    */
-  const handleReact = (msg: ConnectMessage, reaction: string) => {
-    // Prepared for future reactions API
-    console.info(`[Action Architecture] Reaction ${reaction} on message ${msg.id}`);
+  const handleReact = async (msg: ConnectMessage, emoji: string) => {
+    const existingReactions = msg.reactions || [];
+    const currentReaction = existingReactions.find((r) => r.emoji === emoji);
+    const hasUserReacted = Boolean(
+      currentReaction?.hasReacted ||
+        (currentUserId && currentReaction?.userIds?.includes(currentUserId))
+    );
+
+    // Optimistic reaction update
+    let updatedReactions = [...existingReactions];
+    if (hasUserReacted) {
+      if (currentReaction && currentReaction.count <= 1) {
+        updatedReactions = updatedReactions.filter((r) => r.emoji !== emoji);
+      } else if (currentReaction) {
+        updatedReactions = updatedReactions.map((r) =>
+          r.emoji === emoji
+            ? {
+                ...r,
+                count: r.count - 1,
+                hasReacted: false,
+                userIds: currentUserId ? r.userIds.filter((id) => id !== currentUserId) : r.userIds,
+              }
+            : r
+        );
+      }
+    } else {
+      if (currentReaction) {
+        updatedReactions = updatedReactions.map((r) =>
+          r.emoji === emoji
+            ? {
+                ...r,
+                count: r.count + 1,
+                hasReacted: true,
+                userIds: currentUserId ? [...r.userIds, currentUserId] : r.userIds,
+              }
+            : r
+        );
+      } else {
+        updatedReactions.push({
+          emoji,
+          count: 1,
+          hasReacted: true,
+          userIds: currentUserId ? [currentUserId] : [],
+        });
+      }
+    }
+
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, reactions: updatedReactions } : m))
+    );
+
+    try {
+      if (hasUserReacted) {
+        await removeReaction(msg.id, emoji);
+      } else {
+        await addReaction(msg.id, emoji);
+      }
+    } catch (err) {
+      console.error("Failed to update reaction:", err);
+      // Revert on failure
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, reactions: existingReactions } : m))
+      );
+    }
   };
 
-  const handleMention = (msg: ConnectMessage) => {
-    // Prepared for future mentions API
-    console.info(`[Action Architecture] Mention author of message ${msg.id}`);
+  /**
+   * Pin / Unpin Message: POST /api/communications/messages/:messageId/pin
+   * DELETE /api/communications/messages/:messageId/pin
+   * Nitin's Authorization Rule: Channel Owners/Admins for channels; participants for conversations.
+   */
+  const handlePin = async (msg: ConnectMessage) => {
+    const isChannel = activeTarget?.type === "channel" || Boolean(msg.channelId);
+    if (isChannel && !canManageCurrent) {
+      alert("Only channel owners and admins are authorized to pin or unpin messages in this channel.");
+      return;
+    }
+
+    const nextPinned = !msg.isPinned;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, isPinned: nextPinned } : m))
+    );
+
+    try {
+      if (nextPinned) {
+        await pinMessage(msg.id);
+      } else {
+        await unpinMessage(msg.id);
+      }
+    } catch (err) {
+      console.error("Failed to toggle pin state:", err);
+      // Revert
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, isPinned: !nextPinned } : m))
+      );
+      alert("Failed to update pin state. Please verify your permissions.");
+    }
   };
 
-  const handlePin = (msg: ConnectMessage) => {
-    // Prepared for future pin API
-    console.info(`[Action Architecture] Pin message ${msg.id}`);
+  /**
+   * Save / Unsave Message: POST /api/communications/messages/:messageId/save
+   * DELETE /api/communications/messages/:messageId/save
+   */
+  const handleSave = async (msg: ConnectMessage) => {
+    const nextSaved = !msg.isSaved;
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msg.id ? { ...m, isSaved: nextSaved } : m))
+    );
+
+    try {
+      if (nextSaved) {
+        await saveMessage(msg.id);
+      } else {
+        await unsaveMessage(msg.id);
+      }
+    } catch (err) {
+      console.error("Failed to bookmark message:", err);
+      // Revert
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msg.id ? { ...m, isSaved: !nextSaved } : m))
+      );
+      alert("Failed to update bookmark state.");
+    }
   };
 
-  const handleSave = (msg: ConnectMessage) => {
-    // Prepared for future save API
-    console.info(`[Action Architecture] Save bookmark for message ${msg.id}`);
+  /**
+   * Search result navigation: jump to message, select context, and highlight
+   */
+  const handleSelectSearchResult = (result: SearchMessageResult) => {
+    if (result.channelId) {
+      const ch = channels.find((c) => c.id === result.channelId);
+      if (ch) selectChannel(ch);
+    } else if (result.conversationId) {
+      const conv = conversations.find((c) => c.id === result.conversationId);
+      if (conv) selectConversation(conv);
+    }
+
+    setHighlightedMessageId(result.id);
+    setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 3500);
+  };
+
+  /**
+   * Jump to saved message
+   */
+  const handleJumpToSavedMessage = (savedMsg: ConnectMessage) => {
+    if (savedMsg.channelId) {
+      const ch = channels.find((c) => c.id === savedMsg.channelId);
+      if (ch) selectChannel(ch);
+    } else if (savedMsg.conversationId) {
+      const conv = conversations.find((c) => c.id === savedMsg.conversationId);
+      if (conv) selectConversation(conv);
+    }
+
+    setHighlightedMessageId(savedMsg.id);
+    setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 3500);
+  };
+
+  /**
+   * Jump to pinned message
+   */
+  const handleJumpToPinnedMessage = (pinnedMessageId: string) => {
+    setHighlightedMessageId(pinnedMessageId);
+    setTimeout(() => {
+      setHighlightedMessageId(null);
+    }, 3500);
+  };
+
+  /**
+   * Business entity links updated
+   */
+  const handleLinksUpdated = (messageId: string, updatedLinks: BusinessEntityLink[]) => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === messageId ? { ...m, links: updatedLinks } : m))
+    );
+  };
+
+  /**
+   * Thread reply sent callback
+   */
+  const handleThreadReplySent = (parentMessageId: string, reply: ConnectMessage) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === parentMessageId
+          ? {
+              ...m,
+              replyCount: (m.replyCount || 0) + 1,
+              lastReplyAt: reply.createdAt,
+            }
+          : m
+      )
+    );
   };
 
   /* -------------------------------------------------------------------------- */
@@ -671,6 +1068,8 @@ export default function ConnectWorkspace() {
             selectChannel(ch);
             setIsChannelMembersOpen(true);
           }}
+          onOpenSearchModal={() => setIsSearchOpen(true)}
+          onOpenSavedModal={() => setIsSavedOpen(true)}
           currentUserId={currentUserId}
           socketStatus={socketStatus}
           unreadMap={unreadMap}
@@ -753,6 +1152,27 @@ export default function ConnectWorkspace() {
 
                 {/* Header Actions */}
                 <div className="flex items-center gap-2">
+                  {/* Pinned Messages Button */}
+                  <button
+                    id="view-pinned-messages-btn"
+                    onClick={() => setIsPinnedOpen(true)}
+                    className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5"
+                    title="View Pinned Messages"
+                  >
+                    <Pin size={14} className="text-warning" />
+                    <span>Pinned</span>
+                  </button>
+
+                  {/* Search Button */}
+                  <button
+                    id="header-search-btn"
+                    onClick={() => setIsSearchOpen(true)}
+                    className="p-1.5 text-text-muted hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all"
+                    title="Search Messages"
+                  >
+                    <Search size={16} />
+                  </button>
+
                   {activeHeaderDetails.type === "channel" && (
                     <button
                       id="manage-channel-members-btn"
@@ -766,44 +1186,64 @@ export default function ConnectWorkspace() {
                 </div>
               </div>
 
-              {/* Message List Stream */}
-              <MessageList
-                channelId={activeTarget?.type === "channel" ? activeTarget.id : null}
-                conversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
-                messages={messages}
-                loading={messagesLoading}
-                error={messagesError}
-                currentUserId={currentUserId}
-                canManage={canManageCurrent}
-                emptyTitle={`Welcome to ${activeHeaderDetails.title}`}
-                emptySubtitle={
-                  activeHeaderDetails.type === "channel"
-                    ? "This is the very start of the channel. Send a message below to connect with your team!"
-                    : "This is the start of your direct conversation."
-                }
-                onRetryFetch={() => { if (activeTarget) loadMessagesForTarget(activeTarget); }}
-                onReply={handleStartReply}
-                onEdit={handleStartEdit}
-                onDelete={handleDeleteMessage}
-                onRetrySend={handleRetrySend}
-                onReact={handleReact}
-                onMention={handleMention}
-                onPin={handlePin}
-                onSave={handleSave}
-              />
+              {/* Main Chat and Drawer Container */}
+              <div className="flex-1 flex overflow-hidden">
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Message List Stream */}
+                  <MessageList
+                    channelId={activeTarget?.type === "channel" ? activeTarget.id : null}
+                    conversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
+                    messages={messages}
+                    loading={messagesLoading}
+                    error={messagesError}
+                    currentUserId={currentUserId}
+                    canManage={canManageCurrent}
+                    highlightedMessageId={highlightedMessageId}
+                    emptyTitle={`Welcome to ${activeHeaderDetails.title}`}
+                    emptySubtitle={
+                      activeHeaderDetails.type === "channel"
+                        ? "This is the very start of the channel. Send a message below to connect with your team!"
+                        : "This is the start of your direct conversation."
+                    }
+                    onRetryFetch={() => { if (activeTarget) loadMessagesForTarget(activeTarget); }}
+                    onReply={handleStartReply}
+                    onEdit={handleStartEdit}
+                    onDelete={handleDeleteMessage}
+                    onRetrySend={handleRetrySend}
+                    onReact={handleReact}
+                    onPin={handlePin}
+                    onSave={handleSave}
+                    onOpenThread={(msg) => setActiveThreadMessage(msg)}
+                    onOpenLinkModal={(msg) => setSelectedMessageForLinks(msg)}
+                  />
 
-              {/* Message Composer */}
-              <MessageComposer
-                placeholder={`Message ${activeHeaderDetails.title}...`}
-                disabled={messagesLoading}
-                sending={sending}
-                editingMessage={editingMessage}
-                replyingToMessage={replyingToMessage}
-                onSendMessage={handleSendMessage}
-                onSaveEdit={handleSaveEdit}
-                onCancelEdit={() => setEditingMessage(null)}
-                onCancelReply={() => setReplyingToMessage(null)}
-              />
+                  {/* Message Composer */}
+                  <MessageComposer
+                    placeholder={`Message ${activeHeaderDetails.title}...`}
+                    disabled={messagesLoading}
+                    sending={sending}
+                    editingMessage={editingMessage}
+                    replyingToMessage={replyingToMessage}
+                    teamMembers={teamMembers}
+                    onSendMessage={handleSendMessage}
+                    onSaveEdit={handleSaveEdit}
+                    onCancelEdit={() => setEditingMessage(null)}
+                    onCancelReply={() => setReplyingToMessage(null)}
+                  />
+                </div>
+
+                {/* Thread Drawer Panel */}
+                {activeThreadMessage && (
+                  <ThreadDrawer
+                    isOpen={Boolean(activeThreadMessage)}
+                    onClose={() => setActiveThreadMessage(null)}
+                    parentMessage={activeThreadMessage}
+                    currentUserId={currentUserId}
+                    teamMembers={teamMembers}
+                    onReplySent={handleThreadReplySent}
+                  />
+                )}
+              </div>
             </>
           ) : (
             /* Empty State when no conversation or channel is selected */
@@ -858,6 +1298,57 @@ export default function ConnectWorkspace() {
         currentUserId={currentUserId}
         onConversationCreated={handleConversationCreated}
       />
+
+      {/* Day 2 Modals */}
+      {isSearchOpen && (
+        <CommunicationSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          currentChannelId={activeTarget?.type === "channel" ? activeTarget.id : null}
+          currentChannelName={activeHeaderDetails?.type === "channel" ? (activeHeaderDetails.channel?.name || null) : null}
+          currentConversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
+          onSelectResult={handleSelectSearchResult}
+        />
+      )}
+
+      {isSavedOpen && (
+        <SavedMessagesModal
+          isOpen={isSavedOpen}
+          onClose={() => setIsSavedOpen(false)}
+          onJumpToSavedMessage={handleJumpToSavedMessage}
+          onUnsaved={(msgId) => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === msgId ? { ...m, isSaved: false } : m))
+            );
+          }}
+        />
+      )}
+
+      {isPinnedOpen && activeTarget && (
+        <PinnedMessagesModal
+          isOpen={isPinnedOpen}
+          onClose={() => setIsPinnedOpen(false)}
+          targetType={activeTarget.type}
+          targetId={activeTarget.id}
+          targetTitle={activeHeaderDetails?.title || "Current Chat"}
+          canUnpin={activeTarget.type === "channel" ? canManageCurrent : true}
+          onJumpToMessage={handleJumpToPinnedMessage}
+          onUnpinned={(msgId) => {
+            setMessages((prev) =>
+              prev.map((m) => (m.id === msgId ? { ...m, isPinned: false } : m))
+            );
+          }}
+        />
+      )}
+
+      {selectedMessageForLinks && (
+        <BusinessLinkModal
+          isOpen={Boolean(selectedMessageForLinks)}
+          onClose={() => setSelectedMessageForLinks(null)}
+          message={selectedMessageForLinks}
+          onLinksUpdated={handleLinksUpdated}
+        />
+      )}
     </div>
   );
 }

@@ -10,38 +10,53 @@ import {
   AlertCircle,
   RefreshCw,
   CornerDownRight,
+  Pin,
+  Bookmark,
+  Smile,
+  Link as LinkIcon,
+  MessageSquare,
 } from "lucide-react";
 import { ConnectMessage } from "@/types/connect";
 import MessageContextMenu from "./MessageContextMenu";
+import MessageAttachmentRenderer from "./MessageAttachmentRenderer";
 
 interface MessageItemProps {
   message: ConnectMessage;
   currentUserId?: string | null;
   canManage?: boolean;
+  canPin?: boolean;
+  isHighlighted?: boolean;
   onReply: (message: ConnectMessage) => void;
   onEdit: (message: ConnectMessage) => void;
   onDelete: (message: ConnectMessage) => void;
   onRetrySend?: (message: ConnectMessage) => void;
-  onReact?: (message: ConnectMessage, reaction: string) => void;
-  onMention?: (message: ConnectMessage) => void;
+  onReact?: (message: ConnectMessage, emoji: string) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onOpenThread?: (message: ConnectMessage) => void;
+  onOpenLinkModal?: (message: ConnectMessage) => void;
 }
+
+const QUICK_REACTION_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂"];
 
 export default function MessageItem({
   message,
   currentUserId,
   canManage = false,
+  canPin = true,
+  isHighlighted = false,
   onReply,
   onEdit,
   onDelete,
   onRetrySend,
   onReact,
-  onMention,
   onPin,
   onSave,
+  onOpenThread,
+  onOpenLinkModal,
 }: MessageItemProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const isSelf = Boolean(
     (currentUserId && message.senderId === currentUserId) ||
@@ -66,13 +81,18 @@ export default function MessageItem({
     setIsMenuOpen(true);
   };
 
+  const handleEmojiClick = (emoji: string) => {
+    onReact?.(message, emoji);
+    setShowEmojiPicker(false);
+  };
+
   return (
     <div
       id={`message-item-${message.id}`}
       onContextMenu={handleContextMenu}
-      className={`group relative flex items-start gap-3 transition-colors py-1 ${
+      className={`group relative flex items-start gap-3 transition-colors py-1.5 px-2 rounded-2xl ${
         isSelf ? "flex-row-reverse" : "flex-row"
-      }`}
+      } ${isHighlighted ? "msg-highlight-pulse bg-primary/5" : "hover:bg-surface-hover/40"}`}
     >
       {/* Sender Avatar */}
       <div
@@ -96,18 +116,19 @@ export default function MessageItem({
 
       {/* Message Body & Bubble */}
       <div
-        className={`max-w-[78%] md:max-w-[70%] space-y-1 relative ${
+        className={`max-w-[85%] md:max-w-[75%] space-y-1 relative ${
           isSelf ? "items-end text-right" : "items-start text-left"
         }`}
       >
-        {/* Author & Timestamp Header */}
+        {/* Author, Timestamp, Pin & Bookmark Header */}
         <div
-          className={`flex items-center gap-2 text-[11px] text-text-muted px-1 ${
+          className={`flex items-center gap-2 text-[11px] text-text-muted px-1 flex-wrap ${
             isSelf ? "justify-end" : "justify-start"
           }`}
         >
           <span className="font-semibold text-text">{senderName}</span>
           <span>{formattedTime}</span>
+
           {message.editedAt && (
             <span
               id={`edited-badge-${message.id}`}
@@ -116,13 +137,38 @@ export default function MessageItem({
               (edited)
             </span>
           )}
+
+          {/* Pinned Badge */}
+          {message.isPinned && (
+            <span
+              id={`pinned-badge-${message.id}`}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-warning-light text-warning-foreground border border-warning/30"
+              title="Pinned message"
+            >
+              <Pin size={10} className="fill-warning-foreground" />
+              <span>Pinned</span>
+            </span>
+          )}
+
+          {/* Saved Badge */}
+          {message.isSaved && (
+            <span
+              id={`saved-badge-${message.id}`}
+              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20"
+              title="Bookmarked message"
+            >
+              <Bookmark size={10} className="fill-primary" />
+              <span>Saved</span>
+            </span>
+          )}
         </div>
 
-        {/* Parent Message Reply Preview (if referencing a parent) */}
-        {message.parentMessageId && (
+        {/* Parent Message Reply Preview (if quoting parent inline) */}
+        {message.parentMessageId && message.parentMessage && (
           <div
             id={`reply-quote-${message.id}`}
-            className="msg-reply-quote text-[11px] px-2.5 py-1 mb-1 max-w-full text-left truncate flex items-center gap-1.5 text-text-secondary opacity-90"
+            onClick={() => onOpenThread?.(message)}
+            className="msg-reply-quote text-[11px] px-2.5 py-1 mb-1 max-w-full text-left truncate flex items-center gap-1.5 text-text-secondary opacity-90 cursor-pointer hover:opacity-100"
           >
             <CornerDownRight size={12} className="shrink-0 text-primary" />
             <span className="font-semibold text-text truncate">
@@ -141,7 +187,12 @@ export default function MessageItem({
             isSelf ? "msg-bubble-self text-left" : "msg-bubble-peer text-left"
           } ${isFailed ? "border-error border" : ""}`}
         >
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          {message.content && <div className="whitespace-pre-wrap">{message.content}</div>}
+
+          {/* Attachments rendering */}
+          {message.attachments && message.attachments.length > 0 && (
+            <MessageAttachmentRenderer attachments={message.attachments} isSelf={isSelf} />
+          )}
 
           {/* Sending / Failed Status Indicators */}
           {(isSending || isFailed) && (
@@ -176,6 +227,70 @@ export default function MessageItem({
           )}
         </div>
 
+        {/* Business Entity Links badges */}
+        {message.links && message.links.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+            {message.links.map((link) => (
+              <button
+                key={link.id}
+                onClick={() => onOpenLinkModal?.(message)}
+                className="msg-link-badge group/link cursor-pointer"
+                title={`Linked ${link.targetType}: ${link.metadata?.title || link.targetId}`}
+              >
+                <LinkIcon size={11} className="text-primary shrink-0" />
+                <span className="font-semibold text-text uppercase text-[9px] px-1 py-0.2 rounded bg-surface border border-border">
+                  {link.targetType}
+                </span>
+                <span className="truncate max-w-[140px] text-text-secondary">
+                  {link.metadata?.title || link.targetId.slice(-6)}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Reactions Bar */}
+        {message.reactions && message.reactions.length > 0 && (
+          <div className="flex items-center gap-1 flex-wrap pt-0.5">
+            {message.reactions.map((react, i) => {
+              const active = Boolean(
+                react.hasReacted ||
+                  (currentUserId && react.userIds?.includes(currentUserId))
+              );
+
+              return (
+                <button
+                  key={`${react.emoji}-${i}`}
+                  onClick={() => onReact?.(message, react.emoji)}
+                  className={`msg-reaction-pill ${
+                    active ? "msg-reaction-pill-active" : ""
+                  }`}
+                  title={`${react.count} reaction${react.count > 1 ? "s" : ""}`}
+                >
+                  <span>{react.emoji}</span>
+                  <span>{react.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Thread Replies Link / Summary */}
+        {Boolean(message.replyCount && message.replyCount > 0) && (
+          <div className="pt-0.5">
+            <button
+              onClick={() => onOpenThread?.(message)}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+            >
+              <MessageSquare size={13} />
+              <span>
+                {message.replyCount} {message.replyCount === 1 ? "reply" : "replies"}
+              </span>
+              <span className="text-[10px] text-text-muted font-normal">• View thread</span>
+            </button>
+          </div>
+        )}
+
         {/* Quick Action Bar (Visible on Hover) */}
         {!isSending && (
           <div
@@ -184,14 +299,79 @@ export default function MessageItem({
               isSelf ? "right-full mr-2" : "left-full ml-2"
             }`}
           >
-            {/* Quick Reply */}
+            {/* Quick Emoji Reaction Toggle */}
+            <div className="relative">
+              <button
+                id={`quick-react-${message.id}`}
+                onClick={() => setShowEmojiPicker((prev) => !prev)}
+                title="Add Reaction"
+                className="msg-action-btn p-1.5 rounded"
+              >
+                <Smile size={13} />
+              </button>
+
+              {showEmojiPicker && (
+                <div className="absolute bottom-full left-0 mb-1 p-1 bg-surface border border-border shadow-lg rounded-xl flex items-center gap-1 z-30">
+                  {QUICK_REACTION_EMOJIS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      onClick={() => handleEmojiClick(emoji)}
+                      className="p-1 hover:scale-125 transition-transform text-xs"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick Reply in Thread */}
             <button
               id={`quick-reply-${message.id}`}
-              onClick={() => onReply(message)}
-              title="Reply"
+              onClick={() => {
+                if (onOpenThread) onOpenThread(message);
+                else onReply(message);
+              }}
+              title="Reply in Thread"
               className="msg-action-btn p-1.5 rounded"
             >
               <Reply size={13} />
+            </button>
+
+            {/* Quick Pin / Unpin (Nitin's Authorization Rule) */}
+            {canPin && (
+              <button
+                id={`quick-pin-${message.id}`}
+                onClick={() => onPin?.(message)}
+                title={message.isPinned ? "Unpin Message" : "Pin Message"}
+                className={`msg-action-btn p-1.5 rounded ${
+                  message.isPinned ? "text-warning" : ""
+                }`}
+              >
+                <Pin size={13} />
+              </button>
+            )}
+
+            {/* Quick Save / Bookmark */}
+            <button
+              id={`quick-save-${message.id}`}
+              onClick={() => onSave?.(message)}
+              title={message.isSaved ? "Remove Bookmark" : "Save Message"}
+              className={`msg-action-btn p-1.5 rounded ${
+                message.isSaved ? "text-primary" : ""
+              }`}
+            >
+              <Bookmark size={13} />
+            </button>
+
+            {/* Quick Link to Business Record */}
+            <button
+              id={`quick-link-${message.id}`}
+              onClick={() => onOpenLinkModal?.(message)}
+              title="Link to Task or CRM Record"
+              className="msg-action-btn p-1.5 rounded"
+            >
+              <LinkIcon size={13} />
             </button>
 
             {/* Quick Edit (Self author only) */}
@@ -235,13 +415,17 @@ export default function MessageItem({
               message={message}
               isSelf={isSelf}
               canManage={canManage}
-              onReply={onReply}
+              canPin={canPin}
+              onReply={(m) => {
+                if (onOpenThread) onOpenThread(m);
+                else onReply(m);
+              }}
               onEdit={onEdit}
               onDelete={onDelete}
               onReact={onReact}
-              onMention={onMention}
               onPin={onPin}
               onSave={onSave}
+              onOpenLinkModal={onOpenLinkModal}
             />
           </div>
         )}

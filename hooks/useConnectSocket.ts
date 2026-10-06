@@ -11,6 +11,11 @@ import {
   SocketMessageDeletePayload,
   SocketChannelUpdatedPayload,
   SocketConversationUpdatedPayload,
+  SocketChannelReadPayload,
+  SocketConversationReadPayload,
+  SocketMessageReadPayload,
+  SocketReactionPayload,
+  SocketPinPayload,
 } from "@/types/connect";
 
 export type SocketStatus = "connected" | "connecting" | "offline";
@@ -24,6 +29,11 @@ interface UseConnectSocketOptions {
   onDeleteMessage?: (payload: SocketMessageDeletePayload) => void;
   onChannelUpdated?: (payload: SocketChannelUpdatedPayload) => void;
   onConversationUpdated?: (payload: SocketConversationUpdatedPayload) => void;
+  onChannelRead?: (payload: SocketChannelReadPayload) => void;
+  onConversationRead?: (payload: SocketConversationReadPayload) => void;
+  onMessageRead?: (payload: SocketMessageReadPayload) => void;
+  onReaction?: (payload: SocketReactionPayload) => void;
+  onPinUpdated?: (payload: SocketPinPayload) => void;
 }
 
 export function useConnectSocket({
@@ -35,6 +45,11 @@ export function useConnectSocket({
   onDeleteMessage,
   onChannelUpdated,
   onConversationUpdated,
+  onChannelRead,
+  onConversationRead,
+  onMessageRead,
+  onReaction,
+  onPinUpdated,
 }: UseConnectSocketOptions) {
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const socketRef = useRef<Socket | null>(null);
@@ -46,6 +61,11 @@ export function useConnectSocket({
     onDeleteMessage,
     onChannelUpdated,
     onConversationUpdated,
+    onChannelRead,
+    onConversationRead,
+    onMessageRead,
+    onReaction,
+    onPinUpdated,
   });
 
   useEffect(() => {
@@ -55,8 +75,24 @@ export function useConnectSocket({
       onDeleteMessage,
       onChannelUpdated,
       onConversationUpdated,
+      onChannelRead,
+      onConversationRead,
+      onMessageRead,
+      onReaction,
+      onPinUpdated,
     };
-  }, [onNewMessage, onUpdateMessage, onDeleteMessage, onChannelUpdated, onConversationUpdated]);
+  }, [
+    onNewMessage,
+    onUpdateMessage,
+    onDeleteMessage,
+    onChannelUpdated,
+    onConversationUpdated,
+    onChannelRead,
+    onConversationRead,
+    onMessageRead,
+    onReaction,
+    onPinUpdated,
+  ]);
 
   // Connect socket
   useEffect(() => {
@@ -151,6 +187,41 @@ export function useConnectSocket({
     // Sakshi's Event 10: conversation:updated
     socket.on("conversation:updated", (payload: any) => {
       callbacksRef.current.onConversationUpdated?.(payload);
+    });
+
+    // Sakshi's Live Read Events
+    socket.on("channel:read", (payload: any) => {
+      callbacksRef.current.onChannelRead?.(payload);
+    });
+
+    socket.on("conversation:read", (payload: any) => {
+      callbacksRef.current.onConversationRead?.(payload);
+    });
+
+    socket.on("message:read", (payload: any) => {
+      callbacksRef.current.onMessageRead?.(payload);
+    });
+
+    // Sakshi's Live Message Reaction Events
+    socket.on("message:reaction", (payload: any) => {
+      callbacksRef.current.onReaction?.(payload);
+    });
+
+    socket.on("reaction:add", (payload: any) => {
+      callbacksRef.current.onReaction?.({ ...payload, action: "add" });
+    });
+
+    socket.on("reaction:remove", (payload: any) => {
+      callbacksRef.current.onReaction?.({ ...payload, action: "remove" });
+    });
+
+    // Sakshi's Live Pin / Unpin Events
+    socket.on("message:pinned", (payload: any) => {
+      callbacksRef.current.onPinUpdated?.({ ...payload, isPinned: true });
+    });
+
+    socket.on("message:unpinned", (payload: any) => {
+      callbacksRef.current.onPinUpdated?.({ ...payload, isPinned: false });
     });
 
     return () => {

@@ -19,6 +19,7 @@ interface MessageListProps {
   error?: string | null;
   currentUserId?: string | null;
   canManage?: boolean;
+  highlightedMessageId?: string | null;
   emptyTitle?: string;
   emptySubtitle?: string;
   onRetryFetch?: () => void;
@@ -27,9 +28,10 @@ interface MessageListProps {
   onDelete: (message: ConnectMessage) => void;
   onRetrySend?: (message: ConnectMessage) => void;
   onReact?: (message: ConnectMessage, reaction: string) => void;
-  onMention?: (message: ConnectMessage) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onOpenThread?: (message: ConnectMessage) => void;
+  onOpenLinkModal?: (message: ConnectMessage) => void;
 }
 
 export default function MessageList({
@@ -40,6 +42,7 @@ export default function MessageList({
   error = null,
   currentUserId,
   canManage = false,
+  highlightedMessageId = null,
   emptyTitle,
   emptySubtitle,
   onRetryFetch,
@@ -48,19 +51,32 @@ export default function MessageList({
   onDelete,
   onRetrySend,
   onReact,
-  onMention,
   onPin,
   onSave,
+  onOpenThread,
+  onOpenLinkModal,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom whenever messages array changes
+  // Auto-scroll to bottom or highlighted message
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, messages[messages.length - 1]?.id]);
+    if (highlightedMessageId) {
+      const el = document.getElementById(`message-item-${highlightedMessageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        return;
+      }
+    }
+
+    if (messages.length > 0) {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages.length, messages[messages.length - 1]?.id, highlightedMessageId]);
 
   return (
     <div
+      ref={containerRef}
       id="message-list-container"
       className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 bg-background relative"
     >
@@ -119,22 +135,30 @@ export default function MessageList({
       ) : (
         /* Message Stream */
         <div id="messages-stream" className="space-y-2">
-          {messages.map((message) => (
-            <MessageItem
-              key={message.id}
-              message={message}
-              currentUserId={currentUserId}
-              canManage={canManage}
-              onReply={onReply}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onRetrySend={onRetrySend}
-              onReact={onReact}
-              onMention={onMention}
-              onPin={onPin}
-              onSave={onSave}
-            />
-          ))}
+          {messages.map((message) => {
+            const isMsgChannel = Boolean(message.channelId || channelId);
+            const canPin = isMsgChannel ? Boolean(canManage) : true;
+
+            return (
+              <MessageItem
+                key={message.id}
+                message={message}
+                currentUserId={currentUserId}
+                canManage={canManage}
+                canPin={canPin}
+                isHighlighted={highlightedMessageId === message.id}
+                onReply={onReply}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onRetrySend={onRetrySend}
+                onReact={onReact}
+                onPin={onPin}
+                onSave={onSave}
+                onOpenThread={onOpenThread}
+                onOpenLinkModal={onOpenLinkModal}
+              />
+            );
+          })}
         </div>
       )}
 

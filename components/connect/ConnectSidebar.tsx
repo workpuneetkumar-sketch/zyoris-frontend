@@ -15,6 +15,7 @@ import {
   Sparkles,
   Settings,
   UserCircle2,
+  Bookmark,
 } from "lucide-react";
 import { Channel, Conversation, ActiveTarget } from "@/types/connect";
 import { SocketStatus } from "@/hooks/useConnectSocket";
@@ -29,6 +30,8 @@ interface ConnectSidebarProps {
   onOpenCreateDirect: () => void;
   onOpenCreateGroup: () => void;
   onOpenManageChannel: (channel: Channel) => void;
+  onOpenSearchModal?: () => void;
+  onOpenSavedModal?: () => void;
   currentUserId?: string | null;
   socketStatus: SocketStatus;
   unreadMap: Record<string, number>;
@@ -45,6 +48,8 @@ export default function ConnectSidebar({
   onOpenCreateDirect,
   onOpenCreateGroup,
   onOpenManageChannel,
+  onOpenSearchModal,
+  onOpenSavedModal,
   currentUserId,
   socketStatus,
   unreadMap,
@@ -198,17 +203,35 @@ export default function ConnectSidebar({
 
         {/* Quick action buttons */}
         <div className="flex items-center gap-1">
+          {onOpenSearchModal && (
+            <button
+              onClick={onOpenSearchModal}
+              title="Search all messages"
+              className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
+            >
+              <Search size={16} />
+            </button>
+          )}
+          {onOpenSavedModal && (
+            <button
+              onClick={onOpenSavedModal}
+              title="Saved Bookmarks"
+              className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
+            >
+              <Bookmark size={16} />
+            </button>
+          )}
           <button
             onClick={onOpenCreateDirect}
             title="New Direct Message"
-            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
           >
             <MessageSquare size={16} />
           </button>
           <button
             onClick={onOpenCreateChannel}
             title="New Channel"
-            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
           >
             <Plus size={18} />
           </button>
@@ -217,15 +240,29 @@ export default function ConnectSidebar({
 
       {/* Search Input */}
       <div className="px-3 pt-3 pb-2 shrink-0">
-        <div className="relative">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <div className="relative flex items-center">
+          <Search size={14} className="absolute left-3 text-gray-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && onOpenSearchModal) {
+                onOpenSearchModal();
+              }
+            }}
             placeholder="Search channels & chats..."
-            className="w-full pl-8 pr-3 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
+            className="w-full pl-8 pr-14 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
           />
+          {onOpenSearchModal && (
+            <button
+              onClick={onOpenSearchModal}
+              title="Global communication search"
+              className="absolute right-1 px-1.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/10 rounded-md transition-colors"
+            >
+              Search
+            </button>
+          )}
         </div>
       </div>
 
