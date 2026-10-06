@@ -28,6 +28,8 @@ import {
     BadgeCheck,
     Sparkles,
     SlidersHorizontal,
+    Database,
+    Layers,
 } from "lucide-react";
 import { AgentTriggerButton } from "@/components/agents/AgentResultModal";
 import { Lead, computeLeadScore } from "@/types/leads";
@@ -410,6 +412,174 @@ export default function LeadDetailPage() {
                             {convertError}
                         </p>
                     )}
+                </div>
+            </div>
+
+            {/* ── Top Lead Schema & Custom Attributes Cards Deck (Light Professional White & Blue Theme) ── */}
+            <div className="bg-gradient-to-br from-white via-blue-50/20 to-white rounded-2xl border border-blue-100/80 p-5 shadow-sm space-y-4">
+                {/* Header row */}
+                <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-blue-100/60">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200/80 text-blue-600 flex items-center justify-center shadow-xs">
+                            <Database size={20} className="text-blue-600" />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-base font-bold text-gray-900 tracking-tight">Lead Data Schema & Attributes</h2>
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <Sparkles size={11} className="text-blue-600" /> Active Schema
+                                </span>
+                            </div>
+                            <p className="text-xs text-gray-500 font-medium">
+                                Ingested record structure, standard attributes, and custom lead schema details
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                        <div className="px-3 py-1.5 rounded-xl bg-white border border-blue-100 text-xs font-medium text-gray-700 flex items-center gap-2 shadow-2xs">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <span>Schema Status: <strong className="text-blue-700">Verified & Ingested</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Schema Detail Cards Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+                    
+                    {/* Card 1: Core System & Ingestion Schema */}
+                    <div className="bg-white rounded-xl p-4 border border-blue-100 hover:border-blue-300 transition-all shadow-2xs space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                                <Layers size={13} className="text-blue-500" /> System Schema
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-mono font-semibold">
+                                Core
+                            </span>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                            <div>
+                                <span className="text-gray-400 block text-[10px] font-medium uppercase">Lead UUID</span>
+                                <span className="font-mono text-gray-800 text-[11px] font-semibold truncate block bg-slate-50 px-2 py-1 rounded border border-gray-200/80">
+                                    {lead.id}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t border-gray-100">
+                                <span className="text-gray-500">Source Channel</span>
+                                <span className="font-semibold text-blue-700 bg-blue-50 text-[11px] px-2 py-0.5 rounded border border-blue-100">
+                                    {safeString(lead.source)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t border-gray-100">
+                                <span className="text-gray-500">External Reference</span>
+                                <span className="font-medium text-gray-800 truncate max-w-[110px]" title={safeString(lead.externalId)}>
+                                    {safeString(lead.externalId)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 2: Entity & Organization Schema */}
+                    <div className="bg-white rounded-xl p-4 border border-blue-100 hover:border-blue-300 transition-all shadow-2xs space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                                <Building2 size={13} className="text-blue-500" /> Entity Details
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-sky-50 text-sky-700 font-semibold">
+                                Organization
+                            </span>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                            <div>
+                                <span className="text-gray-400 block text-[10px] font-medium uppercase">Company Name</span>
+                                <span className="font-semibold text-gray-900 truncate block" title={safeString(lead.company)}>
+                                    {safeString(lead.company)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t border-gray-100">
+                                <span className="text-gray-500">Industry</span>
+                                <span className="font-medium text-gray-800 truncate max-w-[110px]" title={safeString(lead.industry)}>
+                                    {safeString(lead.industry)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t border-gray-100">
+                                <span className="text-gray-500">Job Role</span>
+                                <span className="font-medium text-gray-800 truncate max-w-[110px]" title={safeString(lead.jobTitle)}>
+                                    {safeString(lead.jobTitle)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 3: Location & Financial Schema */}
+                    <div className="bg-white rounded-xl p-4 border border-blue-100 hover:border-blue-300 transition-all shadow-2xs space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                                <MapPin size={13} className="text-blue-500" /> Location & Value
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-semibold">
+                                Geo / Value
+                            </span>
+                        </div>
+                        <div className="space-y-2 text-xs">
+                            <div>
+                                <span className="text-gray-400 block text-[10px] font-medium uppercase">City / Location</span>
+                                <span className="font-semibold text-gray-900 truncate block" title={safeString(lead.city || lead.state || lead.country)}>
+                                    {safeString(lead.city || lead.state || lead.country)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t border-gray-100">
+                                <span className="text-gray-500">Territory</span>
+                                <span className="font-medium text-gray-800">
+                                    {safeString(lead.territory)}
+                                </span>
+                            </div>
+                            <div className="flex justify-between items-center py-1 border-t border-gray-100">
+                                <span className="text-gray-500">Est. Value</span>
+                                <span className="font-semibold text-emerald-600">
+                                    {lead.estimatedValue ? `₹${lead.estimatedValue.toLocaleString('en-IN')}` : "—"}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Card 4: Custom Fields & Dynamic Ingestion */}
+                    <div className="bg-white rounded-xl p-4 border border-blue-100 hover:border-blue-300 transition-all shadow-2xs space-y-2.5">
+                        <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                                <SlidersHorizontal size={13} className="text-blue-500" /> Custom Fields
+                            </span>
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-100">
+                                {Object.keys(lead.customFields || {}).length} Custom
+                            </span>
+                        </div>
+
+                        {lead.customFields && Object.keys(lead.customFields).length > 0 ? (
+                            <div className="space-y-1.5 max-h-[105px] overflow-y-auto pr-0.5">
+                                {Object.entries(lead.customFields).slice(0, 3).map(([key, val]) => (
+                                    <div key={key} className="bg-blue-50/50 p-1.5 rounded-lg border border-blue-100 flex justify-between items-center text-xs">
+                                        <span className="text-gray-500 text-[10px] font-medium truncate max-w-[85px]" title={key}>
+                                            {formatFieldKey(key)}
+                                        </span>
+                                        <span className="text-blue-950 font-bold text-[11px] truncate max-w-[105px]" title={String(val)}>
+                                            {safeString(val)}
+                                        </span>
+                                    </div>
+                                ))}
+                                {Object.keys(lead.customFields).length > 3 && (
+                                    <p className="text-[10px] text-blue-600 font-semibold text-center pt-0.5">
+                                        +{Object.keys(lead.customFields).length - 3} more custom attributes below
+                                    </p>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="bg-blue-50/30 rounded-lg p-2 text-center border border-blue-100/60">
+                                <p className="text-xs font-semibold text-blue-900">Standard Lead Schema</p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">Ingested via standard CRM mapping</p>
+                            </div>
+                        )}
+                    </div>
+
                 </div>
             </div>
 
