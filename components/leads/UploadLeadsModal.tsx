@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect, DragEvent, ChangeEvent } from
 import {
   Upload, X, FileText, CheckCircle2, AlertCircle, Loader2,
   Eye, FileSpreadsheet, SkipForward, AlertTriangle, RefreshCw,
-  Download, Info, ChevronDown, ChevronUp,
+  Download, Info, ChevronDown, ChevronUp, SlidersHorizontal, ArrowRight,
 } from "lucide-react";
 import {
   startLeadImport,
@@ -13,6 +13,13 @@ import {
   LeadImportJobStatus,
 } from "@/lib/api/leadsApi";
 import * as XLSX from "xlsx";
+import {
+  extractLeadsFromPdf,
+  autoMapField,
+  convertMappedRowsToCsv,
+  TARGET_LEAD_FIELDS,
+  TargetLeadFieldKey,
+} from "@/lib/utils/pdfLeadExtractor";
 
 interface UploadLeadsModalProps {
   onClose: () => void;
@@ -59,7 +66,7 @@ function isValidFile(f: File) {
 
 function parsePreviewRows(
   file: File,
-  maxRows = 5
+  maxRows = 5000
 ): Promise<{ headers: string[]; rows: PreviewRow[] }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -90,7 +97,7 @@ function detectDuplicates(rows: PreviewRow[]): number {
   let count = 0;
   for (const row of rows) {
     const keys = Object.keys(row);
-    const emailKey = keys.find(k => k.toLowerCase().includes("email"));
+    const emailKey = keys.find(k => k.toLowerCase().includes("email") || k.toLowerCase().includes("mail"));
     const phoneKey = keys.find(k => k.toLowerCase().includes("phone") || k.toLowerCase().includes("mobile"));
     
     const emailVal = emailKey ? row[emailKey].toLowerCase().trim() : "";
@@ -108,20 +115,11 @@ function detectDuplicates(rows: PreviewRow[]): number {
   return count;
 }
 
-function validateHeaders(headers: string[]): string[] {
-  const lower = headers.map((h) => h.toLowerCase().trim());
+function validateMappedHeaders(mapping: Record<string, TargetLeadFieldKey>): string[] {
+  const mapped = Object.values(mapping);
   const missing: string[] = [];
-
-  const hasName = lower.some(h =>
-    h === "name" || h.includes("name") || h.includes("fullname") || h.includes("first")
-  );
-  if (!hasName) missing.push("name");
-
-  const hasEmail = lower.some(h =>
-    h === "email" || h.includes("email") || h.includes("e-mail")
-  );
-  if (!hasEmail) missing.push("email");
-
+  if (!mapped.includes("name")) missing.push("Full Name");
+  if (!mapped.includes("email")) missing.push("Email Address");
   return missing;
 }
 
@@ -137,159 +135,23 @@ function statusLabel(status: LeadImportJobStatus["status"]): string {
   }
 }
 
-const FALLBACK_DATA1_LEADS: PreviewRow[] = [
-  { name: "HCL Technologies", email: "investors@hcl.com", phone: "0120-2520946", company: "HCL Technologies", city: "Noida", industry: "IT / Software" },
-  { name: "Samsung India Electronics", email: "support.india@samsung.com", phone: "1800-40-7267864", company: "Samsung India", city: "Noida", industry: "Consumer Electronics" },
-  { name: "Paytm (One97 Communications)", email: "care@paytm.com", phone: "0120-4770799", company: "Paytm", city: "Noida", industry: "Fintech / IT" },
-  { name: "LG Electronics India", email: "serviceindia@lge.com", phone: "1800-315-9999", company: "LG Electronics", city: "Gr.Noida", industry: "Electronics Mfg" },
-  { name: "Adobe Systems India", email: "info@adobe.com", phone: "0120-2444740", company: "Adobe Systems", city: "Noida", industry: "IT / Software" },
-  { name: "Tata Consultancy Services (TCS)", email: "careers@tcs.com", phone: "0120-6331029", company: "TCS", city: "Noida", industry: "IT Services" },
-  { name: "Yamaha Motor Solutions", email: "contact@ymsl.in", phone: "0120-4033029", company: "Yamaha Motor", city: "Gr. Noida", industry: "Automotive IT" },
-  { name: "Moser Baer India", email: "info@moserbaer.com", phone: "0120-40594020", company: "Moser Baer", city: "Gr. Noida", industry: "Technology / Mfg" },
-  { name: "Coforge (formerly NIIT Tech)", email: "contact@coforge.com", phone: "0120-4592329", company: "Coforge", city: "Gr. Noida", industry: "IT Services" },
-  { name: "Havells India Ltd", email: "marketing@havells.com", phone: "0120-4771029", company: "Havells India", city: "Noida", industry: "Electrical Goods" },
-  { name: "Jubilant FoodWorks (Domino's)", email: "contact@jublfood.com", phone: "0120-4090529", company: "Jubilant FoodWorks", city: "Noida", industry: "Food Services" },
-  { name: "Jaypee Infratech", email: "sales@jaypeegreens.com", phone: "0120-4609029", company: "Jaypee Infratech", city: "Noida", industry: "Real Estate / Infra" },
-  { name: "Info Edge (Naukri.com)", email: "investors@naukri.com", phone: "0120-3082029", company: "Info Edge", city: "Noida", industry: "Internet / Tech" },
-  { name: "Kent RO Systems", email: "sales@kent.co.in", phone: "0120-4669695", company: "Kent RO Systems", city: "Noida", industry: "Consumer Goods" },
-  { name: "Dixon Technologies", email: "info@dixoninfo.com", phone: "0120-4737229", company: "Dixon Technologies", city: "Noida", industry: "Electronics Mfg" },
-  { name: "Honda Cars India", email: "customer_relations@hondacarindia.com", phone: "1800-113-121", company: "Honda Cars", city: "Gr. Noida", industry: "Automotive" },
-  { name: "Wipro Limited", email: "helpdesk@wipro.com", phone: "0120-3314029", company: "Wipro", city: "Gr. Noida", industry: "IT Services" },
-  { name: "EXL Service", email: "info@exlservice.com", phone: "0120-4444629", company: "EXL Service", city: "Noida", industry: "BPO / KPO" },
-  { name: "Haldiram Snacks Pvt Ltd", email: "sales@haldiram.com", phone: "0120-2400329", company: "Haldiram Snacks", city: "Noida", industry: "Food Processing" },
-  { name: "Mother Dairy", email: "consumer.service@motherdairy.com", phone: "0120-4399529", company: "Mother Dairy", city: "Noida", industry: "Food / Dairy" },
-  { name: "Asian Paints", email: "customercare@asianpaints.com", phone: "1800-209-5678", company: "Asian Paints", city: "Noida", industry: "Chemicals / Paints" },
-  { name: "New Holland Fiat", email: "customercare.india@newholland.com", phone: "0120-3056000", company: "New Holland", city: "Gr. Noida", industry: "Automotive / Heavy" },
-  { name: "Graziano Trasmissioni", email: "info.india@oerlikon.com", phone: "0120-6625500", company: "Graziano", city: "Gr. Noida", industry: "Manufacturing" },
-  { name: "Vivo Mobile India", email: "global_hr@vivoglobal.com", phone: "1800-208-3388", company: "Vivo Mobile", city: "Gr. Noida", industry: "Consumer Electronics" },
-  { name: "Haier Appliances", email: "customercare@haierindia.com", phone: "1800-102-9999", company: "Haier Appliances", city: "Gr. Noida", industry: "Consumer Electronics" },
-  { name: "Indiamart Intermesh", email: "customercare@indiamart.com", phone: "096969-69696", company: "Indiamart", city: "Gr. Noida", industry: "B2B / E-Commerce" },
-  { name: "KPMG India", email: "in-fmkpmg@kpmg.com", phone: "0120-3868000", company: "KPMG India", city: "Noida", industry: "Consulting / Audit" },
-  { name: "NEC Corporation India", email: "inquiries@nec.co.in", phone: "0120-6125000", company: "NEC Corporation", city: "Noida", industry: "IT / Tech" },
-  { name: "Pitney Bowes India", email: "india.marketing@pb.com", phone: "0120-4026000", company: "Pitney Bowes", city: "Noida", industry: "Technology" }
-];
-
-async function parsePdfLeadRows(
-  file: File
-): Promise<{ headers: string[]; rows: PreviewRow[] }> {
-  try {
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any);
-    const arrayBuffer = await file.arrayBuffer();
-    const data = new Uint8Array(arrayBuffer);
-    const loadingTask = pdfjsLib.getDocument({ data });
-    const pdfDocument = await loadingTask.promise;
-
-    const pageLines: string[] = [];
-
-    for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
-      const page = await pdfDocument.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      let currentLine = "";
-      let lastY: number | null = null;
-
-      for (const item of textContent.items as any[]) {
-        if (!item.str) continue;
-        const y = item.transform ? item.transform[5] : null;
-        if (lastY !== null && y !== null && Math.abs(y - lastY) > 6) {
-          if (currentLine.trim()) pageLines.push(currentLine.trim());
-          currentLine = "";
-        }
-        currentLine += (currentLine ? " " : "") + item.str;
-        if (y !== null) lastY = y;
-      }
-      if (currentLine.trim()) pageLines.push(currentLine.trim());
-    }
-
-    const fullText = pageLines.join("\n");
-    const lines = fullText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
-
-    const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
-    const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,5}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5}/g;
-
-    const headers = ["name", "email", "phone", "company", "city", "industry"];
-    const rows: PreviewRow[] = [];
-    const seenEmails = new Set<string>();
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const emails = line.match(emailRegex);
-      if (!emails) continue;
-
-      for (const email of emails) {
-        const lower = email.toLowerCase();
-        if (seenEmails.has(lower)) continue;
-        seenEmails.add(lower);
-
-        const windowText = [
-          lines[i - 2] || "",
-          lines[i - 1] || "",
-          line,
-          lines[i + 1] || "",
-          lines[i + 2] || "",
-        ].join(" ");
-        const phones = windowText.match(phoneRegex) || [];
-        const phone = phones.find((p) => p.replace(/\D/g, "").length >= 7) || "";
-
-        let cleanLine = line
-          .replace(email, "")
-          .replace(phone, "")
-          .replace(/[^\w\s.,-]/g, " ")
-          .trim();
-        const parts = cleanLine
-          .split(/\s{2,}|\t|,/)
-          .map((p) => p.trim())
-          .filter(Boolean);
-
-        let name = parts[0] || email.split("@")[0].replace(/[._]/g, " ");
-        let company = parts[1] || name;
-        name = name
-          .split(" ")
-          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" ");
-
-        rows.push({
-          name: name || "Lead Record",
-          email: email,
-          phone: phone,
-          company: company,
-          city: "",
-          industry: "",
-        });
-      }
-    }
-
-    if (rows.length === 0) {
-      return {
-        headers,
-        rows: FALLBACK_DATA1_LEADS,
-      };
-    }
-
-    return { headers, rows };
-  } catch (err) {
-    console.error("[parsePdfLeadRows] Real PDF parser error:", err);
-    return {
-      headers: ["name", "email", "phone", "company", "city", "industry"],
-      rows: FALLBACK_DATA1_LEADS,
-    };
-  }
-}
-
 export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModalProps) {
-  const [file,             setFile]             = useState<File | null>(null);
-  const [phase,            setPhase]            = useState<UploadPhase>("idle");
-  const [error,            setError]            = useState<string | null>(null);
-  const [isDragging,       setIsDragging]       = useState(false);
-  const [jobId,            setJobId]            = useState<string | null>(null);
-  const [jobStatus,        setJobStatus]        = useState<LeadImportJobStatus | null>(null);
-  const [preview,          setPreview]          = useState<{ headers: string[]; rows: PreviewRow[] } | null>(null);
-  const [missingHeaders,   setMissingHeaders]   = useState<string[]>([]);
-  const [duplicatesInFile, setDuplicatesInFile] = useState(0);
-  const [pdfExtractedRows, setPdfExtractedRows] = useState<PreviewRow[]>([]);
-  const [allowReimport,    setAllowReimport]    = useState(true);
-  const [hasErrorCsv,      setHasErrorCsv]      = useState(false);
-  const [downloadingErrors,setDownloadingErrors]= useState(false);
-  const [showFormatGuide,  setShowFormatGuide]  = useState(false);
+  const [file,              setFile]              = useState<File | null>(null);
+  const [phase,             setPhase]             = useState<UploadPhase>("idle");
+  const [error,             setError]             = useState<string | null>(null);
+  const [isDragging,        setIsDragging]        = useState(false);
+  const [jobId,             setJobId]             = useState<string | null>(null);
+  const [jobStatus,         setJobStatus]         = useState<LeadImportJobStatus | null>(null);
+  const [preview,           setPreview]           = useState<{ headers: string[]; rows: PreviewRow[] } | null>(null);
+  const [missingHeaders,    setMissingHeaders]    = useState<string[]>([]);
+  const [duplicatesInFile,  setDuplicatesInFile]  = useState(0);
+  const [allExtractedRows,  setAllExtractedRows]  = useState<PreviewRow[]>([]);
+  const [fieldMapping,      setFieldMapping]      = useState<Record<string, TargetLeadFieldKey>>({});
+  const [isParsingPdf,      setIsParsingPdf]      = useState(false);
+  const [allowReimport,     setAllowReimport]     = useState(false);
+  const [hasErrorCsv,       setHasErrorCsv]       = useState(false);
+  const [downloadingErrors, setDownloadingErrors] = useState(false);
+  const [showFormatGuide,   setShowFormatGuide]   = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pollRef      = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -323,10 +185,16 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       pollRef.current = setTimeout(() => pollJob(id), 2000);
     } catch (err: any) {
       console.error('[pollJob] Error polling:', err);
-      // Transient network error — retry after 3 s
       pollRef.current = setTimeout(() => pollJob(id), 3000);
     }
   }, [onSuccess]);
+
+  // ── Field mapping change handler ───────────────────────────────────────────
+  const handleMappingChange = (sourceCol: string, targetKey: TargetLeadFieldKey) => {
+    const updated = { ...fieldMapping, [sourceCol]: targetKey };
+    setFieldMapping(updated);
+    setMissingHeaders(validateMappedHeaders(updated));
+  };
 
   // ── File selection ─────────────────────────────────────────────────────────
   const processFile = useCallback(async (selected: File) => {
@@ -338,39 +206,82 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
     });
     
     if (!isValidFile(selected)) {
-      setError("Invalid file type. Please upload a CSV, Excel, PDF, or PPT file.");
+      setError("Invalid file type. Please upload a CSV, Excel, or PDF file.");
       return;
     }
     setError(null);
     setFile(selected);
+
     try {
-      if (selected.name.endsWith(".csv") || selected.name.endsWith(".xlsx") || selected.name.endsWith(".xls")) {
-        const parsed = await parsePreviewRows(selected, 5);
-        setPreview(parsed);
-        setMissingHeaders(validateHeaders(parsed.headers));
-        setDuplicatesInFile(detectDuplicates(parsed.rows));
-        setPdfExtractedRows([]);
-      } else if (selected.name.endsWith(".pdf")) {
-        const parsed = await parsePdfLeadRows(selected);
+      const lowerName = selected.name.toLowerCase();
+      if (lowerName.endsWith(".csv") || lowerName.endsWith(".xlsx") || lowerName.endsWith(".xls")) {
+        const parsed = await parsePreviewRows(selected, 5000);
+        setAllExtractedRows(parsed.rows);
+        const initialMapping: Record<string, TargetLeadFieldKey> = {};
+        parsed.headers.forEach((h) => {
+          initialMapping[h] = autoMapField(h);
+        });
+        setFieldMapping(initialMapping);
         setPreview({ headers: parsed.headers, rows: parsed.rows.slice(0, 5) });
-        setMissingHeaders(validateHeaders(parsed.headers));
+        setMissingHeaders(validateMappedHeaders(initialMapping));
         setDuplicatesInFile(detectDuplicates(parsed.rows));
-        setPdfExtractedRows(parsed.rows);
+        setPhase("previewing");
+      } else if (lowerName.endsWith(".pdf")) {
+        setIsParsingPdf(true);
+        const extracted = await extractLeadsFromPdf(selected);
+        setIsParsingPdf(false);
+
+        if (extracted.totalLeadsFound === 0) {
+          setError("No readable lead records could be retrieved from this PDF. Please ensure the PDF contains contact text or table rows.");
+          setPhase("error");
+          return;
+        }
+
+        setAllExtractedRows(extracted.rows);
+        const initialMapping: Record<string, TargetLeadFieldKey> = {};
+        extracted.headers.forEach((h) => {
+          initialMapping[h] = autoMapField(h);
+        });
+
+        // Smart fallback: if email or name was not auto-mapped from header name, inspect row values
+        const mappedTargets = Object.values(initialMapping);
+        if (!mappedTargets.includes("email") && extracted.rows.length > 0) {
+          const emailCol = extracted.headers.find((h) =>
+            extracted.rows.some((r) => r[h] && r[h].includes("@") && r[h].includes("."))
+          );
+          if (emailCol) initialMapping[emailCol] = "email";
+        }
+        if (!mappedTargets.includes("name") && extracted.rows.length > 0) {
+          const nameCol = extracted.headers.find(
+            (h) =>
+              initialMapping[h] === "__skip__" &&
+              extracted.rows.some((r) => {
+                const val = (r[h] || "").trim();
+                return val.length >= 2 && !/^\d+$/.test(val) && !val.includes("@");
+              })
+          );
+          if (nameCol) initialMapping[nameCol] = "name";
+        }
+
+        setFieldMapping(initialMapping);
+        setPreview({ headers: extracted.headers, rows: extracted.rows.slice(0, 5) });
+        setMissingHeaders(validateMappedHeaders(initialMapping));
+        setDuplicatesInFile(detectDuplicates(extracted.rows));
+        setPhase("previewing");
       } else {
-        // PPT preview not locally parsed
         setPreview(null);
         setMissingHeaders([]);
         setDuplicatesInFile(0);
-        setPdfExtractedRows([]);
+        setAllExtractedRows([]);
+        setFieldMapping({});
+        setPhase("previewing");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[processFile] Error parsing file:', err);
-      setPreview(null);
-      setMissingHeaders([]);
-      setDuplicatesInFile(0);
-      setPdfExtractedRows([]);
+      setIsParsingPdf(false);
+      setError(err?.message || "Error reading file. Please check file format.");
+      setPhase("error");
     }
-    setPhase("previewing");
   }, []);
 
   const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -393,12 +304,11 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       setError("No file selected");
       return;
     }
-    
-    console.log('[handleUpload] Starting upload for file:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-    });
+
+    if (missingHeaders.length > 0) {
+      setError(`Please map ${missingHeaders.join(" and ")} before starting import.`);
+      return;
+    }
     
     // Check file size (10MB limit)
     if (file.size > 10 * 1024 * 1024) {
@@ -412,31 +322,31 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
     try {
       console.log('[handleUpload] Preparing file for import...');
       let fileToUpload = file;
-      if (file.name.endsWith(".pdf") && pdfExtractedRows.length > 0) {
-        const headers = ["name", "email", "phone", "company", "city", "industry"];
-        const ts = Date.now().toString().slice(-4);
-        const csvLines = [headers.join(",")];
-        
-        pdfExtractedRows.forEach((row, idx) => {
-          let emailVal = row.email || "";
-          if (allowReimport && emailVal.includes("@")) {
-            const [local, domain] = emailVal.split("@");
-            emailVal = `${local}+pdf${ts}_${idx}@${domain}`;
-          }
-          const nameVal = (row.name || "Lead").replace(/"/g, '""');
-          const phoneVal = (row.phone || "").replace(/"/g, '""');
-          const compVal = (row.company || "").replace(/"/g, '""');
-          const cityVal = (row.city || "").replace(/"/g, '""');
-          const indVal = (row.industry || "").replace(/"/g, '""');
-          csvLines.push(`"${nameVal}","${emailVal}","${phoneVal}","${compVal}","${cityVal}","${indVal}"`);
-        });
 
-        const csvString = csvLines.join("\n");
+      // For PDF files or customized mappings, convert mapped rows into clean CSV
+      if (file.name.toLowerCase().endsWith(".pdf") || allExtractedRows.length > 0) {
+        let rowsToExport = allExtractedRows;
+        if (allowReimport) {
+          const ts = Date.now().toString().slice(-4);
+          rowsToExport = allExtractedRows.map((r, idx) => {
+            const copy = { ...r };
+            for (const [col, target] of Object.entries(fieldMapping)) {
+              if (target === "email" && copy[col] && copy[col].includes("@")) {
+                const [local, domain] = copy[col].split("@");
+                copy[col] = `${local}+reimport${ts}_${idx}@${domain}`;
+              }
+            }
+            return copy;
+          });
+        }
+
+        const csvString = convertMappedRowsToCsv(rowsToExport, fieldMapping);
         const blob = new Blob([csvString], { type: "text/csv" });
-        fileToUpload = new File([blob], file.name.replace(/\.pdf$/i, ".csv"), { type: "text/csv" });
+        const cleanName = file.name.replace(/\.[^/.]+$/, "") + "_import.csv";
+        fileToUpload = new File([blob], cleanName, { type: "text/csv" });
       }
 
-      console.log('[handleUpload] Calling startLeadImport...');
+      console.log('[handleUpload] Calling startLeadImport with:', fileToUpload.name, fileToUpload.size);
       const res = await startLeadImport(fileToUpload);
       console.log('[handleUpload] Import started successfully:', res);
       
@@ -478,7 +388,6 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('[handleDownloadErrors] Error:', err);
-      // swallow — error CSV may not exist
     } finally {
       setDownloadingErrors(false);
     }
@@ -490,6 +399,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
     setFile(null); setPhase("idle"); setError(null);
     setJobId(null); setJobStatus(null);
     setPreview(null); setMissingHeaders([]); setDuplicatesInFile(0);
+    setAllExtractedRows([]); setFieldMapping({}); setIsParsingPdf(false);
     setHasErrorCsv(false);
   };
 
@@ -499,19 +409,21 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200/60">
+      <div className={`bg-white rounded-3xl shadow-2xl w-full overflow-hidden border border-slate-200/60 transition-all duration-200 ${
+        phase === "previewing" ? "max-w-2xl" : "max-w-lg"
+      }`}>
 
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-extrabold text-white">Bulk Import Leads</h3>
             <p className="text-xs text-blue-100 font-semibold uppercase tracking-widest mt-0.5">
-              CSV, PDF, OR PPT UPLOAD · UP TO 5 000 ROWS
+              CSV, EXCEL, OR PDF · BULK INGESTION & FIELD MAPPING
             </p>
           </div>
           <button
             onClick={onClose}
-            disabled={phase === "uploading" || phase === "polling"}
+            disabled={phase === "uploading" || phase === "polling" || isParsingPdf}
             className="text-blue-100 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-40"
             aria-label="Close"
           >
@@ -519,10 +431,23 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           </button>
         </div>
 
-        <div className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
+        <div className="p-6 space-y-5 max-h-[82vh] overflow-y-auto">
+
+          {/* ── PARSING PDF STATE ── */}
+          {isParsingPdf && (
+            <div className="flex flex-col items-center text-center py-12 space-y-4">
+              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-inner">
+                <Loader2 size={32} className="text-blue-600 animate-spin" />
+              </div>
+              <div>
+                <h4 className="text-base font-extrabold text-slate-900 mb-1">Analyzing PDF Document…</h4>
+                <p className="text-xs text-slate-500 font-medium">Decompressing document streams and extracting lead records…</p>
+              </div>
+            </div>
+          )}
 
           {/* ── IDLE: file picker ─────────────────────────────────────────── */}
-          {phase === "idle" && (
+          {!isParsingPdf && phase === "idle" && (
             <>
               <div
                 onDrop={handleDrop}
@@ -698,27 +623,55 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           {phase === "previewing" && file && (
             <>
               {/* File pill */}
-              <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-                <FileSpreadsheet size={18} className="text-blue-600 shrink-0" />
+              <div className="flex items-center gap-3 bg-blue-50/80 border border-blue-100 rounded-2xl px-4 py-3">
+                {file.name.toLowerCase().endsWith(".pdf") ? (
+                  <FileText size={22} className="text-red-500 shrink-0" />
+                ) : (
+                  <FileSpreadsheet size={22} className="text-blue-600 shrink-0" />
+                )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-extrabold text-blue-800 truncate">{file.name}</p>
-                  <p className="text-xs text-blue-400">{(file.size / 1024).toFixed(1)} KB</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-extrabold text-slate-900 truncate">{file.name}</p>
+                    {file.name.toLowerCase().endsWith(".pdf") ? (
+                      <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        PDF
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Spreadsheet
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    {(file.size / 1024).toFixed(1)} KB · <span className="font-semibold text-blue-700">{allExtractedRows.length} lead records retrieved</span>
+                  </p>
                 </div>
-                <button onClick={handleReset} className="p-1.5 rounded-lg text-blue-300 hover:text-blue-600 hover:bg-blue-100 transition-colors" aria-label="Remove">
-                  <X size={13} />
+                <button
+                  onClick={handleReset}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-white transition-colors"
+                  aria-label="Remove"
+                >
+                  <X size={15} />
                 </button>
               </div>
 
-              {/* Missing columns warning */}
-              {missingHeaders.length > 0 && (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
-                  <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+              {/* Missing required columns warning */}
+              {missingHeaders.length > 0 ? (
+                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                  <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold text-amber-800 mb-0.5">Missing recommended columns</p>
-                    <p className="text-xs text-amber-600">
-                      <span className="font-semibold">{missingHeaders.join(", ")}</span> — recommended for full records. You can still import.
+                    <p className="text-xs font-bold text-amber-900 mb-0.5">Required field mapping missing</p>
+                    <p className="text-xs text-amber-700 leading-snug">
+                      Please map <span className="font-bold">{missingHeaders.join(" and ")}</span> using the field selectors below to proceed with lead creation.
                     </p>
                   </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5">
+                  <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                  <p className="text-xs font-bold text-emerald-800">
+                    All required fields (Full Name, Email Address) are mapped and ready for import.
+                  </p>
                 </div>
               )}
 
@@ -728,11 +681,84 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   <SkipForward size={15} className="text-orange-500 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-xs font-bold text-orange-800 mb-0.5">
-                      {duplicatesInFile} potential duplicate row{duplicatesInFile > 1 ? "s" : ""} in preview
+                      {duplicatesInFile} potential duplicate row{duplicatesInFile > 1 ? "s" : ""} detected
                     </p>
                     <p className="text-xs text-orange-600">
-                      The server will detect duplicates against your database and skip them.
+                      The server will automatically deduplicate against your existing leads database.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Field Mapping Configuration Card ── */}
+              {preview && preview.headers.length > 0 && (
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <SlidersHorizontal size={15} className="text-blue-600" />
+                      <span className="text-xs font-bold text-slate-800">Field Mapping</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {Object.values(fieldMapping).filter(v => v !== "__skip__").length} of {preview.headers.length} Columns Mapped
+                    </span>
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Confirm or adjust how the detected columns connect to standard Zyoris Lead attributes:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+                    {preview.headers.map((h) => {
+                      const current = fieldMapping[h] || "__skip__";
+                      const isReq = current === "name" || current === "email";
+                      return (
+                        <div
+                          key={h}
+                          className={`flex items-center justify-between gap-2 p-2 rounded-xl border text-xs transition-colors ${
+                            isReq
+                              ? "bg-blue-50/60 border-blue-200"
+                              : current === "__skip__"
+                              ? "bg-slate-100/50 border-slate-200/60 opacity-80"
+                              : "bg-white border-slate-200"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="font-bold text-slate-800 truncate" title={h}>{h}</p>
+                            <p className="text-[10px] text-slate-400">File column</p>
+                          </div>
+                          <ArrowRight size={12} className="text-slate-400 shrink-0" />
+                          <select
+                            value={current}
+                            onChange={(e) => handleMappingChange(h, e.target.value as TargetLeadFieldKey)}
+                            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 max-w-[140px] truncate"
+                          >
+                            <optgroup label="Required">
+                              <option value="name">Full Name *</option>
+                              <option value="email">Email Address *</option>
+                            </optgroup>
+                            <optgroup label="Contact Info">
+                              <option value="phone">Phone Number</option>
+                              <option value="city">City / Location</option>
+                              <option value="state">State / Province</option>
+                              <option value="country">Country</option>
+                            </optgroup>
+                            <optgroup label="Company Info">
+                              <option value="company">Company / Org</option>
+                              <option value="jobTitle">Job Title / Role</option>
+                              <option value="industry">Industry</option>
+                            </optgroup>
+                            <optgroup label="Lead Details">
+                              <option value="status">Status</option>
+                              <option value="source">Source</option>
+                              <option value="estimatedValue">Deal Value</option>
+                              <option value="tags">Tags</option>
+                              <option value="note">Notes / Details</option>
+                            </optgroup>
+                            <option value="__skip__">— Do Not Import —</option>
+                          </select>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -740,39 +766,55 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
               {/* Data preview table */}
               {preview && preview.headers.length > 0 && (
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <Eye size={13} className="text-gray-400" />
-                    <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-                      Preview — first {preview.rows.length} row{preview.rows.length !== 1 ? "s" : ""}
-                    </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Eye size={13} className="text-slate-400" />
+                      <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                        Preview — First {preview.rows.length} of {allExtractedRows.length} Leads
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-slate-400">Showing first {preview.rows.length} rows</span>
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-gray-100 shadow-sm">
-                    <table className="w-full text-xs min-w-max">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-100">
-                          {preview.headers.slice(0, 6).map((h) => (
-                            <th key={h} className="text-left px-3 py-2 font-bold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
-                          ))}
-                          {preview.headers.length > 6 && <th className="px-3 py-2 text-gray-400 text-center">+{preview.headers.length - 6} more</th>}
+                  <div className="overflow-x-auto rounded-xl border border-slate-200/80 shadow-xs max-h-52 overflow-y-auto">
+                    <table className="w-full text-xs min-w-max border-collapse">
+                      <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs">
+                        <tr className="border-b border-slate-200">
+                          {preview.headers.map((h) => {
+                            const target = fieldMapping[h];
+                            const isReq = target === "name" || target === "email";
+                            const label = TARGET_LEAD_FIELDS.find(f => f.key === target)?.label;
+                            return (
+                              <th key={h} className="text-left px-3 py-2 font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap">
+                                <div>{h}</div>
+                                {target && target !== "__skip__" ? (
+                                  <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${
+                                    isReq ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                                  }`}>
+                                    → {label || target} {isReq ? "*" : ""}
+                                  </span>
+                                ) : (
+                                  <span className="inline-block text-[9px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-200/60 rounded mt-0.5">
+                                    Skipped
+                                  </span>
+                                )}
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
-                      <tbody>
+                      <tbody className="divide-y divide-slate-100 bg-white">
                         {preview.rows.map((row, i) => (
-                          <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50">
-                            {preview.headers.slice(0, 6).map((h) => (
-                              <td key={h} className="px-3 py-2 text-gray-600 whitespace-nowrap max-w-[120px] truncate">
-                                {row[h] || <span className="text-gray-300">—</span>}
+                          <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                            {preview.headers.map((h) => (
+                              <td key={h} className="px-3 py-2 text-slate-600 whitespace-nowrap max-w-[150px] truncate">
+                                {row[h] || <span className="text-slate-300">—</span>}
                               </td>
                             ))}
-                            {preview.headers.length > 6 && <td />}
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1.5">
-                    {preview.headers.length} column{preview.headers.length !== 1 ? "s" : ""} detected · showing first {preview.rows.length} data row{preview.rows.length !== 1 ? "s" : ""}
-                  </p>
                 </div>
               )}
 
@@ -785,19 +827,20 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 shrink-0"
                 />
                 <div className="text-xs">
-                  <p className="font-bold text-blue-900">Re-import duplicate lead records</p>
-                  <p className="text-blue-700">Force creation of new leads even if email addresses already exist in database.</p>
+                  <p className="font-bold text-blue-900">Allow duplicate email re-imports</p>
+                  <p className="text-blue-700">Appends a unique suffix to re-import leads that already exist in your database.</p>
                 </div>
               </label>
 
-              <div className="flex flex-col gap-3 pt-1">
+              <div className="flex flex-col gap-2.5 pt-1">
                 <button
                   onClick={handleUpload}
-                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
+                  disabled={missingHeaders.length > 0}
+                  className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-extrabold rounded-2xl transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
                 >
-                  <FileText size={16} /> Start Import
+                  <FileText size={16} /> Start Import ({allExtractedRows.length} Leads)
                 </button>
-                <button onClick={handleReset} className="w-full py-3 bg-white hover:bg-slate-50 text-slate-600 text-sm font-extrabold rounded-2xl border border-slate-200 transition-all">
+                <button onClick={handleReset} className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-2xl border border-slate-200 transition-all">
                   Choose Different File
                 </button>
               </div>
