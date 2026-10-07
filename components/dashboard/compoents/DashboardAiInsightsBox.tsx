@@ -155,9 +155,7 @@ export function DashboardAiInsightsBox({
                         </p>
                       </div>
                     </div>
-                    <span className="text-xs font-bold uppercase tracking-wider px-3 py-1.5 bg-surface text-text rounded-lg shrink-0 text-center border border-border/60">
-                      Immediate Focus
-                    </span>
+                    
                   </div>
                 )}
               </div>
@@ -208,14 +206,11 @@ export function DashboardAiInsightsBox({
                           </p>
                         </div>
 
-                        <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2 text-xs">
+                        <div className="pt-3 border-t border-border/60 flex items-center gap-2 text-xs">
                           <div className="flex items-center gap-1.5 font-semibold text-text truncate">
                             <ArrowRight className="w-3.5 h-3.5 shrink-0 text-text-muted group-hover:translate-x-0.5 transition-transform" />
                             <span className="truncate">{alert.recommendation}</span>
                           </div>
-                          <span className="text-[10px] font-extrabold uppercase tracking-wider text-text-muted shrink-0">
-                            Action
-                          </span>
                         </div>
                       </div>
                     );

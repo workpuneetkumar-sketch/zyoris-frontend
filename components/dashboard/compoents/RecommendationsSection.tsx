@@ -66,7 +66,7 @@ export function RecommendationsSection({ token }: { token: string }) {
             AI Strategy Insights
           </h3>
         </div>
-        <span className="text-xs text-blue-600 font-medium">Groq AI Engine</span>
+        <span className="text-xs text-gray-500 font-medium"></span>
       </div>
 
       <div className="p-5">
@@ -137,12 +137,9 @@ export function RecommendationsSection({ token }: { token: string }) {
                             {alert.description}
                           </p>
                         </div>
-                        <div className="pt-2 border-t border-current/10 flex items-center justify-between gap-2">
+                        <div className="pt-2 border-t border-current/10 flex items-center gap-2">
                           <span className="text-[11px] font-bold truncate">
                             {alert.recommendation}
-                          </span>
-                          <span className="text-[10px] font-extrabold uppercase px-2 py-1 bg-white/90 rounded-md shadow-2xs">
-                            Action
                           </span>
                         </div>
                       </div>
@@ -172,10 +169,11 @@ export function RecommendationsSection({ token }: { token: string }) {
                           {rec.description}
                         </p>
                       </div>
-                      <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full shrink-0">
-                        {Math.round((rec.confidence || 0.9) * 100)}% Match
-                      </span>
-                    </div>
+                      {typeof rec.confidence === "number" && (
+                        <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full shrink-0">
+                          {Math.round(rec.confidence * 100)}% Match
+                        </span>
+                      )}                    </div>
                   </div>
                 ))}
               </div>
