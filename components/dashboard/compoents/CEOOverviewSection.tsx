@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "@/lib/api/api";
-import { DollarSign, BarChart2, Activity, TrendingUp, TrendingDown, Minus, Search, Bell, Plus } from "lucide-react";
+import { DollarSign, BarChart2, Activity, TrendingUp, TrendingDown, Minus, Bell, Plus } from "lucide-react";
 
 export function CEOOverviewSection({ token }: { token: string }) {
     const [data, setData] = useState<any>(null);
@@ -42,57 +42,84 @@ export function CEOOverviewSection({ token }: { token: string }) {
         return <Minus size={14} className="text-blue-400" />;
     };
 
-    const cards = [
+    const cards: Array<{
+        title: string;
+        value: string;
+        icon: React.ElementType;
+        color: string;
+        trend?: string;
+        status?: string;
+    }> = [
         {
             title: "Revenue Forecast",
-            value: `$${Math.round((revenueForecast?.projectedRevenue || kpis?.totalRevenue || 0) / 1000)}k`,
+            value: revenueForecast?.projectedRevenue != null
+                ? `$${Math.round(revenueForecast.projectedRevenue / 1000)}k`
+                : kpis?.totalRevenue != null
+                ? `$${Math.round(kpis.totalRevenue / 1000)}k`
+                : "—",
             icon: DollarSign,
             color: "blue",
-            trend: revenueForecast?.stats?.trend || revenueForecast?.trend || "flat",
-            status: (revenueForecast?.stats?.trend === "upward" || revenueForecast?.trend === "upward") ? "Growth" : "Stable"
+            trend: revenueForecast?.stats?.trend || revenueForecast?.trend,
+            // Growth/Declining/Stable only when we have a definitive trend; no label otherwise
+            status: (() => {
+                const t = revenueForecast?.stats?.trend || revenueForecast?.trend;
+                if (!t) return undefined;
+                if (t === "upward" || t === "increasing") return "Growth";
+                if (t === "downward" || t === "decreasing") return "Declining";
+                return "Stable";
+            })(),
         },
         {
             title: "Gross Margin",
-            value: `${Math.round((riskIndicators?.marginPct || 0) * 100)}%`,
+            // Show raw percentage only — no threshold label (no marginTarget from backend)
+            value: riskIndicators?.marginPct != null
+                ? `${Math.round(riskIndicators.marginPct * 100)}%`
+                : "—",
             icon: BarChart2,
             color: "violet",
-            status: (riskIndicators?.marginPct || 0) >= 0.3 ? "Healthy" : "Below Target"
+            status: undefined,  // removed: 0.3 threshold label was arbitrary
         },
         {
             title: "Demand Trends",
-            value: (trends?.overallTrend || riskIndicators?.demandTrend || "flat").charAt(0).toUpperCase() + (trends?.overallTrend || riskIndicators?.demandTrend || "flat").slice(1),
+            value: (() => {
+                const raw = trends?.overallTrend || riskIndicators?.demandTrend;
+                return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : "—";
+            })(),
             icon: Activity,
             color: "emerald",
-            trend: trends?.overallTrend || riskIndicators?.demandTrend || "flat",
-            status: (trends?.overallTrend === "increasing" || riskIndicators?.demandTrend === "increasing") ? "Strong" : "Neutral"
+            trend: trends?.overallTrend || riskIndicators?.demandTrend,
+            // Strong/Declining/Neutral from real API field; no label when absent
+            status: (() => {
+                const t = trends?.overallTrend || riskIndicators?.demandTrend;
+                if (!t) return undefined;
+                if (t === "increasing") return "Strong";
+                if (t === "decreasing") return "Declining";
+                if (t === "flat" || t === "stable") return "Neutral";
+                return undefined;
+            })(),
         }
     ];
 
-    // Optional: add a fourth card for drivers if space permits or just keep 3 for layout consistency
+    // Growth Driver card — only when backend provides topDriver;
+    // never fabricate trend or status
     if (drivers?.topDriver) {
+        const driverTrend: string | undefined = typeof drivers.trend === "string" ? drivers.trend : undefined;
+        const driverStatus: string | undefined = typeof drivers.status === "string" ? drivers.status : undefined;
         cards.push({
             title: "Growth Driver",
             value: drivers.topDriver,
             icon: TrendingUp,
             color: "amber",
-            trend: "upward",
-            status: "Primary"
+            trend: driverTrend,
+            status: driverStatus,
         });
     }
 
     return (
         <div className="space-y-8">
-            {/* ── Search & Actions ── */}
+            {/* ── Actions ── */}
             <div className="flex items-center justify-end">
                 <div className="flex items-center gap-3">
-                    <div className="hidden md:flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 w-64 shadow-sm">
-                        <Search size={14} className="text-gray-400 shrink-0" />
-                        <input
-                            type="text"
-                            placeholder="Search insights..."
-                            className="bg-transparent text-sm text-gray-600 outline-none w-full"
-                        />
-                    </div>
                     <button className="relative p-2.5 rounded-xl bg-white border border-gray-200 shadow-sm text-gray-500 hover:text-gray-700">
                         <Bell size={17} />
                         <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-red-500 rounded-full ring-1 ring-white" />
@@ -122,12 +149,16 @@ export function CEOOverviewSection({ token }: { token: string }) {
                         )}
                     </div>
                     <div className="mt-4 flex items-center gap-2">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Healthy" || card.status === "Growth" || card.status === "Strong"
-                                ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                                : "bg-blue-50 text-blue-600 border border-blue-100"
-                            }`}>
-                            {card.status}
-                        </span>
+                        {card.status && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Healthy" || card.status === "Growth" || card.status === "Strong"
+                                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                                    : card.status === "Declining"
+                                    ? "bg-red-50 text-red-600 border border-red-100"
+                                    : "bg-blue-50 text-blue-600 border border-blue-100"
+                                }`}>
+                                {card.status}
+                            </span>
+                        )}
                     </div>
                 </div>
             ))}

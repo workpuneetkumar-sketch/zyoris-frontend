@@ -178,7 +178,7 @@ export default function CeoDashboardPage() {
           sub="Margin Health Indicator"
           icon={<Target className="text-violet-600" />}
           trendColor="violet"
-          status={risk?.marginPct != null ? (risk.marginPct >= 0.3 ? "Healthy" : "Needs Review") : "No data"}
+          status={undefined}
         />
         <SummaryCard
           title="Marketing ROI"

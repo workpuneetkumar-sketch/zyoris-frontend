@@ -84,36 +84,57 @@ export function ExecutiveDashboardWidget({ isPreview }: { isPreview?: boolean })
   const demandTrend   = (ceo.riskIndicators?.demandTrend ?? "").toLowerCase();
   const projRevenue   = ceo.revenueForecast?.projectedRevenue;
 
-  const metrics = [
-    {
-      label: "Total Revenue",
-      value: fmtCurrency(totalRevenue),
-      up:    true,
-      icon:  DollarSign,
-      color: "#6366f1",
-    },
-    {
-      label: "Gross Margin",
-      value: fmtPercent(marginPct),
-      up:    (marginPct ?? 0) >= 0.3,
-      icon:  Briefcase,
-      color: "#10b981",
-    },
-    {
+  // Build metric rows — only include entries where we have real data to show.
+  // "up" is a tri-state: true = up arrow, false = down arrow, undefined = no arrow.
+  type MetricRow = {
+    label: string;
+    value: string;
+    up?: boolean;          // undefined → hide trend arrow entirely
+    icon: React.ElementType;
+    color: string;
+  };
+
+  const metrics: MetricRow[] = [];
+
+  // Total Revenue — always show value; trend arrow only when backend provides a direction
+  metrics.push({
+    label: "Total Revenue",
+    value: fmtCurrency(totalRevenue),
+    up:    undefined,   // no trend field available in CEO response for overall revenue
+    icon:  DollarSign,
+    color: "#6366f1",
+  });
+
+  // Gross Margin — show value; remove threshold-based label (no marginTarget from API)
+  metrics.push({
+    label: "Gross Margin",
+    value: fmtPercent(marginPct),
+    up:    undefined,   // no "good vs bad" without a backend-provided target
+    icon:  Briefcase,
+    color: "#10b981",
+  });
+
+  // Demand — derive arrow from real trend string; hide arrow when absent
+  if (demandTrend) {
+    metrics.push({
       label: "Demand",
-      value: demandTrend.charAt(0).toUpperCase() + demandTrend.slice(1) || "—",
-      up:    demandTrend === "increasing",
+      value: demandTrend.charAt(0).toUpperCase() + demandTrend.slice(1),
+      up:    demandTrend === "increasing" ? true : demandTrend === "decreasing" ? false : undefined,
       icon:  Users,
       color: "#f59e0b",
-    },
-    {
+    });
+  }
+
+  // Projection — only show card when backend explicitly provides projectedRevenue
+  if (projRevenue != null) {
+    metrics.push({
       label: "Projection",
-      value: fmtCurrency(projRevenue ?? totalRevenue),
-      up:    true,
+      value: fmtCurrency(projRevenue),
+      up:    undefined,   // no direction data for projection card
       icon:  Target,
       color: "#8b5cf6",
-    },
-  ];
+    });
+  }
 
   return (
     <div className="h-full flex flex-col gap-3">
@@ -133,9 +154,8 @@ export function ExecutiveDashboardWidget({ isPreview }: { isPreview?: boolean })
                 <p className="text-[10px] text-gray-500 truncate">{m.label}</p>
                 <p className="text-sm font-extrabold text-gray-900 truncate">{m.value}</p>
               </div>
-              {m.up
-                ? <TrendingUp  size={10} className="ml-auto text-emerald-500 flex-shrink-0" />
-                : <TrendingDown size={10} className="ml-auto text-red-500   flex-shrink-0" />}
+              {m.up === true  && <TrendingUp  size={10} className="ml-auto text-emerald-500 flex-shrink-0" />}
+              {m.up === false && <TrendingDown size={10} className="ml-auto text-red-500   flex-shrink-0" />}
             </div>
           );
         })}

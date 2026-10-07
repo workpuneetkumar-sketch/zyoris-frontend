@@ -117,7 +117,8 @@ export function CFOOverviewSection({ token }: { token: string }) {
       subValue: `$${Math.round(marginTrends.margin).toLocaleString()}`,
       icon: BarChart2,
       color: "blue",
-      status: marginTrends.marginPct >= 0.3 ? "Positive" : "Review Required"
+      // No threshold label — backend provides no marginTarget to compare against
+      status: null as string | null
     },
     {
       title: "Total Expenses",
@@ -125,7 +126,7 @@ export function CFOOverviewSection({ token }: { token: string }) {
       subValue: "Current Period",
       icon: Wallet,
       color: "violet",
-      status: "On Track"
+      status: null as string | null   // no status — backend provides no budget target to compare against
     },
     {
       title: "Pending Approvals",
@@ -137,15 +138,17 @@ export function CFOOverviewSection({ token }: { token: string }) {
     }
   ];
 
-  // Derive category expenses dynamically using standard proportions
+  // Real expense category data.
+  // The /dashboard/cfo endpoint returns expensesSummary.totalExpenses (scalar only).
+  // Per-category breakdown is returned ONLY if the backend adds expensesSummary.categories[].
+  // We never fabricate proportions — show the pie only with real category data.
   const totalExpensesVal = expensesSummary.totalExpenses || 0;
-  const derivedExpenses = [
-    { name: "Salary & Wages", value: Math.round(totalExpensesVal * 0.40) },
-    { name: "Marketing Campaigns", value: Math.round(totalExpensesVal * 0.25) },
-    { name: "Office Rent & Tech", value: Math.round(totalExpensesVal * 0.18) },
-    { name: "Travel & Leisure", value: Math.round(totalExpensesVal * 0.12) },
-    { name: "Miscellaneous", value: Math.round(totalExpensesVal * 0.05) }
-  ].filter(item => item.value > 0);
+  const expenseCategories: Array<{ name: string; value: number }> =
+    Array.isArray((expensesSummary as any).categories)
+      ? (expensesSummary as any).categories
+          .filter((c: any) => typeof c.amount === "number" && c.amount > 0)
+          .map((c: any) => ({ name: c.name, value: c.amount }))
+      : [];
 
   // Prepare chart data for revenue forecast
   const revenueChartData = forecast
@@ -169,12 +172,14 @@ export function CFOOverviewSection({ token }: { token: string }) {
               <p className="text-sm text-gray-400 font-medium">{card.subValue}</p>
             </div>
             <div className="mt-4 flex items-center gap-2">
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Positive" || card.status === "Cleared" || card.status === "On Track"
-                  ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                  : "bg-amber-50 text-amber-600 border border-amber-100"
-                }`}>
-                {card.status}
-              </span>
+              {card.status && (
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${card.status === "Positive" || card.status === "Cleared"
+                    ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
+                    : "bg-amber-50 text-amber-600 border border-amber-100"
+                  }`}>
+                  {card.status}
+                </span>
+              )}
             </div>
           </div>
         ))}
@@ -245,17 +250,19 @@ export function CFOOverviewSection({ token }: { token: string }) {
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex flex-col h-[380px]">
           <div>
             <h3 className="text-sm font-bold text-gray-800">Expense Allocations</h3>
-            <p className="text-xs text-gray-400 mt-0.5">Dynamic cost categories proportional to total spend.</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Cost category breakdown from backend data.
+            </p>
           </div>
-          
+
           <div className="flex-1 min-h-0 w-full flex flex-col sm:flex-row items-center justify-center gap-4 mt-2">
-            {totalExpensesVal > 0 ? (
+            {expenseCategories.length > 0 ? (
               <>
                 <div className="w-[180px] h-[180px] shrink-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <RechartsPieChart>
                       <Pie
-                        data={derivedExpenses}
+                        data={expenseCategories}
                         cx="50%"
                         cy="50%"
                         innerRadius={55}
@@ -263,7 +270,7 @@ export function CFOOverviewSection({ token }: { token: string }) {
                         paddingAngle={3}
                         dataKey="value"
                       >
-                        {derivedExpenses.map((entry, index) => (
+                        {expenseCategories.map((_, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                         ))}
                       </Pie>
@@ -272,22 +279,44 @@ export function CFOOverviewSection({ token }: { token: string }) {
                   </ResponsiveContainer>
                 </div>
                 <div className="flex-1 space-y-2.5 w-full sm:w-auto">
-                  {derivedExpenses.map((item, idx) => (
+                  {expenseCategories.map((item, idx) => (
                     <div key={item.name} className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
                         <span className="text-gray-500 font-medium">{item.name}</span>
                       </div>
                       <span className="text-gray-800 font-semibold font-mono">
-                        ${item.value.toLocaleString()} ({Math.round((item.value / totalExpensesVal) * 100)}%)
+                        ${item.value.toLocaleString()}
+                        {totalExpensesVal > 0 && (
+                          <span className="text-gray-400 ml-1">
+                            ({Math.round((item.value / totalExpensesVal) * 100)}%)
+                          </span>
+                        )}
                       </span>
                     </div>
                   ))}
                 </div>
               </>
             ) : (
-              <div className="h-full w-full flex items-center justify-center text-sm text-gray-400 bg-gray-50 rounded-xl border border-dashed border-gray-200">
-                No expense allocations available.
+              /* Backend does not return category breakdown — show total only, no fabricated chart */
+              <div className="h-full w-full flex flex-col items-center justify-center gap-3 text-center">
+                {totalExpensesVal > 0 ? (
+                  <>
+                    <div className="w-28 h-28 rounded-full border-4 border-dashed border-gray-200 flex items-center justify-center">
+                      <div>
+                        <p className="text-lg font-extrabold text-gray-800">
+                          ${Math.round(totalExpensesVal / 1000)}k
+                        </p>
+                        <p className="text-[10px] text-gray-400">Total</p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400 max-w-[200px] leading-relaxed">
+                      Category breakdown unavailable — backend returns total spend only.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-gray-400">No expense data available.</p>
+                )}
               </div>
             )}
           </div>
