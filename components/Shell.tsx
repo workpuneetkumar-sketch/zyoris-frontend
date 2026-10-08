@@ -332,7 +332,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/settings",
         label: "Settings",
         icon: Settings,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD", "USER"],
       },
     ],
   },
@@ -466,7 +466,7 @@ const GROUP_ICONS: Record<string, LucideIcon> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout, sidebarItems, visibleDashboards, visibleModules } = useAuth();
+  const { user, logout, sidebarItems, visibleDashboards, visibleModules, hasPermission } = useAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
@@ -656,6 +656,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     operations: "Operations",
     admin: "Admin",
   };
+
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
 
   const visibleNavGroups = (() => {
     if (sidebarItems && sidebarItems.length > 0) {
@@ -849,20 +851,22 @@ export function AppShell({ children }: { children: ReactNode }) {
       const itemsByGroup: Record<string, { href: string; label: string; icon: LucideIcon }[]> = {};
 
       const addItem = (groupLabel: string, href: string, label: string, icon: LucideIcon) => {
+        if (groupLabel === "Admin Tools" && !isAdmin) return;
         if (!itemsByGroup[groupLabel]) itemsByGroup[groupLabel] = [];
         if (!itemsByGroup[groupLabel].some((x) => x.href === href)) {
           itemsByGroup[groupLabel].push({ href, label, icon });
         }
       };
 
-      const adminModules = new Set([
-        "users",
-        "roles",
-        "audit",
-        "settings",
-        "notifications",
-        "admin",
-      ]);
+      const ROLE_DASHBOARD_ALLOWED_ROLES: Record<string, string[]> = {
+        ceo: ["ADMIN", "CEO"],
+        cfo: ["ADMIN", "CFO"],
+        sales: ["ADMIN", "SALES_HEAD", "SALES_USER"],
+        operations: ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"],
+        admin: ["ADMIN"],
+      };
+
+      const normalizedUserRole = (user?.role ?? "").toUpperCase().trim();
 
       visibleDashboards
         .filter((item) => item.visible !== false && item.route)
@@ -873,15 +877,28 @@ export function AppShell({ children }: { children: ReactNode }) {
             ROLE_DASHBOARD_LABELS[key] ??
             key.replace(/[-_]/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 
-          if (href) addItem("Role Dashboards", href, label, Crown);
+          if (href) {
+            if ((href === "/admin" || href.startsWith("/admin/")) && !isAdmin) {
+              return;
+            }
+
+            const allowedRoles =
+              ROLE_DASHBOARD_ALLOWED_ROLES[key] ??
+              (href === "/ceo" ? ["ADMIN", "CEO"] :
+               href === "/cfo" ? ["ADMIN", "CFO"] :
+               href === "/sales" ? ["ADMIN", "SALES_HEAD", "SALES_USER"] :
+               href === "/operations" ? ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"] :
+               undefined);
+
+            if (allowedRoles && !allowedRoles.includes(normalizedUserRole)) {
+              return;
+            }
+
+            addItem("Role Dashboards", href, label, Crown);
+          }
         });
 
-      const hasAdminToolAccess =
-        sidebarItems.some((item) => {
-          const key = (item.key ?? "").toLowerCase();
-          const route = (item.route ?? "").toLowerCase();
-          return key === "settings" || key === "roles" || key === "users" || key === "audit" || route.startsWith("/admin");
-        }) || visibleModules.some((module) => adminModules.has((module ?? "").toLowerCase()));
+      const hasAdminToolAccess = isAdmin;
 
       if (hasAdminToolAccess) {
         ADMIN_TOOL_ITEMS.forEach((item) => addItem("Admin Tools", item.href, item.label, item.icon));
@@ -969,14 +986,21 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     // ── Static fallback (no API data) ─────────────────────────────────
     // Communication is always shown to every role — skip the role filter for it.
-    return NAV_GROUPS.map((group) => ({
-      ...group,
-      items: group.label === "Communication"
-        ? group.items
-        : group.items.filter((item) =>
-            user ? item.roles.includes(user.role) : item.href === "/dashboard"
-          ),
-    })).filter((group) => group.items.length > 0);
+    return NAV_GROUPS.map((group) => {
+      if (group.label === "Admin Tools" && !isAdmin) {
+        return { ...group, items: [] };
+      }
+      return {
+        ...group,
+        items: group.label === "Communication"
+          ? group.items
+          : group.items.filter((item) =>
+              user
+                ? item.roles.some((r) => r.toUpperCase() === user.role.toUpperCase())
+                : item.href === "/dashboard"
+            ),
+      };
+    }).filter((group) => group.items.length > 0);
   })();
 
   // Auto-expand whichever module group contains the currently active page,

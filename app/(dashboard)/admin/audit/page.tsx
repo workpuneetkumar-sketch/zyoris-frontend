@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { getAuditLogs, getAuditLog, AuditLog } from "@/lib/api/auditApi";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   FileSearch,
   Loader2,
@@ -61,12 +62,11 @@ export default function AuditPage() {
   const [detailLog, setDetailLog] = useState<AuditLog | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
-  // Guard: ADMIN only — wait for initialization
-  useEffect(() => {
-    if (!isInitializing && user && user.role !== "ADMIN") {
-      router.push("/admin");
-    }
-  }, [user, isInitializing, router]);
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
 
   const fetchLogs = useCallback(async (p: number) => {
     setLoading(true);
@@ -84,8 +84,10 @@ export default function AuditPage() {
   }, []);
 
   useEffect(() => {
-    fetchLogs(page);
-  }, [page, fetchLogs]);
+    if (isAdmin) {
+      fetchLogs(page);
+    }
+  }, [isAdmin, page, fetchLogs]);
 
   async function openDetail(log: AuditLog) {
     setDetailLog(log);

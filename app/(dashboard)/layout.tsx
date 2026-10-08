@@ -1,11 +1,12 @@
 "use client";
 
 import { AppShell } from "@/components/Shell";
-import { isPathAllowed } from "@/utils/roleRedirect";
+import { isPathAllowed, isRoleDashboardPath, isRoleDashboardAllowed } from "@/utils/roleRedirect";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { attachAudioUnlock } from "@/lib/notificationSound";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 function hasStoredToken(): boolean {
   if (typeof window === "undefined") return false;
@@ -43,33 +44,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.replace("/login");
   }, [isAuthenticated, isInitializing, router]);
 
-  // Route access guard — runs only after permissions are fully loaded
-  // Uses the RBAC sidebar from the API as single source of truth
-  useEffect(() => {
-    // Wait until everything is ready
-    if (isInitializing || !permissionsLoaded || !isAuthenticated || !user) return;
-
-    // If sidebar is empty the API hasn't returned yet — don't block
-    if (!sidebarItems || sidebarItems.length === 0) return;
-
-    const allowed = isPathAllowed(pathname ?? window.location.pathname, sidebarItems, visibleDashboards);
-
-    if (!allowed) {
-      // Redirect to /dashboard (universally allowed) instead of trying to
-      // infer a fallback from visibleDashboards which may also be empty
-      router.replace("/dashboard");
-    }
-  }, [
-    isInitializing,
-    permissionsLoaded,
-    isAuthenticated,
-    user,
-    sidebarItems,
-    visibleDashboards,
-    pathname,
-    router,
-  ]);
-
   if (isInitializing) {
     return (
       <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
@@ -79,6 +53,28 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (!isAuthenticated) return null;
+
+  // Centralized route authorization check
+  const path = (pathname ?? (typeof window !== "undefined" ? window.location.pathname : "")).split("?")[0].replace(/\/+$/, "") || "/";
+  const isAdminPath = path === "/admin" || path.startsWith("/admin/");
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  let isAllowed = true;
+  if (isAdminPath) {
+    isAllowed = isAdmin;
+  } else if (isRoleDashboardPath(path)) {
+    isAllowed = isRoleDashboardAllowed(path, user?.role);
+  } else if (permissionsLoaded && sidebarItems && sidebarItems.length > 0) {
+    isAllowed = isPathAllowed(path, sidebarItems, visibleDashboards, user?.role);
+  }
+
+  if (!isAllowed) {
+    return (
+      <AppShell>
+        <AccessDenied />
+      </AppShell>
+    );
+  }
 
   return <AppShell>{children}</AppShell>;
 }

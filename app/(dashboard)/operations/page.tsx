@@ -125,7 +125,9 @@ export default function OperationsDashboardPage() {
       router.replace("/login");
       return;
     }
-    if (user.role !== "OPERATIONS_HEAD" && user.role !== "ADMIN") {
+    const role = (user.role ?? "").toUpperCase();
+    const allowed = ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"];
+    if (!allowed.includes(role)) {
       router.replace("/dashboard");
     }
   }, [user, router]);

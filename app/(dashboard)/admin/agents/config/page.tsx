@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/agentConfigApi";
 import { AgentConfigForm } from "@/components/admin/AgentConfigForm";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   Settings2,
   Bot,
@@ -58,7 +59,7 @@ export default function AgentConfigPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const canManageConfig =
-    user?.role === "ADMIN" ||
+    user?.role?.toUpperCase() === "ADMIN" ||
     hasPermission("admin") ||
     hasPermission("developer");
 
@@ -72,18 +73,10 @@ export default function AgentConfigPage() {
   const [rejectedToolIds, setRejectedToolIds] = useState<string[]>([]);
   const [saveMessage, setSaveMessage]         = useState<string | undefined>();
 
-  // Auth + role guard
+  // Auth guard
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (!permissionsLoaded) return;
-    if (
-      user.role !== "ADMIN" &&
-      !hasPermission("admin") &&
-      !hasPermission("developer")
-    ) {
-      router.replace("/dashboard");
-    }
-  }, [user, permissionsLoaded, hasPermission, router]);
+  }, [user, router]);
 
   // Load agent list
   useEffect(() => {
@@ -147,7 +140,11 @@ export default function AgentConfigPage() {
     }
   };
 
-  if (!user || !permissionsLoaded || !canManageConfig) return null;
+  if (!user) return null;
+  if (permissionsLoaded && !canManageConfig) {
+    return <AccessDenied />;
+  }
+  if (!permissionsLoaded || !canManageConfig) return null;
 
   return (
     <div className="space-y-6 max-w-[900px] mx-auto">

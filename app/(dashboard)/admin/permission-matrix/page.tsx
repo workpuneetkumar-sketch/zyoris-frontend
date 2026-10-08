@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   Shield,
   Loader2,
@@ -86,12 +87,11 @@ export default function PermissionMatrixPage() {
   const [tab, setTab] = useState<Tab>("matrix");
   const [error, setError] = useState<string | null>(null);
 
-  // Guard: ADMIN only — wait for initialization
-  useEffect(() => {
-    if (!isInitializing && user && user.role !== "ADMIN") {
-      router.push("/admin");
-    }
-  }, [user, isInitializing, router]);
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
 
   // -- Data State --
   const [roles, setRoles] = useState<RoleMatrix[]>([]);
@@ -118,10 +118,10 @@ export default function PermissionMatrixPage() {
   }, []);
 
   useEffect(() => {
-    if (tab === "matrix" || tab === "bulk" || tab === "clone") {
+    if (isAdmin && (tab === "matrix" || tab === "bulk" || tab === "clone")) {
       fetchMatrix();
     }
-  }, [fetchMatrix, tab]);
+  }, [isAdmin, fetchMatrix, tab]);
 
   const filteredRoles = roles.filter(r => r.name.toLowerCase().includes(search.toLowerCase()));
 

@@ -1,9 +1,59 @@
 export type Role = string;
 
-import { SidebarItem, DashboardItem } from "@/lib/api/frontendApi";
+import type { SidebarItem, DashboardItem } from "../lib/api/frontendApi";
 
 /** Map each role to its default landing path after login */
 export const getDashboardForRole = (role: Role): string => "/dashboard";
+
+export const ROLE_DASHBOARD_PERMISSIONS: Record<string, string[]> = {
+  "/ceo": ["ADMIN", "CEO"],
+  "/cfo": ["ADMIN", "CFO"],
+  "/sales": ["ADMIN", "SALES_HEAD", "SALES_USER"],
+  "/operations": ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"],
+};
+
+export function normalizeDashboardPath(pathname: string): string {
+  const clean = pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
+  if (clean === "/dashboard/ceo") return "/ceo";
+  if (clean === "/dashboard/cfo") return "/cfo";
+  if (clean === "/dashboard/sales") return "/sales";
+  if (clean === "/dashboard/operations") return "/operations";
+  return clean;
+}
+
+export function isRoleDashboardPath(pathname: string): boolean {
+  const normalized = normalizeDashboardPath(pathname);
+  return (
+    normalized === "/ceo" ||
+    normalized.startsWith("/ceo/") ||
+    normalized === "/cfo" ||
+    normalized.startsWith("/cfo/") ||
+    normalized === "/sales" ||
+    (normalized.startsWith("/sales/") && !normalized.startsWith("/sales/execution") && !normalized.startsWith("/sales/activities")) ||
+    normalized === "/operations" ||
+    normalized.startsWith("/operations/")
+  );
+}
+
+export function isRoleDashboardAllowed(pathname: string, userRole?: string): boolean {
+  if (!userRole) return false;
+  const role = userRole.trim().toUpperCase();
+  const normalized = normalizeDashboardPath(pathname);
+
+  if (normalized === "/ceo" || normalized.startsWith("/ceo/")) {
+    return ROLE_DASHBOARD_PERMISSIONS["/ceo"].includes(role);
+  }
+  if (normalized === "/cfo" || normalized.startsWith("/cfo/")) {
+    return ROLE_DASHBOARD_PERMISSIONS["/cfo"].includes(role);
+  }
+  if (normalized === "/sales" || (normalized.startsWith("/sales/") && !normalized.startsWith("/sales/execution") && !normalized.startsWith("/sales/activities"))) {
+    return ROLE_DASHBOARD_PERMISSIONS["/sales"].includes(role);
+  }
+  if (normalized === "/operations" || normalized.startsWith("/operations/")) {
+    return ROLE_DASHBOARD_PERMISSIONS["/operations"].includes(role);
+  }
+  return true;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // isPathAllowed
@@ -28,13 +78,27 @@ export const getDashboardForRole = (role: Role): string => "/dashboard";
 export const isPathAllowed = (
   pathname: string,
   sidebarItems: SidebarItem[],
-  _visibleDashboards: DashboardItem[]   // kept for API compatibility, unused
+  _visibleDashboards: DashboardItem[] = [],   // kept for API compatibility, unused
+  userRole?: string
 ): boolean => {
   // Normalise trailing slash
   const path =
     pathname.endsWith("/") && pathname.length > 1
       ? pathname.slice(0, -1)
       : pathname;
+
+  const isAdminPath = path === "/admin" || path.startsWith("/admin/");
+  const isAdmin = userRole ? userRole.toUpperCase() === "ADMIN" : false;
+
+  // Strict check: Admin routes are ONLY accessible by users with role ADMIN
+  if (isAdminPath) {
+    return isAdmin;
+  }
+
+  // Strict check: Role Dashboards are ONLY accessible by authorized roles
+  if (isRoleDashboardPath(path)) {
+    return isRoleDashboardAllowed(path, userRole);
+  }
 
   // ── 1. Always-allowed paths ──────────────────────────────────────────────
   const ALWAYS_ALLOWED = [
@@ -59,12 +123,6 @@ export const isPathAllowed = (
     "/messages",
     "/connect",
     "/meetings",
-    "/admin",
-    "/admin/rbac",
-    "/admin/roles",
-    "/admin/user-roles",
-    "/admin/audit",
-    "/admin/permission-matrix",
     "/calendar",
     "/tasks",
     "/projects",
@@ -81,10 +139,6 @@ export const isPathAllowed = (
     "/data-quality",
     "/revops",
     "/workflows/drafts",
-    // Day 7 — Enterprise Agent Config, Observability, Version Promotion
-    "/admin/agents/config",
-    "/admin/agents/observability",
-    "/admin/agents/versions",
     // deep sub-routes that don't need an explicit sidebar entry
     "/leads/assignment",
     "/dashboard/reminders",
@@ -115,7 +169,17 @@ export const isPathAllowed = (
 
     // Aggregate key expansion — if the API returns key:"crm" that expands to
     // /leads, /deals, etc., those sub-routes must also be allowed
-    const CRM_EXPANSION = ["/leads", "/deals", "/contacts", "/companies", "/customers", "/activities", "/ai-insights"];
+    const CRM_EXPANSION = [
+      "/leads",
+      "/deals",
+      "/contacts",
+      "/companies",
+      "/customers",
+      "/activities",
+      "/ai-insights",
+      "/sales/execution",
+      "/sales/activities",
+    ];
     const COMM_EXPANSION = ["/communications", "/email", "/whatsapp", "/calls", "/messages", "/meetings", "/calendar", "/tasks", "/projects"];
 
     const hasCrmKey = sidebarItems.some((item) => (item.key ?? "").toLowerCase() === "crm");
@@ -128,33 +192,34 @@ export const isPathAllowed = (
     const standAloneRoutes = sidebarItems.map((item) => item.route).filter(Boolean);
     if (standAloneRoutes.some((r) => path === r || path.startsWith(`${r!}/`))) return true;
 
-    // Role-specific dashboards — always allow if user is authenticated with sidebar data
-    const normalizedPath = [
-      "/dashboard/ceo",
-      "/dashboard/cfo",
-      "/dashboard/sales",
-      "/dashboard/operations",
-    ].includes(path)
-      ? path.replace("/dashboard/", "/")
-      : path;
-
-    const ROLE_DASH = ["/ceo", "/cfo", "/sales", "/operations", "/admin"];
-    if (ROLE_DASH.some((p) => normalizedPath === p || normalizedPath.startsWith(`${p}/`))) {
-      return true;
+    // Role-specific dashboards — check against allowed roles
+    if (isRoleDashboardPath(path)) {
+      return isRoleDashboardAllowed(path, userRole);
     }
 
-    const ADMIN_SUBROUTES = [
-      "/admin/rbac",
-      "/admin/roles",
-      "/admin/user-roles",
-      "/admin/audit",
-      // Day 7
-      "/admin/agents/config",
-      "/admin/agents/observability",
-      "/admin/agents/versions",
-    ];
-    if (ADMIN_SUBROUTES.some((p) => normalizedPath === p || normalizedPath.startsWith(`${p}/`))) {
-      return true;
+    if (isAdmin) {
+      const ADMIN_SUBROUTES = [
+        "/admin/rbac",
+        "/admin/roles",
+        "/admin/user-roles",
+        "/admin/audit",
+        "/admin/permission-matrix",
+        // Day 7
+        "/admin/agents/config",
+        "/admin/agents/observability",
+        "/admin/agents/versions",
+      ];
+      const normalizedAdminPath = [
+        "/dashboard/ceo",
+        "/dashboard/cfo",
+        "/dashboard/sales",
+        "/dashboard/operations",
+      ].includes(path)
+        ? path.replace("/dashboard/", "/")
+        : path;
+      if (ADMIN_SUBROUTES.some((p) => normalizedAdminPath === p || normalizedAdminPath.startsWith(`${p}/`))) {
+        return true;
+      }
     }
 
     // Path not matched → block
@@ -162,9 +227,18 @@ export const isPathAllowed = (
   }
 
   // ── 3. Fallback: permissions not yet loaded — allow everything to prevent
-  //    false redirects during the loading window ────────────────────────────
+  //    false redirects during the loading window, EXCEPT admin routes for non-admins
+  //    and role dashboards for unauthorized roles ──
+  if (isAdminPath) {
+    return isAdmin;
+  }
+  if (isRoleDashboardPath(path)) {
+    return isRoleDashboardAllowed(path, userRole);
+  }
   return true;
 };
 
 // Legacy export kept for any remaining callers
-export const isPathAllowedForRole = (_pathname: string, _role: Role): boolean => true;
+export const isPathAllowedForRole = (pathname: string, role: Role): boolean => {
+  return isPathAllowed(pathname, [], [], role);
+};
