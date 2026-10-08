@@ -7,6 +7,7 @@ import { getUserRole, assignUserRole, getUsersByRole, getRoleName, UserByRoleIte
 import { getRbacUserPermissions, getRbacRoles } from "@/lib/api/rbacApi";
 import { RbacRoleMatrixItem } from "@/lib/api/rbacApi";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   UserCog,
   Search,
@@ -284,12 +285,11 @@ export default function UserRolesPage() {
   // Permissions panel
   const [permUser, setPermUser] = useState<{ id: string; name: string } | null>(null);
 
-  // Guard: ADMIN only — wait for initialization
-  useEffect(() => {
-    if (!isInitializing && user && user.role !== "ADMIN") {
-      router.push("/admin");
-    }
-  }, [user, isInitializing, router]);
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
 
   /* ── Fetch all users + roles ──────────────────────────────────────── */
 
@@ -376,8 +376,10 @@ export default function UserRolesPage() {
   }, [user?.organizationId]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isAdmin) {
+      fetchData();
+    }
+  }, [isAdmin, fetchData]);
 
   /* ── Assign role (PATCH /user-roles/:userId) ────────────────────── */
 

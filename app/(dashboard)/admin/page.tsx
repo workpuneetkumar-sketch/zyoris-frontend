@@ -25,6 +25,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 
 
 interface AdminOverview {
@@ -149,13 +150,12 @@ export default function AdminDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
   useEffect(() => {
     if (!user) {
       router.replace("/login");
       return;
-    }
-    if (user.role !== "ADMIN") {
-      router.replace("/dashboard");
     }
   }, [user, router]);
 
@@ -214,11 +214,16 @@ export default function AdminDashboardPage() {
   };
 
   useEffect(() => {
-    loadData();
+    if (isAdmin) {
+      loadData();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, isAdmin]);
 
   if (!user) return null;
+  if (!isAdmin) {
+    return <AccessDenied />;
+  }
 
   if (loading) {
     return (

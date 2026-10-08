@@ -68,7 +68,8 @@ export default function CeoDashboardPage() {
       router.replace("/login");
       return;
     }
-    if (user.role !== "CEO" && user.role !== "ADMIN") {
+    const role = (user.role ?? "").toUpperCase();
+    if (role !== "CEO" && role !== "ADMIN") {
       router.replace("/dashboard");
     }
   }, [user, router]);

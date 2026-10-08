@@ -12,8 +12,11 @@ export default function CfoDashboardPage() {
   const [dataChecked, setDataChecked] = useState(false);
 
   useEffect(() => {
-    if (!isInitializing && user && user.role !== "CFO" && user.role !== "ADMIN") {
-      router.replace("/dashboard");
+    if (!isInitializing && user) {
+      const role = (user.role ?? "").toUpperCase();
+      if (role !== "CFO" && role !== "ADMIN") {
+        router.replace("/dashboard");
+      }
     }
   }, [user, isInitializing, router]);
 

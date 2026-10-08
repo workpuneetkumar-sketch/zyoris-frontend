@@ -15,6 +15,7 @@ import { getRbacRoles, getRbacRoleDetails } from "@/lib/api/rbacApi";
 import { RbacRoleMatrixItem } from "@/lib/api/rbacApi";
 import api from "@/lib/api/api";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   Plus, Pencil, Trash2, X, KeyRound, Shield, Check,
   Loader2, Eye, RefreshCw, AlertCircle, Grid3X3, Settings2,
@@ -411,9 +412,11 @@ export default function RolesPage() {
   // Permission panel
   const [permRole, setPermRole] = useState<RbacRoleMatrixItem | null>(null);
 
-  useEffect(() => {
-    if (!isInitializing && user && user.role !== "ADMIN") router.push("/admin");
-  }, [user, isInitializing, router]);
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
 
   const fetchRoles = useCallback(async () => {
     setLoading(true); setError(null);
@@ -428,7 +431,11 @@ export default function RolesPage() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchRoles(); }, [fetchRoles]);
+  useEffect(() => {
+    if (isAdmin) {
+      fetchRoles();
+    }
+  }, [isAdmin, fetchRoles]);
 
   function openCreate() { setEditingRole(null); setFormData(emptyForm); setShowForm(true); }
   function openEdit(role: RbacRoleMatrixItem) { setEditingRole(role); setFormData({ name: role.name, description: role.description || "" }); setShowForm(true); }
