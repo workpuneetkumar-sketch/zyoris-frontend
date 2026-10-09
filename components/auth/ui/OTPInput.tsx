@@ -38,7 +38,6 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
   const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Backspace") {
       if (!otp[index] && index > 0 && inputRefs.current[index - 1]) {
-        // Move to previous input on backspace if current is empty
         inputRefs.current[index - 1]?.focus();
       }
       const newOtp = [...otp];
@@ -60,7 +59,7 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
         newOtp[i] = pastedData[i];
       }
       setOtp(newOtp);
-      
+
       const nextIndex = Math.min(pastedData.length, length - 1);
       inputRefs.current[nextIndex]?.focus();
 
@@ -71,7 +70,13 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
   };
 
   return (
-    <div className={classNames("flex justify-between gap-1.5 xs:gap-2 sm:gap-4", className)}>
+    // role="group" + aria-label groups the individual inputs so assistive
+    // technology announces "Verification code, digit 1 of 6" etc.
+    <div
+      role="group"
+      aria-label="Verification code"
+      className={classNames("flex justify-between gap-1.5 xs:gap-2 sm:gap-4", className)}
+    >
       {otp.map((digit, index) => (
         <input
           key={index}
@@ -81,6 +86,8 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
           type="text"
           inputMode="numeric"
           maxLength={1}
+          autoComplete={index === 0 ? "one-time-code" : "off"}
+          aria-label={`Digit ${index + 1} of ${length}`}
           value={digit}
           onChange={(e) => handleChange(index, e.target.value)}
           onKeyDown={(e) => handleKeyDown(index, e)}

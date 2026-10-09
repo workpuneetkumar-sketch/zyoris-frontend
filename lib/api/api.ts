@@ -174,12 +174,15 @@ export function getEffectiveAuthToken(): string | null {
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
         // Always attach the token for every request — including /auth/me, /workspace/pages etc.
-        // Only skip for login/register/refresh endpoints that don't need a Bearer token.
+        // Skip for public endpoints that either don't need a token or must not receive one
+        // (sending a Bearer header on /auth/logout could cause the refresh interceptor to
+        // treat a 401 response as an expired-session and attempt another refresh, looping).
         const url = config.url || "";
         const isUnauthenticatedEndpoint =
             url.includes("/auth/login") ||
             url.includes("/auth/register") ||
-            url.includes("/auth/refresh");
+            url.includes("/auth/refresh") ||
+            url.includes("/auth/logout");
 
         if (!isUnauthenticatedEndpoint) {
             const token = getEffectiveAuthToken();
@@ -215,6 +218,21 @@ api.interceptors.request.use(
 --------------------------------------------------- */
 
 let isRedirecting = false;
+
+/**
+ * Single in-flight refresh promise.
+ *
+ * Because refresh tokens ROTATE, concurrent 401 responses must share a single
+ * refresh call — if two requests each try to refresh with the same (now old)
+ * token, the second will receive INVALID_REFRESH_TOKEN and log the user out.
+ *
+ * Pattern: the first 401 creates this promise; every subsequent 401 that
+ * arrives before the refresh resolves awaits the same promise instead of
+ * issuing a second call.  Once the refresh settles the promise is cleared so
+ * the next expiry cycle can start fresh.
+ */
+let refreshPromise: Promise<string> | null = null;
+
 // Helper function to delay retries
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -413,7 +431,9 @@ api.interceptors.response.use(
             originalRequest._retryCount += 1;
             // Exponential backoff: 1s, 2s, 4s
             const backoffTime = Math.pow(2, originalRequest._retryCount - 1) * 1000;
-            console.log(`Network error, retrying in ${backoffTime / 1000}s... (attempt ${originalRequest._retryCount}/3)`);
+            if (process.env.NODE_ENV === "development") {
+                console.log(`[auth] Network error, retrying in ${backoffTime / 1000}s… (attempt ${originalRequest._retryCount}/3)`);
+            }
             await delay(backoffTime);
             return api(originalRequest);
         }
@@ -438,7 +458,9 @@ api.interceptors.response.use(
                     return Promise.reject(error);
                 }
 
-                // Resolve refresh token flexibly from multiple potential sources
+                // ── Resolve the current refresh token ─────────────────────────
+                // We read it once here; if a concurrent refresh is already in
+                // flight we will not need it (we share that promise instead).
                 let refreshToken: string | null = null;
                 let parsedAuth: any = null;
 
@@ -483,67 +505,95 @@ api.interceptors.response.use(
 
                         if (!isPublicAuthPage && !isRedirecting && typeof window !== "undefined") {
                             isRedirecting = true;
-                            window.location.href = "/login";
+                            window.location.href = "/login?reason=session_expired";
                         }
                     }
                     return Promise.reject(error);
                 }
 
-                /* -----------------------------------
-                   CALL REFRESH TOKEN API
-                ----------------------------------- */
+                // ── Concurrent-refresh deduplication ─────────────────────────
+                // If a refresh is already in flight (from another concurrent 401),
+                // share that promise — do NOT issue a second refresh with the same
+                // (soon-to-be-invalid) token.
+                if (!refreshPromise) {
+                    refreshPromise = (async (): Promise<string> => {
+                        try {
+                            /* -----------------------------------
+                               CALL REFRESH TOKEN API
+                            ----------------------------------- */
+                            const refreshResponse = await axios.post(
+                                `${BASE_URL}/auth/refresh`,
+                                { refreshToken },
+                                { timeout: 10000 }
+                            );
 
-                const refreshResponse = await axios.post(
-                    `${BASE_URL}/auth/refresh`,
-                    {
-                        refreshToken,
-                    },
-                    {
-                        timeout: 10000,
-                    }
-                );
+                            // Backend confirmed flat response: { token, refreshToken, user }
+                            // Keep data.data.token as a last-resort safety net only.
+                            const newAccessToken = sanitizeBearerToken(
+                                refreshResponse.data?.token ||
+                                refreshResponse.data?.accessToken ||
+                                refreshResponse.data?.data?.token ||
+                                refreshResponse.data?.data?.accessToken
+                            );
 
-                const newAccessToken = sanitizeBearerToken(
-                    refreshResponse.data?.token ||
-                    refreshResponse.data?.accessToken ||
-                    refreshResponse.data?.data?.token ||
-                    refreshResponse.data?.data?.accessToken
-                );
+                            if (!newAccessToken) {
+                                throw new Error("Refresh response contained no access token.");
+                            }
 
-                if (!newAccessToken) {
-                    return Promise.reject(error);
+                            // Tokens ROTATE — the backend returns a new refreshToken.
+                            // Never fall back to the old one: if the new one is absent
+                            // the refresh endpoint has a bug, and reusing the old token
+                            // would produce an INVALID_REFRESH_TOKEN on the next expiry.
+                            const newRefreshToken: string | null =
+                                refreshResponse.data?.refreshToken ||
+                                refreshResponse.data?.data?.refreshToken ||
+                                null;
+
+                            /* -----------------------------------
+                               PERSIST NEW TOKENS
+                               IMPORTANT: Only token strings are
+                               written here — NOT the reduced `user`
+                               object from the refresh response.
+                               The full User in React/AuthContext
+                               (with permissions, memberships, etc.)
+                               is preserved unchanged.
+                            ----------------------------------- */
+                            setAuthToken(newAccessToken);
+
+                            try {
+                                const raw = localStorage.getItem("zyoris-auth");
+                                const parsed = raw ? JSON.parse(raw) : (parsedAuth || {});
+                                const updatedAuth: Record<string, unknown> = {
+                                    ...parsed,
+                                    token: newAccessToken,
+                                };
+                                if (newRefreshToken) {
+                                    updatedAuth.refreshToken = newRefreshToken;
+                                } else {
+                                    // New refreshToken absent — log and REMOVE old one so
+                                    // we don't accidentally reuse an invalidated token.
+                                    console.warn("[auth] Refresh response missing refreshToken — removing stale token from storage.");
+                                    delete updatedAuth.refreshToken;
+                                }
+                                localStorage.setItem("zyoris-auth", JSON.stringify(updatedAuth));
+                            } catch {}
+
+                            // Update cookie (SameSite=Lax, matches AuthContext)
+                            const TOKEN_COOKIE = "zyoris-token";
+                            document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+
+                            return newAccessToken;
+                        } finally {
+                            // Always clear the shared promise so the next expiry
+                            // cycle can create a new one.
+                            refreshPromise = null;
+                        }
+                    })();
                 }
 
-                const newRefreshToken =
-                    refreshResponse.data?.refreshToken ||
-                    refreshResponse.data?.data?.refreshToken ||
-                    refreshToken;
-
-                /* -----------------------------------
-                   UPDATE IN-MEMORY TOKEN
-                ----------------------------------- */
-                setAuthToken(newAccessToken);
-
-                /* -----------------------------------
-                   UPDATE LOCAL & SESSION STORAGE
-                ----------------------------------- */
-                try {
-                    const raw = localStorage.getItem("zyoris-auth");
-                    const parsed = raw ? JSON.parse(raw) : (parsedAuth || {});
-                    const updatedAuth = {
-                        ...parsed,
-                        token: newAccessToken,
-                        refreshToken: newRefreshToken,
-                    };
-
-                    localStorage.setItem("zyoris-auth", JSON.stringify(updatedAuth));
-                } catch {}
-
-                /* -----------------------------------
-                   UPDATE COOKIE (SameSite=Lax matches AuthContext)
-                ----------------------------------- */
-                const TOKEN_COOKIE = "zyoris-token";
-                document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+                // Await the shared promise — whether we just created it or
+                // found one already in flight.
+                const newAccessToken = await refreshPromise;
 
                 /* -----------------------------------
                    RETRY ORIGINAL REQUEST
@@ -560,12 +610,26 @@ api.interceptors.response.use(
                 return api(originalRequest);
             } catch (refreshError) {
                 /* -----------------------------------
-                   REFRESH FAILED -> LOGOUT USER
+                   REFRESH FAILED -> CLEAR AUTH STATE
                 ----------------------------------- */
+                // Ensure the shared promise is cleared even on failure.
+                refreshPromise = null;
+
                 setAuthToken(null);
-                localStorage.removeItem("zyoris-auth");
+                try {
+                    localStorage.removeItem("zyoris-auth");
+                    const keys = ["zyoris-token", "token", "accessToken", "zyoris-refresh-token", "refreshToken"];
+                    keys.forEach(k => {
+                        try { localStorage.removeItem(k); } catch {}
+                        try { sessionStorage.removeItem(k); } catch {}
+                    });
+                    // Clear the session hint so the banner is driven by ?reason= param only.
+                    try { sessionStorage.removeItem("zyoris-had-session"); } catch {}
+                } catch {}
+
                 const TOKEN_COOKIE = "zyoris-token";
                 document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+                document.cookie = `${TOKEN_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
 
                 const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
                 const isPublicAuthPage =
@@ -576,7 +640,7 @@ api.interceptors.response.use(
 
                 if (!isPublicAuthPage && !isRedirecting && typeof window !== "undefined") {
                     isRedirecting = true;
-                    window.location.href = "/login";
+                    window.location.href = "/login?reason=session_expired";
                 }
 
                 return Promise.reject(refreshError);
