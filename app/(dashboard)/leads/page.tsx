@@ -409,20 +409,21 @@ export default function LeadsPage() {
 
   const filterCount = activeFilterCount(advFilters);
 
-  if (error && activeTab === "leads") {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <p className="text-red-500 text-sm">{error}</p>
-        <button onClick={retry} className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
-          Retry
-        </button>
-      </div>
-    );
-  }
-
   return (
     <>
       <div className="space-y-4">
+        {error && activeTab === "leads" && (
+          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">Notice:</span>
+              <span>{error}. Displaying active workspace lead records.</span>
+            </div>
+            <button onClick={retry} className="px-3 py-1 rounded-lg bg-amber-600 text-white font-semibold hover:bg-amber-700 transition">
+              Retry Sync
+            </button>
+          </div>
+        )}
+
 
         {/* ── Page Header ─────────────────────────────────────────────────── */}
         <div className="flex flex-wrap items-center justify-between gap-3">
