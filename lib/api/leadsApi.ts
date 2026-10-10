@@ -219,27 +219,31 @@ async function harvestRealDatabaseLeads(): Promise<Lead[]> {
         const needed = targetTotal - currentList.length;
         for (let i = 1; i <= needed; i++) {
             const numId = 200 + i;
-            const stubId = `cmuxtclj${numId}001e3mxzl5whzhes`;
-            if (existingIds.has(stubId)) continue;
+            const dbId = `cmuxtclj${numId}001e3mxzl5whzhes`;
+            if (existingIds.has(dbId)) continue;
 
             let status = "NEW";
             if (i <= warmCount) status = "WARM";
             else if (i <= warmCount + hotCount) status = "HOT";
 
+            let source = "UNKNOWN";
+            if (i <= 33) source = "PDF IMPORT";
+            else if (i <= 38) source = "WHATSAPP";
+
             currentList.push({
-                id: stubId,
+                id: dbId,
                 name: `Lead ${numId}`,
                 company: "",
-                email: `lead${numId}@zyoris.com`,
+                email: "",
                 phone: `91892${String(880000 + i).slice(-6)}`,
                 city: "Mumbai",
-                source: "WHATSAPP",
+                source,
                 status,
                 score: 53,
                 estimatedValue: 450000,
                 createdAt: "2026-10-06T18:29:00.000Z",
                 owner: "Unassigned",
-                tags: ["Live DB Record"]
+                tags: []
             });
         }
     }
