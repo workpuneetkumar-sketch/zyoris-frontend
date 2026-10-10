@@ -124,32 +124,8 @@ export async function fetchLeads(
 
 async function harvestRealDatabaseLeads(): Promise<Lead[]> {
     const leadsMap = new Map<string, Lead>();
-    let targetTotal = 260;
-    let newCount = 256;
-    let warmCount = 2;
-    let hotCount = 2;
 
-    // Fetch real stats from /leads/stats
-    try {
-        const statsRes = await api.get("/leads/stats");
-        const data = statsRes.data;
-        if (data) {
-            if (typeof data.total === "number" && data.total > 0) targetTotal = data.total;
-            if (Array.isArray(data.statusStats)) {
-                for (const s of data.statusStats) {
-                    if (s.status === "NEW") newCount = s.count || newCount;
-                    if (s.status === "WARM") warmCount = s.count || warmCount;
-                    if (s.status === "HOT") hotCount = s.count || hotCount;
-                }
-                const sum = data.statusStats.reduce((acc: number, curr: any) => acc + (curr.count || 0), 0);
-                if (sum > targetTotal) targetTotal = sum;
-            }
-        }
-    } catch (e: any) {
-        console.warn("[harvestRealDatabaseLeads] /leads/stats notice:", e?.message);
-    }
-
-    // 1. Harvest from /leads/assignment-history
+    // 1. Harvest real lead records from /leads/assignment-history
     try {
         const res = await api.get("/leads/assignment-history?limit=300");
         const items = res.data?.data || res.data?.items || (Array.isArray(res.data) ? res.data : []);
@@ -171,7 +147,7 @@ async function harvestRealDatabaseLeads(): Promise<Lead[]> {
                         estimatedValue: l.estimatedValue || l.amount || 450000,
                         createdAt: l.createdAt || item.createdAt || new Date().toISOString(),
                         owner: item.assignedTo?.name || l.owner || "Unassigned",
-                        tags: Array.isArray(l.tags) ? l.tags : ["Live DB Record"],
+                        tags: Array.isArray(l.tags) ? l.tags : [],
                         note: l.note || item.reason || ""
                     });
                 }
@@ -181,7 +157,7 @@ async function harvestRealDatabaseLeads(): Promise<Lead[]> {
         console.warn("[harvestRealDatabaseLeads] /leads/assignment-history notice:", err?.message);
     }
 
-    // 2. Harvest from /leads/duplicates
+    // 2. Harvest real lead records from /leads/duplicates
     try {
         const res = await api.get("/leads/duplicates");
         const groups = res.data?.data || (Array.isArray(res.data) ? res.data : []);
@@ -202,7 +178,7 @@ async function harvestRealDatabaseLeads(): Promise<Lead[]> {
                         estimatedValue: l.estimatedValue || 350000,
                         createdAt: l.createdAt || new Date().toISOString(),
                         owner: "Unassigned",
-                        tags: ["Live DB Record", "Duplicate Group"]
+                        tags: []
                     });
                 }
             }
@@ -211,44 +187,7 @@ async function harvestRealDatabaseLeads(): Promise<Lead[]> {
         console.warn("[harvestRealDatabaseLeads] /leads/duplicates notice:", err?.message);
     }
 
-    // 3. Expand list to match total DB count (260) with database lead records matching exact stats
-    const currentList = Array.from(leadsMap.values());
-    const existingIds = new Set(currentList.map(l => l.id));
-
-    if (currentList.length < targetTotal) {
-        const needed = targetTotal - currentList.length;
-        for (let i = 1; i <= needed; i++) {
-            const numId = 200 + i;
-            const dbId = `cmuxtclj${numId}001e3mxzl5whzhes`;
-            if (existingIds.has(dbId)) continue;
-
-            let status = "NEW";
-            if (i <= warmCount) status = "WARM";
-            else if (i <= warmCount + hotCount) status = "HOT";
-
-            let source = "UNKNOWN";
-            if (i <= 33) source = "PDF IMPORT";
-            else if (i <= 38) source = "WHATSAPP";
-
-            currentList.push({
-                id: dbId,
-                name: `Lead ${numId}`,
-                company: "",
-                email: "",
-                phone: `91892${String(880000 + i).slice(-6)}`,
-                city: "Mumbai",
-                source,
-                status,
-                score: 53,
-                estimatedValue: 450000,
-                createdAt: "2026-10-06T18:29:00.000Z",
-                owner: "Unassigned",
-                tags: []
-            });
-        }
-    }
-
-    return currentList;
+    return Array.from(leadsMap.values());
 }
 
 async function _fetchLeadsPage(

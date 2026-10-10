@@ -306,27 +306,9 @@ export async function fetchAISummary(conversationId: string): Promise<AISummaryR
         const data = res.data?.data ?? res.data;
         const summary = data?.summary || data?.text || data?.result || (typeof data === "string" ? data : "");
         if (summary) return { summary };
+        throw new Error("No summary returned from backend.");
     } catch (err: any) {
-        if (process.env.NODE_ENV !== "production") {
-            console.warn("[fetchAISummary] Backend request notice:", err?.message);
-        }
-    }
-
-    // Dynamic AI summary generated directly from live conversation messages
-    try {
-        const msgs = await fetchConversationMessages(conversationId);
-        const validMsgs = msgs.filter(m => Boolean(m.text && m.text.trim()));
-        const inboundCount = validMsgs.filter(m => m.sender === "contact").length;
-        const outboundCount = validMsgs.filter(m => m.sender === "user").length;
-        const lastMsg = validMsgs[validMsgs.length - 1];
-
-        let summaryText = `Active WhatsApp thread with ${validMsgs.length} messages (${inboundCount} received from customer, ${outboundCount} sent by agent).`;
-        if (lastMsg) {
-            summaryText += ` Last activity: "${lastMsg.text.slice(0, 80)}${lastMsg.text.length > 80 ? "…" : ""}".`;
-        }
-        return { summary: summaryText };
-    } catch {
-        return { summary: "Active WhatsApp conversation connected via Meta Business API." };
+        throw new Error(parseApiError(err));
     }
 }
 
@@ -339,13 +321,7 @@ export async function fetchAISentiment(conversationId: string): Promise<AISentim
             score: data?.confidence ?? data?.score ?? 0.75,
         };
     } catch (err: any) {
-        if (process.env.NODE_ENV !== "production") {
-            console.warn("[fetchAISentiment] Backend request notice:", err?.message);
-        }
-        return {
-            sentiment: "Neutral",
-            score: 0.75,
-        };
+        throw new Error(parseApiError(err));
     }
 }
 
@@ -363,36 +339,10 @@ export async function fetchAISuggestions(conversationId: string): Promise<AISugg
         }
         const suggestions = raw.map((s: any) => (typeof s === "string" ? s : s?.text || s?.message || JSON.stringify(s))).filter(Boolean);
         if (suggestions.length > 0) return { suggestions };
+        throw new Error("No suggestions returned from backend.");
     } catch (err: any) {
-        if (process.env.NODE_ENV !== "production") {
-            console.warn("[fetchAISuggestions] Backend request notice:", err?.message);
-        }
+        throw new Error(parseApiError(err));
     }
-
-    // Dynamic AI suggestion pills synthesized from live message context
-    try {
-        const msgs = await fetchConversationMessages(conversationId);
-        const validMsgs = msgs.filter(m => Boolean(m.text && m.text.trim()));
-        const lastMsg = validMsgs[validMsgs.length - 1];
-
-        if (lastMsg && lastMsg.sender === "contact") {
-            return {
-                suggestions: [
-                    `Thank you for reaching out! How can I help you today?`,
-                    `I can share our complete product catalog and pricing details.`,
-                    `Would you like to schedule a quick 15-minute demo with our team?`
-                ]
-            };
-        }
-    } catch {}
-
-    return {
-        suggestions: [
-            "Thank you for contacting Zyoris! How can I assist you today?",
-            "I can share our product catalog and pricing details right away.",
-            "Would you like to schedule a quick 15-minute demo with our team?"
-        ]
-    };
 }
 
 
