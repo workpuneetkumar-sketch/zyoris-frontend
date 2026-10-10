@@ -50,6 +50,39 @@ function isLeadSoftDeleted(lead: Lead): boolean {
     return Boolean(lead.deleted) || getSoftDeletedLeadIds().includes(lead.id);
 }
 
+// ── Helper utilities for response unwrapping ─────────────────────────────
+
+function extractLeadsArray(d: any): Lead[] {
+    if (!d) return [];
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.data)) return d.data;
+    if (Array.isArray(d?.leads)) return d.leads;
+    if (Array.isArray(d?.data?.leads)) return d.data.leads;
+    if (Array.isArray(d?.data?.data)) return d.data.data;
+    if (Array.isArray(d?.result)) return d.result;
+    if (Array.isArray(d?.result?.leads)) return d.result.leads;
+    if (Array.isArray(d?.items)) return d.items;
+    if (Array.isArray(d?.data?.items)) return d.data.items;
+    if (Array.isArray(d?.payload)) return d.payload;
+    if (Array.isArray(d?.payload?.leads)) return d.payload.leads;
+    if (Array.isArray(d?.records)) return d.records;
+    if (Array.isArray(d?.data?.records)) return d.data.records;
+    return [];
+}
+
+function extractLeadsTotal(d: any, defaultCount: number): number {
+    if (!d) return defaultCount;
+    if (typeof d?.pagination?.total === "number") return d.pagination.total;
+    if (typeof d?.meta?.total === "number") return d.meta.total;
+    if (typeof d?.total === "number") return d.total;
+    if (typeof d?.data?.total === "number") return d.data.total;
+    if (typeof d?.data?.pagination?.total === "number") return d.data.pagination.total;
+    if (typeof d?.data?.meta?.total === "number") return d.data.meta.total;
+    if (typeof d?.count === "number") return d.count;
+    if (typeof d?.data?.count === "number") return d.data.count;
+    return defaultCount;
+}
+
 // ── GET paginated + filtered leads ─────────────────────────
 
 // ── Backend page-size cap (the API won't return more than this per request) ──
@@ -92,6 +125,7 @@ async function _fetchLeadsPage(
     const params = {
         page,
         limit,
+        pageSize: limit,
 
         ...(filters.status !== "All Status" && {
             status: filters.status,
@@ -118,40 +152,51 @@ async function _fetchLeadsPage(
         }),
     };
 
+    let responseData: any = null;
+
+    // Attempt 1: GET /leads/get-leads
     try {
-        const res = await api.get("/leads/get-leads", {
-            params,
-        });
-
-        const d = res.data;
-
-        let leads: Lead[] =
-            Array.isArray(d?.data)        ? d.data :
-            Array.isArray(d?.leads)       ? d.leads :
-            Array.isArray(d?.data?.leads) ? d.data.leads :
-            Array.isArray(d?.data?.data)  ? d.data.data :
-            Array.isArray(d)              ? d :
-            [];
-
-        const total: number =
-            typeof d?.pagination?.total === "number" ? d.pagination.total :
-            typeof d?.meta?.total        === "number" ? d.meta.total :
-            typeof d?.total              === "number" ? d.total :
-            typeof d?.data?.total        === "number" ? d.data.total :
-            leads.length;
-
-        leads = leads.filter((lead: Lead) => !isLeadSoftDeleted(lead));
-
-        const scoredLeads: Lead[] = leads.map((lead: Lead) => ({
-            ...lead,
-            score: typeof lead.score === "number" && lead.score > 0 ? lead.score : computeLeadScore(lead),
-        }));
-
-        return { leads: scoredLeads, total };
-    } catch (err: any) {
-        console.error("[fetchLeads] Backend /leads/get-leads error:", err?.response?.data || err?.message);
-        return { leads: [], total: 0 };
+        const res = await api.get("/leads/get-leads", { params });
+        responseData = res.data;
+    } catch (e1: any) {
+        console.warn("[fetchLeads] /leads/get-leads failed, trying /leads:", e1?.message);
     }
+
+    // Attempt 2: GET /leads (if get-leads returns no items or errors out)
+    if (!responseData || extractLeadsArray(responseData).length === 0) {
+        try {
+            const res = await api.get("/leads", { params });
+            if (extractLeadsArray(res.data).length > 0) {
+                responseData = res.data;
+            }
+        } catch (e2: any) {
+            console.warn("[fetchLeads] /leads failed:", e2?.message);
+        }
+    }
+
+    // Attempt 3: GET /leads/filter (if needed)
+    if (!responseData || extractLeadsArray(responseData).length === 0) {
+        try {
+            const res = await api.get("/leads/filter", { params });
+            if (extractLeadsArray(res.data).length > 0) {
+                responseData = res.data;
+            }
+        } catch (e3: any) {
+            console.warn("[fetchLeads] /leads/filter failed:", e3?.message);
+        }
+    }
+
+    let leads: Lead[] = extractLeadsArray(responseData);
+    const total: number = extractLeadsTotal(responseData, leads.length);
+
+    leads = leads.filter((lead: Lead) => !isLeadSoftDeleted(lead));
+
+    const scoredLeads: Lead[] = leads.map((lead: Lead) => ({
+        ...lead,
+        score: typeof lead.score === "number" && lead.score > 0 ? lead.score : computeLeadScore(lead),
+    }));
+
+    return { leads: scoredLeads, total };
 }
 
 
@@ -278,14 +323,31 @@ export async function fetchTeamMembers(): Promise<any> {
 export async function fetchLeadById(leadId: string): Promise<any> {
     console.log('[fetchLeadById] Fetching lead:', leadId);
     
+    let leadRaw: any = null;
+
     try {
         const res = await api.get(`/leads/get-lead/${leadId}`);
-        const lead = res.data?.data || res.data?.lead || res.data?.result || res.data;
-        
+        leadRaw = res.data?.data || res.data?.lead || res.data?.result || res.data;
+    } catch (e1: any) {
+        console.warn('[fetchLeadById] /leads/get-lead/:id failed, trying /leads/:id:', e1?.message);
+    }
+
+    if (!leadRaw || typeof leadRaw !== "object" || Array.isArray(leadRaw)) {
+        try {
+            const res = await api.get(`/leads/${leadId}`);
+            leadRaw = res.data?.data || res.data?.lead || res.data?.result || res.data;
+        } catch (e2: any) {
+            console.warn('[fetchLeadById] /leads/:id failed:', e2?.message);
+        }
+    }
+
+    const lead = leadRaw;
+    
+    try {
         console.log('[fetchLeadById] Raw API response:', JSON.stringify(lead, null, 2));
         
         // Check if lead exists
-        if (!lead || typeof lead !== "object") {
+        if (!lead || typeof lead !== "object" || Array.isArray(lead)) {
             console.error('[fetchLeadById] No lead data returned');
             throw new Error('Lead not found');
         }
