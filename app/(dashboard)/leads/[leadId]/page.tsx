@@ -297,7 +297,7 @@ export default function LeadDetailPage() {
     }
 
     // ── Error ─────────────────────────────────────────────────────────────────
-    if (error) {
+    if (error && !lead) {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
                 <AlertCircle size={36} className="text-red-400" />
