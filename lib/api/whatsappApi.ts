@@ -138,6 +138,13 @@ export function extractWhatsAppMessageText(raw: any): string {
     if (raw.type === "sticker" || raw.sticker) return "🎨 Sticker";
     if (raw.type === "location" || raw.location) return "📍 Location Pin";
 
+    // Fallback for inbound WhatsApp messages received without explicit text body in DB
+    const dir = String(raw.direction || raw.sender || "").toUpperCase();
+    const isInbound = dir === "INBOUND" || dir === "INCOMING" || dir === "CONTACT" || dir === "CUSTOMER" || raw.fromMe === false;
+    if (isInbound && (raw.id || raw.metaId)) {
+        return "💬 Incoming WhatsApp Message";
+    }
+
     return "";
 }
 

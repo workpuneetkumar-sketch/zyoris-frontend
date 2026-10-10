@@ -60,9 +60,10 @@ export function useWhatsApp() {
                     }
                 }
 
+                const isCurrentlySelected = newConv.id === selectedConversationIdRef.current;
                 return {
                     ...newConv,
-                    // Always keep server-authoritative fields, but fallback to local for optimistic ones
+                    unreadCount: isCurrentlySelected ? 0 : (newConv.unreadCount ?? existing.unreadCount ?? 0),
                     pinned:   newConv.pinned   ?? existing.pinned   ?? false,
                     archived: newConv.archived ?? existing.archived ?? false,
                     labels:   newConv.labels   ?? existing.labels   ?? [],
