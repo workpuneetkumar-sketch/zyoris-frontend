@@ -183,10 +183,13 @@ export function useWhatsApp() {
         return () => clearInterval(interval);
     }, [silentRefreshConversations, silentRefreshMessages]);
 
-    // Load messages when conversation is first selected
+    // Load messages & reset unread count when conversation is selected
     useEffect(() => {
         if (selectedConversationId) {
             silentRefreshMessages(selectedConversationId);
+            setConversations(prev =>
+                prev.map(c => c.id === selectedConversationId ? { ...c, unreadCount: 0 } : c)
+            );
         }
     }, [selectedConversationId, silentRefreshMessages]);
 

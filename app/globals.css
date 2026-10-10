@@ -1083,7 +1083,8 @@ a {
 }
 
 .zii-fab--whatsapp {
-  bottom: 8rem;
+  bottom: 5.5rem;
+  right: 1.25rem;
 }
 
 /* Scrollbar styling */

@@ -111,15 +111,63 @@ function parseApiError(error: any): string {
     return parseApiErrorDetail(error).message;
 }
 
+export function extractWhatsAppMessageText(raw: any): string {
+    if (!raw) return "";
+    if (typeof raw === "string") return raw;
+    if (typeof raw.text === "string" && raw.text.trim()) return raw.text;
+    if (raw.text && typeof raw.text.body === "string" && raw.text.body.trim()) return raw.text.body;
+    if (typeof raw.body === "string" && raw.body.trim()) return raw.body;
+    if (typeof raw.message === "string" && raw.message.trim()) return raw.message;
+    if (raw.message && typeof raw.message.body === "string" && raw.message.body.trim()) return raw.message.body;
+    if (raw.message && typeof raw.message.text === "string" && raw.message.text.trim()) return raw.message.text;
+    if (typeof raw.content === "string" && raw.content.trim()) return raw.content;
+    if (typeof raw.messageText === "string" && raw.messageText.trim()) return raw.messageText;
+    if (typeof raw.caption === "string" && raw.caption.trim()) return raw.caption;
+    if (raw.payload) {
+        const payloadText = extractWhatsAppMessageText(raw.payload);
+        if (payloadText) return payloadText;
+    }
+    if (raw.data) {
+        const dataText = extractWhatsAppMessageText(raw.data);
+        if (dataText) return dataText;
+    }
+    if (raw.type === "image" || raw.image || raw.mediaType === "image") return raw.caption ? `📷 ${raw.caption}` : "📷 Photo";
+    if (raw.type === "document" || raw.document || raw.mediaType === "document") return raw.caption ? `📄 ${raw.caption}` : "📄 Document";
+    if (raw.type === "audio" || raw.audio || raw.mediaType === "audio") return "🎵 Voice Message";
+    if (raw.type === "video" || raw.video || raw.mediaType === "video") return raw.caption ? `🎥 ${raw.caption}` : "🎥 Video";
+    if (raw.type === "sticker" || raw.sticker) return "🎨 Sticker";
+    if (raw.type === "location" || raw.location) return "📍 Location Pin";
+
+    return "";
+}
+
+export function isWhatsAppUserSender(raw: any): boolean {
+    if (!raw) return true;
+    if (raw.fromMe === true || raw.fromMe === "true" || raw.fromMe === 1) return true;
+    if (raw.isOutgoing === true || raw.isOutgoing === "true" || raw.isOutgoing === 1) return true;
+    if (raw.outgoing === true || raw.outgoing === "true" || raw.outgoing === 1) return true;
+
+    const dirStr = String(raw.direction || "").toUpperCase();
+    if (["OUTBOUND", "OUTGOING", "USER", "ME", "SENT", "AGENT", "BUSINESS", "SYSTEM"].includes(dirStr)) return true;
+
+    const senderStr = String(raw.sender || raw.from || raw.role || raw.author || "").toUpperCase();
+    if (["USER", "AGENT", "BUSINESS", "ME", "SELF", "SYSTEM", "ADMIN", "OUTBOUND", "OUTGOING"].includes(senderStr)) return true;
+
+    if (dirStr === "INBOUND" || dirStr === "INCOMING" || dirStr === "CONTACT" || dirStr === "CUSTOMER") return false;
+    if (senderStr === "CONTACT" || senderStr === "CUSTOMER" || senderStr === "CLIENT" || senderStr === "INBOUND") return false;
+
+    return false;
+}
+
 export function normalizeWhatsAppMessage(raw: any): WhatsAppMessage {
     if (!raw) return { id: `m_${Date.now()}`, text: "", sender: "contact", timestamp: new Date().toISOString() };
-    const dir = String(raw.direction || raw.sender || raw.type || "").toUpperCase();
-    const isUser = dir === "OUTBOUND" || dir === "USER" || dir === "ME" || dir === "SENT" || raw.fromMe === true || raw.isOutgoing === true;
+    const text = extractWhatsAppMessageText(raw);
+    const isUser = isWhatsAppUserSender(raw);
     return {
-        id: raw.id || raw.metaId || `m_${Date.now()}`,
-        text: raw.text || raw.message || "",
+        id: String(raw.id || raw.metaId || raw._id || `m_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`),
+        text: text,
         sender: isUser ? "user" : "contact",
-        timestamp: raw.timestamp || raw.createdAt || new Date().toISOString(),
+        timestamp: raw.timestamp || raw.createdAt || raw.time || new Date().toISOString(),
     };
 }
 

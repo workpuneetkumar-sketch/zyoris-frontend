@@ -262,9 +262,27 @@ export function WhatsAppUI({
     // non-null waStatus = real response from backend → use connected field
     const isConnected: boolean | null = waStatus == null ? null : (waStatus.connected ?? true);
 
+function formatDateDivider(isoStr: string) {
+    if (!isoStr) return "";
+    try {
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return "";
+        const now = new Date();
+        const isToday = d.toDateString() === now.toDateString();
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const isYesterday = d.toDateString() === yesterday.toDateString();
+
+        if (isToday) return "Today";
+        if (isYesterday) return "Yesterday";
+        return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    } catch { return ""; }
+}
+
     const renderConversationCard = (conv: WhatsAppConversation) => {
         const lastMsg = conv.messages[conv.messages.length - 1];
         const isSelected = conv.id === selectedConversationId;
+        const lastMsgText = lastMsg ? (lastMsg.sender === "user" ? `You: ${lastMsg.text}` : lastMsg.text) : "No messages";
         return (
             <div key={conv.id}
                 onClick={() => { setSelectedConversationId(conv.id); setShowMobileChat(true); }}
@@ -281,8 +299,8 @@ export function WhatsAppUI({
                     </div>
                 </div>
                 <div className="flex justify-between items-center gap-2 mb-1.5">
-                    <p className="text-xs text-gray-500 truncate flex-1">{lastMsg ? lastMsg.text : "No messages"}</p>
-                    {conv.unreadCount > 0 && <span className="shrink-0 bg-green-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">{conv.unreadCount}</span>}
+                    <p className="text-xs text-gray-500 truncate flex-1">{lastMsgText}</p>
+                    {conv.unreadCount > 0 && <span className="shrink-0 bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shadow-xs">{conv.unreadCount}</span>}
                 </div>
                 {conv.labels && conv.labels.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5">
@@ -463,18 +481,59 @@ export function WhatsAppUI({
                             )}
 
                             {/* Messages Area */}
-                            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                                {selectedConversation.messages.map(msg => {
-                                    const isUser = msg.sender==="user";
-                                    return (
-                                        <div key={msg.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
-                                            <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 shadow-sm ${isUser ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm" : "bg-white border border-gray-100 text-gray-800 rounded-bl-sm"}`}>
-                                                <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
-                                                <p className={`text-[11px] mt-1 text-right font-medium ${isUser ? "text-blue-100/80" : "text-gray-400"}`}>{formatTime(msg.timestamp)}</p>
+                            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
+                                {(() => {
+                                    const validMessages = selectedConversation.messages.filter(m => Boolean(m.text && m.text.trim()));
+                                    if (validMessages.length === 0) {
+                                        return (
+                                            <div className="flex flex-col items-center justify-center h-full p-8 text-center text-gray-400">
+                                                <MessageCircle size={36} className="mb-2 opacity-30 text-blue-500" />
+                                                <p className="text-xs font-semibold text-gray-500">No message content in this chat</p>
+                                                <p className="text-[11px] text-gray-400 mt-1">Send a message below to start communicating.</p>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    }
+                                    return validMessages.map((msg, idx) => {
+                                        const isUser = msg.sender === "user";
+                                        const msgDateStr = formatDateDivider(msg.timestamp);
+                                        const prevMsg = idx > 0 ? validMessages[idx - 1] : null;
+                                        const prevDateStr = prevMsg ? formatDateDivider(prevMsg.timestamp) : "";
+                                        const showDateSeparator = msgDateStr && msgDateStr !== prevDateStr;
+
+                                        return (
+                                            <div key={msg.id} className="space-y-2">
+                                                {showDateSeparator && (
+                                                    <div className="flex justify-center my-3">
+                                                        <span className="px-3 py-1 bg-gray-200/90 text-gray-600 text-[11px] font-bold rounded-full shadow-2xs">
+                                                            {msgDateStr}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className={`flex ${isUser ? "justify-end" : "justify-start"} group`}>
+                                                    <div className={`max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 shadow-sm transition-all duration-200 ${
+                                                        isUser
+                                                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-tr-xs"
+                                                            : "bg-white border border-gray-200 text-gray-900 rounded-tl-xs border-l-4 border-l-emerald-500"
+                                                    }`}>
+                                                        {!isUser && (
+                                                            <div className="flex items-center gap-1.5 mb-1.5">
+                                                                <span className="text-[11px] font-bold text-emerald-700">{selectedConversation.contactName}</span>
+                                                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">Customer</span>
+                                                            </div>
+                                                        )}
+                                                        <p className="text-[14px] leading-relaxed whitespace-pre-wrap break-words">{msg.text}</p>
+                                                        <div className={`flex items-center justify-end gap-1 text-[11px] mt-1.5 font-medium ${isUser ? "text-blue-100/90" : "text-gray-400"}`}>
+                                                            <span>{formatTime(msg.timestamp)}</span>
+                                                            {isUser && (
+                                                                <span className="text-blue-200 font-bold ml-1 text-[12px]" title="Sent">✓✓</span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    });
+                                })()}
                                 <div ref={messagesEndRef}/>
                             </div>
 
