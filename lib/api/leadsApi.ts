@@ -50,272 +50,6 @@ function isLeadSoftDeleted(lead: Lead): boolean {
     return Boolean(lead.deleted) || getSoftDeletedLeadIds().includes(lead.id);
 }
 
-// ── Fallback Dataset (15 leads for demo/offline/error resiliency & pagination) ──
-export const FALLBACK_LEADS: Lead[] = [
-    {
-        id: "cmm616hdx004ioxsh0lz04hqe",
-        name: "Rahul Sharma",
-        company: "Acme Software Technologies",
-        email: "rahul.sharma@acme.com",
-        phone: "+9198928814237",
-        city: "Mumbai",
-        state: "Maharashtra",
-        country: "India",
-        source: "WHATSAPP",
-        status: "NEW",
-        score: 85,
-        estimatedValue: 450000,
-        createdAt: new Date().toISOString(),
-        owner: "Sales Rep",
-        tags: ["WhatsApp AI Detected", "High Intent", "Enterprise"],
-        industry: "Information Technology",
-        companySize: "100-500 employees",
-        jobTitle: "VP of Engineering",
-        note: "Interested in WhatsApp integration and automated CRM sync."
-    },
-    {
-        id: "lead_demo_2",
-        name: "Priya Patel",
-        company: "Nexus Enterprises Solutions",
-        email: "priya.p@nexus.io",
-        phone: "+919986162874",
-        city: "Bengaluru",
-        state: "Karnataka",
-        country: "India",
-        source: "WEBSITE",
-        status: "WARM",
-        score: 72,
-        estimatedValue: 600000,
-        createdAt: new Date(Date.now() - 86400000).toISOString(),
-        owner: "Sales Rep",
-        tags: ["Enterprise", "Inbound"],
-        industry: "Financial Services",
-        companySize: "50-200 employees",
-        jobTitle: "Director of Product"
-    },
-    {
-        id: "lead_demo_3",
-        name: "Vikram Malhotra",
-        company: "Global Logistics Corp",
-        email: "v.malhotra@globallogistics.com",
-        phone: "+919876543210",
-        city: "Delhi",
-        state: "Delhi",
-        country: "India",
-        source: "REFERRAL",
-        status: "HOT",
-        score: 91,
-        estimatedValue: 1200000,
-        createdAt: new Date(Date.now() - 172800000).toISOString(),
-        owner: "Account Executive",
-        tags: ["Hot Lead", "High Value"]
-    },
-    {
-        id: "lead_demo_4",
-        name: "Ananya Deshmukh",
-        company: "Zenith Cloud Solutions",
-        email: "ananya@zenithcloud.com",
-        phone: "+919823456789",
-        city: "Pune",
-        state: "Maharashtra",
-        country: "India",
-        source: "LINKEDIN",
-        status: "QUALIFIED",
-        score: 88,
-        estimatedValue: 850000,
-        createdAt: new Date(Date.now() - 259200000).toISOString(),
-        owner: "Priya Patel",
-        tags: ["Cloud Infra", "Decision Maker"]
-    },
-    {
-        id: "lead_demo_5",
-        name: "Karan Verma",
-        company: "Apex Healthcare Systems",
-        email: "karan.verma@apexhealth.org",
-        phone: "+919711223344",
-        city: "Hyderabad",
-        state: "Telangana",
-        country: "India",
-        source: "WHATSAPP",
-        status: "CONTACTED",
-        score: 65,
-        estimatedValue: 350000,
-        createdAt: new Date(Date.now() - 345600000).toISOString(),
-        owner: "Sales Rep",
-        tags: ["Healthcare", "WhatsApp AI"]
-    },
-    {
-        id: "lead_demo_6",
-        name: "Siddharth Rao",
-        company: "Vanguard FinTech Ltd",
-        email: "s.rao@vanguardfin.in",
-        phone: "+919888776655",
-        city: "Bengaluru",
-        state: "Karnataka",
-        country: "India",
-        source: "DIRECT",
-        status: "PROPOSAL",
-        score: 94,
-        estimatedValue: 1500000,
-        createdAt: new Date(Date.now() - 432000000).toISOString(),
-        owner: "Rahul Sharma",
-        tags: ["FinTech", "Proposal Sent"]
-    },
-    {
-        id: "lead_demo_7",
-        name: "Meera Nair",
-        company: "Kochi Innovations Lab",
-        email: "meera@kochinnovations.com",
-        phone: "+919447012345",
-        city: "Kochi",
-        state: "Kerala",
-        country: "India",
-        source: "WEBSITE",
-        status: "NEW",
-        score: 55,
-        estimatedValue: 200000,
-        createdAt: new Date(Date.now() - 518400000).toISOString(),
-        owner: "Unassigned",
-        tags: ["Inbound", "Startup"]
-    },
-    {
-        id: "lead_demo_8",
-        name: "Rohan Kapoor",
-        company: "Titanium Cyber Security",
-        email: "r.kapoor@titaniumsec.io",
-        phone: "+919910987654",
-        city: "Gurugram",
-        state: "Haryana",
-        country: "India",
-        source: "REFERRAL",
-        status: "NEGOTIATION",
-        score: 92,
-        estimatedValue: 2100000,
-        createdAt: new Date(Date.now() - 604800000).toISOString(),
-        owner: "Account Executive",
-        tags: ["Cybersecurity", "Urgent"]
-    },
-    {
-        id: "lead_demo_9",
-        name: "Neha Agarwal",
-        company: "Bright Future EdTech",
-        email: "neha@brightfuture.edu",
-        phone: "+919833445566",
-        city: "Noida",
-        state: "Uttar Pradesh",
-        country: "India",
-        source: "COLD_CALL",
-        status: "WARM",
-        score: 70,
-        estimatedValue: 400000,
-        createdAt: new Date(Date.now() - 691200000).toISOString(),
-        owner: "Sales Rep",
-        tags: ["EdTech", "Mid-Market"]
-    },
-    {
-        id: "lead_demo_10",
-        name: "Amitabh Sen",
-        company: "Eastern Robotics & Automation",
-        email: "asen@easternrobotics.com",
-        phone: "+919831098765",
-        city: "Kolkata",
-        state: "West Bengal",
-        country: "India",
-        source: "LINKEDIN",
-        status: "CLOSED",
-        score: 98,
-        estimatedValue: 3000000,
-        createdAt: new Date(Date.now() - 777600000).toISOString(),
-        owner: "Priya Patel",
-        tags: ["Manufacturing", "Closed Won"]
-    },
-    {
-        id: "lead_demo_11",
-        name: "Deepak Joshi",
-        company: "Himalaya Renewable Energy",
-        email: "d.joshi@himalayaenergy.com",
-        phone: "+919412011223",
-        city: "Dehradun",
-        state: "Uttarakhand",
-        country: "India",
-        source: "WEBSITE",
-        status: "NEW",
-        score: 60,
-        estimatedValue: 500000,
-        createdAt: new Date(Date.now() - 864000000).toISOString(),
-        owner: "Unassigned",
-        tags: ["CleanTech", "Green Energy"]
-    },
-    {
-        id: "lead_demo_12",
-        name: "Shalini Menon",
-        company: "Apex Retail Solutions",
-        email: "shalini@apexretail.in",
-        phone: "+919845099887",
-        city: "Chennai",
-        state: "Tamil Nadu",
-        country: "India",
-        source: "WHATSAPP",
-        status: "HOT",
-        score: 89,
-        estimatedValue: 950000,
-        createdAt: new Date(Date.now() - 950400000).toISOString(),
-        owner: "Sales Rep",
-        tags: ["Retail", "WhatsApp AI", "POS Integration"]
-    },
-    {
-        id: "lead_demo_13",
-        name: "Gaurav Mehta",
-        company: "Starlight Digital Marketing",
-        email: "gaurav@starlightdigital.com",
-        phone: "+919727011990",
-        city: "Ahmedabad",
-        state: "Gujarat",
-        country: "India",
-        source: "DIRECT",
-        status: "QUALIFIED",
-        score: 78,
-        estimatedValue: 320000,
-        createdAt: new Date(Date.now() - 1036800000).toISOString(),
-        owner: "Rahul Sharma",
-        tags: ["Agency", "Marketing"]
-    },
-    {
-        id: "lead_demo_14",
-        name: "Tarun Banerjee",
-        company: "Velocity Fleet Management",
-        email: "t.banerjee@velocityfleet.io",
-        phone: "+919830055443",
-        city: "Kolkata",
-        state: "West Bengal",
-        country: "India",
-        source: "LINKEDIN",
-        status: "CONTACTED",
-        score: 68,
-        estimatedValue: 700000,
-        createdAt: new Date(Date.now() - 1123200000).toISOString(),
-        owner: "Sales Rep",
-        tags: ["Logistics", "SaaS"]
-    },
-    {
-        id: "lead_demo_15",
-        name: "Kavita Reddy",
-        company: "BioGen Pharma Tech",
-        email: "kavita.r@biogenpharma.com",
-        phone: "+919849012345",
-        city: "Hyderabad",
-        state: "Telangana",
-        country: "India",
-        source: "REFERRAL",
-        status: "WARM",
-        score: 82,
-        estimatedValue: 1100000,
-        createdAt: new Date(Date.now() - 1209600000).toISOString(),
-        owner: "Priya Patel",
-        tags: ["Pharma", "High Value"]
-    }
-];
-
 // ── GET paginated + filtered leads ─────────────────────────
 
 // ── Backend page-size cap (the API won't return more than this per request) ──
@@ -396,6 +130,7 @@ async function _fetchLeadsPage(
             Array.isArray(d?.leads)       ? d.leads :
             Array.isArray(d?.data?.leads) ? d.data.leads :
             Array.isArray(d?.data?.data)  ? d.data.data :
+            Array.isArray(d)              ? d :
             [];
 
         const total: number =
@@ -414,28 +149,8 @@ async function _fetchLeadsPage(
 
         return { leads: scoredLeads, total };
     } catch (err: any) {
-        console.warn("[fetchLeads] Backend /leads/get-leads returned error, applying paginated fallback dataset:", err?.message);
-        let filtered = FALLBACK_LEADS.filter(l => !isLeadSoftDeleted(l));
-
-        if (filters.status && filters.status !== "All Status") {
-            filtered = filtered.filter(l => (l.status ?? "").toUpperCase() === filters.status.toUpperCase());
-        }
-        if (filters.source && filters.source !== "All Sources") {
-            filtered = filtered.filter(l => (l.source ?? "").toUpperCase() === filters.source.toUpperCase());
-        }
-        if (filters.search) {
-            const q = filters.search.toLowerCase();
-            filtered = filtered.filter(l =>
-                l.name?.toLowerCase().includes(q) ||
-                l.company?.toLowerCase().includes(q) ||
-                l.email?.toLowerCase().includes(q)
-            );
-        }
-
-        const startIndex = (page - 1) * limit;
-        const sliced = filtered.slice(startIndex, startIndex + limit);
-
-        return { leads: sliced, total: filtered.length };
+        console.error("[fetchLeads] Backend /leads/get-leads error:", err?.response?.data || err?.message);
+        return { leads: [], total: 0 };
     }
 }
 
@@ -565,12 +280,12 @@ export async function fetchLeadById(leadId: string): Promise<any> {
     
     try {
         const res = await api.get(`/leads/get-lead/${leadId}`);
-        const lead = res.data;
+        const lead = res.data?.data || res.data?.lead || res.data?.result || res.data;
         
         console.log('[fetchLeadById] Raw API response:', JSON.stringify(lead, null, 2));
         
         // Check if lead exists
-        if (!lead) {
+        if (!lead || typeof lead !== "object") {
             console.error('[fetchLeadById] No lead data returned');
             throw new Error('Lead not found');
         }
@@ -626,34 +341,8 @@ export async function fetchLeadById(leadId: string): Promise<any> {
         return enrichedLead;
         
     } catch (error: any) {
-        console.warn('[fetchLeadById] Backend endpoint error, providing fallback demo lead object:', leadId, error?.message);
-        
-        const matched = FALLBACK_LEADS.find(l => l.id === leadId);
-        if (matched) {
-            return matched;
-        }
-
-        return {
-            id: leadId,
-            name: "Rahul Sharma",
-            company: "Acme Software Technologies",
-            email: "rahul.sharma@acme.com",
-            phone: "+9198928814237",
-            city: "Mumbai",
-            state: "Maharashtra",
-            country: "India",
-            source: "WHATSAPP",
-            status: "NEW",
-            score: 85,
-            estimatedValue: 450000,
-            createdAt: new Date().toISOString(),
-            owner: "Sales Rep",
-            tags: ["WhatsApp AI Detected", "High Intent", "Enterprise"],
-            industry: "Information Technology",
-            companySize: "100-500 employees",
-            jobTitle: "VP of Engineering",
-            note: "Interested in WhatsApp integration and automated CRM sync."
-        };
+        console.error('[fetchLeadById] Error:', error.response?.data || error.message);
+        throw error;
     }
 }
 
