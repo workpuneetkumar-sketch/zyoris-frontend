@@ -42,8 +42,10 @@ import { toast } from "react-toastify";
 import { AiExtractionCard } from "@/components/ai/AiExtractionCard";
 import { AiBadge } from "@/components/ai/AiBadge";
 import { CommunicationIntelligenceWidget } from "@/components/ai/CommunicationIntelligenceWidget";
+import { LeadAISummaryCard } from "@/components/leads/LeadAISummaryCard";
 import { LeadIntelligencePanel } from "@/components/leads/LeadIntelligencePanel";
 import { LeadApiActionsToolbar } from "@/components/leads/LeadApiActionsToolbar";
+
 
 // Helper to format date safely
 function formatDate(dateString: string | undefined) {
@@ -698,8 +700,12 @@ export default function LeadDetailPage() {
                 <AiExtractionCard data={extractionData} />
             )}
 
+            {/* AI CRM Lead Summary & Next Action Card */}
+            <LeadAISummaryCard leadId={leadId} />
+
             {/* AI Communication Intelligence Widget */}
             <CommunicationIntelligenceWidget leadId={leadId} />
+
 
             {/* Lead Intelligence Panel */}
             <LeadIntelligencePanel lead={lead} />

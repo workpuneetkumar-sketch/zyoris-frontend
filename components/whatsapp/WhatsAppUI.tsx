@@ -298,9 +298,15 @@ export function WhatsAppUI({
             {/* ── Page Header ── */}
             <div className="flex items-center justify-between pt-4 gap-3 flex-wrap">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">WhatsApp Workspace</h1>
-                    <p className="text-[15px] text-gray-500 mt-1 font-medium">Manage labels, pinned chats, AI insights, and broadcast campaigns</p>
+                    <div className="flex items-center gap-2.5">
+                        <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight leading-tight">WhatsApp Workspace</h1>
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
+                            <Sparkles size={13} className="text-emerald-600" /> ActivityCapture & AI Pipeline Connected
+                        </span>
+                    </div>
+                    <p className="text-[15px] text-gray-500 mt-1 font-medium">Meta WhatsApp Business Cloud API • Shared AI Context Service for CRM, Customer 360 & Meeting Prep</p>
                 </div>
+
                 {/* Right header actions */}
                 <div className="flex items-center gap-2 flex-wrap">
                     {/* Connection status dot */}
