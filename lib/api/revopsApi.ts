@@ -14,7 +14,7 @@
  * the existing POST /api/approvals endpoint — no new approval logic.
  */
 
-import api from "@/lib/api/api";
+import api from "./api.ts";
 import type {
   RevOpsInsight,
   RevOpsInsightsResponse,
@@ -299,9 +299,71 @@ export async function sendRevOpsActionToApproval(
   }
 }
 
+// ─── Human-Readable Action Label Mapping ──────────────────────────────────────
+
+export const REVOPS_ACTION_LABELS: Record<string, string> = {
+  CAMPAIGN_TRIGGER: "Campaign Automation",
+  WORKFLOW_ACTIVATION: "Workflow Activation",
+  PROCESS_GATE: "Process Validation Gate",
+  DISCOUNT_APPROVAL: "Discount Approval",
+  ASSIGN_LEAD: "Lead Assignment",
+  ASSIGN_USER: "User Assignment",
+  ROUND_ROBIN_ASSIGN: "Round Robin Assignment",
+  AI_RECOMMENDATION_ASSIGN: "AI Strategy Assignment",
+  SEND_EMAIL: "Email Notification",
+  SEND_NOTIFICATION: "System Notification",
+  NOTIFY_MANAGER: "Manager Notification",
+  SEND_REMINDER: "Automated Reminder",
+  PIPELINE_UPDATE: "Pipeline Update",
+  CREATE_TASK: "Task Creation",
+  CREATE_PROJECT: "Project Initialization",
+  CONDITIONAL_UPDATE: "Conditional Update",
+  DELAY: "Scheduled Delay",
+  PROPOSED_ACTION: "Recommended Action",
+};
+
+/**
+ * Maps internal/API action codes (e.g. CAMPAIGN_TRIGGER, WORKFLOW_ACTIVATION)
+ * to clean, human-readable business labels. Handles unknown or null codes gracefully.
+ */
+export function formatActionType(type?: string | null): string {
+  if (!type || typeof type !== "string" || !type.trim()) {
+    return "Recommended Action";
+  }
+
+  const normalized = type.trim();
+  const upper = normalized.toUpperCase();
+
+  if (REVOPS_ACTION_LABELS[upper]) {
+    return REVOPS_ACTION_LABELS[upper];
+  }
+
+  // Format unmapped snake_case, kebab-case, or camelCase identifiers into Title Case
+  const words = normalized
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .split(/\s+/);
+
+  if (words.length > 0 && words[0].length > 0) {
+    return words
+      .map((w) => {
+        const u = w.toUpperCase();
+        if (["AI", "CRM", "SaaS", "ARR", "MRR", "API", "UI", "ID", "HR"].includes(u)) {
+          return u;
+        }
+        return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+      })
+      .join(" ");
+  }
+
+  return "Recommended Action";
+}
+
 // Re-export types
 export type {
   RevOpsInsight,
   RevOpsInsightsResponse,
   ProposedAction,
 } from "@/lib/types/agent-results";
+

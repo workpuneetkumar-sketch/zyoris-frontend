@@ -9,6 +9,7 @@ import {
   AlertCircle,
   ArrowRight,
   Info,
+  CheckCircle2,
 } from "lucide-react";
 import {
   TriggerType,
@@ -21,6 +22,7 @@ import {
   getConfigFields,
   getValidActionsForTrigger,
   validateConfig,
+  getHumanReadableConfigSummary,
   ConfigField,
 } from "@/lib/api/automationApi";
 
@@ -273,39 +275,62 @@ export default function CreateRuleModal({
             </div>
           )}
 
-          {/* Payload Preview */}
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-gray-500">Payload Preview</p>
-              <span className="text-xs text-gray-400">Will be sent to API</span>
+          {/* Configuration Summary */}
+          <div className="bg-slate-50/80 rounded-xl p-4 border border-slate-200/80 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-indigo-600" />
+                <span className="text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Configuration Summary
+                </span>
+              </div>
+              <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full border ${
+                formData.name.trim() 
+                  ? "text-indigo-700 bg-indigo-50 border-indigo-200/60" 
+                  : "text-amber-700 bg-amber-50 border-amber-200/60"
+              }`}>
+                {formData.name.trim() ? "Ready to create" : "Name required"}
+              </span>
             </div>
-            <pre className="text-xs font-mono bg-white p-3 rounded-lg border border-gray-100 overflow-x-auto">
-              {JSON.stringify(
-                {
-                  name: formData.name || "<rule name>",
-                  trigger: formData.trigger,
-                  action: formData.action,
-                  config: formData.config,
-                },
-                null,
-                2
-              )}
-            </pre>
-          </div>
 
-          {/* Flow Preview */}
-          <div className="bg-gray-50 rounded-xl p-4 border border-gray-200">
-            <p className="text-xs font-medium text-gray-500 mb-2">Flow Preview</p>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-sm font-medium text-gray-700 border border-gray-200">
-                <span>{getTriggerIcon(formData.trigger)}</span>
-                {getTriggerLabel(formData.trigger)}
+            {/* Rule Identity & Flow */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div className="p-3 bg-white rounded-lg border border-gray-200/60 shadow-2xs">
+                <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1">
+                  Rule Name
+                </span>
+                <span className="font-semibold text-gray-800 break-words block">
+                  {formData.name.trim() || <span className="text-gray-400 italic font-normal">Not named yet</span>}
+                </span>
+              </div>
+
+              <div className="p-3 bg-white rounded-lg border border-gray-200/60 shadow-2xs">
+                <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1">
+                  Automation Flow
+                </span>
+                <div className="flex items-center gap-1.5 font-semibold text-gray-800">
+                  <span className="truncate">{getTriggerIcon(formData.trigger)} {getTriggerLabel(formData.trigger)}</span>
+                  <ArrowRight className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+                  <span className="truncate text-indigo-600">{getActionIcon(formData.action)} {getActionLabel(formData.action)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Details */}
+            <div className="p-3 bg-white rounded-lg border border-gray-200/60 shadow-2xs text-xs space-y-1.5">
+              <span className="text-gray-400 block text-[10px] uppercase font-bold tracking-wider mb-1">
+                Action Parameters
               </span>
-              <ArrowRight className="w-4 h-4 text-gray-400" />
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white rounded-lg text-sm font-medium text-gray-700 border border-gray-200">
-                <span>{getActionIcon(formData.action)}</span>
-                {getActionLabel(formData.action)}
-              </span>
+              {getHumanReadableConfigSummary(formData.action, formData.config).map((item, idx) => (
+                <div key={idx} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 py-0.5">
+                  <span className="text-gray-500 font-medium">{item.label}</span>
+                  <span className={`font-semibold sm:text-right break-words ${
+                    item.value === "Not configured yet" ? "text-gray-400 italic font-normal" : "text-gray-800"
+                  }`}>
+                    {item.value}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 

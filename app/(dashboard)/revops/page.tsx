@@ -86,13 +86,13 @@ export default function RevOpsPage() {
   // Group insights by category
   const grouped = CATEGORY_ORDER.reduce<Record<RevOpsCategory, RevOpsInsight[]>>(
     (acc, cat) => {
-      acc[cat] = insights.filter((i) => i.category === cat);
+      acc[cat] = insights.filter((i) => (i.category ? String(i.category).toUpperCase() : "") === cat);
       return acc;
     },
     {} as Record<RevOpsCategory, RevOpsInsight[]>
   );
 
-  const highCount = insights.filter((i) => i.severity === "HIGH").length;
+  const highCount = insights.filter((i) => (i.severity ? String(i.severity).toUpperCase() : "") === "HIGH").length;
 
   if (error && !loading && insights.length === 0) {
     return (

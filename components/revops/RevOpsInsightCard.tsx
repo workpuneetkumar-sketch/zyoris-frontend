@@ -33,7 +33,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import { sendRevOpsActionToApproval } from "@/lib/api/revopsApi";
+import { sendRevOpsActionToApproval, formatActionType } from "@/lib/api/revopsApi";
 import { AgentResultFrame } from "@/components/agents/AgentResultFrame";
 import { toast } from "react-toastify";
 import type { RevOpsInsight, RevOpsCategory } from "@/lib/types/agent-results";
@@ -68,18 +68,20 @@ const CATEGORY_META: Record<RevOpsCategory, { label: string; icon: React.Element
 // ─── Severity badge ───────────────────────────────────────────────────────────
 // Severity is a structural/status badge — kept on existing semantic tokens.
 
-function SeverityBadge({ severity }: { severity: string }) {
+function SeverityBadge({ severity }: { severity?: string | null }) {
+  const sev = (severity || "LOW").toUpperCase();
   const styles: Record<string, string> = {
     HIGH:   "bg-[color:var(--color-error-light)] text-[color:var(--color-error-foreground)] border-[color:var(--color-error-light)]",
     MEDIUM: "bg-[color:var(--color-warning-light)] text-[color:var(--color-warning-foreground)] border-[color:var(--color-warning-light)]",
     LOW:    "bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border-[color:var(--color-border)]",
   };
+  const label = sev === "HIGH" ? "High Severity" : sev === "MEDIUM" ? "Medium Severity" : "Low Severity";
   return (
     <span className={classNames(
       "inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold border",
-      styles[severity] ?? styles.LOW
+      styles[sev] ?? styles.LOW
     )}>
-      {severity.charAt(0) + severity.slice(1).toLowerCase()} Severity
+      {label}
     </span>
   );
 }
@@ -189,9 +191,12 @@ function ProposedActionPreview({ insight }: ProposedActionPreviewProps) {
             )}
           </div>
 
-          <code className="inline-block text-[10px] font-mono px-2 py-0.5 rounded-lg bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)]">
-            {proposedAction.type}
-          </code>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-[color:var(--color-background-secondary)] text-[color:var(--color-text)] border border-[color:var(--color-border)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--color-primary)]" />
+              {formatActionType(proposedAction.type)}
+            </span>
+          </div>
 
           <div className="pt-1 border-t border-[color:var(--color-border-light)]">
             {approvalId ? (
@@ -244,7 +249,8 @@ export interface RevOpsInsightCardProps {
 }
 
 export function RevOpsInsightCard({ insight, className }: RevOpsInsightCardProps) {
-  const meta = CATEGORY_META[insight.category] ?? CATEGORY_META.COVERAGE;
+  const catKey = (insight?.category ? String(insight.category).toUpperCase() : "COVERAGE") as RevOpsCategory;
+  const meta = CATEGORY_META[catKey] ?? CATEGORY_META.COVERAGE;
   const Icon = meta.icon;
 
   return (
