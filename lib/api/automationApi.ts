@@ -1,4 +1,4 @@
-import api from "@/lib/api/api";
+import api from "./api.ts";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -278,3 +278,63 @@ export function validateConfig(action: ActionType, config: Record<string, any>):
 
   return { valid: errors.length === 0, errors };
 }
+
+// ─── Human-Readable Summary Helper ─────────────────────────────────────
+
+export interface ConfigSummaryItem {
+  label: string;
+  value: string;
+}
+
+export function getHumanReadableConfigSummary(
+  action: ActionType,
+  config: Record<string, any>
+): ConfigSummaryItem[] {
+  if (action === "AI_RECOMMENDATION_ASSIGN") {
+    const note = config?.aiStrategyNote?.trim();
+    return [
+      {
+        label: "Routing Strategy",
+        value: note || "Automated dynamic assignment via 3-Pillar scoring matrix (conversion, load, territory)"
+      }
+    ];
+  }
+
+  if (action === "SEND_REMINDER") {
+    const hours = config?.hours;
+    const hasHours = hours !== undefined && hours !== null && hours !== "" && !isNaN(Number(hours));
+    return [
+      {
+        label: "Reminder Schedule",
+        value: hasHours ? `${hours} hour${Number(hours) === 1 ? "" : "s"} before event` : "Not configured yet"
+      }
+    ];
+  }
+
+  const fields = getConfigFields(action);
+  if (fields.length === 0) {
+    return [
+      {
+        label: "Parameters",
+        value: "No additional configuration required"
+      }
+    ];
+  }
+
+  return fields.map((field) => {
+    const rawValue = config ? config[field.key] : undefined;
+    const isConfigured = rawValue !== undefined && rawValue !== null && String(rawValue).trim() !== "";
+    
+    // Human-friendly labels instead of raw property names
+    let friendlyLabel = field.label;
+    if (field.key === "assignedUserId") friendlyLabel = "Assigned User";
+    else if (field.key === "managerId") friendlyLabel = "Manager";
+    else if (field.key === "team") friendlyLabel = "Target Team";
+    else if (field.key === "message") friendlyLabel = "Notification Message";
+
+    return {
+      label: friendlyLabel,
+      value: isConfigured ? String(rawValue) : "Not configured yet"
+    };
+  });
+}

@@ -19,6 +19,7 @@ import {
   getTriggerIcon,
   getActionIcon,
   getRuleStats,
+  getHumanReadableConfigSummary,
 } from "@/lib/api/automationApi";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -263,14 +264,13 @@ export default function AutomationRulesList({
                 <span className="text-xs font-medium text-gray-700">{getActionLabel(rule.action)}</span>
               </div>
 
-              {/* Config Preview */}
+              {/* Config Summary */}
               {Object.keys(rule.config || {}).length > 0 && (
-                <div className="mt-2 p-2 bg-gray-50 rounded-lg border border-gray-100">
-                  <p className="text-xs text-gray-500 mb-0.5">Config:</p>
-                  {Object.entries(rule.config || {}).map(([key, value]) => (
-                    <div key={key} className="text-xs text-gray-600 flex items-center gap-2">
-                      <span className="font-mono text-gray-400">{key}:</span>
-                      <span className="font-medium">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+                <div className="mt-2 p-2.5 bg-gray-50/70 rounded-lg border border-gray-100 text-xs space-y-1">
+                  {getHumanReadableConfigSummary(rule.action, rule.config).map((item, idx) => (
+                    <div key={idx} className="flex items-center justify-between gap-2">
+                      <span className="text-gray-500 font-medium">{item.label}:</span>
+                      <span className="font-semibold text-gray-800 truncate">{item.value}</span>
                     </div>
                   ))}
                 </div>
