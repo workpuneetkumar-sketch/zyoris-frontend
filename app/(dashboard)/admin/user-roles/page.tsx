@@ -268,6 +268,17 @@ function UserPermissionsPanel({
 
 export default function UserRolesPage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <UserRolesContent />;
+}
+
+function UserRolesContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("users");
@@ -276,20 +287,17 @@ export default function UserRolesPage() {
   const [entries, setEntries] = useState<UserRoleEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
 
-  // Dropdown state
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("ALL");
+  const [assignmentModal, setAssignmentModal] = useState<TeamUser | null>(null);
+  const [selectedRole, setSelectedRole] = useState("");
+  const [assigning, setAssigning] = useState(false);
+  const [activeTab, setActiveTab] = useState<"roles" | "users">("users");
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [assigningUserId, setAssigningUserId] = useState<string | null>(null);
-
-  // Permissions panel
   const [permUser, setPermUser] = useState<{ id: string; name: string } | null>(null);
-
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-
-  if (!isInitializing && user && !isAdmin) {
-    return <AccessDenied />;
-  }
 
   /* ── Fetch all users + roles ──────────────────────────────────────── */
 
@@ -350,15 +358,15 @@ export default function UserRolesPage() {
           setEntries((prev) =>
             prev.map((e) =>
               e.user.id === u.id
-                ? { 
-                    ...e, 
-                    assignedRole: {
-                      id: role?.id,
-                      name: role?.name,
-                      description: role?.description
-                    }, 
-                    loadingRole: false 
-                  }
+                ? {
+                  ...e,
+                  assignedRole: {
+                    id: role?.id,
+                    name: role?.name,
+                    description: role?.description
+                  },
+                  loadingRole: false
+                }
                 : e
             )
           );
@@ -393,11 +401,11 @@ export default function UserRolesPage() {
         prev.map((e) =>
           e.user.id === userId
             ? {
-                ...e,
-                assignedRole: newRole
-                  ? { id: newRole.id, name: newRole.name, description: newRole.description }
-                  : e.assignedRole,
-              }
+              ...e,
+              assignedRole: newRole
+                ? { id: newRole.id, name: newRole.name, description: newRole.description }
+                : e.assignedRole,
+            }
             : e
         )
       );
@@ -448,11 +456,10 @@ export default function UserRolesPage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === key
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === key
                 ? "bg-white text-purple-700 shadow-sm"
                 : "text-gray-500 hover:text-gray-700"
-            }`}
+              }`}
           >
             {label}
           </button>
@@ -570,9 +577,8 @@ export default function UserRolesPage() {
                               <button
                                 key={role.id}
                                 onClick={() => handleAssign(entry.user.id, role.id)}
-                                className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 ${
-                                  isActive ? "text-purple-700 font-medium" : "text-gray-700"
-                                }`}
+                                className={`w-full flex items-center justify-between px-4 py-2.5 text-sm transition-colors hover:bg-purple-50 ${isActive ? "text-purple-700 font-medium" : "text-gray-700"
+                                  }`}
                               >
                                 {role.name}
                                 {isActive && <Check size={13} className="text-purple-600" />}

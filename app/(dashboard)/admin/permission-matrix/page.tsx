@@ -82,16 +82,23 @@ function ErrorBanner({ message, onRetry }: { message: string; onRetry?: () => vo
 
 export default function PermissionMatrixPage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <PermissionMatrixContent />;
+}
+
+function PermissionMatrixContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("matrix");
   const [error, setError] = useState<string | null>(null);
 
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-
-  if (!isInitializing && user && !isAdmin) {
-    return <AccessDenied />;
-  }
 
   // -- Data State --
   const [roles, setRoles] = useState<RoleMatrix[]>([]);
@@ -189,7 +196,7 @@ export default function PermissionMatrixPage() {
       toast.success("Permissions updated successfully.");
       setEditRole(null);
       fetchMatrix();
-      
+
       // Update local detail cache
       setRoleDetailData(prev => ({
         ...prev,
@@ -209,7 +216,7 @@ export default function PermissionMatrixPage() {
   const [templates, setTemplates] = useState<PermissionTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<PermissionTemplate | null>(null);
-  
+
   // Apply template state
   const [applyTargetRole, setApplyTargetRole] = useState("");
   const [applyLoading, setApplyLoading] = useState(false);
@@ -343,11 +350,10 @@ export default function PermissionMatrixPage() {
           <button
             key={key}
             onClick={() => setTab(key)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-              tab === key
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${tab === key
                 ? "bg-indigo-50 text-indigo-700 shadow-sm border border-indigo-100"
                 : "text-gray-600 hover:bg-gray-50"
-            }`}
+              }`}
           >
             <Icon size={16} />
             {label}
@@ -405,7 +411,7 @@ export default function PermissionMatrixPage() {
                           {role.description && <p className="text-xs text-gray-500 mt-0.5">{role.description}</p>}
                         </div>
                         <div className="flex items-center gap-4 text-sm font-medium text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">
-                           {permList.length} Permissions
+                          {permList.length} Permissions
                         </div>
                         <div className="px-2">
                           {detailLoading === role.id ? (
@@ -417,7 +423,7 @@ export default function PermissionMatrixPage() {
                           )}
                         </div>
                       </button>
-                      
+
                       <div className="pl-4 border-l border-gray-100 ml-4">
                         <button
                           onClick={() => openEdit(role)}
@@ -482,8 +488,8 @@ export default function PermissionMatrixPage() {
                     </div>
                   </div>
                   {tpl.description && <p className="text-sm text-gray-600 mb-4 flex-1">{tpl.description}</p>}
-                  
-                  <button 
+
+                  <button
                     onClick={() => setSelectedTemplate(tpl)}
                     className="w-full mt-4 py-2 border border-indigo-200 text-indigo-700 rounded-lg text-sm font-semibold hover:bg-indigo-50 transition-colors"
                   >
@@ -510,8 +516,8 @@ export default function PermissionMatrixPage() {
               <div className="bg-gray-50 border border-gray-200 rounded-lg h-[300px] overflow-y-auto p-2">
                 {roles.map(r => (
                   <label key={r.id} className="flex items-center gap-3 p-2 hover:bg-white rounded-md cursor-pointer transition-colors border border-transparent hover:border-gray-200">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={bulkRoleIds.has(r.id)}
                       onChange={(e) => {
                         const next = new Set(bulkRoleIds);
@@ -519,7 +525,7 @@ export default function PermissionMatrixPage() {
                         else next.delete(r.id);
                         setBulkRoleIds(next);
                       }}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" 
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                     />
                     <span className="text-sm font-medium text-gray-800">{r.name}</span>
                   </label>
@@ -533,8 +539,8 @@ export default function PermissionMatrixPage() {
               <div className="bg-gray-50 border border-gray-200 rounded-lg h-[300px] overflow-y-auto p-2">
                 {allPermissions.map(p => (
                   <label key={p} className="flex items-center gap-3 p-2 hover:bg-white rounded-md cursor-pointer transition-colors border border-transparent hover:border-gray-200">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={bulkPerms.has(p)}
                       onChange={(e) => {
                         const next = new Set(bulkPerms);
@@ -542,7 +548,7 @@ export default function PermissionMatrixPage() {
                         else next.delete(p);
                         setBulkPerms(next);
                       }}
-                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500" 
+                      className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                     />
                     <span className="text-sm text-gray-700">{p}</span>
                   </label>
@@ -555,22 +561,20 @@ export default function PermissionMatrixPage() {
             <div className="flex gap-2">
               <button
                 onClick={() => setBulkMode("assign")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  bulkMode === "assign" ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${bulkMode === "assign" ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                  }`}
               >
                 Assign
               </button>
               <button
                 onClick={() => setBulkMode("remove")}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  bulkMode === "remove" ? "bg-red-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
-                }`}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${bulkMode === "remove" ? "bg-red-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-100"
+                  }`}
               >
                 Remove
               </button>
             </div>
-            
+
             <button
               onClick={handleBulkAction}
               disabled={bulkLoading || bulkRoleIds.size === 0 || bulkPerms.size === 0}
@@ -594,11 +598,11 @@ export default function PermissionMatrixPage() {
             </h2>
             <p className="text-sm text-gray-500">Create a new role by duplicating all permissions from an existing one.</p>
           </div>
-          
+
           <form onSubmit={handleCloneRole} className="p-6 space-y-5">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Source Role <span className="text-red-500">*</span></label>
-              <select 
+              <select
                 required
                 value={cloneSourceId}
                 onChange={e => setCloneSourceId(e.target.value)}
@@ -610,11 +614,11 @@ export default function PermissionMatrixPage() {
                 ))}
               </select>
             </div>
-            
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">New Role Name <span className="text-red-500">*</span></label>
-              <input 
-                type="text" 
+              <input
+                type="text"
                 required
                 value={cloneName}
                 onChange={e => setCloneName(e.target.value)}
@@ -622,10 +626,10 @@ export default function PermissionMatrixPage() {
                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Description</label>
-              <textarea 
+              <textarea
                 value={cloneDescription}
                 onChange={e => setCloneDescription(e.target.value)}
                 placeholder="Optional description"
@@ -633,7 +637,7 @@ export default function PermissionMatrixPage() {
                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
               />
             </div>
-            
+
             <button
               type="submit"
               disabled={cloneLoading || !cloneSourceId || !cloneName}
@@ -659,7 +663,7 @@ export default function PermissionMatrixPage() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-6">
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-sm font-semibold text-gray-700">{editPerms.size} Selected</span>
@@ -672,10 +676,9 @@ export default function PermissionMatrixPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                 {allPermissions.length > 0 ? (
                   allPermissions.map(p => (
-                    <label key={p} className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${
-                      editPerms.has(p) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-200 hover:bg-gray-50'
-                    }`}>
-                      <input 
+                    <label key={p} className={`flex items-start gap-2.5 p-3 rounded-lg border cursor-pointer transition-colors ${editPerms.has(p) ? 'bg-indigo-50 border-indigo-200' : 'bg-white border-gray-200 hover:bg-gray-50'
+                      }`}>
+                      <input
                         type="checkbox"
                         checked={editPerms.has(p)}
                         onChange={() => toggleEditPerm(p)}
@@ -689,15 +692,15 @@ export default function PermissionMatrixPage() {
                 )}
               </div>
             </div>
-            
+
             <div className="p-6 border-t border-gray-100 bg-gray-50 flex justify-end gap-3 rounded-b-2xl">
-              <button 
+              <button
                 onClick={() => setEditRole(null)}
                 className="px-5 py-2.5 border border-gray-300 bg-white text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleSaveEdit}
                 disabled={editLoading}
                 className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
@@ -712,27 +715,27 @@ export default function PermissionMatrixPage() {
 
       {/* APPLY TEMPLATE MODAL */}
       {selectedTemplate && (
-         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-         <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
-           <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
-             <h2 className="text-lg font-bold text-gray-900">Apply Template</h2>
-             <button
-               onClick={() => setSelectedTemplate(null)}
-               className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
-             >
-               <X size={18} className="text-gray-500" />
-             </button>
-           </div>
-           
-           <div className="p-6">
-             <div className="mb-5 bg-emerald-50 border border-emerald-100 rounded-lg p-4">
-               <p className="text-sm font-medium text-emerald-800">Template: {selectedTemplate.name}</p>
-               <p className="text-xs text-emerald-600 mt-1">{selectedTemplate.permissions.length} permissions included.</p>
-               <p className="text-xs text-emerald-700 mt-2"><strong>Warning:</strong> This will overwrite the target role's permissions completely.</p>
-             </div>
-             
-             <label className="block text-sm font-semibold text-gray-700 mb-2">Select Target Role</label>
-             <select 
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-gray-100">
+              <h2 className="text-lg font-bold text-gray-900">Apply Template</h2>
+              <button
+                onClick={() => setSelectedTemplate(null)}
+                className="p-1 rounded-lg hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} className="text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="mb-5 bg-emerald-50 border border-emerald-100 rounded-lg p-4">
+                <p className="text-sm font-medium text-emerald-800">Template: {selectedTemplate.name}</p>
+                <p className="text-xs text-emerald-600 mt-1">{selectedTemplate.permissions.length} permissions included.</p>
+                <p className="text-xs text-emerald-700 mt-2"><strong>Warning:</strong> This will overwrite the target role's permissions completely.</p>
+              </div>
+
+              <label className="block text-sm font-semibold text-gray-700 mb-2">Select Target Role</label>
+              <select
                 required
                 value={applyTargetRole}
                 onChange={e => setApplyTargetRole(e.target.value)}
@@ -743,26 +746,26 @@ export default function PermissionMatrixPage() {
                   <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>
-           </div>
-           
-           <div className="p-6 pt-0 flex gap-3">
-             <button
-               onClick={() => setSelectedTemplate(null)}
-               className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-             >
-               Cancel
-             </button>
-             <button
-               onClick={handleApplyTemplate}
-               disabled={applyLoading || !applyTargetRole}
-               className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
-             >
-               {applyLoading && <Loader2 size={14} className="animate-spin" />}
-               Confirm Apply
-             </button>
-           </div>
-         </div>
-       </div>
+            </div>
+
+            <div className="p-6 pt-0 flex gap-3">
+              <button
+                onClick={() => setSelectedTemplate(null)}
+                className="flex-1 border border-gray-200 text-gray-600 py-2.5 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleApplyTemplate}
+                disabled={applyLoading || !applyTargetRole}
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white py-2.5 rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
+              >
+                {applyLoading && <Loader2 size={14} className="animate-spin" />}
+                Confirm Apply
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

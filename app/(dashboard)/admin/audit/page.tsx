@@ -35,10 +35,10 @@ function ActionBadge({ action }: { action: string }) {
   const color = action.includes("DELETE")
     ? "bg-red-50 text-red-700 border-red-200"
     : action.includes("CREATE") || action.includes("ASSIGN")
-    ? "bg-green-50 text-green-700 border-green-200"
-    : action.includes("UPDATE") || action.includes("PATCH")
-    ? "bg-amber-50 text-amber-700 border-amber-200"
-    : "bg-blue-50 text-blue-700 border-blue-200";
+      ? "bg-green-50 text-green-700 border-green-200"
+      : action.includes("UPDATE") || action.includes("PATCH")
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-blue-50 text-blue-700 border-blue-200";
 
   return (
     <span className={`inline-block border text-xs font-medium px-2 py-0.5 rounded-full ${color}`}>
@@ -49,6 +49,17 @@ function ActionBadge({ action }: { action: string }) {
 
 export default function AuditPage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <AuditContent />;
+}
+
+function AuditContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [logs, setLogs] = useState<AuditLog[]>([]);
@@ -63,10 +74,6 @@ export default function AuditPage() {
   const [detailLoading, setDetailLoading] = useState(false);
 
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-
-  if (!isInitializing && user && !isAdmin) {
-    return <AccessDenied />;
-  }
 
   const fetchLogs = useCallback(async (p: number) => {
     setLoading(true);
