@@ -4,6 +4,14 @@
 
 import api from "./api";
 import {
+  uploadFile,
+  getUploadStatus,
+  getUploadDownloadUrl,
+  downloadUploadedFile,
+  waitForUploadReady,
+  type FileUploadResponse,
+} from "./uploadsApi";
+import {
   Channel,
   ChannelMember,
   ChannelVisibility,
@@ -785,7 +793,8 @@ export async function getLinksByEntity(
 /* -------------------------------------------------------------------------- */
 
 /**
- * Upload an attachment file using existing storage contracts (/uploads/file)
+ * Upload an attachment file using storage contract (POST /uploads/file)
+ * Pre-fetches signed download URL (GET /uploads/:fileUploadId/download)
  * Supports progress tracking and returns standard MessageAttachment object
  */
 export async function uploadMessageAttachment(
@@ -798,29 +807,32 @@ export async function uploadMessageAttachment(
     throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed is 25MB.`);
   }
 
-  const formData = new FormData();
-  formData.append("file", file);
+  // 1. Upload file via POST /uploads/file
+  const uploadRes = await uploadFile(file, onProgress);
+  const fileUploadId = uploadRes.id || uploadRes.fileUploadId;
 
-  const res = await api.post("/documents/upload", formData, {
-    onUploadProgress: (progressEvent) => {
-      if (onProgress && progressEvent.total) {
-        const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-        onProgress(percent);
-      }
-    },
-  });
+  if (!fileUploadId) {
+    throw new Error("File upload completed but no identifier was returned by server.");
+  }
 
-  const serverData = res.data?.data || res.data;
-  const fileId = serverData?.id || serverData?.fileUploadId || `upload-${Date.now()}`;
-  const downloadUrl = serverData?.url || serverData?.s3Url || `/documents/download/${fileId}`;
+  // 2. Pre-fetch temporary signed download URL via GET /uploads/:fileUploadId/download
+  let downloadUrl = `/uploads/${fileUploadId}/download`;
+  try {
+    const signedUrl = await getUploadDownloadUrl(fileUploadId);
+    if (signedUrl) {
+      downloadUrl = signedUrl;
+    }
+  } catch (err) {
+    console.warn(`Could not pre-fetch signed download URL for ${fileUploadId}:`, err);
+  }
 
   return {
-    id: fileId,
-    fileUploadId: fileId,
-    name: file.name,
-    size: file.size,
-    type: file.type,
-    mimeType: file.type,
+    id: fileUploadId,
+    fileUploadId: fileUploadId,
+    name: uploadRes.fileName || file.name,
+    size: uploadRes.fileSize || file.size,
+    type: uploadRes.fileType || file.type,
+    mimeType: uploadRes.fileType || file.type,
     url: downloadUrl,
   };
 }
@@ -845,5 +857,15 @@ export async function getConnectMessages(params: {
 export const sendConnectMessage = sendMessage;
 export const updateConnectMessage = updateMessage;
 export const deleteConnectMessage = deleteMessage;
+
+// Re-export upload & download endpoints for global access
+export {
+  uploadFile,
+  getUploadStatus,
+  getUploadDownloadUrl,
+  downloadUploadedFile,
+  waitForUploadReady,
+  type FileUploadResponse,
+};
 
 

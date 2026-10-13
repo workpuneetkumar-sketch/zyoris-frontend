@@ -1,6 +1,6 @@
 // hooks/useConnectSocket.ts
 // Real-time Socket.IO integration for Connect workspace
-// Conforming to Sakshi's Day 1 Socket Event Contracts
+// Conforming to Sakshi's Day 1 & Day 2 Socket Event Contracts and Day 3 Recovery/Typing
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
@@ -20,6 +20,14 @@ import {
 
 export type SocketStatus = "connected" | "connecting" | "offline";
 
+export interface SocketTypingPayload {
+  userId: string;
+  userName?: string;
+  channelId?: string | null;
+  conversationId?: string | null;
+  channel?: string | null;
+}
+
 interface UseConnectSocketOptions {
   activeChannelId?: string | null;
   activeChannelName?: string | null;
@@ -34,6 +42,9 @@ interface UseConnectSocketOptions {
   onMessageRead?: (payload: SocketMessageReadPayload) => void;
   onReaction?: (payload: SocketReactionPayload) => void;
   onPinUpdated?: (payload: SocketPinPayload) => void;
+  onTypingStart?: (payload: SocketTypingPayload) => void;
+  onTypingStop?: (payload: SocketTypingPayload) => void;
+  onMessageSync?: (payload: { messages: any[]; channelId?: string; conversationId?: string }) => void;
 }
 
 export function useConnectSocket({
@@ -50,6 +61,9 @@ export function useConnectSocket({
   onMessageRead,
   onReaction,
   onPinUpdated,
+  onTypingStart,
+  onTypingStop,
+  onMessageSync,
 }: UseConnectSocketOptions) {
   const [status, setStatus] = useState<SocketStatus>("connecting");
   const socketRef = useRef<Socket | null>(null);
@@ -66,6 +80,9 @@ export function useConnectSocket({
     onMessageRead,
     onReaction,
     onPinUpdated,
+    onTypingStart,
+    onTypingStop,
+    onMessageSync,
   });
 
   useEffect(() => {
@@ -80,6 +97,9 @@ export function useConnectSocket({
       onMessageRead,
       onReaction,
       onPinUpdated,
+      onTypingStart,
+      onTypingStop,
+      onMessageSync,
     };
   }, [
     onNewMessage,
@@ -92,6 +112,9 @@ export function useConnectSocket({
     onMessageRead,
     onReaction,
     onPinUpdated,
+    onTypingStart,
+    onTypingStop,
+    onMessageSync,
   ]);
 
   // Connect socket
@@ -124,9 +147,15 @@ export function useConnectSocket({
           channel: activeChannelName || activeChannelId,
           channelId: activeChannelId,
         });
+        socket.emit("recovery:sync", {
+          channelId: activeChannelId,
+        });
       }
       if (activeConversationId) {
         socket.emit("conversation:join", { conversationId: activeConversationId });
+        socket.emit("recovery:sync", {
+          conversationId: activeConversationId,
+        });
       }
     });
 
@@ -144,7 +173,7 @@ export function useConnectSocket({
       callbacksRef.current.onNewMessage?.(payload);
     });
 
-    // Also support fallback generic message events if emitted by other microservices
+    // Fallback generic message events if emitted by other microservices
     socket.on("newMessage", (payload: any) => {
       callbacksRef.current.onNewMessage?.({
         id: payload.id,
@@ -177,6 +206,20 @@ export function useConnectSocket({
         channelId: payload.channelId,
         conversationId: payload.conversationId,
       });
+    });
+
+    // Sakshi's Event: typing:start & typing:stop
+    socket.on("typing:start", (payload: any) => {
+      callbacksRef.current.onTypingStart?.(payload);
+    });
+
+    socket.on("typing:stop", (payload: any) => {
+      callbacksRef.current.onTypingStop?.(payload);
+    });
+
+    // Sakshi's Event: message:sync (Missed message recovery)
+    socket.on("message:sync", (payload: any) => {
+      callbacksRef.current.onMessageSync?.(payload);
     });
 
     // Sakshi's Event 9: channel:updated
@@ -297,9 +340,32 @@ export function useConnectSocket({
     }
   }, []);
 
+  // Client emission: typing:start
+  const emitTypingStart = useCallback((target: { channelId?: string; conversationId?: string; userName?: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("typing:start", target);
+    }
+  }, []);
+
+  // Client emission: typing:stop
+  const emitTypingStop = useCallback((target: { channelId?: string; conversationId?: string; userName?: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("typing:stop", target);
+    }
+  }, []);
+
+  // Client emission: recovery:sync
+  const emitRecoverySync = useCallback((target: { channelId?: string; conversationId?: string; lastMessageId?: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("recovery:sync", target);
+    }
+  }, []);
+
   return {
     status,
     emitSendMessage,
+    emitTypingStart,
+    emitTypingStop,
+    emitRecoverySync,
   };
 }
-

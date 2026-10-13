@@ -152,3 +152,44 @@ export async function getPortalDocuments(): Promise<PortalDocument[]> {
     throw new Error(error.response?.data?.message || "Failed to fetch documents");
   }
 }
+
+// ── Client Portal Communications ──────────────────────────────────
+/**
+ * GET /portal/communications/channels
+ * Fetch client-accessible channels in the client portal
+ */
+export async function getPortalChannels(): Promise<any[]> {
+  try {
+    const res = await portalApi.get("/portal/communications/channels");
+    const data = res.data?.data || res.data;
+    return Array.isArray(data) ? data : data?.channels || [];
+  } catch (error: any) {
+    console.warn("Failed to fetch portal communications channels:", error);
+    return [];
+  }
+}
+
+/**
+ * GET /portal/communications/channels/:channelId/messages
+ * Fetch messages for a client-visible channel in the portal
+ */
+export async function getPortalChannelMessages(
+  channelId: string,
+  limit: number = 50,
+  cursor?: string
+): Promise<{ data: any[]; nextCursor?: string | null }> {
+  try {
+    const query = new URLSearchParams();
+    query.set("limit", String(limit));
+    if (cursor) query.set("cursor", cursor);
+    const res = await portalApi.get(
+      `/portal/communications/channels/${encodeURIComponent(channelId)}/messages?${query.toString()}`
+    );
+    const resData = res.data?.data || res.data;
+    const list = Array.isArray(resData) ? resData : resData?.messages || resData?.data || [];
+    return { data: list, nextCursor: resData?.nextCursor || null };
+  } catch (error: any) {
+    console.warn(`Failed to fetch portal messages for channel ${channelId}:`, error);
+    return { data: [], nextCursor: null };
+  }
+}

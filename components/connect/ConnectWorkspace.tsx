@@ -10,6 +10,7 @@ import {
   Pin,
   Bookmark,
   Search,
+  Sparkles,
 } from "lucide-react";
 import ConnectSidebar from "./ConnectSidebar";
 import CreateChannelModal from "./CreateChannelModal";
@@ -23,6 +24,7 @@ import PinnedMessagesModal from "./PinnedMessagesModal";
 import SavedMessagesModal from "./SavedMessagesModal";
 import CommunicationSearchModal from "./CommunicationSearchModal";
 import BusinessLinkModal from "./BusinessLinkModal";
+import ZiiConversationModal from "./ZiiConversationModal";
 import {
   Channel,
   Conversation,
@@ -94,9 +96,13 @@ export default function ConnectWorkspace() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSavedOpen, setIsSavedOpen] = useState(false);
   const [isPinnedOpen, setIsPinnedOpen] = useState(false);
+  const [isZiiModalOpen, setIsZiiModalOpen] = useState(false);
   const [activeThreadMessage, setActiveThreadMessage] = useState<ConnectMessage | null>(null);
   const [selectedMessageForLinks, setSelectedMessageForLinks] = useState<ConnectMessage | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+
+  // Typing status: userId -> { userName, timestamp }
+  const [typingUsers, setTypingUsers] = useState<Record<string, { userName: string; timestamp: number }>>({});
 
   // Message Editing & Replying Modes
   const [editingMessage, setEditingMessage] = useState<ConnectMessage | null>(null);
@@ -197,6 +203,9 @@ export default function ConnectWorkspace() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Immediately clear previous messages to ensure no stale protected content is visible
+    setMessages([]);
+    setHighlightedMessageId(null);
     setMessagesLoading(true);
     setMessagesError(null);
     setEditingMessage(null);
@@ -218,7 +227,12 @@ export default function ConnectWorkspace() {
         return; // Ignore aborted stale request
       }
       console.error("Failed to load messages for target:", err);
-      setMessagesError("Unable to load message history. Please check your network connection.");
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        setMessages([]);
+        setMessagesError("You do not have authorization to view this conversation.");
+      } else {
+        setMessagesError("Unable to load message history. Please check your network connection.");
+      }
     } finally {
       if (!controller.signal.aborted) {
         setMessagesLoading(false);
@@ -527,6 +541,74 @@ export default function ConnectWorkspace() {
     );
   }, []);
 
+  // Sakshi's Typing Events
+  const handleSocketTypingStart = useCallback((payload: any) => {
+    if (!payload?.userId || payload.userId === currentUserId) return;
+    const current = activeTargetRef.current;
+    const isCurrent =
+      (current?.type === "channel" && (current.id === payload.channelId || (current.item as Channel)?.name === payload.channel)) ||
+      (current?.type === "conversation" && current.id === payload.conversationId);
+    if (!isCurrent) return;
+
+    setTypingUsers((prev) => ({
+      ...prev,
+      [payload.userId]: {
+        userName: payload.userName || "Teammate",
+        timestamp: Date.now(),
+      },
+    }));
+  }, [currentUserId]);
+
+  const handleSocketTypingStop = useCallback((payload: any) => {
+    if (!payload?.userId) return;
+    setTypingUsers((prev) => {
+      if (!prev[payload.userId]) return prev;
+      const copy = { ...prev };
+      delete copy[payload.userId];
+      return copy;
+    });
+  }, []);
+
+  // Sakshi's Reconnect Recovery: message:sync
+  const handleSocketMessageSync = useCallback((payload: any) => {
+    if (!payload?.messages || !Array.isArray(payload.messages)) return;
+    const current = activeTargetRef.current;
+    const isCurrent =
+      (current?.type === "channel" && current.id === payload.channelId) ||
+      (current?.type === "conversation" && current.id === payload.conversationId);
+
+    if (isCurrent) {
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newOnes = payload.messages.filter((m: any) => !existingIds.has(m.id));
+        if (newOnes.length === 0) return prev;
+        const merged = [...prev, ...newOnes];
+        merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+        return merged;
+      });
+    }
+  }, []);
+
+  // Auto-expire typing users after 3.5s
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setTypingUsers((prev) => {
+        let changed = false;
+        const next: typeof prev = {};
+        for (const [id, val] of Object.entries(prev)) {
+          if (now - val.timestamp < 3500) {
+            next[id] = val;
+          } else {
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 1500);
+    return () => clearInterval(timer);
+  }, []);
+
   // Active channel name for socket room subscription
   const activeChannelName = useMemo(() => {
     if (activeTarget?.type === "channel") {
@@ -537,7 +619,7 @@ export default function ConnectWorkspace() {
   }, [activeTarget, channels]);
 
   // Hook into real-time socket
-  const { status: socketStatus } = useConnectSocket({
+  const { status: socketStatus, emitTypingStart, emitTypingStop } = useConnectSocket({
     activeChannelId: activeTarget?.type === "channel" ? activeTarget.id : null,
     activeChannelName,
     activeConversationId: activeTarget?.type === "conversation" ? activeTarget.id : null,
@@ -551,6 +633,9 @@ export default function ConnectWorkspace() {
     onMessageRead: handleSocketMessageRead,
     onReaction: handleSocketReaction,
     onPinUpdated: handleSocketPinUpdated,
+    onTypingStart: handleSocketTypingStart,
+    onTypingStop: handleSocketTypingStop,
+    onMessageSync: handleSocketMessageSync,
   });
 
   /* -------------------------------------------------------------------------- */
@@ -921,16 +1006,45 @@ export default function ConnectWorkspace() {
   const handleSelectSearchResult = (result: SearchMessageResult) => {
     if (result.channelId) {
       const ch = channels.find((c) => c.id === result.channelId);
-      if (ch) selectChannel(ch);
+      if (ch) {
+        selectChannel(ch);
+      } else {
+        selectChannel({
+          id: result.channelId,
+          name: result.channelName || "channel",
+          visibility: "PUBLIC",
+          organizationId: "",
+          createdAt: "",
+          updatedAt: "",
+        });
+      }
     } else if (result.conversationId) {
       const conv = conversations.find((c) => c.id === result.conversationId);
-      if (conv) selectConversation(conv);
+      if (conv) {
+        selectConversation(conv);
+      } else {
+        selectConversation({
+          id: result.conversationId,
+          type: "DIRECT",
+          organizationId: "",
+          members: [],
+          createdAt: "",
+          updatedAt: "",
+        });
+      }
     }
 
     setHighlightedMessageId(result.id);
     setTimeout(() => {
+      const el = document.getElementById(`message-item-${result.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 450);
+
+    setTimeout(() => {
       setHighlightedMessageId(null);
-    }, 3500);
+    }, 4500);
   };
 
   /**
@@ -947,8 +1061,15 @@ export default function ConnectWorkspace() {
 
     setHighlightedMessageId(savedMsg.id);
     setTimeout(() => {
+      const el = document.getElementById(`message-item-${savedMsg.id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 450);
+
+    setTimeout(() => {
       setHighlightedMessageId(null);
-    }, 3500);
+    }, 4500);
   };
 
   /**
@@ -957,8 +1078,15 @@ export default function ConnectWorkspace() {
   const handleJumpToPinnedMessage = (pinnedMessageId: string) => {
     setHighlightedMessageId(pinnedMessageId);
     setTimeout(() => {
+      const el = document.getElementById(`message-item-${pinnedMessageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }, 150);
+
+    setTimeout(() => {
       setHighlightedMessageId(null);
-    }, 3500);
+    }, 4500);
   };
 
   /**
@@ -1152,11 +1280,22 @@ export default function ConnectWorkspace() {
 
                 {/* Header Actions */}
                 <div className="flex items-center gap-2">
+                  {/* ZII AI Summary & Structured Actions Button */}
+                  <button
+                    id="header-zii-summary-btn"
+                    onClick={() => setIsZiiModalOpen(true)}
+                    className="px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 border border-primary/30 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    title="ZII Conversation Summary & Actions"
+                  >
+                    <Sparkles size={14} className="text-primary" />
+                    <span>ZII Summary</span>
+                  </button>
+
                   {/* Pinned Messages Button */}
                   <button
                     id="view-pinned-messages-btn"
                     onClick={() => setIsPinnedOpen(true)}
-                    className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5"
+                    className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                     title="View Pinned Messages"
                   >
                     <Pin size={14} className="text-warning" />
@@ -1167,7 +1306,7 @@ export default function ConnectWorkspace() {
                   <button
                     id="header-search-btn"
                     onClick={() => setIsSearchOpen(true)}
-                    className="p-1.5 text-text-muted hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all"
+                    className="p-1.5 text-text-muted hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all cursor-pointer"
                     title="Search Messages"
                   >
                     <Search size={16} />
@@ -1177,7 +1316,7 @@ export default function ConnectWorkspace() {
                     <button
                       id="manage-channel-members-btn"
                       onClick={() => setIsChannelMembersOpen(true)}
-                      className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5"
+                      className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Users size={14} />
                       <span>Manage Members</span>
@@ -1217,6 +1356,20 @@ export default function ConnectWorkspace() {
                     onOpenLinkModal={(msg) => setSelectedMessageForLinks(msg)}
                   />
 
+                  {/* Real-time Typing Indicator */}
+                  {Object.keys(typingUsers).length > 0 && (
+                    <div
+                      id="connect-typing-indicator"
+                      className="px-6 py-1 bg-surface text-text-muted text-[11px] flex items-center gap-1.5 italic animate-pulse border-t border-border/50 shrink-0"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
+                      <span>
+                        {Object.values(typingUsers).map((u) => u.userName).join(", ")}{" "}
+                        {Object.keys(typingUsers).length === 1 ? "is typing..." : "are typing..."}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Message Composer */}
                   <MessageComposer
                     placeholder={`Message ${activeHeaderDetails.title}...`}
@@ -1225,6 +1378,20 @@ export default function ConnectWorkspace() {
                     editingMessage={editingMessage}
                     replyingToMessage={replyingToMessage}
                     teamMembers={teamMembers}
+                    onTyping={() => {
+                      emitTypingStart({
+                        channelId: activeTarget?.type === "channel" ? activeTarget.id : undefined,
+                        conversationId: activeTarget?.type === "conversation" ? activeTarget.id : undefined,
+                        userName: currentUserId ? (teamMembers.find(t => t.id === currentUserId)?.name || "Teammate") : "Teammate",
+                      });
+                    }}
+                    onStopTyping={() => {
+                      emitTypingStop({
+                        channelId: activeTarget?.type === "channel" ? activeTarget.id : undefined,
+                        conversationId: activeTarget?.type === "conversation" ? activeTarget.id : undefined,
+                        userName: currentUserId ? (teamMembers.find(t => t.id === currentUserId)?.name || "Teammate") : "Teammate",
+                      });
+                    }}
                     onSendMessage={handleSendMessage}
                     onSaveEdit={handleSaveEdit}
                     onCancelEdit={() => setEditingMessage(null)}
@@ -1347,6 +1514,17 @@ export default function ConnectWorkspace() {
           onClose={() => setSelectedMessageForLinks(null)}
           message={selectedMessageForLinks}
           onLinksUpdated={handleLinksUpdated}
+        />
+      )}
+
+      {/* Day 3 ZII AI Conversation Intelligence Modal */}
+      {isZiiModalOpen && activeTarget && (
+        <ZiiConversationModal
+          isOpen={isZiiModalOpen}
+          onClose={() => setIsZiiModalOpen(false)}
+          sessionId={activeTarget.id}
+          sessionTitle={activeHeaderDetails?.title || "Conversation"}
+          isChannel={activeTarget.type === "channel"}
         />
       )}
     </div>
