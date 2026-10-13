@@ -192,16 +192,23 @@ function DetailList({ data }: { data: unknown }) {
 
 export default function RbacConsolePage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <RbacConsoleContent />;
+}
+
+function RbacConsoleContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<TabKey>("assign");
   const [pageError, setPageError] = useState<string | null>(null);
 
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-
-  if (!isInitializing && user && !isAdmin) {
-    return <AccessDenied />;
-  }
 
   const [assignmentForm, setAssignmentForm] = useState({ userId: "", roleId: "", newRoleId: "", removeRoleId: "" });
   const [assignmentLoading, setAssignmentLoading] = useState<"assign" | "change" | "remove" | "load" | null>(null);

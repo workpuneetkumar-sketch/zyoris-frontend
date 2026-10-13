@@ -325,9 +325,8 @@ function PermissionsPanel({
                       {/* Module toggle checkbox */}
                       <button
                         onClick={() => toggleModule(group)}
-                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                          allSelected ? "bg-blue-600 border-blue-600" : someSelected ? "bg-blue-200 border-blue-400" : "border-gray-300 bg-white"
-                        }`}
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${allSelected ? "bg-blue-600 border-blue-600" : someSelected ? "bg-blue-200 border-blue-400" : "border-gray-300 bg-white"
+                          }`}
                       >
                         {allSelected && <Check size={10} className="text-white" strokeWidth={3} />}
                         {someSelected && <div className="w-2 h-0.5 bg-blue-600 rounded" />}
@@ -388,9 +387,19 @@ function PermissionsPanel({
 }
 
 /* ─── Main Page ──────────────────────────────────────────────────────── */
-
 export default function RolesPage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <RolesContent />;
+}
+
+function RolesContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("manage");
@@ -413,10 +422,6 @@ export default function RolesPage() {
   const [permRole, setPermRole] = useState<RbacRoleMatrixItem | null>(null);
 
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
-
-  if (!isInitializing && user && !isAdmin) {
-    return <AccessDenied />;
-  }
 
   const fetchRoles = useCallback(async () => {
     setLoading(true); setError(null);
