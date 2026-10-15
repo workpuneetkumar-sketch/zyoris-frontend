@@ -33,7 +33,7 @@ const SkeletonCard = () => (
 export const FinanceStatsCards: React.FC<FinanceStatsCardsProps> = ({ stats, isLoading }) => {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4.5 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
         {Array.from({ length: 5 }).map((_, idx) => (
           <SkeletonCard key={idx} />
         ))}
@@ -99,13 +99,13 @@ export const FinanceStatsCards: React.FC<FinanceStatsCardsProps> = ({ stats, isL
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4.5 w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
       {stats.map((stat, idx) => {
         const theme = getCardTheme(stat.type, stat.value);
         return (
           <div
             key={idx}
-            className={`group bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between ${theme.accentBorder}`}
+            className={`group bg-white p-5 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200 flex flex-col justify-between min-h-[128px] ${theme.accentBorder}`}
           >
             <div className="flex items-start justify-between gap-3 mb-3">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider line-clamp-1">

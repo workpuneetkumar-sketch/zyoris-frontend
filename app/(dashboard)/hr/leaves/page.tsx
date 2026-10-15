@@ -329,79 +329,79 @@ export default function LeavesPage() {
         {/* 5 Sleek Stat Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {/* Total */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4.5 hover:shadow-md transition-all flex flex-col justify-between">
-            <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px]">
+            <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Requests</span>
-              <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
                 <CalendarDays size={16} />
               </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900 tracking-tight">{total}</p>
-              <p className="text-[11px] font-semibold text-blue-600 mt-1">All Recorded Applications</p>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{total}</p>
+              <p className="text-xs font-medium text-blue-600 mt-2">All Recorded Applications</p>
             </div>
           </div>
 
           {/* Pending Approval */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4.5 hover:shadow-md transition-all flex flex-col justify-between hover:border-amber-200">
-            <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-amber-200">
+            <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pending Action</span>
-              <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
                 <Clock size={16} />
               </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900 tracking-tight">{pending}</p>
-              <p className="text-[11px] font-semibold text-amber-700 mt-1 flex items-center gap-1">
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{pending}</p>
+              <p className="text-xs font-medium text-amber-700 mt-2 flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                {total > 0 ? ((pending / total) * 100).toFixed(1) : 0}% requires review
+                <span>{total > 0 ? ((pending / total) * 100).toFixed(1) : 0}% requires review</span>
               </p>
             </div>
           </div>
 
           {/* Approved */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4.5 hover:shadow-md transition-all flex flex-col justify-between hover:border-emerald-200">
-            <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-emerald-200">
+            <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Approved</span>
-              <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
                 <CheckCircle2 size={16} />
               </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900 tracking-tight">{approved}</p>
-              <p className="text-[11px] font-semibold text-emerald-600 mt-1">
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{approved}</p>
+              <p className="text-xs font-medium text-emerald-600 mt-2">
                 {total > 0 ? ((approved / total) * 100).toFixed(1) : 0}% of all requests
               </p>
             </div>
           </div>
 
           {/* Rejected */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4.5 hover:shadow-md transition-all flex flex-col justify-between hover:border-rose-200">
-            <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-rose-200">
+            <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rejected</span>
-              <div className="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
                 <XCircle size={16} />
               </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900 tracking-tight">{rejected}</p>
-              <p className="text-[11px] font-semibold text-rose-600 mt-1">
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{rejected}</p>
+              <p className="text-xs font-medium text-rose-600 mt-2">
                 {total > 0 ? ((rejected / total) * 100).toFixed(1) : 0}% declined
               </p>
             </div>
           </div>
 
           {/* Upcoming Leaves */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4.5 hover:shadow-md transition-all flex flex-col justify-between hover:border-purple-200">
-            <div className="flex items-center justify-between gap-2 mb-2">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-purple-200">
+            <div className="flex items-start justify-between gap-2">
               <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Upcoming</span>
-              <div className="w-8 h-8 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
                 <Plane size={16} />
               </div>
             </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900 tracking-tight">{upcoming}</p>
-              <p className="text-[11px] font-semibold text-purple-600 mt-1">Next 30 days window</p>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{upcoming}</p>
+              <p className="text-xs font-medium text-purple-600 mt-2">Next 30 days window</p>
             </div>
           </div>
         </div>
