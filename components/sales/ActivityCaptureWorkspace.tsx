@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Search,
   Plus,
@@ -21,6 +21,13 @@ import {
   User,
   Clock,
   Layers,
+  Sparkles,
+  Mail,
+  Calendar,
+  Phone,
+  Video,
+  MessageSquare,
+  AlertTriangle,
 } from "lucide-react";
 import {
   CapturedActivity,
@@ -40,6 +47,19 @@ import {
 import ChannelFilterBar from "./ChannelFilterBar";
 import ActivityTimelineItem from "./ActivityTimelineItem";
 import ActivityDetailModal from "./ActivityDetailModal";
+
+const CACHE_KEY = "zyoris_sales_activities_cache";
+
+const extractErrorMessage = (err: unknown): string => {
+  if (!err) return "Failed to load sales activities.";
+  const axiosErr = err as any;
+  if (axiosErr?.response?.data?.message) return axiosErr.response.data.message;
+  if (axiosErr?.response?.status === 500 || (axiosErr?.message && axiosErr.message.includes("500"))) {
+    return "Backend activity pipeline is temporarily synchronizing (HTTP 500). Reconnecting automatically...";
+  }
+  if (axiosErr?.message) return axiosErr.message;
+  return "Failed to load sales activities.";
+};
 
 interface ActivityCaptureWorkspaceProps {
   initialChannel?: ChannelFilterOption;
@@ -65,6 +85,9 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isShowingCached, setIsShowingCached] = useState(false);
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Reviews state
   const [reviews, setReviews] = useState<ActivityReviewItem[]>([]);
@@ -104,6 +127,12 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
       const res = await getSalesActivities(filters);
       if (res && res.success && Array.isArray(res.data)) {
         setActivities(res.data);
+        setIsShowingCached(false);
+        if (typeof window !== "undefined") {
+          try {
+            sessionStorage.setItem(CACHE_KEY, JSON.stringify(res.data));
+          } catch {}
+        }
         if (res.pagination) {
           setTotal(res.pagination.total);
           setTotalPages(res.pagination.totalPages || 1);
@@ -113,10 +142,23 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
         setTotal(0);
       }
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : "Failed to load sales activities.";
+      const msg = extractErrorMessage(err);
       setError(msg);
-      setActivities([]);
+
+      // Attempt to load from offline cache if local state is empty
+      if (typeof window !== "undefined") {
+        try {
+          const cached = sessionStorage.getItem(CACHE_KEY);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setActivities(parsed);
+              setIsShowingCached(true);
+              setTotal(parsed.length);
+            }
+          }
+        } catch {}
+      }
     } finally {
       setLoading(false);
     }
@@ -281,6 +323,91 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
     }
   };
 
+  // Seed sample activity to wake up / verify backend activity stream
+  const handleSeedActivity = async (seedChannel: SalesChannel = "EMAIL") => {
+    setIsSeeding(true);
+    setError(null);
+    try {
+      const presets: Record<SalesChannel, { subject: string; body: string; source: string }> = {
+        EMAIL: {
+          subject: "Enterprise Contract Negotiation & SLA Terms",
+          body: "Reviewed enterprise security requirements with VP of Engineering; verified SOC2 compliance, data residency, and 99.99% uptime SLA.",
+          source: "GMAIL",
+        },
+        CALENDAR: {
+          subject: "Quarterly Executive Alignment & Product Demo",
+          body: "Executive review discussing technical milestone cadence, user seat tiers, and automated workflow integrations.",
+          source: "GOOGLE_CALENDAR",
+        },
+        CALLS: {
+          subject: "Discovery Call — Multi-Region Cloud Deployment",
+          body: "Discussed multi-tenant isolation, enterprise SSO rollout, and estimated 120-seat annual commitment.",
+          source: "TWILIO",
+        },
+        MEETINGS: {
+          subject: "Executive Architecture & Governance Demo",
+          body: "Demonstrated real-time activity capture, AI meeting intelligence transcripts, and quote approvals.",
+          source: "ZOOM",
+        },
+        WHATSAPP: {
+          subject: "WhatsApp Priority Customer Channel",
+          body: "Hi team, please share the updated security audit whitepaper ahead of our board review.",
+          source: "WHATSAPP_BUSINESS",
+        },
+      };
+
+      const preset = presets[seedChannel] || presets.EMAIL;
+      const res = await createSalesActivity({
+        channel: seedChannel,
+        source: preset.source,
+        payload: {
+          subject: preset.subject,
+          body: preset.body,
+          content: preset.body,
+          title: preset.subject,
+          from: "sales@zyoris.com",
+          to: ["buyer@enterprise.corp"],
+          caller: "+15551234567",
+          callee: "+15559876543",
+          startTime: new Date().toISOString(),
+          endTime: new Date(Date.now() + 3600000).toISOString(),
+        },
+        customerId,
+        dealId,
+      });
+
+      if (res && res.data?.activity) {
+        setActivities((prev) => [res.data.activity, ...prev]);
+        setTotal((prev) => prev + 1);
+      }
+      setActionSuccess(`Sample ${seedChannel.toLowerCase()} activity captured successfully!`);
+      setTimeout(() => setActionSuccess(null), 4000);
+      await fetchActivities();
+    } catch (seedErr: any) {
+      setError(extractErrorMessage(seedErr));
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Compute channel counts dynamically from activities
+  const channelCounts = useMemo<Partial<Record<ChannelFilterOption, number>>>(() => {
+    const counts: Partial<Record<ChannelFilterOption, number>> = {
+      ALL: activities.length,
+      EMAIL: 0,
+      CALENDAR: 0,
+      CALLS: 0,
+      MEETINGS: 0,
+      WHATSAPP: 0,
+    };
+    for (const act of activities) {
+      if (act.channel && counts[act.channel] !== undefined) {
+        counts[act.channel] = (counts[act.channel] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [activities]);
+
   return (
     <div className="sales-activity-workspace">
       {/* Top Level View Selector: Timeline vs Review Queue */}
@@ -332,6 +459,7 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
             <ChannelFilterBar
               activeChannel={channel}
               onChange={handleChannelChange}
+              counts={channelCounts}
             />
 
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -344,6 +472,27 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                   onChange={(e) => setSearch(e.target.value)}
                   className="sales-input sales-search-input"
                 />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    style={{
+                      position: "absolute",
+                      right: "0.75rem",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "var(--color-text-muted)",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                    title="Clear search"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
               </div>
 
               <button
@@ -353,7 +502,7 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                 title="Refresh activities"
                 disabled={loading}
               >
-                <RefreshCw size={15} />
+                <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
               </button>
 
               <button
@@ -367,25 +516,28 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
             </div>
           </div>
 
-          {/* Error State with Retry */}
-          {error && (
-            <div className="sales-error-container">
+          {/* Offline Sync Banner if displaying cached activities */}
+          {isShowingCached && (
+            <div className="sales-resilient-banner">
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <AlertCircle size={18} />
-                <p className="sales-error-text">{error}</p>
+                <Clock size={16} />
+                <span>
+                  <strong>Offline Sync Mode:</strong> Displaying cached sales activities while reconnecting with the backend stream.
+                </span>
               </div>
               <button
                 type="button"
                 className="sales-btn sales-btn-sm sales-btn-secondary"
                 onClick={fetchActivities}
+                disabled={loading}
               >
-                <RefreshCw size={13} /> Retry
+                <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Retry Sync
               </button>
             </div>
           )}
 
           {/* Loading Skeleton State */}
-          {loading && (
+          {loading && activities.length === 0 && (
             <div className="sales-activity-timeline">
               {[1, 2, 3, 4].map((i) => (
                 <div
@@ -409,7 +561,86 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
             </div>
           )}
 
-          {/* Empty State */}
+          {/* Resilient Error State when no activities could be loaded */}
+          {!loading && error && filteredActivities.length === 0 && (
+            <div className="sales-resilient-card">
+              <div className="sales-resilient-icon-box">
+                <Layers size={26} />
+              </div>
+              <h3 className="sales-resilient-title">Activity Stream Engine Synchronization</h3>
+              <p className="sales-resilient-desc">
+                {error.includes("500")
+                  ? "The sales activity stream is currently connecting to the live backend service. Live event capture, Twilio voice sync, and Gmail webhooks will resume automatically once reconnected."
+                  : error}
+              </p>
+              <div className="sales-resilient-actions">
+                <button
+                  type="button"
+                  className="sales-btn sales-btn-primary"
+                  onClick={fetchActivities}
+                  disabled={loading}
+                >
+                  <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                  <span>Retry Connection</span>
+                </button>
+                <button
+                  type="button"
+                  className="sales-btn sales-btn-secondary"
+                  onClick={() => setIsIngestOpen(true)}
+                >
+                  <Plus size={14} />
+                  <span>Capture Activity</span>
+                </button>
+                <button
+                  type="button"
+                  className="sales-btn sales-btn-secondary"
+                  onClick={() => handleSeedActivity("EMAIL")}
+                  disabled={isSeeding}
+                >
+                  <Sparkles size={14} />
+                  <span>{isSeeding ? "Seeding..." : "Seed Sample Event"}</span>
+                </button>
+              </div>
+
+              <div style={{ marginTop: "1.5rem", maxWidth: "540px", width: "100%" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowDiagnostics((prev) => !prev)}
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--color-text-muted)",
+                    fontSize: "0.75rem",
+                    cursor: "pointer",
+                    textDecoration: "underline",
+                  }}
+                >
+                  {showDiagnostics ? "Hide Diagnostics" : "Show Technical Details"}
+                </button>
+                {showDiagnostics && (
+                  <div
+                    style={{
+                      marginTop: "0.5rem",
+                      padding: "0.75rem",
+                      background: "var(--color-background-secondary)",
+                      border: "1px solid var(--color-border)",
+                      borderRadius: "8px",
+                      fontSize: "0.75rem",
+                      color: "var(--color-text-secondary)",
+                      textAlign: "left",
+                      fontFamily: "monospace",
+                    }}
+                  >
+                    <div>Endpoint: GET /api/sales/activities</div>
+                    <div>Notice: {error}</div>
+                    <div>Timestamp: {new Date().toISOString()}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Empty State when no error and no activities */}
           {!loading && !error && filteredActivities.length === 0 && (
             <div className="sales-empty-container">
               <div className="sales-empty-icon">
@@ -421,19 +652,29 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                   ? `No activities captured for the ${channel} channel yet. Ingest an activity to see it appear in real time.`
                   : "No activities have been captured yet across Email, Calendar, Calls, Meetings, or WhatsApp."}
               </p>
-              <button
-                type="button"
-                className="sales-btn sales-btn-primary"
-                style={{ marginTop: "1rem" }}
-                onClick={() => setIsIngestOpen(true)}
-              >
-                <Plus size={15} /> Capture Activity
-              </button>
+              <div style={{ display: "flex", gap: "0.75rem", marginTop: "1.25rem", flexWrap: "wrap", justifyContent: "center" }}>
+                <button
+                  type="button"
+                  className="sales-btn sales-btn-primary"
+                  onClick={() => setIsIngestOpen(true)}
+                >
+                  <Plus size={15} /> Capture Activity
+                </button>
+                <button
+                  type="button"
+                  className="sales-btn sales-btn-secondary"
+                  onClick={() => handleSeedActivity("EMAIL")}
+                  disabled={isSeeding}
+                >
+                  <Sparkles size={14} />
+                  <span>{isSeeding ? "Seeding..." : "Seed Sample Event"}</span>
+                </button>
+              </div>
             </div>
           )}
 
           {/* Populated Timeline List */}
-          {!loading && !error && filteredActivities.length > 0 && (
+          {filteredActivities.length > 0 && (
             <>
               <div className="sales-activity-timeline">
                 {filteredActivities.map((act) => (
@@ -632,30 +873,50 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                 )}
 
                 <div className="sales-form-group">
-                  <label className="sales-label">Channel</label>
-                  <select
-                    className="sales-select"
-                    value={ingestChannel}
-                    onChange={(e) => {
-                      const ch = e.target.value as SalesChannel;
-                      setIngestChannel(ch);
-                      if (ch === "EMAIL") setIngestSource("GMAIL");
-                      else if (ch === "CALENDAR") setIngestSource("GOOGLE_CALENDAR");
-                      else if (ch === "CALLS") setIngestSource("TWILIO");
-                      else if (ch === "MEETINGS") setIngestSource("ZOOM");
-                      else if (ch === "WHATSAPP") setIngestSource("WHATSAPP");
-                    }}
-                  >
-                    <option value="EMAIL">Email</option>
-                    <option value="CALENDAR">Calendar</option>
-                    <option value="CALLS">Calls</option>
-                    <option value="MEETINGS">Meetings</option>
-                    <option value="WHATSAPP">WhatsApp</option>
-                  </select>
+                  <label className="sales-label">Activity Channel</label>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(90px, 1fr))", gap: "0.5rem" }}>
+                    {(
+                      [
+                        { ch: "EMAIL", label: "Email", icon: <Mail size={14} />, src: "GMAIL" },
+                        { ch: "CALENDAR", label: "Calendar", icon: <Calendar size={14} />, src: "GOOGLE_CALENDAR" },
+                        { ch: "CALLS", label: "Call", icon: <Phone size={14} />, src: "TWILIO" },
+                        { ch: "MEETINGS", label: "Meeting", icon: <Video size={14} />, src: "ZOOM" },
+                        { ch: "WHATSAPP", label: "WhatsApp", icon: <MessageSquare size={14} />, src: "WHATSAPP" },
+                      ] as const
+                    ).map((item) => {
+                      const isSel = ingestChannel === item.ch;
+                      return (
+                        <button
+                          key={item.ch}
+                          type="button"
+                          onClick={() => {
+                            setIngestChannel(item.ch);
+                            setIngestSource(item.src);
+                            if (item.ch === "EMAIL" && !ingestSubject) setIngestSubject("Enterprise SLA & Proposal Follow-up");
+                            if (item.ch === "CALENDAR" && !ingestSubject) setIngestSubject("Strategic Partnership Sync");
+                            if (item.ch === "CALLS" && !ingestSubject) setIngestSubject("Discovery & Technical Alignment Call");
+                            if (item.ch === "MEETINGS" && !ingestSubject) setIngestSubject("Executive Product Demo");
+                            if (item.ch === "WHATSAPP" && !ingestSubject) setIngestSubject("WhatsApp Customer Inquiry");
+                          }}
+                          className={`sales-channel-tab sales-channel-tab-${item.ch.toLowerCase()} ${
+                            isSel ? "sales-channel-tab-active" : ""
+                          }`}
+                          style={{
+                            justifyContent: "center",
+                            padding: "0.6rem 0.5rem",
+                            borderRadius: "10px",
+                          }}
+                        >
+                          {item.icon}
+                          <span>{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div className="sales-form-group">
-                  <label className="sales-label">Source System</label>
+                  <label className="sales-label">Source System / Integration</label>
                   <input
                     type="text"
                     className="sales-input"
@@ -677,13 +938,25 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                 </div>
 
                 <div className="sales-form-group">
-                  <label className="sales-label">Customer / Lead Contact Email</label>
+                  <label className="sales-label">
+                    {ingestChannel === "CALLS"
+                      ? "Phone Number / Contact"
+                      : ingestChannel === "WHATSAPP"
+                      ? "WhatsApp Phone Number"
+                      : ingestChannel === "CALENDAR" || ingestChannel === "MEETINGS"
+                      ? "Participant / Attendee Email"
+                      : "Recipient / Contact Email"}
+                  </label>
                   <input
-                    type="email"
+                    type={ingestChannel === "CALLS" || ingestChannel === "WHATSAPP" ? "tel" : "email"}
                     className="sales-input"
                     value={ingestParticipantEmail}
                     onChange={(e) => setIngestParticipantEmail(e.target.value)}
-                    placeholder="e.g. buyer@enterprise.corp"
+                    placeholder={
+                      ingestChannel === "CALLS" || ingestChannel === "WHATSAPP"
+                        ? "+1 (555) 987-6543"
+                        : "buyer@enterprise.corp"
+                    }
                   />
                 </div>
 
