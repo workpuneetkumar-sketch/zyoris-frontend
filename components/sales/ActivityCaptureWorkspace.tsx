@@ -21,7 +21,6 @@ import {
   User,
   Clock,
   Layers,
-  Sparkles,
   Mail,
   Calendar,
   Phone,
@@ -48,14 +47,18 @@ import ChannelFilterBar from "./ChannelFilterBar";
 import ActivityTimelineItem from "./ActivityTimelineItem";
 import ActivityDetailModal from "./ActivityDetailModal";
 
-const CACHE_KEY = "zyoris_sales_activities_cache";
-
 const extractErrorMessage = (err: unknown): string => {
   if (!err) return "Failed to load sales activities.";
   const axiosErr = err as any;
-  if (axiosErr?.response?.data?.message) return axiosErr.response.data.message;
+  if (axiosErr?.response?.data?.message) {
+    const msg = axiosErr.response.data.message;
+    if (axiosErr.response.status === 500 || axiosErr?.response?.data?.error === "INTERNAL_ERROR") {
+      return `Server Error (HTTP 500): ${msg}`;
+    }
+    return msg;
+  }
   if (axiosErr?.response?.status === 500 || (axiosErr?.message && axiosErr.message.includes("500"))) {
-    return "Backend activity pipeline is temporarily synchronizing (HTTP 500). Reconnecting automatically...";
+    return "Server Error (HTTP 500): Database error on the server.";
   }
   if (axiosErr?.message) return axiosErr.message;
   return "Failed to load sales activities.";
@@ -85,8 +88,6 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isShowingCached, setIsShowingCached] = useState(false);
-  const [isSeeding, setIsSeeding] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   // Reviews state
@@ -127,12 +128,6 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
       const res = await getSalesActivities(filters);
       if (res && res.success && Array.isArray(res.data)) {
         setActivities(res.data);
-        setIsShowingCached(false);
-        if (typeof window !== "undefined") {
-          try {
-            sessionStorage.setItem(CACHE_KEY, JSON.stringify(res.data));
-          } catch {}
-        }
         if (res.pagination) {
           setTotal(res.pagination.total);
           setTotalPages(res.pagination.totalPages || 1);
@@ -144,21 +139,8 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
     } catch (err: unknown) {
       const msg = extractErrorMessage(err);
       setError(msg);
-
-      // Attempt to load from offline cache if local state is empty
-      if (typeof window !== "undefined") {
-        try {
-          const cached = sessionStorage.getItem(CACHE_KEY);
-          if (cached) {
-            const parsed = JSON.parse(cached);
-            if (Array.isArray(parsed) && parsed.length > 0) {
-              setActivities(parsed);
-              setIsShowingCached(true);
-              setTotal(parsed.length);
-            }
-          }
-        } catch {}
-      }
+      setActivities([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -323,73 +305,6 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
     }
   };
 
-  // Seed sample activity to wake up / verify backend activity stream
-  const handleSeedActivity = async (seedChannel: SalesChannel = "EMAIL") => {
-    setIsSeeding(true);
-    setError(null);
-    try {
-      const presets: Record<SalesChannel, { subject: string; body: string; source: string }> = {
-        EMAIL: {
-          subject: "Enterprise Contract Negotiation & SLA Terms",
-          body: "Reviewed enterprise security requirements with VP of Engineering; verified SOC2 compliance, data residency, and 99.99% uptime SLA.",
-          source: "GMAIL",
-        },
-        CALENDAR: {
-          subject: "Quarterly Executive Alignment & Product Demo",
-          body: "Executive review discussing technical milestone cadence, user seat tiers, and automated workflow integrations.",
-          source: "GOOGLE_CALENDAR",
-        },
-        CALLS: {
-          subject: "Discovery Call — Multi-Region Cloud Deployment",
-          body: "Discussed multi-tenant isolation, enterprise SSO rollout, and estimated 120-seat annual commitment.",
-          source: "TWILIO",
-        },
-        MEETINGS: {
-          subject: "Executive Architecture & Governance Demo",
-          body: "Demonstrated real-time activity capture, AI meeting intelligence transcripts, and quote approvals.",
-          source: "ZOOM",
-        },
-        WHATSAPP: {
-          subject: "WhatsApp Priority Customer Channel",
-          body: "Hi team, please share the updated security audit whitepaper ahead of our board review.",
-          source: "WHATSAPP_BUSINESS",
-        },
-      };
-
-      const preset = presets[seedChannel] || presets.EMAIL;
-      const res = await createSalesActivity({
-        channel: seedChannel,
-        source: preset.source,
-        payload: {
-          subject: preset.subject,
-          body: preset.body,
-          content: preset.body,
-          title: preset.subject,
-          from: "sales@zyoris.com",
-          to: ["buyer@enterprise.corp"],
-          caller: "+15551234567",
-          callee: "+15559876543",
-          startTime: new Date().toISOString(),
-          endTime: new Date(Date.now() + 3600000).toISOString(),
-        },
-        customerId,
-        dealId,
-      });
-
-      if (res && res.data?.activity) {
-        setActivities((prev) => [res.data.activity, ...prev]);
-        setTotal((prev) => prev + 1);
-      }
-      setActionSuccess(`Sample ${seedChannel.toLowerCase()} activity captured successfully!`);
-      setTimeout(() => setActionSuccess(null), 4000);
-      await fetchActivities();
-    } catch (seedErr: any) {
-      setError(extractErrorMessage(seedErr));
-    } finally {
-      setIsSeeding(false);
-    }
-  };
-
   // Compute channel counts dynamically from activities
   const channelCounts = useMemo<Partial<Record<ChannelFilterOption, number>>>(() => {
     const counts: Partial<Record<ChannelFilterOption, number>> = {
@@ -516,26 +431,6 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
             </div>
           </div>
 
-          {/* Offline Sync Banner if displaying cached activities */}
-          {isShowingCached && (
-            <div className="sales-resilient-banner">
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-                <Clock size={16} />
-                <span>
-                  <strong>Offline Sync Mode:</strong> Displaying cached sales activities while reconnecting with the backend stream.
-                </span>
-              </div>
-              <button
-                type="button"
-                className="sales-btn sales-btn-sm sales-btn-secondary"
-                onClick={fetchActivities}
-                disabled={loading}
-              >
-                <RefreshCw size={13} className={loading ? "animate-spin" : ""} /> Retry Sync
-              </button>
-            </div>
-          )}
-
           {/* Loading Skeleton State */}
           {loading && activities.length === 0 && (
             <div className="sales-activity-timeline">
@@ -590,15 +485,6 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                 >
                   <Plus size={14} />
                   <span>Capture Activity</span>
-                </button>
-                <button
-                  type="button"
-                  className="sales-btn sales-btn-secondary"
-                  onClick={() => handleSeedActivity("EMAIL")}
-                  disabled={isSeeding}
-                >
-                  <Sparkles size={14} />
-                  <span>{isSeeding ? "Seeding..." : "Seed Sample Event"}</span>
                 </button>
               </div>
 
@@ -663,11 +549,11 @@ export const ActivityCaptureWorkspace: React.FC<ActivityCaptureWorkspaceProps> =
                 <button
                   type="button"
                   className="sales-btn sales-btn-secondary"
-                  onClick={() => handleSeedActivity("EMAIL")}
-                  disabled={isSeeding}
+                  onClick={fetchActivities}
+                  disabled={loading}
                 >
-                  <Sparkles size={14} />
-                  <span>{isSeeding ? "Seeding..." : "Seed Sample Event"}</span>
+                  <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                  <span>Refresh</span>
                 </button>
               </div>
             </div>
