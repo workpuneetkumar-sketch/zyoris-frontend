@@ -93,7 +93,11 @@ export default function CommunicationSearchModal({
       });
 
       if (append) {
-        setResults((prev) => [...prev, ...res.data]);
+        setResults((prev) => {
+          const existingIds = new Set(prev.map((r) => r.id));
+          const fresh = res.data.filter((r) => !existingIds.has(r.id));
+          return [...prev, ...fresh];
+        });
       } else {
         setResults(res.data);
       }

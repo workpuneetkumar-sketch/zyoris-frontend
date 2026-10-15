@@ -23,6 +23,8 @@ interface MessageComposerProps {
   editingMessage?: ConnectMessage | null;
   replyingToMessage?: ConnectMessage | null;
   teamMembers?: TeamMember[];
+  onTyping?: () => void;
+  onStopTyping?: () => void;
   onSendMessage: (
     content: string,
     parentMessageId?: string | null,
@@ -41,6 +43,8 @@ export default function MessageComposer({
   editingMessage = null,
   replyingToMessage = null,
   teamMembers = [],
+  onTyping,
+  onStopTyping,
   onSendMessage,
   onSaveEdit,
   onCancelEdit,
@@ -49,6 +53,7 @@ export default function MessageComposer({
   const [content, setContent] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const typingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Attachments State
   const [attachments, setAttachments] = useState<MessageAttachment[]>([]);
@@ -109,6 +114,13 @@ export default function MessageComposer({
     const val = e.target.value;
     setContent(val);
 
+    // Trigger typing event
+    onTyping?.();
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = setTimeout(() => {
+      onStopTyping?.();
+    }, 2500);
+
     // Detect mention trigger
     const lastAtPos = val.lastIndexOf("@");
     if (lastAtPos !== -1 && lastAtPos === val.length - 1) {
@@ -142,6 +154,9 @@ export default function MessageComposer({
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (typingTimerRef.current) clearTimeout(typingTimerRef.current);
+    onStopTyping?.();
+
     const cleanContent = content.trim();
     if ((!cleanContent && attachments.length === 0) || sending || disabled || uploading) return;
 
