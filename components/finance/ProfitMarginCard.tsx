@@ -3,6 +3,7 @@
 import React from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { ExpenseBreakdownPoint } from '@/lib/api/finance/financeApi';
+import { PieChart as PieIcon } from 'lucide-react';
 
 interface ExpenseBreakdownCardProps {
   data?: ExpenseBreakdownPoint[];
@@ -16,98 +17,130 @@ export const ExpenseBreakdownCard: React.FC<ExpenseBreakdownCardProps> = ({ data
     if (value >= 10000000) return `₹${(value / 10000000).toFixed(1)} Cr`;
     if (value >= 100000) return `₹${(value / 100000).toFixed(1)} L`;
     if (value >= 1000) return `₹${(value / 1000).toFixed(1)}K`;
-    return `₹${value}`;
+    return `₹${value.toLocaleString('en-IN')}`;
   };
 
   if (isLoading) {
     return (
-      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm w-full h-auto min-h-[400px] flex flex-col">
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm w-full h-[400px] flex flex-col">
         <div className="flex items-center justify-between mb-4">
-          <div className="h-6 bg-gray-200 rounded w-32 animate-pulse"></div>
-          <div className="h-8 bg-gray-200 rounded w-24 animate-pulse"></div>
+          <div className="h-5 bg-gray-100 rounded w-36 animate-pulse" />
+          <div className="h-6 bg-gray-100 rounded-full w-20 animate-pulse" />
         </div>
-        <div className="flex-1 bg-gray-100 rounded animate-pulse"></div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-36 h-36 rounded-full border-4 border-gray-100 border-t-blue-500 animate-spin" />
+        </div>
       </div>
     );
   }
 
   if (!data || data.length === 0) {
     return (
-      <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm w-full h-auto min-h-[400px] flex flex-col items-center justify-center">
-        <p className="text-gray-500">No expense data available</p>
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm w-full h-[400px] flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center text-gray-400 mb-3">
+          <PieIcon className="w-6 h-6" />
+        </div>
+        <h4 className="text-sm font-semibold text-gray-700">No Expense Data</h4>
+        <p className="text-xs text-gray-400 mt-1 max-w-[200px]">
+          Approved and reimbursed expenses will appear categorized here.
+        </p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white p-4 sm:p-6 rounded-2xl border border-gray-100 shadow-sm w-full h-auto min-h-[400px] flex flex-col">
-      <div className="flex items-center justify-between mb-4 sm:mb-2">
-        <h3 className="text-base font-bold text-gray-900">Expense Breakdown</h3>
-        <div className="text-xs text-gray-400 bg-gray-50 px-3 py-1.5 rounded-lg border border-gray-100 font-medium">
+    <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm w-full h-[400px] flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+            <PieIcon className="w-4 h-4" />
+          </div>
+          <h3 className="text-base font-bold text-gray-900 tracking-tight">Expense Breakdown</h3>
+        </div>
+        <span className="text-[11px] font-semibold text-gray-500 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-200/60">
           By Category
+        </span>
+      </div>
+
+      {/* Donut Chart (Compact Center) */}
+      <div className="relative w-full h-[150px] flex items-center justify-center">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Tooltip 
+              formatter={(value: any) => [`₹${Number(value).toLocaleString('en-IN')}`, 'Amount']}
+              contentStyle={{ 
+                backgroundColor: '#0f172a', 
+                borderRadius: '10px', 
+                border: 'none',
+                boxShadow: '0 8px 20px -4px rgba(0,0,0,0.25)',
+                fontSize: '11px',
+                color: '#f8fafc',
+                padding: '6px 10px'
+              }}
+              itemStyle={{ color: '#f8fafc' }}
+            />
+            <Pie
+              data={data}
+              cx="50%"
+              cy="50%"
+              innerRadius="62%"
+              outerRadius="88%"
+              paddingAngle={3}
+              dataKey="value"
+            >
+              {data.map((entry, index) => (
+                <Cell key={`cell-${index}`} fill={entry.color} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        
+        <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
+          <span className="text-base font-bold text-gray-900 leading-tight">
+            {formatValue(totalExpenses)}
+          </span>
+          <span className="text-[10px] text-gray-400 font-medium">
+            Total
+          </span>
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row items-center justify-between flex-1 gap-6 md:gap-4">
-        <div className="w-full md:w-1/2 h-[220px] sm:h-[260px] md:h-[280px] relative flex items-center justify-center">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Tooltip 
-                formatter={(value: any) => [formatValue(value), 'Amount']}
-                contentStyle={{ 
-                  backgroundColor: '#ffffff', 
-                  borderRadius: '12px', 
-                  border: '1px solid #f3f4f6',
-                  fontSize: '12px',
-                  padding: '8px 12px'
-                }}
-              />
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius="60%"
-                outerRadius="85%"
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-          
-          <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center px-2">
-            <span className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900">
-              {formatValue(totalExpenses)}
-            </span>
-            <span className="text-[10px] sm:text-xs text-gray-400 font-medium mt-0.5">
-              Total Expenses
-            </span>
-          </div>
-        </div>
-
-        <div className="w-full md:w-1/2 space-y-2 sm:space-y-2.5 overflow-y-auto max-h-[200px] sm:max-h-[240px] md:max-h-[280px] pr-1 sm:pr-2">
-          {data.map((item, idx) => (
-            <div 
-              key={idx} 
-              className="flex items-center justify-between text-xs sm:text-sm font-medium py-1 border-b border-gray-50 last:border-0"
-            >
-              <div className="flex items-center space-x-2 min-w-0 flex-1">
-                <span 
-                  className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full flex-shrink-0" 
-                  style={{ backgroundColor: item.color }} 
-                />
-                <span className="text-gray-700 truncate">{item.name}</span>
+      {/* Full-width Category Breakdown List (No Truncation!) */}
+      <div className="flex-1 overflow-y-auto mt-2 pr-1 space-y-2.5">
+        {data.map((item, idx) => {
+          const numericPct = parseFloat(item.percentage.replace('%', '')) || 0;
+          return (
+            <div key={idx} className="group/item">
+              <div className="flex items-center justify-between text-xs font-medium mb-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span 
+                    className="w-2.5 h-2.5 rounded-full shrink-0" 
+                    style={{ backgroundColor: item.color }} 
+                  />
+                  <span className="text-gray-800 font-semibold truncate group-hover/item:text-blue-600 transition-colors">
+                    {item.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-gray-900 font-bold">
+                    {formatValue(item.value)}
+                  </span>
+                  <span className="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                    {item.percentage}
+                  </span>
+                </div>
               </div>
-              <div className="text-gray-500 space-x-1 flex-shrink-0 ml-2">
-                <span className="text-gray-900 font-semibold">{formatValue(item.value)}</span>
-                <span className="text-gray-400 text-[10px] sm:text-xs">({item.percentage})</span>
+              {/* Subtle mini progress bar */}
+              <div className="w-full bg-gray-100 rounded-full h-1 overflow-hidden">
+                <div 
+                  className="h-full rounded-full transition-all duration-500" 
+                  style={{ width: `${Math.min(100, numericPct)}%`, backgroundColor: item.color }}
+                />
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
     </div>
   );

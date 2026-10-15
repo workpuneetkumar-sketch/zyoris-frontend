@@ -1,8 +1,8 @@
-// app/finance/page.tsx
+// app/(dashboard)/finance/page.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import Link from 'next/link';                                       // <-- Next.js Link
+import Link from 'next/link';
 import {
   fetchFinanceDashboardData,
   fetchExpenses,
@@ -26,7 +26,7 @@ import { ExpenseBreakdownCard } from '@/components/finance/ProfitMarginCard';
 import { OutstandingInvoices } from '@/components/finance/OutstandingInvoices';
 import { RecentTransactions } from '@/components/finance/RecentTransactions';
 import { CashFlowAnalysisChart } from '@/components/finance/CashFlowAnalysisChart';
-import { FileText, Receipt, ArrowRight } from 'lucide-react';
+import { FileText, Receipt, ArrowRight, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function FinanceDashboardPage() {
   const [stats, setStats] = useState<StatCardData[]>([]);
@@ -35,6 +35,8 @@ export default function FinanceDashboardPage() {
   const [upcomingPayments, setUpcomingPayments] = useState<UpcomingPayment[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [cashFlowData, setCashFlowData] = useState<CashFlowDataPoint[]>([]);
+  const [totalInvoicesCount, setTotalInvoicesCount] = useState(0);
+  const [totalExpensesCount, setTotalExpensesCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,9 +57,11 @@ export default function FinanceDashboardPage() {
       setUpcomingPayments(computeUpcomingPayments(invoices));
       setTransactions(computeRecentTransactions(expenses, invoices));
       setCashFlowData(computeCashFlowData(expenses, invoices));
-    } catch (err) {
+      setTotalInvoicesCount(invoices.length);
+      setTotalExpensesCount(expenses.length);
+    } catch (err: any) {
       console.error('Failed to load dashboard data:', err);
-      setError('Failed to load dashboard data. Please try again.');
+      setError(err?.message || 'Failed to load dashboard data. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -69,20 +73,19 @@ export default function FinanceDashboardPage() {
 
   if (error) {
     return (
-      <div className="p-4 md:p-6 bg-[#f8fafc] min-h-screen">
-        <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-8 text-center">
-          <div className="text-red-600 mb-4">
-            <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
+      <div className="p-4 md:p-6 bg-[#f8fafc] min-h-screen flex items-center justify-center">
+        <div className="bg-white rounded-2xl border border-rose-100 shadow-md p-8 text-center max-w-md w-full">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Dashboard</h3>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <h3 className="text-lg font-bold text-gray-900 mb-1">Error Loading Finance Data</h3>
+          <p className="text-sm text-gray-600 mb-5">{error}</p>
           <button
             onClick={loadData}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
           >
-            Try Again
+            <RefreshCw className="w-4 h-4" />
+            <span>Try Again</span>
           </button>
         </div>
       </div>
@@ -91,52 +94,85 @@ export default function FinanceDashboardPage() {
 
   return (
     <div className="p-4 md:p-6 bg-[#f8fafc] min-h-screen space-y-6">
-      <FinanceHeader />
+      {/* Executive Header */}
+      <FinanceHeader onRefresh={loadData} isRefreshing={isLoading} />
 
-      {/* Quick‑navigation links (client‑side, no reload) */}
-      <div className="grid grid-cols-2 gap-4">
-        <Link href="/finance/invoices" className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-100 transition-all group">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600">
-              <FileText className="w-5 h-5" />
+      {/* Quick-navigation Action Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Link 
+          href="/finance/invoices" 
+          className="group relative flex items-center justify-between p-4 bg-white border border-gray-100 hover:border-blue-300 rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 group-hover:bg-blue-600 text-blue-600 group-hover:text-white flex items-center justify-center transition-colors shadow-xs">
+              <FileText className="w-6 h-6 stroke-[2]" />
             </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-gray-800">Invoices</p>
-              <p className="text-xs text-gray-400">Manage & create invoices</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
+                  Invoices Management
+                </h4>
+                {totalInvoicesCount > 0 && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/50">
+                    {totalInvoicesCount} Records
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Generate client billings, track status & view receivable aging
+              </p>
             </div>
           </div>
-          <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-blue-600 transition-colors" />
+          <div className="w-8 h-8 rounded-full bg-gray-50 group-hover:bg-blue-50 flex items-center justify-center text-gray-400 group-hover:text-blue-600 transition-all shrink-0 ml-3">
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </div>
         </Link>
 
-        <Link href="/finance/expenses" className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-rose-100 transition-all group">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-rose-50 text-rose-600">
-              <Receipt className="w-5 h-5" />
+        <Link 
+          href="/finance/expenses" 
+          className="group relative flex items-center justify-between p-4 bg-white border border-gray-100 hover:border-rose-300 rounded-2xl shadow-xs hover:shadow-md transition-all duration-200 overflow-hidden"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-xl bg-rose-50 group-hover:bg-rose-600 text-rose-600 group-hover:text-white flex items-center justify-center transition-colors shadow-xs">
+              <Receipt className="w-6 h-6 stroke-[2]" />
             </div>
-            <div className="text-left">
-              <p className="text-sm font-semibold text-gray-800">Expenses</p>
-              <p className="text-xs text-gray-400">View & track expenses</p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h4 className="text-base font-bold text-gray-900 group-hover:text-rose-600 transition-colors">
+                  Expenses & Outflows
+                </h4>
+                {totalExpensesCount > 0 && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200/50">
+                    {totalExpensesCount} Recorded
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Submit claims, monitor categories, approvals & reimbursements
+              </p>
             </div>
           </div>
-          <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-rose-600 transition-colors" />
+          <div className="w-8 h-8 rounded-full bg-gray-50 group-hover:bg-rose-50 flex items-center justify-center text-gray-400 group-hover:text-rose-600 transition-all shrink-0 ml-3">
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+          </div>
         </Link>
       </div>
 
+      {/* Primary KPI Stats Cards */}
       <FinanceStatsCards stats={stats} isLoading={isLoading} />
 
-      {/* Row 1: Revenue vs Expenses (2/3) + Expense Breakdown (1/3) */}
+      {/* Row 1: Revenue vs Expenses Trend (2/3) + Expense Breakdown (1/3) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
           {isLoading ? (
             <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center h-[400px] text-gray-400">
-              Loading chart…
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-5 h-5 animate-spin text-blue-600" />
+                <span>Loading financial trend…</span>
+              </div>
             </div>
-          ) : chartData.length > 0 ? (
-            <RevenueExpenseChart data={chartData} />
           ) : (
-            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center h-[400px] text-gray-400">
-              No data available for trend
-            </div>
+            <RevenueExpenseChart data={chartData} />
           )}
         </div>
 
@@ -145,12 +181,12 @@ export default function FinanceDashboardPage() {
         </div>
       </div>
 
-      {/* Row 2: Cash Flow Analysis (full width) */}
+      {/* Row 2: Cash Flow Analysis (Full Width) */}
       <div>
         <CashFlowAnalysisChart data={cashFlowData} isLoading={isLoading} />
       </div>
 
-      {/* Row 3: Upcoming Payments + Recent Transactions */}
+      {/* Row 3: Upcoming Invoices & Recent Ledger Transactions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <OutstandingInvoices payments={upcomingPayments} isLoading={isLoading} />
         <RecentTransactions transactions={transactions} isLoading={isLoading} />
