@@ -46,6 +46,26 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           crossOrigin="anonymous"
           referrerPolicy="no-referrer"
         />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  var stored = localStorage.getItem('zyoris-theme');
+                  var isDark = stored === 'dark' || (!stored || stored === 'system') && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                  var root = document.documentElement;
+                  if (isDark) {
+                    root.classList.add('dark');
+                    root.classList.remove('light');
+                  } else {
+                    root.classList.add('light');
+                    root.classList.remove('dark');
+                  }
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
       </head>
       <body className={inter.className}>
         <Script

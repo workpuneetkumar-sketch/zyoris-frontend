@@ -162,8 +162,14 @@ a {
   --color-cat-custom-bg:    #f3f4f6;
 }
 
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
 /* Dark theme variables — deep indigo enterprise, high-contrast */
 .dark {
+  color-scheme: dark;
   /* ── Surfaces ─────────────────────────────────────────────────── */
   --color-background:           #080c18;   /* slightly warmer deep navy */
   --color-background-secondary: #0d1225;
