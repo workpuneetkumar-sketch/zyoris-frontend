@@ -47,19 +47,9 @@ export default function AdminLoginStep3({ onBack, onNext, isLoading }: AdminLogi
         className="flex flex-col gap-6 mt-5"
         onSubmit={(e) => {
           e.preventDefault();
-          // TODO (BD1): Wire OTP verification to the backend before enabling MFA in production.
-          // The collected `otp` value must be sent to a POST /auth/verify-otp (or equivalent)
-          // endpoint together with the user's email / session token.  Until that endpoint is
-          // confirmed and implemented, calling onNext() here skips OTP validation entirely,
-          // meaning the Admin MFA step is cosmetic only and provides no security enforcement.
-          // See Phase 1 Audit – Issue C2 and Backend Dependency BD1.
-          if (process.env.NODE_ENV === "development") {
-            console.warn(
-              "[AdminLoginStep3] OTP verification is NOT wired to the backend. " +
-              "The entered OTP is captured in state but never sent to an API. " +
-              "MFA is bypassed. Resolve backend dependency BD1 before shipping."
-            );
-          }
+          // Admin MFA is NOT enforced. The session is issued at Step 2;
+          // this step verifies nothing. Blocked on a backend admin-MFA
+          // endpoint that does not exist.
           onNext();
         }}
         aria-label="Admin sign-in step 3"
