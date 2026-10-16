@@ -30,6 +30,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { submitWorkflowDraftForApproval } from "@/lib/api/workflowsApi";
+import { formatActionType } from "@/lib/api/revopsApi";
 import { AgentResultFrame } from "@/components/agents/AgentResultFrame";
 import { ApprovalStatusBadge } from "@/components/approvals/ApprovalStatusBadge";
 import { toast } from "react-toastify";
@@ -98,9 +99,9 @@ function StepRow({ step, isLast }: { step: WorkflowDraftStep; isLast: boolean })
           <p className="text-xs font-semibold text-[color:var(--color-text)] leading-snug flex-1">
             {step.actionLabel}
           </p>
-          <code className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-muted)] border border-[color:var(--color-border)] shrink-0">
-            {step.actionType}
-          </code>
+          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[color:var(--color-background-secondary)] text-[color:var(--color-text-secondary)] border border-[color:var(--color-border)] shrink-0">
+            {formatActionType(step.actionType)}
+          </span>
         </div>
         {step.targetEntity && (
           <p className="text-[11px] text-[color:var(--color-text-muted)] mt-0.5">

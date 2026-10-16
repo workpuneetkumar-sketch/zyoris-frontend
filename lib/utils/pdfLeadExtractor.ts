@@ -819,7 +819,8 @@ export async function extractLeadsFromPdf(
 
   // ── Tier 2 (Fallback): pdfjs-dist Engine ──
   try {
-    const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as any);
+    const importedModule = await import("pdfjs-dist/legacy/build/pdf.js" as any);
+    const pdfjsLib = importedModule?.default?.getDocument ? importedModule.default : importedModule;
     if (pdfjsLib && pdfjsLib.getDocument) {
       const copy = cleanUint8.slice(0);
       const loadingTask = pdfjsLib.getDocument({
