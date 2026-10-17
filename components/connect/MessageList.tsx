@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Hash,
   MessageSquare,
+  Bell,
 } from "lucide-react";
 import { ConnectMessage } from "@/types/connect";
 import MessageItem from "./MessageItem";
@@ -19,19 +20,21 @@ interface MessageListProps {
   error?: string | null;
   currentUserId?: string | null;
   canManage?: boolean;
-  highlightedMessageId?: string | null;
   emptyTitle?: string;
   emptySubtitle?: string;
+  unreadCount?: number;
   onRetryFetch?: () => void;
   onReply: (message: ConnectMessage) => void;
   onEdit: (message: ConnectMessage) => void;
   onDelete: (message: ConnectMessage) => void;
   onRetrySend?: (message: ConnectMessage) => void;
   onReact?: (message: ConnectMessage, reaction: string) => void;
+  onMention?: (message: ConnectMessage) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onLinkEntity?: (message: ConnectMessage) => void;
+  onUnlinkEntity?: (message: ConnectMessage, linkId: string) => void;
   onOpenThread?: (message: ConnectMessage) => void;
-  onOpenLinkModal?: (message: ConnectMessage) => void;
 }
 
 export default function MessageList({
@@ -42,41 +45,36 @@ export default function MessageList({
   error = null,
   currentUserId,
   canManage = false,
-  highlightedMessageId = null,
   emptyTitle,
   emptySubtitle,
+  unreadCount = 0,
   onRetryFetch,
   onReply,
   onEdit,
   onDelete,
   onRetrySend,
   onReact,
+  onMention,
   onPin,
   onSave,
+  onLinkEntity,
+  onUnlinkEntity,
   onOpenThread,
-  onOpenLinkModal,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Auto-scroll to bottom or highlighted message
+  // Auto-scroll to bottom whenever messages array changes
   useEffect(() => {
-    if (highlightedMessageId) {
-      const el = document.getElementById(`message-item-${highlightedMessageId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-        return;
-      }
-    }
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, messages[messages.length - 1]?.id]);
 
-    if (messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [messages.length, messages[messages.length - 1]?.id, highlightedMessageId]);
+  // Index where unread marker should appear if there are unread messages
+  const unreadMarkerIndex = unreadCount > 0 && messages.length >= unreadCount
+    ? messages.length - unreadCount
+    : -1;
 
   return (
     <div
-      ref={containerRef}
       id="message-list-container"
       className="flex-1 overflow-y-auto p-4 md:p-6 space-y-3 bg-background relative"
     >
@@ -135,30 +133,38 @@ export default function MessageList({
       ) : (
         /* Message Stream */
         <div id="messages-stream" className="space-y-2">
-          {messages.map((message) => {
-            const isMsgChannel = Boolean(message.channelId || channelId);
-            const canPin = isMsgChannel ? Boolean(canManage) : true;
+          {messages.map((message, idx) => (
+            <React.Fragment key={message.id}>
+              {/* Unread Divider Marker */}
+              {idx === unreadMarkerIndex && (
+                <div className="my-4 flex items-center gap-3 select-none">
+                  <div className="h-px bg-error/40 flex-1" />
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 border border-error/20 text-error text-[10px] font-bold uppercase tracking-wider">
+                    <Bell size={11} />
+                    <span>New Messages</span>
+                  </div>
+                  <div className="h-px bg-error/40 flex-1" />
+                </div>
+              )}
 
-            return (
               <MessageItem
-                key={message.id}
                 message={message}
                 currentUserId={currentUserId}
                 canManage={canManage}
-                canPin={canPin}
-                isHighlighted={highlightedMessageId === message.id}
                 onReply={onReply}
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onRetrySend={onRetrySend}
                 onReact={onReact}
+                onMention={onMention}
                 onPin={onPin}
                 onSave={onSave}
+                onLinkEntity={onLinkEntity}
+                onUnlinkEntity={onUnlinkEntity}
                 onOpenThread={onOpenThread}
-                onOpenLinkModal={onOpenLinkModal}
               />
-            );
-          })}
+            </React.Fragment>
+          ))}
         </div>
       )}
 

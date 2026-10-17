@@ -14,6 +14,9 @@ export interface ChannelMember {
   role: MemberRole;
   createdAt: string;
   updatedAt: string;
+  restriction?: "NONE" | "READ_ONLY" | "MUTED";
+  restrictedUntil?: string | null;
+  mutedAt?: string | null;
   user?: {
     id: string;
     name: string;
@@ -22,14 +25,22 @@ export interface ChannelMember {
   };
 }
 
+export type ChannelAudience = "INTERNAL" | "CLIENT_SHARED";
+
 export interface Channel {
   id: string;
   organizationId: string;
   name: string;
   slug?: string;
   description?: string | null;
+  topic?: string | null;
   visibility: ChannelVisibility;
+  audience?: ChannelAudience;
+  clientId?: string | null;
+  isReadOnly?: boolean;
+  isMuted?: boolean;
   archivedAt?: string | null;
+  archivedById?: string | null;
   createdById?: string;
   createdAt: string;
   updatedAt: string;
@@ -78,28 +89,25 @@ export interface Conversation {
 
 export type MessageDeliveryStatus = "sending" | "sent" | "failed";
 
-export interface MessageAttachment {
-  id?: string;
+export interface MessageReactionUser {
+  id: string;
   name: string;
-  url?: string;
-  size?: number; // bytes
-  mimeType?: string;
-  fileType?: string;
-  type?: string;
-  fileUploadId?: string;
+  avatarUrl?: string | null;
 }
 
-export interface MessageReaction {
+export interface MessageReactionSummary {
   emoji: string;
   count: number;
-  userIds: string[];
-  hasReacted?: boolean;
+  users: MessageReactionUser[];
+  hasReacted: boolean;
 }
 
-export type BusinessLinkTargetType =
+export type BusinessEntityType =
   | "TASK"
   | "LEAD"
   | "DEAL"
+  | "CONTACT"
+  | "COMPANY"
   | "MEETING"
   | "PROJECT"
   | "DOCUMENT";
@@ -107,16 +115,16 @@ export type BusinessLinkTargetType =
 export interface BusinessEntityLink {
   id: string;
   messageId: string;
-  targetType: BusinessLinkTargetType | string;
+  targetType: BusinessEntityType;
   targetId: string;
-  metadata?: {
-    title?: string;
-    description?: string;
-    status?: string;
-    url?: string;
-    [key: string]: any;
-  } | null;
+  title?: string;
+  url?: string;
+  metadata?: Record<string, any>;
   createdAt?: string;
+  createdBy?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface ConnectMessage {
@@ -148,13 +156,16 @@ export interface ConnectMessage {
     email?: string | null;
     avatarUrl?: string | null;
   };
-  attachments?: MessageAttachment[];
-  reactions?: MessageReaction[];
-  links?: BusinessEntityLink[];
+  attachments?: any[];
+  visibility?: "INTERNAL" | "CLIENT_SHARED";
+  // Day 2 Collaboration Properties
+  reactions?: MessageReactionSummary[];
   replyCount?: number;
   lastReplyAt?: string | null;
+  replyUsers?: Array<{ id: string; name: string; avatarUrl?: string | null }>;
   isPinned?: boolean;
   isSaved?: boolean;
+  businessLinks?: BusinessEntityLink[];
   mentionedUserIds?: string[];
   // Optimistic client fields
   status?: MessageDeliveryStatus;
@@ -162,18 +173,45 @@ export interface ConnectMessage {
   clientMessageId?: string;
 }
 
+export interface ThreadReply extends ConnectMessage {
+  parentMessageId: string;
+}
+
 export interface SendMessagePayload {
   channelId?: string;
   conversationId?: string;
   content: string;
   parentMessageId?: string | null;
-  attachments?: MessageAttachment[];
+  attachments?: string[];
   mentionedUserIds?: string[];
+  visibility?: "INTERNAL" | "CLIENT_SHARED";
 }
 
-export interface SendReplyPayload {
+export interface CommunicationStats {
+  period: string;
+  emailsSent: number;
+  whatsAppMessages: number;
+  calls: number;
+  callsConnected: number;
+  totalCallDurationSeconds: number;
+  meetings: number;
+  total: number;
+}
+
+export interface CommunicationInboxItem {
+  id: string;
+  type: string;
+  subject?: string;
+  content?: string;
+  status?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface SendThreadReplyPayload {
+  messageId: string;
   content: string;
-  attachments?: MessageAttachment[];
+  attachments?: string[];
   mentionedUserIds?: string[];
 }
 
@@ -190,38 +228,6 @@ export interface GetMessagesResponse {
   nextCursor?: string | null;
 }
 
-export interface SearchCommunicationsParams {
-  q: string;
-  channelId?: string;
-  conversationId?: string;
-  limit?: number;
-  cursor?: string;
-}
-
-export interface SearchMessageResult {
-  id: string;
-  content: string;
-  createdAt: string;
-  channelId?: string | null;
-  conversationId?: string | null;
-  channelName?: string | null;
-  conversationName?: string | null;
-  sender?: {
-    id: string;
-    name: string;
-    email?: string;
-    avatarUrl?: string | null;
-  };
-  attachments?: MessageAttachment[];
-  parentMessageId?: string | null;
-}
-
-export interface UnreadStateResponse {
-  channels?: Record<string, number>;
-  conversations?: Record<string, number>;
-  total?: number;
-}
-
 export type MessageActionType =
   | "reply"
   | "edit"
@@ -229,9 +235,7 @@ export type MessageActionType =
   | "react"
   | "mention"
   | "pin"
-  | "unpin"
   | "save"
-  | "unsave"
   | "link";
 
 export interface MessageActionItem {
@@ -253,6 +257,31 @@ export interface ActiveTarget {
   item?: Channel | Conversation;
 }
 
+export type PresenceStatus = "ONLINE" | "AWAY" | "BUSY" | "OFFLINE";
+
+export interface UserPresence {
+  userId: string;
+  status: PresenceStatus;
+  customStatus?: string;
+  lastActiveAt?: string;
+}
+
+export interface TypingIndicatorInfo {
+  userId: string;
+  userName: string;
+  channelId?: string | null;
+  conversationId?: string | null;
+  timestamp: number;
+}
+
+export interface UnreadSummaryItem {
+  id: string;
+  type: "channel" | "conversation";
+  unreadCount: number;
+  lastReadAt?: string;
+  lastMessageAt?: string;
+}
+
 export interface SocketMessageNewPayload {
   id?: string;
   messageId?: string;
@@ -267,6 +296,8 @@ export interface SocketMessageNewPayload {
   parentMessageId?: string | null;
   createdAt?: string;
   clientMessageId?: string;
+  attachments?: any[];
+  mentionedUserIds?: string[];
   sender?: {
     id: string;
     name: string;
@@ -304,10 +335,13 @@ export interface SocketMessageDeletePayload {
 
 export interface SocketChannelUpdatedPayload {
   channelId: string;
+  channel?: string;
   action?: string;
   organizationId?: string;
   metadata?: Record<string, any>;
   updatedAt?: string;
+  topic?: string;
+  name?: string;
 }
 
 export interface SocketConversationUpdatedPayload {
@@ -316,6 +350,105 @@ export interface SocketConversationUpdatedPayload {
   organizationId?: string;
   metadata?: Record<string, any>;
   updatedAt?: string;
+  lastMessageId?: string;
+  lastMessageContent?: string;
+  unreadCount?: number;
+}
+
+// Sakshi's Day 2 Collaboration Event Payloads
+export interface SocketReactionAddPayload {
+  messageId: string;
+  emoji: string;
+  userId: string;
+  userName?: string;
+  createdAt?: string;
+}
+
+export interface SocketReactionRemovePayload {
+  messageId: string;
+  emoji: string;
+  userId: string;
+}
+
+export interface SocketThreadReplyPayload {
+  messageId: string;
+  reply?: ConnectMessage;
+  content?: string;
+  replyCount?: number;
+}
+
+export interface SocketMentionNewPayload {
+  messageId: string;
+  mentionedUserIds: string[];
+}
+
+export interface SocketTypingEventPayload {
+  userId?: string;
+  userName?: string;
+  channel?: string;
+  conversationId?: string;
+}
+
+export interface SocketPresenceUpdatePayload {
+  userId: string;
+  status: PresenceStatus;
+  customStatus?: string;
+}
+
+export interface SocketMessageReadPayload {
+  messageId: string;
+  userId?: string;
+  channelId?: string;
+  conversationId?: string;
+  readAt?: string;
+}
+
+export interface SocketMessageSyncPayload {
+  messages: ConnectMessage[];
+  since: string;
+}
+
+export interface MessageAttachment {
+  id?: string;
+  name: string;
+  url?: string;
+  size?: number;
+  mimeType?: string;
+  fileType?: string;
+  type?: string;
+  fileUploadId?: string;
+}
+
+export interface SendReplyPayload {
+  content: string;
+  attachments?: MessageAttachment[];
+  mentionedUserIds?: string[];
+}
+
+export interface SearchCommunicationsParams {
+  q: string;
+  channelId?: string;
+  conversationId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface SearchMessageResult {
+  id: string;
+  content: string;
+  createdAt: string;
+  channelId?: string | null;
+  conversationId?: string | null;
+  channelName?: string | null;
+  conversationName?: string | null;
+  sender?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatarUrl?: string | null;
+  };
+  attachments?: MessageAttachment[];
+  parentMessageId?: string | null;
 }
 
 export interface SocketChannelReadPayload {
@@ -328,31 +461,6 @@ export interface SocketConversationReadPayload {
   conversationId: string;
   userId?: string;
   readAt?: string;
-}
-
-export interface SocketMessageReadPayload {
-  messageId?: string;
-  channelId?: string | null;
-  conversationId?: string | null;
-  userId?: string;
-  readAt?: string;
-}
-
-export interface SocketReactionPayload {
-  messageId: string;
-  channelId?: string | null;
-  conversationId?: string | null;
-  emoji: string;
-  userId: string;
-  action?: "add" | "remove";
-  reactions?: MessageReaction[];
-}
-
-export interface SocketPinPayload {
-  messageId: string;
-  channelId?: string | null;
-  conversationId?: string | null;
-  isPinned: boolean;
 }
 
 

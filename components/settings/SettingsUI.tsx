@@ -116,7 +116,7 @@ const SETTINGS_NAV: { label: string; icon: any }[] = [
 const DEFAULT_NOTIFS = DEFAULT_NOTIF_MATRIX;
 
 const DEFAULT_PREFS = {
-  theme: "light",
+  theme: "light" as ThemeMode,
   language: "en",
   timezone: "Asia/Kolkata",
   dateFormat: "DD/MM/YYYY",
