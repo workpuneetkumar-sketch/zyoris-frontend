@@ -126,8 +126,9 @@ function LoginPageInner() {
   };
 
   const handleAdminLoginComplete = (): void => {
-    // TODO (BD1): replace with real OTP verification once the backend endpoint
-    // is confirmed.  Credentials were already validated at Step 2.
+    // Admin MFA is NOT enforced. The session is issued at Step 2;
+    // Step 3 verifies nothing. Blocked on a backend admin-MFA endpoint
+    // that does not exist.
     toast.success("Admin signed in successfully!");
     redirectAfterLogin();
   };

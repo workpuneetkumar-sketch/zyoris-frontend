@@ -182,7 +182,11 @@ api.interceptors.request.use(
             url.includes("/auth/login") ||
             url.includes("/auth/register") ||
             url.includes("/auth/refresh") ||
-            url.includes("/auth/logout");
+            url.includes("/auth/logout") ||
+            // Day 2 — public password-recovery and verification endpoints
+            url.includes("/auth/forgot-password") ||
+            url.includes("/auth/reset-password") ||
+            url.includes("/auth/verify-email");
 
         if (!isUnauthenticatedEndpoint) {
             const token = getEffectiveAuthToken();
@@ -444,7 +448,11 @@ api.interceptors.response.use(
             reqUrl.includes("/auth/login") ||
             reqUrl.includes("/auth/register") ||
             reqUrl.includes("/auth/refresh") ||
-            reqUrl.includes("/auth/logout");
+            reqUrl.includes("/auth/logout") ||
+            // Day 2 — public password-recovery and verification endpoints
+            reqUrl.includes("/auth/forgot-password") ||
+            reqUrl.includes("/auth/reset-password") ||
+            reqUrl.includes("/auth/verify-email");
 
         if (
             !isUnauthenticatedEndpoint &&
