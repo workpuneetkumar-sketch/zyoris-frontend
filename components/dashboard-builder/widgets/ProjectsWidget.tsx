@@ -20,17 +20,22 @@ function getStatusMeta(status?: string) {
   return STATUS_META[(status ?? "").toUpperCase()] ?? DEFAULT_META;
 }
 
-/** Compute rough % progress from milestone counts; fall back to 0 */
-function progressPct(project: Project): number {
+/** Real progress from API: uses progressPct field if provided, else milestones completed/total.
+ *  Returns null when no real progress data is available — the bar is hidden, not fabricated. */
+function getProgressPct(project: Project): number | null {
+  // Prefer an explicit progressPct field if the API returns it
+  if (typeof (project as any).progressPct === "number") {
+    return Math.max(0, Math.min(100, (project as any).progressPct));
+  }
+  // Use milestones completion ratio if both values are available
   const counts = project.counts;
-  if (!counts || !counts.milestones) return 0;
-  // We don't have completed milestones count from the list endpoint —
-  // show 100% only for COMPLETED status, otherwise 50% for ACTIVE, etc.
-  const s = (project.status ?? "").toUpperCase();
-  if (s === "COMPLETED") return 100;
-  if (s === "ACTIVE")    return 60;
-  if (s === "ON_HOLD")   return 40;
-  return 20; // PLANNING
+  if (counts && typeof (counts as any).completedMilestones === "number" && counts.milestones > 0) {
+    return Math.round(((counts as any).completedMilestones / counts.milestones) * 100);
+  }
+  // COMPLETED status → 100% is the only safe inference (it's a terminal state)
+  if ((project.status ?? "").toUpperCase() === "COMPLETED") return 100;
+  // No real progress data available — do not fabricate
+  return null;
 }
 
 /** Format end/target date */
@@ -95,7 +100,7 @@ export function ProjectsWidget({ isPreview }: { isPreview?: boolean }) {
     <div className="h-full flex flex-col gap-2 overflow-hidden">
       {displayed.map((p: Project) => {
         const meta = getStatusMeta(p.status);
-        const pct  = progressPct(p);
+        const pct  = getProgressPct(p);
         const due  = dueLabel(p);
 
         return (
@@ -109,15 +114,20 @@ export function ProjectsWidget({ isPreview }: { isPreview?: boolean }) {
                 </span>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 h-2 rounded-full bg-gray-100">
-                <div
-                  className="h-full rounded-full transition-all duration-700"
-                  style={{ width: `${pct}%`, backgroundColor: meta.bar }}
-                />
+            {pct !== null ? (
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2 rounded-full bg-gray-100">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${pct}%`, backgroundColor: meta.bar }}
+                  />
+                </div>
+                <p className="text-[10px] font-bold text-gray-600 w-8 text-right">{pct}%</p>
               </div>
-              <p className="text-[10px] font-bold text-gray-600 w-8 text-right">{pct}%</p>
-            </div>
+            ) : (
+              /* No real progress data from API — hide bar rather than show fake value */
+              <p className="text-[10px] text-gray-400">Progress unavailable</p>
+            )}
           </div>
         );
       })}

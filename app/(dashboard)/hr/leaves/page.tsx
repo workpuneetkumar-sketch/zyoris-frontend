@@ -15,6 +15,8 @@ import {
   SlidersHorizontal,
   X,
   Loader2,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import {
   fetchLeaves,
@@ -79,6 +81,9 @@ export default function LeavesPage() {
   const [filterDept, setFilterDept] = useState("all");
   const [filterType, setFilterType] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -91,7 +96,7 @@ export default function LeavesPage() {
       const data = await fetchLeaves();
       setLeaves(data as LeaveWithEmployee[]);
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load leaves:", e);
     } finally {
       setLoading(false);
     }
@@ -101,7 +106,7 @@ export default function LeavesPage() {
     loadLeaves();
   }, []);
 
-  // ── Stats (from full data, unaffected by filters) ──
+  // ── Stats (calculated from real database records) ──
   const total = leaves.length;
   const pending = leaves.filter((l) => l.status === "PENDING").length;
   const approved = leaves.filter((l) => l.status === "APPROVED").length;
@@ -114,7 +119,7 @@ export default function LeavesPage() {
     return s >= now && s <= in30;
   }).length;
 
-  // ── Dynamic department list from actual data ──────────────
+  // ── Dynamic department list from live database records ────
   const allDepartments = Array.from(
     new Set(
       leaves
@@ -131,7 +136,8 @@ export default function LeavesPage() {
 
     const matchSearch =
       searchQuery.trim() === "" ||
-      name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+      name.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+      (l.reason && l.reason.toLowerCase().includes(searchQuery.trim().toLowerCase()));
 
     const matchTab =
       activeTab === "all" ||
@@ -150,7 +156,13 @@ export default function LeavesPage() {
       filterStatus === "all" ||
       l.status === filterStatus;
 
-    return matchSearch && matchTab && matchDept && matchType && matchStatus;
+    const matchStartDate =
+      !startDateFilter || new Date(l.startDate) >= new Date(startDateFilter);
+
+    const matchEndDate =
+      !endDateFilter || new Date(l.endDate) <= new Date(endDateFilter);
+
+    return matchSearch && matchTab && matchDept && matchType && matchStatus && matchStartDate && matchEndDate;
   });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -218,7 +230,7 @@ export default function LeavesPage() {
       await approveLeave(id);
       await loadLeaves();
     } catch (e) {
-      console.error(e);
+      console.error("Failed to approve leave:", e);
     } finally {
       setActionLoading(null);
     }
@@ -230,7 +242,7 @@ export default function LeavesPage() {
       await rejectLeave(id);
       await loadLeaves();
     } catch (e) {
-      console.error(e);
+      console.error("Failed to reject leave:", e);
     } finally {
       setActionLoading(null);
     }
@@ -240,6 +252,8 @@ export default function LeavesPage() {
     setFilterDept("all");
     setFilterType("all");
     setFilterStatus("all");
+    setStartDateFilter("");
+    setEndDateFilter("");
     setSearchQuery("");
     setCurrentPage(1);
   };
@@ -248,6 +262,8 @@ export default function LeavesPage() {
     filterDept !== "all" ||
     filterType !== "all" ||
     filterStatus !== "all" ||
+    startDateFilter !== "" ||
+    endDateFilter !== "" ||
     searchQuery.trim() !== "";
 
   // ── Tabs with counts ─────────────────────────────────────
@@ -258,9 +274,8 @@ export default function LeavesPage() {
     { key: "rejected", label: "Rejected", count: rejected },
   ];
 
-  // ── Render ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50/50">
+    <div className="min-h-screen bg-[#f8fafc]">
       {showModal && (
         <ApplyLeaveModal
           onClose={() => setShowModal(false)}
@@ -268,85 +283,136 @@ export default function LeavesPage() {
         />
       )}
 
-      <div className="px-6 py-6 max-w-[1400px] mx-auto">
-        {/* Page header */}
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Leave Management</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage employee leave requests and track balances.
-          </p>
-        </div>
-
-        {/* Stat Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
-              <CalendarDays size={20} className="text-blue-600" />
+      <div className="p-4 md:p-6 max-w-[1440px] mx-auto space-y-6">
+        
+        {/* Executive Header */}
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-blue-500/20">
+                <CalendarDays className="w-5 h-5" />
+              </div>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 tracking-tight">
+                Leave Management
+              </h1>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200/60">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                Live HR Pipeline
+              </span>
             </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Total Leave Requests</p>
-              <p className="text-2xl font-bold text-gray-900 mt-0.5">{total}</p>
-              <p className="text-xs text-green-600 font-medium mt-0.5">All time</p>
-            </div>
+            <p className="text-xs sm:text-sm text-gray-500">
+              Review employee leave applications, approve requests, and monitor team availability.
+            </p>
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-yellow-50 flex items-center justify-center shrink-0">
-              <Clock size={20} className="text-yellow-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Pending Approval</p>
-              <p className="text-2xl font-bold text-gray-900 mt-0.5">{pending}</p>
-              <p className="text-xs text-yellow-600 font-medium mt-0.5">
-                {total > 0 ? ((pending / total) * 100).toFixed(1) : 0}% of total
-              </p>
-            </div>
-          </div>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={loadLeaves}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-3.5 py-2.5 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border border-gray-200 text-gray-700 text-xs sm:text-sm font-semibold rounded-xl transition-all disabled:opacity-60 cursor-pointer"
+              title="Refresh leave requests"
+            >
+              <RefreshCw className={`w-4 h-4 text-gray-500 ${loading ? "animate-spin text-blue-600" : ""}`} />
+              <span className="hidden sm:inline">{loading ? "Refreshing..." : "Refresh"}</span>
+            </button>
 
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center shrink-0">
-              <CheckCircle2 size={20} className="text-green-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Approved</p>
-              <p className="text-2xl font-bold text-gray-900 mt-0.5">{approved}</p>
-              <p className="text-xs text-green-600 font-medium mt-0.5">
-                {total > 0 ? ((approved / total) * 100).toFixed(1) : 0}% of total
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
-              <XCircle size={20} className="text-red-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Rejected</p>
-              <p className="text-2xl font-bold text-gray-900 mt-0.5">{rejected}</p>
-              <p className="text-xs text-red-500 font-medium mt-0.5">
-                {total > 0 ? ((rejected / total) * 100).toFixed(1) : 0}% of total
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 flex items-start gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center shrink-0">
-              <Plane size={20} className="text-purple-500" />
-            </div>
-            <div>
-              <p className="text-xs text-gray-500 font-medium">Upcoming Leaves</p>
-              <p className="text-2xl font-bold text-gray-900 mt-0.5">{upcoming}</p>
-              <p className="text-xs text-purple-500 font-medium mt-0.5">Next 30 days</p>
-            </div>
+            <button
+              onClick={() => setShowModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer"
+            >
+              <Plus size={16} />
+              <span>Apply Leave</span>
+            </button>
           </div>
         </div>
 
-        {/* Table Card */}
+        {/* 5 Sleek Stat Cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          {/* Total */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px]">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Total Requests</span>
+              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                <CalendarDays size={16} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{total}</p>
+              <p className="text-xs font-medium text-blue-600 mt-2">All Recorded Applications</p>
+            </div>
+          </div>
+
+          {/* Pending Approval */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-amber-200">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pending Action</span>
+              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+                <Clock size={16} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{pending}</p>
+              <p className="text-xs font-medium text-amber-700 mt-2 flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                <span>{total > 0 ? ((pending / total) * 100).toFixed(1) : 0}% requires review</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Approved */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-emerald-200">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Approved</span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                <CheckCircle2 size={16} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{approved}</p>
+              <p className="text-xs font-medium text-emerald-600 mt-2">
+                {total > 0 ? ((approved / total) * 100).toFixed(1) : 0}% of all requests
+              </p>
+            </div>
+          </div>
+
+          {/* Rejected */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-rose-200">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Rejected</span>
+              <div className="w-8 h-8 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                <XCircle size={16} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{rejected}</p>
+              <p className="text-xs font-medium text-rose-600 mt-2">
+                {total > 0 ? ((rejected / total) * 100).toFixed(1) : 0}% declined
+              </p>
+            </div>
+          </div>
+
+          {/* Upcoming Leaves */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-xs hover:shadow-md transition-all p-5 flex flex-col justify-between min-h-[128px] hover:border-purple-200">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Upcoming</span>
+              <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                <Plane size={16} />
+              </div>
+            </div>
+            <div className="mt-3">
+              <p className="text-2xl font-bold text-gray-900 tracking-tight leading-none">{upcoming}</p>
+              <p className="text-xs font-medium text-purple-600 mt-2">Next 30 days window</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Primary Table Card */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-          {/* Filter Bar */}
-          <div className="px-5 py-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
+          
+          {/* Filter Bar Row */}
+          <div className="p-4 border-b border-gray-100 flex flex-wrap items-center gap-3">
             <select
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs"
               value={filterDept}
               onChange={(e) => { setFilterDept(e.target.value); setCurrentPage(1); }}
             >
@@ -357,7 +423,7 @@ export default function LeavesPage() {
             </select>
 
             <select
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs"
               value={filterType}
               onChange={(e) => { setFilterType(e.target.value); setCurrentPage(1); }}
             >
@@ -368,7 +434,7 @@ export default function LeavesPage() {
             </select>
 
             <select
-              className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:opacity-50"
+              className="px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-2xs disabled:opacity-50"
               value={activeTab !== "all" ? activeTab.toUpperCase() : filterStatus}
               disabled={activeTab !== "all"}
               onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); }}
@@ -379,34 +445,83 @@ export default function LeavesPage() {
               <option value="REJECTED">Rejected</option>
             </select>
 
+            {/* Functional More Filters Button */}
+            <button
+              onClick={() => setShowMoreFilters(!showMoreFilters)}
+              className={`flex items-center gap-1.5 px-3.5 py-2 border rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                showMoreFilters || startDateFilter || endDateFilter
+                  ? "bg-blue-50 text-blue-700 border-blue-200 shadow-2xs"
+                  : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+              }`}
+            >
+              <SlidersHorizontal size={14} />
+              <span>{showMoreFilters ? "Hide Date Filters" : "Filter by Dates"}</span>
+            </button>
+
             {hasActiveFilters && (
               <button
                 onClick={resetFilters}
-                className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors"
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
               >
-                <X size={14} />
-                Clear
+                <X size={13} />
+                <span>Reset Filters</span>
               </button>
             )}
 
-            <div className="ml-auto flex items-center gap-3">
-              <button className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-                <SlidersHorizontal size={15} />
-                More Filters
-              </button>
+            <div className="ml-auto flex items-center gap-2">
               <button
-                onClick={() => setShowModal(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg transition-colors"
+                onClick={handleExport}
+                disabled={exporting || filtered.length === 0}
+                className="flex items-center gap-2 px-3.5 py-2 border border-gray-200 rounded-xl text-xs font-semibold text-gray-700 hover:bg-gray-50 active:bg-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-2xs cursor-pointer"
+                title="Download spreadsheet report"
               >
-                <Plus size={15} />
-                Apply Leave
+                {exporting ? (
+                  <Loader2 size={14} className="animate-spin text-blue-600" />
+                ) : (
+                  <Download size={14} />
+                )}
+                <span>{exporting ? "Exporting..." : "Export Excel"}</span>
               </button>
             </div>
           </div>
 
-          {/* Tabs + Search Row */}
-          <div className="px-5 pt-3 flex items-center justify-between flex-wrap gap-3 border-b border-gray-100">
-            <div className="flex items-center gap-1">
+          {/* Expandable Functional More Filters Drawer */}
+          {showMoreFilters && (
+            <div className="px-5 py-3.5 bg-gray-50/80 border-b border-gray-100 flex flex-wrap items-center gap-4 animate-in slide-in-from-top-2 duration-150">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-600">Start Date From:</span>
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={(e) => { setStartDateFilter(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gray-600">End Date To:</span>
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={(e) => { setEndDateFilter(e.target.value); setCurrentPage(1); }}
+                  className="px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-2xs"
+                />
+              </div>
+
+              {(startDateFilter || endDateFilter) && (
+                <button
+                  onClick={() => { setStartDateFilter(""); setEndDateFilter(""); setCurrentPage(1); }}
+                  className="text-xs text-rose-600 hover:underline font-semibold"
+                >
+                  Clear Date Filters
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Tabs + Quick Search Row */}
+          <div className="px-4 pt-2 flex items-center justify-between flex-wrap gap-3 border-b border-gray-100">
+            <div className="flex items-center gap-1 overflow-x-auto">
               {TABS.map((tab) => (
                 <button
                   key={tab.key}
@@ -415,18 +530,18 @@ export default function LeavesPage() {
                     setCurrentPage(1);
                     setFilterStatus("all");
                   }}
-                  className={`px-4 py-2.5 text-sm font-medium transition-colors relative flex items-center gap-1.5 whitespace-nowrap ${
+                  className={`px-4 py-2.5 text-xs font-bold transition-all relative flex items-center gap-2 whitespace-nowrap cursor-pointer ${
                     activeTab === tab.key
                       ? "text-blue-600 border-b-2 border-blue-600"
-                      : "text-gray-500 hover:text-gray-700"
+                      : "text-gray-500 hover:text-gray-800"
                   }`}
                 >
-                  {tab.label}
-                  {tab.count !== undefined && tab.count > 0 && (
+                  <span>{tab.label}</span>
+                  {tab.count !== undefined && (
                     <span
-                      className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                      className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
                         activeTab === tab.key
-                          ? "bg-blue-100 text-blue-600"
+                          ? "bg-blue-100 text-blue-700"
                           : "bg-gray-100 text-gray-500"
                       }`}
                     >
@@ -437,38 +552,34 @@ export default function LeavesPage() {
               ))}
             </div>
 
-            <div className="flex items-center gap-3 pb-2">
+            <div className="pb-2">
               <div className="relative">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by employee name..."
+                  placeholder="Search employee or reason..."
                   value={searchQuery}
                   onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                  className="pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-56"
+                  className="pl-8.5 pr-8 py-2 border border-gray-200 rounded-xl text-gray-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-56 sm:w-64 bg-white shadow-2xs"
                 />
-              </div>
-              <button
-                onClick={handleExport}
-                disabled={exporting || filtered.length === 0}
-                className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {exporting ? (
-                  <Loader2 size={15} className="animate-spin" />
-                ) : (
-                  <Download size={15} />
+                {searchQuery && (
+                  <button 
+                    onClick={() => { setSearchQuery(""); setCurrentPage(1); }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <X size={13} />
+                  </button>
                 )}
-                {exporting ? "Exporting..." : "Export"}
-              </button>
+              </div>
             </div>
           </div>
 
-          {/* Active filter chips */}
+          {/* Active Filter Chips */}
           {hasActiveFilters && (
-            <div className="px-5 py-2.5 flex items-center gap-2 flex-wrap border-b border-gray-50 bg-blue-50/40">
-              <span className="text-xs text-gray-500 font-medium">Active filters:</span>
+            <div className="px-5 py-2 flex items-center gap-2 flex-wrap border-b border-gray-100 bg-blue-50/30">
+              <span className="text-[11px] text-gray-500 font-semibold">Active filters:</span>
               {filterDept !== "all" && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 shadow-2xs">
                   Dept: {filterDept}
                   <button onClick={() => { setFilterDept("all"); setCurrentPage(1); }}>
                     <X size={11} className="text-gray-400 hover:text-gray-600" />
@@ -476,7 +587,7 @@ export default function LeavesPage() {
                 </span>
               )}
               {filterType !== "all" && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 shadow-2xs">
                   Type: {LEAVE_TYPE_LABEL[filterType] || filterType}
                   <button onClick={() => { setFilterType("all"); setCurrentPage(1); }}>
                     <X size={11} className="text-gray-400 hover:text-gray-600" />
@@ -484,23 +595,39 @@ export default function LeavesPage() {
                 </span>
               )}
               {filterStatus !== "all" && activeTab === "all" && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 shadow-2xs">
                   Status: {filterStatus}
                   <button onClick={() => { setFilterStatus("all"); setCurrentPage(1); }}>
                     <X size={11} className="text-gray-400 hover:text-gray-600" />
                   </button>
                 </span>
               )}
+              {startDateFilter && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 shadow-2xs">
+                  From: {startDateFilter}
+                  <button onClick={() => { setStartDateFilter(""); setCurrentPage(1); }}>
+                    <X size={11} className="text-gray-400 hover:text-gray-600" />
+                  </button>
+                </span>
+              )}
+              {endDateFilter && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 shadow-2xs">
+                  To: {endDateFilter}
+                  <button onClick={() => { setEndDateFilter(""); setCurrentPage(1); }}>
+                    <X size={11} className="text-gray-400 hover:text-gray-600" />
+                  </button>
+                </span>
+              )}
               {searchQuery.trim() !== "" && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-600">
-                  Search: "{searchQuery}"
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-white border border-gray-200 rounded-full text-xs text-gray-700 shadow-2xs">
+                  Search: &quot;{searchQuery}&quot;
                   <button onClick={() => { setSearchQuery(""); setCurrentPage(1); }}>
                     <X size={11} className="text-gray-400 hover:text-gray-600" />
                   </button>
                 </span>
               )}
-              <span className="text-xs text-blue-600 font-medium ml-1">
-                {filtered.length} result{filtered.length !== 1 ? "s" : ""}
+              <span className="text-xs text-blue-600 font-bold ml-1">
+                {filtered.length} request{filtered.length !== 1 ? "s" : ""}
               </span>
             </div>
           )}
@@ -514,20 +641,20 @@ export default function LeavesPage() {
             onReject={handleReject}
           />
 
-          {/* Pagination */}
+          {/* Pagination Controls */}
           {!loading && filtered.length > 0 && (
-            <div className="px-5 py-4 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
-              <p className="text-sm text-gray-500">
+            <div className="px-5 py-3.5 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+              <p className="text-xs font-medium text-gray-500">
                 Showing {Math.min((currentPage - 1) * pageSize + 1, filtered.length)} to{" "}
-                {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} requests
+                {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} leave requests
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                   disabled={currentPage === 1}
-                  className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronLeft size={16} className="text-gray-600" />
+                  <ChevronLeft size={15} className="text-gray-600" />
                 </button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   const page = i + 1;
@@ -535,9 +662,9 @@ export default function LeavesPage() {
                     <button
                       key={page}
                       onClick={() => setCurrentPage(page)}
-                      className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                      className={`w-8 h-8 rounded-lg text-xs font-bold transition-all ${
                         currentPage === page
-                          ? "bg-blue-600 text-white"
+                          ? "bg-blue-600 text-white shadow-2xs"
                           : "border border-gray-200 text-gray-600 hover:bg-gray-50"
                       }`}
                     >
@@ -548,14 +675,15 @@ export default function LeavesPage() {
                 <button
                   onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                   disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  className="p-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                 >
-                  <ChevronRight size={16} className="text-gray-600" />
+                  <ChevronRight size={15} className="text-gray-600" />
                 </button>
               </div>
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

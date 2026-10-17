@@ -343,25 +343,45 @@ export function computeRecentTransactions(
 }
 export function computeExpenseBreakdown(expenses: Expense[]): ExpenseBreakdownPoint[] {
   const categoryColors: Record<string, string> = {
-    TRAVEL: '#f59e0b',   // amber
-    OFFICE: '#3b82f6',   // blue
-    MARKETING: '#8b5cf6', // purple
-    OTHER: '#6b7280',    // gray
+    TRAVEL: '#f59e0b',       // Amber
+    OFFICE: '#3b82f6',       // Blue
+    MARKETING: '#8b5cf6',    // Purple
+    SOFTWARE: '#06b6d4',     // Cyan
+    SERVICES: '#ec4899',     // Pink
+    SALARY: '#10b981',       // Emerald
+    SUBSCRIPTIONS: '#6366f1',// Indigo
+    UTILITIES: '#14b8a6',    // Teal
+    EQUIPMENT: '#f97316',    // Orange
+    OTHER: '#64748b',        // Slate
   };
+
+  const formatCategoryName = (cat: string): string => {
+    if (!cat) return 'Other';
+    return cat
+      .replace(/_/g, ' ')
+      .toLowerCase()
+      .replace(/\b\w/g, (char) => char.toUpperCase());
+  };
+
   const categoryTotals: Record<string, number> = {};
   const totalAmount = expenses
     .filter(exp => exp.status === 'APPROVED' || exp.status === 'REIMBURSED')
     .reduce((sum, exp) => {
-      categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
+      const cat = exp.category || 'OTHER';
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + exp.amount;
       return sum + exp.amount;
     }, 0);
+
   if (totalAmount === 0) return [];
-  return Object.entries(categoryTotals).map(([category, amount]) => ({
-    name: category.charAt(0) + category.slice(1).toLowerCase(),
-    value: amount,
-    color: categoryColors[category] || '#6b7280',
-    percentage: `${((amount / totalAmount) * 100).toFixed(1)}%`,
-  }));
+
+  return Object.entries(categoryTotals)
+    .sort((a, b) => b[1] - a[1])
+    .map(([category, amount]) => ({
+      name: formatCategoryName(category),
+      value: amount,
+      color: categoryColors[category] || categoryColors[category.toUpperCase()] || '#64748b',
+      percentage: `${((amount / totalAmount) * 100).toFixed(1)}%`,
+    }));
 }
 
 export async function fetchExpenseById(id: string): Promise<Expense> {
@@ -528,8 +548,8 @@ export function computeMonthlyTrend(
     .filter(m => monthlyMap[m])
     .map(month => ({
       month,
-      revenue: parseFloat((monthlyMap[month].revenue / 1e7).toFixed(2)),   // in Cr
-      expenses: parseFloat((monthlyMap[month].expenses / 1e7).toFixed(2)),
+      revenue: monthlyMap[month].revenue || 0,
+      expenses: monthlyMap[month].expenses || 0,
     }));
 }
 

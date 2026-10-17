@@ -57,7 +57,9 @@ export default function SalesDashboardPage() {
       router.replace("/login");
       return;
     }
-    if (user.role !== "SALES_HEAD" && user.role !== "ADMIN") {
+    const role = (user.role ?? "").toUpperCase();
+    const allowed = ["ADMIN", "SALES_HEAD", "SALES_USER"];
+    if (!allowed.includes(role)) {
       router.replace("/dashboard");
     }
   }, [user, router]);

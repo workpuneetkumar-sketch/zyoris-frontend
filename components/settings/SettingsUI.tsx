@@ -45,6 +45,7 @@ import {
   WhatsAppTemplate,
   CampaignTemplate
 } from "@/lib/api/templatesApi";
+import { useTheme, ThemeMode } from "@/context/ThemeContext";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -73,32 +74,41 @@ const NOTIF_CATEGORIES = ["leads", "messages", "deals", "tasks", "system"] as co
 type NotifCategory = (typeof NOTIF_CATEGORIES)[number];
 
 const DEFAULT_NOTIF_MATRIX: NotifMatrix = {
-  leads:    { inApp: true,  email: true,  push: true,  sound: false },
-  messages: { inApp: true,  email: true,  push: false, sound: false },
-  deals:    { inApp: true,  email: true,  push: true,  sound: false },
-  tasks:    { inApp: true,  email: false, push: true,  sound: false },
-  system:   { inApp: true,  email: true,  push: false, sound: true  },
+  leads: { inApp: true, email: true, push: true, sound: false },
+  messages: { inApp: true, email: true, push: false, sound: false },
+  deals: { inApp: true, email: true, push: true, sound: false },
+  tasks: { inApp: true, email: false, push: true, sound: false },
+  system: { inApp: true, email: true, push: false, sound: true },
 };
 
 const PREF_KEYS = {
-  theme:      "pref.theme",
-  language:   "pref.language",
-  timezone:   "pref.timezone",
+  theme: "pref.theme",
+  language: "pref.language",
+  timezone: "pref.timezone",
   dateFormat: "pref.date_format",
-  currency:   "pref.currency",
+  currency: "pref.currency",
   timeFormat: "pref.time_format",
+};
+
+const PREF_LABELS: Record<string, string> = {
+  [PREF_KEYS.theme]: "Theme",
+  [PREF_KEYS.language]: "Language",
+  [PREF_KEYS.timezone]: "Timezone",
+  [PREF_KEYS.dateFormat]: "Date format",
+  [PREF_KEYS.currency]: "Currency",
+  [PREF_KEYS.timeFormat]: "Time format",
 };
 
 // ── Sidebar nav ───────────────────────────────────────────────────────────────
 
 const SETTINGS_NAV: { label: string; icon: any }[] = [
-  { label: "Profile",       icon: User },
-  { label: "Account",       icon: Settings },
-  { label: "Security",      icon: Shield },
+  { label: "Profile", icon: User },
+  { label: "Account", icon: Settings },
+  { label: "Security", icon: Shield },
   { label: "Notifications", icon: Bell },
-  { label: "Preferences",   icon: Sliders },
-  { label: "Templates",     icon: MessageSquare },
-  { label: "My Company",    icon: Building2 },
+  { label: "Preferences", icon: Sliders },
+  { label: "Templates", icon: MessageSquare },
+  { label: "My Company", icon: Building2 },
 ];
 
 // ── Default values ────────────────────────────────────────────────────────────
@@ -106,44 +116,56 @@ const SETTINGS_NAV: { label: string; icon: any }[] = [
 const DEFAULT_NOTIFS = DEFAULT_NOTIF_MATRIX;
 
 const DEFAULT_PREFS = {
-  theme:      "light",
-  language:   "en",
-  timezone:   "Asia/Kolkata",
+  theme: "light" as ThemeMode,
+  language: "en",
+  timezone: "Asia/Kolkata",
   dateFormat: "DD/MM/YYYY",
-  currency:   "INR",
+  currency: "INR",
   timeFormat: "12h",
 };
 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
-  const [activeTab, setActiveTab]           = useState("Profile");
-  const [name, setName]                     = useState(profile?.name ?? fallback.name);
-  const [originalName, setOriginalName]     = useState(profile?.name ?? fallback.name);
-  const [designation, setDesignation]       = useState(profile?.designation ?? "");
+  const [activeTab, setActiveTab] = useState("Profile");
+  const [name, setName] = useState(profile?.name ?? fallback?.name ?? "");
+  const [originalName, setOriginalName] = useState(profile?.name ?? fallback?.name ?? "");
+  const [designation, setDesignation] = useState(profile?.designation ?? "");
   const [originalDesignation, setOriginalDesignation] = useState(profile?.designation ?? "");
-  const [photoPreview, setPhotoPreview]     = useState<string | null>(null);
-  const [photoFile, setPhotoFile]           = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   // URL returned by server after a successful upload – persists as the profile pic
   const [savedAvatarUrl, setSavedAvatarUrl] = useState<string | null>((profile as any)?.avatarUrl ?? null);
-  const [saving, setSaving]                 = useState(false);
-  const [isEditing, setIsEditing]           = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+
+  const { theme: activeTheme, setTheme } = useTheme();
 
   // Settings API state
   const [settingsLoading, setSettingsLoading] = useState(true);
-  const [settingsError,   setSettingsError]   = useState<string | null>(null);
-  const [remoteSettings,  setRemoteSettings]  = useState<SettingsMap>({});
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [remoteSettings, setRemoteSettings] = useState<SettingsMap>({});
 
   // Notification preference matrix (driven by /api/notifications/preferences)
   const [notificationPrefs, setNotificationPrefs] = useState<NotifMatrix>(DEFAULT_NOTIF_MATRIX);
-  const [savingNotifKey, setSavingNotifKey]       = useState<string | null>(null);
+  const [savingNotifKey, setSavingNotifKey] = useState<string | null>(null);
 
   // App preferences (driven by remoteSettings)
-  const [prefs, setPrefs]         = useState(DEFAULT_PREFS);
+  const [prefs, setPrefs] = useState(() => ({
+    ...DEFAULT_PREFS,
+    theme: activeTheme || DEFAULT_PREFS.theme,
+  }));
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [prefsModified, setPrefsModified] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync active theme into local state if not modified by user
+  useEffect(() => {
+    if (activeTheme && !prefsModified) {
+      setPrefs((prev) => (prev.theme === activeTheme ? prev : { ...prev, theme: activeTheme }));
+    }
+  }, [activeTheme, prefsModified]);
 
   // ── Load all settings from API on mount ──────────────────────────────────
   const loadSettings = useCallback(async () => {
@@ -162,6 +184,21 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
         const apiKey = PREF_KEYS[k];
         if (apiKey in map) (hydratedPrefs as any)[k] = map[apiKey];
       });
+
+      // Synchronize theme: prioritize active localStorage theme if set, otherwise server theme
+      const localTheme = typeof window !== "undefined" ? (localStorage.getItem("zyoris-theme") as ThemeMode | null) : null;
+      if (localTheme && ["light", "dark", "system"].includes(localTheme)) {
+        hydratedPrefs.theme = localTheme;
+        setTheme(localTheme);
+      } else if (map[PREF_KEYS.theme]) {
+        const serverTheme = map[PREF_KEYS.theme] as ThemeMode;
+        if (["light", "dark", "system"].includes(serverTheme)) {
+          hydratedPrefs.theme = serverTheme;
+          setTheme(serverTheme);
+        }
+      } else if (activeTheme) {
+        hydratedPrefs.theme = activeTheme;
+      }
       setPrefs(hydratedPrefs);
     } catch (err: any) {
       console.warn("Failed to load settings:", err);
@@ -169,7 +206,7 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     } finally {
       setSettingsLoading(false);
     }
-  }, []);
+  }, [activeTheme, setTheme]);
 
   useEffect(() => { loadSettings(); }, [loadSettings]);
 
@@ -205,8 +242,13 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     }
   }, [profile]);
 
-  const initials = (profile?.name ?? fallback.name)
-    .split(" ").map((p) => p[0]?.toUpperCase() ?? "").join("").slice(0, 2);
+  const rawDisplayName = profile?.name || fallback?.name || fallback?.email || "User";
+  const initials = rawDisplayName
+    .trim()
+    .split(/\s+/)
+    .map((p) => p[0]?.toUpperCase() ?? "")
+    .join("")
+    .slice(0, 2) || "U";
 
   // ── Profile handlers ──────────────────────────────────────────────────────
   const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -303,6 +345,9 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
           saveSetting(PREF_KEYS[k], (prefs as any)[k])
         )
       );
+      if (prefs.theme) {
+        setTheme(prefs.theme as ThemeMode);
+      }
       setPrefsModified(false);
       toast.success("Preferences saved!");
     } catch (err: any) {
@@ -320,7 +365,18 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
         delete next[key];
         return next;
       });
-      toast.success(`Setting "${key}" reset to default`);
+      const prefKey = (Object.keys(PREF_KEYS) as (keyof typeof PREF_KEYS)[]).find(
+        (k) => PREF_KEYS[k] === key
+      );
+      if (prefKey) {
+        const defVal = (DEFAULT_PREFS as any)[prefKey];
+        setPrefs((prev) => ({ ...prev, [prefKey]: defVal }));
+        if (prefKey === "theme") {
+          setTheme(defVal as ThemeMode);
+        }
+      }
+      const label = PREF_LABELS[key] || "Preference";
+      toast.success(`${label} reset to default`);
     } catch (err: any) {
       if (err?.response?.status === 404) {
         toast.info("Setting not found (already at default)");
@@ -332,19 +388,19 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-background py-8 px-4 sm:px-6 lg:px-8 text-gray-900 dark:text-text">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage your account, preferences, and notifications</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-text">Settings</h1>
+          <p className="mt-1 text-sm text-gray-500 dark:text-text-muted">Manage your account, preferences, and notifications</p>
         </div>
 
         {/* Global settings error banner */}
         {settingsError && (
-          <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-sm">
+          <div className="mb-4 flex items-center gap-2 px-4 py-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-200 text-sm">
             <AlertCircle size={16} className="shrink-0" />
             <span className="flex-1">{settingsError}</span>
-            <button onClick={loadSettings} className="flex items-center gap-1 text-xs font-semibold text-amber-700 hover:underline">
+            <button onClick={loadSettings} className="flex items-center gap-1 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:underline">
               <RefreshCw size={12} /> Retry
             </button>
           </div>
@@ -353,17 +409,18 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar */}
           <aside className="w-full lg:w-64 shrink-0">
-            <nav className="bg-white rounded-2xl shadow-sm border border-gray-200 p-2 space-y-1">
+            <nav className="bg-white dark:bg-surface rounded-2xl shadow-sm border border-gray-200 dark:border-border p-2 space-y-1">
               {SETTINGS_NAV.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.label;
                 return (
                   <button key={item.label} onClick={() => setActiveTab(item.label)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all w-full text-left ${
-                      isActive ? "bg-blue-50 text-blue-600" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                    }`}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all w-full text-left ${isActive
+                      ? "bg-blue-50 dark:bg-primary/10 text-blue-600 dark:text-primary-light font-semibold"
+                      : "text-gray-600 dark:text-text-secondary hover:bg-gray-50 dark:hover:bg-surface-hover hover:text-gray-900 dark:hover:text-text"
+                      }`}
                   >
-                    <Icon size={18} className={isActive ? "text-blue-500" : "text-gray-400"} />
+                    <Icon size={18} className={isActive ? "text-blue-500 dark:text-primary" : "text-gray-400 dark:text-text-muted"} />
                     {item.label}
                     {item.label === "Notifications" && settingsLoading && (
                       <Loader2 size={12} className="ml-auto animate-spin text-gray-300" />
@@ -375,29 +432,41 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
           </aside>
 
           {/* Content */}
-          <div className="flex-1 bg-white rounded-2xl shadow-sm border border-gray-200 p-8">
+          <div className="flex-1 bg-white dark:bg-surface rounded-2xl shadow-sm border border-gray-200 dark:border-border p-8">
             {activeTab === "Profile" && (
-              <ProfileTab name={name} designation={designation} email={profile?.email ?? fallback.email}
-                role={profile?.role ?? fallback.role} initials={initials}
+              <ProfileTab name={name} designation={designation} email={profile?.email ?? fallback?.email ?? ""}
+                role={profile?.role ?? fallback?.role ?? "User"} initials={initials}
                 photoPreview={photoPreview} savedAvatarUrl={savedAvatarUrl} saving={saving} isEditing={isEditing}
                 fileInputRef={fileInputRef} onNameChange={setName} onDesignationChange={setDesignation}
                 onPhotoChange={handlePhotoChange} onSave={handleSaveProfile}
                 onCancel={handleCancel} onEdit={() => setIsEditing(true)} profile={profile} />
             )}
-            {activeTab === "Account"       && <AccountTab profile={profile} fallback={fallback} />}
-            {activeTab === "Security"      && <SecurityTab />}
+            {activeTab === "Account" && <AccountTab profile={profile} fallback={fallback ?? { email: "", name: "", role: "" }} />}
+            {activeTab === "Security" && <SecurityTab />}
             {activeTab === "Notifications" && (
               <NotificationsTab prefs={notificationPrefs} loading={settingsLoading}
                 savingKey={savingNotifKey} onPrefChange={handleNotificationChange} />
             )}
-            {activeTab === "Preferences"   && (
-              <PreferencesTab prefs={prefs} loading={settingsLoading} saving={prefsSaving}
+            {activeTab === "Preferences" && (
+              <PreferencesTab
+                prefs={prefs}
+                loading={settingsLoading}
+                saving={prefsSaving}
                 modified={prefsModified}
-                onChange={(k, v) => { setPrefs((p) => ({ ...p, [k]: v })); setPrefsModified(true); }}
-                onSave={handleSavePrefs} onDelete={handleDeleteSetting} />
+                onChange={(k, v) => {
+                  setPrefs((p) => ({ ...p, [k]: v }));
+                  setPrefsModified(true);
+                  if (k === "theme") {
+                    setTheme(v as ThemeMode);
+                    saveSetting(PREF_KEYS.theme, v).catch(() => {});
+                  }
+                }}
+                onSave={handleSavePrefs}
+                onDelete={handleDeleteSetting}
+              />
             )}
-            {activeTab === "Templates"     && <TemplatesTab />}
-            {activeTab === "My Company"    && <MyCompanyTab />}
+            {activeTab === "Templates" && <TemplatesTab />}
+            {activeTab === "My Company" && <MyCompanyTab />}
           </div>
         </div>
       </div>
@@ -470,7 +539,7 @@ function ProfileTab({ name, designation, email, role, initials, photoPreview, sa
         <FormField label="Full Name">
           {isEditing
             ? <input type="text" value={name} onChange={(e) => onNameChange(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
             : <ReadonlyField>{name}</ReadonlyField>}
         </FormField>
         <FormField label="Email Address"><ReadonlyField>{email}</ReadonlyField></FormField>
@@ -481,8 +550,8 @@ function ProfileTab({ name, designation, email, role, initials, photoPreview, sa
         <FormField label="Designation">
           {isEditing
             ? <input type="text" value={designation} onChange={(e) => onDesignationChange(e.target.value)}
-                placeholder="e.g. Software Engineer"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
+              placeholder="e.g. Software Engineer"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" />
             : <ReadonlyField>{designation || "Not specified"}</ReadonlyField>}
         </FormField>
         {profile?.department && (
@@ -666,7 +735,7 @@ interface NotificationsTabProps {
 const NOTIF_CHANNELS: { key: keyof NotificationCategoryPreferences; label: string }[] = [
   { key: "inApp", label: "In-App" },
   { key: "email", label: "Email" },
-  { key: "push",  label: "Push"  },
+  { key: "push", label: "Push" },
   { key: "sound", label: "Sound" },
 ];
 
@@ -757,8 +826,8 @@ const TIMEZONES = [
 ];
 
 const DATE_FORMATS = ["DD/MM/YYYY", "MM/DD/YYYY", "YYYY-MM-DD", "D MMM YYYY"];
-const CURRENCIES   = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "JPY"];
-const LANGUAGES    = [
+const CURRENCIES = ["INR", "USD", "EUR", "GBP", "AED", "SGD", "JPY"];
+const LANGUAGES = [
   { value: "en", label: "English" },
   { value: "hi", label: "Hindi" },
   { value: "es", label: "Spanish" },
@@ -772,8 +841,8 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">App Preferences</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Personalise your workspace experience</p>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-text">App Preferences</h2>
+          <p className="text-sm text-gray-500 dark:text-text-muted mt-0.5">Personalise your workspace experience</p>
         </div>
         {loading && <Loader2 size={18} className="animate-spin text-blue-400" />}
       </div>
@@ -784,15 +853,14 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
           <div className="flex gap-3">
             {[
               { value: "light", label: "Light", icon: <Sun size={15} /> },
-              { value: "dark",  label: "Dark",  icon: <Moon size={15} /> },
-              { value: "system",label: "System",icon: <Sliders size={15} /> },
+              { value: "dark", label: "Dark", icon: <Moon size={15} /> },
+              { value: "system", label: "System", icon: <Sliders size={15} /> },
             ].map((t) => (
               <button key={t.value} onClick={() => onChange("theme", t.value)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-                  prefs.theme === t.value
-                    ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                }`}>
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${prefs.theme === t.value
+                  ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                  : "bg-white dark:bg-surface-secondary text-gray-600 dark:text-text-secondary border-gray-200 dark:border-border hover:border-blue-300"
+                  }`}>
                 {t.icon} {t.label}
               </button>
             ))}
@@ -802,16 +870,16 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
         {/* Language */}
         <PrefCard label="Language" apiKey={PREF_KEYS.language} icon={<Languages size={16} />} onReset={onDelete}>
           <select value={prefs.language} onChange={(e) => onChange("language", e.target.value)}
-            className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            {LANGUAGES.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+            className="w-full h-10 rounded-xl border border-gray-200 dark:border-border px-3 text-sm text-gray-800 dark:text-text outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-surface-secondary">
+            {LANGUAGES.map((l) => <option key={l.value} value={l.value} className="bg-white dark:bg-surface text-gray-800 dark:text-text">{l.label}</option>)}
           </select>
         </PrefCard>
 
         {/* Timezone */}
         <PrefCard label="Timezone" apiKey={PREF_KEYS.timezone} icon={<Globe size={16} />} onReset={onDelete}>
           <select value={prefs.timezone} onChange={(e) => onChange("timezone", e.target.value)}
-            className="w-full h-10 rounded-xl border border-gray-200 px-3 text-sm text-gray-800 outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-            {TIMEZONES.map((tz) => <option key={tz} value={tz}>{tz}</option>)}
+            className="w-full h-10 rounded-xl border border-gray-200 dark:border-border px-3 text-sm text-gray-800 dark:text-text outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-surface-secondary">
+            {TIMEZONES.map((tz) => <option key={tz} value={tz} className="bg-white dark:bg-surface text-gray-800 dark:text-text">{tz}</option>)}
           </select>
         </PrefCard>
 
@@ -820,11 +888,10 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
           <div className="flex flex-wrap gap-2">
             {DATE_FORMATS.map((f) => (
               <button key={f} onClick={() => onChange("dateFormat", f)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold border transition-all ${
-                  prefs.dateFormat === f
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                }`}>{f}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold border transition-all ${prefs.dateFormat === f
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white dark:bg-surface-secondary text-gray-600 dark:text-text-secondary border-gray-200 dark:border-border hover:border-blue-300"
+                  }`}>{f}
               </button>
             ))}
           </div>
@@ -835,11 +902,10 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
           <div className="flex gap-3">
             {[{ value: "12h", label: "12-hour (AM/PM)" }, { value: "24h", label: "24-hour" }].map((t) => (
               <button key={t.value} onClick={() => onChange("timeFormat", t.value)}
-                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
-                  prefs.timeFormat === t.value
-                    ? "bg-blue-600 text-white border-blue-600 shadow-md"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                }`}>{t.label}
+                className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${prefs.timeFormat === t.value
+                  ? "bg-blue-600 text-white border-blue-600 shadow-md"
+                  : "bg-white dark:bg-surface-secondary text-gray-600 dark:text-text-secondary border-gray-200 dark:border-border hover:border-blue-300"
+                  }`}>{t.label}
               </button>
             ))}
           </div>
@@ -850,11 +916,10 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
           <div className="flex flex-wrap gap-2">
             {CURRENCIES.map((c) => (
               <button key={c} onClick={() => onChange("currency", c)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                  prefs.currency === c
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-600 border-gray-200 hover:border-blue-300"
-                }`}>{c}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${prefs.currency === c
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white dark:bg-surface-secondary text-gray-600 dark:text-text-secondary border-gray-200 dark:border-border hover:border-blue-300"
+                  }`}>{c}
               </button>
             ))}
           </div>
@@ -868,9 +933,6 @@ function PreferencesTab({ prefs, loading, saving, modified, onChange, onSave, on
             className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 disabled:opacity-60 shadow-sm shadow-blue-200 transition-all">
             {saving ? <><Loader2 size={16} className="animate-spin" /> Saving…</> : <><Save size={16} /> Save Preferences</>}
           </button>
-          <p className="text-xs text-gray-400">
-            Saves via <code className="bg-gray-100 px-1 rounded">PUT /settings/{"{key}"}</code>
-          </p>
         </div>
       )}
     </div>
@@ -882,15 +944,14 @@ function PrefCard({ label, apiKey, icon, children, onReset }: {
   onReset: (key: string) => Promise<void>;
 }) {
   return (
-    <div className="p-5 rounded-2xl border border-gray-200 bg-gray-50/50">
+    <div className="p-5 rounded-2xl border border-gray-200 dark:border-border bg-gray-50/50 dark:bg-surface-hover/50">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <span className="text-blue-500">{icon}</span>
-          <span className="text-sm font-semibold text-gray-800">{label}</span>
-          <span className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{apiKey}</span>
+          <span className="text-blue-500 dark:text-primary">{icon}</span>
+          <span className="text-sm font-semibold text-gray-800 dark:text-text">{label}</span>
         </div>
         <button onClick={() => onReset(apiKey)} title="Reset to default"
-          className="w-6 h-6 rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 flex items-center justify-center transition-colors">
+          className="w-6 h-6 rounded-lg text-gray-300 dark:text-text-muted hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 flex items-center justify-center transition-colors">
           <Trash2 size={12} />
         </button>
       </div>
@@ -1080,9 +1141,8 @@ function TemplatesTab() {
             <button
               key={t.id}
               onClick={() => setSubTab(t.id as any)}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
-                isActive ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"
-              }`}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${isActive ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-900"
+                }`}
             >
               <Icon size={14} />
               {t.label}
@@ -1151,10 +1211,9 @@ function TemplatesTab() {
                       <td className="px-6 py-4 text-gray-500">{w.category || "N/A"}</td>
                       <td className="px-6 py-4 text-gray-500 font-mono">{w.language || "N/A"}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          w.status === "ACTIVE" || w.status === "APPROVED" ? "bg-green-100 text-green-800" :
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${w.status === "ACTIVE" || w.status === "APPROVED" ? "bg-green-100 text-green-800" :
                           w.status === "REJECTED" ? "bg-red-100 text-red-800" : "bg-yellow-100 text-yellow-800"
-                        }`}>
+                          }`}>
                           {w.status || "DRAFT"}
                         </span>
                       </td>
@@ -1197,10 +1256,9 @@ function TemplatesTab() {
                       <td className="px-6 py-4 text-gray-500 font-semibold">{c.channel}</td>
                       <td className="px-6 py-4 text-gray-500 font-mono">${c.budget || 0}</td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
-                          c.status === "ACTIVE" || c.status === "COMPLETED" ? "bg-green-100 text-green-800" :
+                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${c.status === "ACTIVE" || c.status === "COMPLETED" ? "bg-green-100 text-green-800" :
                           c.status === "PAUSED" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-800"
-                        }`}>
+                          }`}>
                           {c.status || "DRAFT"}
                         </span>
                       </td>
@@ -1459,31 +1517,31 @@ const BUSINESS_TYPES = [
 ];
 
 const INDIAN_STATES = [
-  "Andhra Pradesh","Arunachal Pradesh","Assam","Bihar","Chhattisgarh","Goa","Gujarat",
-  "Haryana","Himachal Pradesh","Jharkhand","Karnataka","Kerala","Madhya Pradesh",
-  "Maharashtra","Manipur","Meghalaya","Mizoram","Nagaland","Odisha","Punjab",
-  "Rajasthan","Sikkim","Tamil Nadu","Telangana","Tripura","Uttar Pradesh",
-  "Uttarakhand","West Bengal","Andaman & Nicobar Islands","Chandigarh",
-  "Dadra & Nagar Haveli and Daman & Diu","Delhi","Jammu & Kashmir","Ladakh",
-  "Lakshadweep","Puducherry",
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa", "Gujarat",
+  "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala", "Madhya Pradesh",
+  "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland", "Odisha", "Punjab",
+  "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura", "Uttar Pradesh",
+  "Uttarakhand", "West Bengal", "Andaman & Nicobar Islands", "Chandigarh",
+  "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Jammu & Kashmir", "Ladakh",
+  "Lakshadweep", "Puducherry",
 ];
 
 function MyCompanyTab() {
   const [companyType, setCompanyType] = useState<CompanyType>(null);
   const [activeSection, setActiveSection] = useState<CompanySection>("basic");
-  const [form, setForm]       = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
+  const [form, setForm] = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
   const [isEditing, setIsEditing] = useState(false);
-  const [saving, setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const logoRef = useRef<HTMLInputElement>(null);
 
-  const SK_REG   = "zyoris-company-registered";
+  const SK_REG = "zyoris-company-registered";
   const SK_UNREG = "zyoris-company-unregistered";
 
   useEffect(() => {
     if (!companyType) return;
     const stored = localStorage.getItem(companyType === "registered" ? SK_REG : SK_UNREG);
-    if (stored) { try { const p = JSON.parse(stored); setForm(p); setLogoPreview(p.logo ?? null); } catch {} }
+    if (stored) { try { const p = JSON.parse(stored); setForm(p); setLogoPreview(p.logo ?? null); } catch { } }
     else { setForm(EMPTY_COMPANY_FORM); setLogoPreview(null); }
     setIsEditing(false); setActiveSection("basic");
   }, [companyType]);
@@ -1506,7 +1564,7 @@ function MyCompanyTab() {
 
   const handleCancel = () => {
     const stored = localStorage.getItem(companyType === "registered" ? SK_REG : SK_UNREG);
-    if (stored) { try { const p = JSON.parse(stored); setForm(p); setLogoPreview(p.logo ?? null); } catch {} }
+    if (stored) { try { const p = JSON.parse(stored); setForm(p); setLogoPreview(p.logo ?? null); } catch { } }
     else { setForm(EMPTY_COMPANY_FORM); setLogoPreview(null); }
     setIsEditing(false);
   };
@@ -1544,7 +1602,7 @@ function MyCompanyTab() {
               <h3 className="text-base font-bold text-gray-900 mb-2">Registered Company</h3>
               <p className="text-xs text-gray-500 leading-relaxed mb-4">GST registered business with full legal &amp; tax compliance details.</p>
               <div className="flex flex-wrap gap-1.5">
-                {["GST","PAN","CIN","Bank"].map((t) => (
+                {["GST", "PAN", "CIN", "Bank"].map((t) => (
                   <span key={t} className="text-[10px] font-semibold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full border border-blue-200">{t}</span>
                 ))}
               </div>
@@ -1566,7 +1624,7 @@ function MyCompanyTab() {
               <h3 className="text-base font-bold text-gray-900 mb-2">Unregistered Business</h3>
               <p className="text-xs text-gray-500 leading-relaxed mb-4">Freelancer or small business without GST — enter only the basics.</p>
               <div className="flex flex-wrap gap-1.5">
-                {["No GST","Basic Info","Bank"].map((t) => (
+                {["No GST", "Basic Info", "Bank"].map((t) => (
                   <span key={t} className="text-[10px] font-semibold bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full border border-amber-200">{t}</span>
                 ))}
               </div>
@@ -1587,11 +1645,11 @@ function MyCompanyTab() {
 
   const isReg = companyType === "registered";
   const SECTION_NAV: { id: CompanySection; label: string; icon: React.ReactNode }[] = [
-    { id: "basic",   label: "Basic Info",  icon: <Building2 size={14} /> },
-    { id: "address", label: "Address",     icon: <MapPin size={14} /> },
-    { id: "contact", label: "Contact",     icon: <Phone size={14} /> },
-    { id: "tax",     label: "Tax & Legal", icon: <FileText size={14} /> },
-    { id: "bank",    label: "Bank Details",icon: <Landmark size={14} /> },
+    { id: "basic", label: "Basic Info", icon: <Building2 size={14} /> },
+    { id: "address", label: "Address", icon: <MapPin size={14} /> },
+    { id: "contact", label: "Contact", icon: <Phone size={14} /> },
+    { id: "tax", label: "Tax & Legal", icon: <FileText size={14} /> },
+    { id: "bank", label: "Bank Details", icon: <Landmark size={14} /> },
   ];
 
   return (
@@ -1651,9 +1709,8 @@ function MyCompanyTab() {
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl overflow-x-auto">
         {SECTION_NAV.map((s) => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${
-              activeSection === s.id ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
-            }`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${activeSection === s.id ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
+              }`}>
             <span className={activeSection === s.id ? "text-blue-500" : "text-gray-400"}>{s.icon}</span>
             {s.label}
           </button>
@@ -1735,12 +1792,12 @@ function MyCompanyTab() {
 // ── MC helper components ──────────────────────────────────────────────────────
 
 const COLOR_MAP: Record<string, { bg: string; border: string; icon: string; text: string }> = {
-  blue:   { bg: "bg-blue-50",   border: "border-blue-100",  icon: "bg-blue-100 text-blue-600",    text: "text-blue-700"   },
-  green:  { bg: "bg-green-50",  border: "border-green-100", icon: "bg-green-100 text-green-600",  text: "text-green-700"  },
-  purple: { bg: "bg-purple-50", border: "border-purple-100",icon: "bg-purple-100 text-purple-600",text: "text-purple-700" },
-  red:    { bg: "bg-red-50",    border: "border-red-100",   icon: "bg-red-100 text-red-600",      text: "text-red-700"    },
-  amber:  { bg: "bg-amber-50",  border: "border-amber-100", icon: "bg-amber-100 text-amber-600",  text: "text-amber-700"  },
-  indigo: { bg: "bg-indigo-50", border: "border-indigo-100",icon: "bg-indigo-100 text-indigo-600",text: "text-indigo-700" },
+  blue: { bg: "bg-blue-50", border: "border-blue-100", icon: "bg-blue-100 text-blue-600", text: "text-blue-700" },
+  green: { bg: "bg-green-50", border: "border-green-100", icon: "bg-green-100 text-green-600", text: "text-green-700" },
+  purple: { bg: "bg-purple-50", border: "border-purple-100", icon: "bg-purple-100 text-purple-600", text: "text-purple-700" },
+  red: { bg: "bg-red-50", border: "border-red-100", icon: "bg-red-100 text-red-600", text: "text-red-700" },
+  amber: { bg: "bg-amber-50", border: "border-amber-100", icon: "bg-amber-100 text-amber-600", text: "text-amber-700" },
+  indigo: { bg: "bg-indigo-50", border: "border-indigo-100", icon: "bg-indigo-100 text-indigo-600", text: "text-indigo-700" },
 };
 
 function MCSection({ title, subtitle, icon, color = "blue", children }: {
@@ -1777,11 +1834,10 @@ function MCField({ label, htmlFor, required, children }: {
 function MCInput({ disabled, className = "", style, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { disabled?: boolean }) {
   return (
     <input disabled={disabled} style={style}
-      className={`w-full px-4 py-2.5 text-sm rounded-xl transition-all ${
-        disabled
-          ? "border border-gray-200 bg-white/70 text-gray-600 cursor-default"
-          : "border border-gray-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 hover:border-gray-400"
-      } ${className}`}
+      className={`w-full px-4 py-2.5 text-sm rounded-xl transition-all ${disabled
+        ? "border border-gray-200 bg-white/70 text-gray-600 cursor-default"
+        : "border border-gray-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 hover:border-gray-400"
+        } ${className}`}
       {...props} />
   );
 }
@@ -1789,11 +1845,10 @@ function MCInput({ disabled, className = "", style, ...props }: React.InputHTMLA
 function MCSelect({ disabled, children, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { disabled?: boolean }) {
   return (
     <select disabled={disabled}
-      className={`w-full px-4 py-2.5 text-sm rounded-xl transition-all ${
-        disabled
-          ? "border border-gray-200 bg-white/70 text-gray-500 cursor-default"
-          : "border border-gray-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 hover:border-gray-400"
-      }`}
+      className={`w-full px-4 py-2.5 text-sm rounded-xl transition-all ${disabled
+        ? "border border-gray-200 bg-white/70 text-gray-500 cursor-default"
+        : "border border-gray-300 bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-400 hover:border-gray-400"
+        }`}
       {...props}>
       {children}
     </select>

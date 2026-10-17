@@ -19,7 +19,12 @@ import {
   BusinessEntityLink,
   CommunicationStats,
   CommunicationInboxItem,
+  MessageAttachment,
+  SendReplyPayload,
+  SearchCommunicationsParams,
+  SearchMessageResult,
 } from "@/types/connect";
+import { uploadFile } from "./uploadsApi";
 
 const BASE_COMM = "/api/communications";
 
@@ -1414,6 +1419,121 @@ export async function getAllCommunicationLinks(params?: {
     console.warn("Failed to fetch communication links:", error);
     return { data: [], nextCursor: null };
   }
+}
+
+/**
+ * Search communications: GET /api/communications/search
+ */
+export async function searchCommunications(
+  params: SearchCommunicationsParams
+): Promise<{ data: SearchMessageResult[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("q", params.q.trim());
+  query.set("limit", String(params.limit || 50));
+  if (params.channelId) query.set("channelId", params.channelId);
+  if (params.conversationId) query.set("conversationId", params.conversationId);
+  if (params.cursor) query.set("cursor", params.cursor);
+
+  try {
+    const res = await api.get(`${BASE_COMM}/search?${query.toString()}`);
+    const resData = res.data;
+
+    let list: SearchMessageResult[] = [];
+    let nextCursor: string | null = null;
+
+    if (Array.isArray(resData)) {
+      list = resData;
+    } else if (resData?.data && Array.isArray(resData.data)) {
+      list = resData.data;
+      nextCursor = resData.nextCursor ?? null;
+    } else if (resData?.results && Array.isArray(resData.results)) {
+      list = resData.results;
+      nextCursor = resData.nextCursor ?? null;
+    }
+    return { data: list, nextCursor };
+  } catch (error: any) {
+    console.warn(`Failed to search communications for '${params.q}':`, error);
+    return { data: [], nextCursor: null };
+  }
+}
+
+/**
+ * Fetch thread replies: GET /api/communications/messages/:messageId/replies
+ */
+export async function getMessageReplies(
+  messageId: string,
+  limit: number = 50,
+  cursor?: string
+): Promise<{ data: ConnectMessage[]; nextCursor?: string | null }> {
+  const query = new URLSearchParams();
+  query.set("limit", String(limit));
+  if (cursor) query.set("cursor", cursor);
+
+  try {
+    const res = await api.get(`${BASE_COMM}/messages/${messageId}/replies?${query.toString()}`);
+    const resData = res.data;
+
+    let list: ConnectMessage[] = [];
+    let nextCursor: string | null = null;
+
+    if (Array.isArray(resData)) {
+      list = resData;
+    } else if (resData?.data && Array.isArray(resData.data)) {
+      list = resData.data;
+      nextCursor = resData.nextCursor ?? null;
+    } else if (resData?.replies && Array.isArray(resData.replies)) {
+      list = resData.replies;
+      nextCursor = resData.nextCursor ?? null;
+    }
+
+    list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return { data: list, nextCursor };
+  } catch (error: any) {
+    console.warn(`Failed to get replies for message ${messageId}:`, error);
+    return { data: [], nextCursor: null };
+  }
+}
+
+/**
+ * Send a reply to a message thread: POST /api/communications/messages/:messageId/replies
+ */
+export async function sendReply(
+  messageId: string,
+  payload: SendReplyPayload
+): Promise<ConnectMessage> {
+  const body: Record<string, any> = {
+    content: payload.content,
+  };
+  if (payload.attachments && payload.attachments.length > 0) body.attachments = payload.attachments;
+  if (payload.mentionedUserIds && payload.mentionedUserIds.length > 0) body.mentionedUserIds = payload.mentionedUserIds;
+
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/replies`, body);
+  return res.data?.data || res.data;
+}
+
+/**
+ * Upload an attachment for a message
+ */
+export async function uploadMessageAttachment(
+  file: File,
+  onProgress?: (percent: number) => void
+): Promise<MessageAttachment> {
+  const MAX_SIZE = 25 * 1024 * 1024;
+  if (file.size > MAX_SIZE) {
+    throw new Error(`File is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). Maximum allowed is 25MB.`);
+  }
+
+  const uploadRes = await uploadFile(file, onProgress);
+  const fileUploadId = uploadRes.id || uploadRes.fileUploadId;
+
+  return {
+    id: fileUploadId,
+    fileUploadId,
+    name: file.name,
+    size: file.size,
+    mimeType: file.type || "application/octet-stream",
+    url: uploadRes.downloadUrl || uploadRes.url,
+  };
 }
 
 /* Backward-compatibility aliases */

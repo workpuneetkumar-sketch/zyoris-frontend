@@ -15,6 +15,7 @@ import { getRbacRoles, getRbacRoleDetails } from "@/lib/api/rbacApi";
 import { RbacRoleMatrixItem } from "@/lib/api/rbacApi";
 import api from "@/lib/api/api";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   Plus, Pencil, Trash2, X, KeyRound, Shield, Check,
   Loader2, Eye, RefreshCw, AlertCircle, Grid3X3, Settings2,
@@ -324,9 +325,8 @@ function PermissionsPanel({
                       {/* Module toggle checkbox */}
                       <button
                         onClick={() => toggleModule(group)}
-                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                          allSelected ? "bg-blue-600 border-blue-600" : someSelected ? "bg-blue-200 border-blue-400" : "border-gray-300 bg-white"
-                        }`}
+                        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${allSelected ? "bg-blue-600 border-blue-600" : someSelected ? "bg-blue-200 border-blue-400" : "border-gray-300 bg-white"
+                          }`}
                       >
                         {allSelected && <Check size={10} className="text-white" strokeWidth={3} />}
                         {someSelected && <div className="w-2 h-0.5 bg-blue-600 rounded" />}
@@ -387,9 +387,19 @@ function PermissionsPanel({
 }
 
 /* ─── Main Page ──────────────────────────────────────────────────────── */
-
 export default function RolesPage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <RolesContent />;
+}
+
+function RolesContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<Tab>("manage");
@@ -411,9 +421,7 @@ export default function RolesPage() {
   // Permission panel
   const [permRole, setPermRole] = useState<RbacRoleMatrixItem | null>(null);
 
-  useEffect(() => {
-    if (!isInitializing && user && user.role !== "ADMIN") router.push("/admin");
-  }, [user, isInitializing, router]);
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
 
   const fetchRoles = useCallback(async () => {
     setLoading(true); setError(null);
@@ -428,7 +436,11 @@ export default function RolesPage() {
     } finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchRoles(); }, [fetchRoles]);
+  useEffect(() => {
+    if (isAdmin) {
+      fetchRoles();
+    }
+  }, [isAdmin, fetchRoles]);
 
   function openCreate() { setEditingRole(null); setFormData(emptyForm); setShowForm(true); }
   function openEdit(role: RbacRoleMatrixItem) { setEditingRole(role); setFormData({ name: role.name, description: role.description || "" }); setShowForm(true); }

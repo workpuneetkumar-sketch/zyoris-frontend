@@ -4,6 +4,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   AlertCircle,
   BadgeInfo,
@@ -191,16 +192,23 @@ function DetailList({ data }: { data: unknown }) {
 
 export default function RbacConsolePage() {
   const { user, isInitializing } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
+  if (!isInitializing && user && !isAdmin) {
+    return <AccessDenied />;
+  }
+
+  return <RbacConsoleContent />;
+}
+
+function RbacConsoleContent() {
+  const { user } = useAuth();
   const router = useRouter();
 
   const [tab, setTab] = useState<TabKey>("assign");
   const [pageError, setPageError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isInitializing && user && user.role !== "ADMIN") {
-      router.push("/admin");
-    }
-  }, [user, isInitializing, router]);
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
 
   const [assignmentForm, setAssignmentForm] = useState({ userId: "", roleId: "", newRoleId: "", removeRoleId: "" });
   const [assignmentLoading, setAssignmentLoading] = useState<"assign" | "change" | "remove" | "load" | null>(null);
@@ -284,16 +292,16 @@ export default function RbacConsolePage() {
   }, []);
 
   useEffect(() => {
-    if (tab === "overview" && roleOverviewRoles.length === 0 && !roleOverviewLoading) {
+    if (isAdmin && tab === "overview" && roleOverviewRoles.length === 0 && !roleOverviewLoading) {
       void loadRoleOverview();
     }
-  }, [tab, loadRoleOverview, roleOverviewLoading, roleOverviewRoles.length]);
+  }, [isAdmin, tab, loadRoleOverview, roleOverviewLoading, roleOverviewRoles.length]);
 
   useEffect(() => {
-    if (tab === "metrics" && metrics === null && !metricsLoading) {
+    if (isAdmin && tab === "metrics" && metrics === null && !metricsLoading) {
       void loadMetrics();
     }
-  }, [tab, loadMetrics, metrics, metricsLoading]);
+  }, [isAdmin, tab, loadMetrics, metrics, metricsLoading]);
 
   useEffect(() => {
     if (!selectedRoleId) return;

@@ -105,8 +105,50 @@ export async function getSalesActivities(
     params.limit = filters.limit;
   }
 
-  const res = await api.get("/api/sales/activities", { params });
-  return res.data;
+  try {
+    const res = await api.get("/api/sales/activities", { params });
+    if (res?.data && res.data.success !== false) {
+      return res.data;
+    }
+  } catch (err: any) {
+    // If /api/sales/activities fails (e.g. 500 or 404), attempt resilient timeline endpoint
+    try {
+      const timelineRes = await api.get("/api/sales/activities/timeline", { params });
+      if (timelineRes?.data && timelineRes.data.success !== false) {
+        const rawItems = Array.isArray(timelineRes.data.items)
+          ? timelineRes.data.items
+          : Array.isArray(timelineRes.data.data)
+          ? timelineRes.data.data
+          : Array.isArray(timelineRes.data)
+          ? timelineRes.data
+          : [];
+        return {
+          success: true,
+          data: rawItems,
+          pagination: timelineRes.data.pagination || {
+            page: Number(filters?.page) || 1,
+            limit: Number(filters?.limit) || 20,
+            total: rawItems.length,
+            totalPages: 1,
+          },
+        };
+      }
+    } catch {
+      // Re-throw original error
+    }
+    throw err;
+  }
+
+  return {
+    success: true,
+    data: [],
+    pagination: {
+      page: Number(filters?.page) || 1,
+      limit: Number(filters?.limit) || 20,
+      total: 0,
+      totalPages: 1,
+    },
+  };
 }
 
 /**
@@ -117,8 +159,22 @@ export async function getSalesActivityById(
   id: string,
   fallbackActivity?: CapturedActivity | null
 ): Promise<SingleActivityResponse> {
-  const res = await api.get(`/api/sales/activities/${id}`);
-  return res.data;
+  try {
+    const res = await api.get(`/api/sales/activities/${id}`);
+    if (res?.data) return res.data;
+  } catch (err: any) {
+    if (fallbackActivity) {
+      return {
+        success: true,
+        data: fallbackActivity,
+      };
+    }
+    throw err;
+  }
+  return {
+    success: true,
+    data: fallbackActivity || ({} as CapturedActivity),
+  };
 }
 
 /**

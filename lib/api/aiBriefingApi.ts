@@ -1,7 +1,7 @@
 import api from "@/lib/api/api";
 
 export interface MorningBriefingData {
-  greeting: string;
+  greeting?: string;
   summaryBullets: string[];
   overdueHighlight?: string;
   topPriorityAction?: string;
@@ -34,11 +34,11 @@ export async function getMorningBriefing(): Promise<MorningBriefingData> {
       .replace(/^good (morning|afternoon|evening)[,.]?\s*/i, "")
       .trim();
     return {
-      greeting: greetingBody || "Here is your daily executive brief.",
+      greeting: greetingBody || undefined,
       summaryBullets: Array.isArray(data.summaryBullets) ? data.summaryBullets : [],
       overdueHighlight: data.overdueHighlight,
       topPriorityAction: data.topPriorityAction,
-      confidenceScore: typeof data.confidenceScore === "number" ? data.confidenceScore : 0.95,
+      confidenceScore: typeof data.confidenceScore === "number" ? data.confidenceScore : undefined,
       fallback: data.fallback || false,
     };
   } catch (error: any) {

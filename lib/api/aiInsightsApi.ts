@@ -94,14 +94,14 @@ export async function getDashboardInsights(
 // =========================================
 
 export interface WeeklyBriefingData {
-  period: string;
+  period?: string;
   highlights: string[];
   leadsCreated?: number;
   dealsClosed?: number;
   revenueGenerated?: number;
   topPerformer?: string;
   keyInsights?: string[];
-  generatedAt: string;
+  generatedAt?: string;
   fallback?: boolean;
 }
 
@@ -148,14 +148,14 @@ export async function getWeeklyBriefing(): Promise<WeeklyBriefingData> {
     }
 
     return {
-      period: raw.kpis?.period ? "Last 7 days" : (raw.period || "Last 7 days"),
+      period: raw.kpis?.period ?? raw.period ?? undefined,
       highlights,
       leadsCreated: raw.kpis?.newLeads ?? raw.leadsCreated,
       dealsClosed: raw.kpis?.dealsWon ?? raw.dealsClosed,
       revenueGenerated: raw.kpis?.revenueGenerated ?? raw.revenueGenerated,
       topPerformer: topPerformerName ?? raw.topPerformer,
       keyInsights,
-      generatedAt: raw.generatedAt || new Date().toISOString(),
+      generatedAt: raw.generatedAt ?? undefined,
       fallback: raw.fallback || false,
     };
   } catch (error: any) {
@@ -209,15 +209,12 @@ export async function getCommunicationIntelligence(
       ? raw.recommendedReplies
       : [];
 
-    const suggestedReplies = (
-      rawSuggestions.length > 0
-        ? rawSuggestions
-        : [
-            raw.nextBestAction,
-            "Send customized pricing & proposal details",
-            "Schedule a 15-minute quick call to address questions",
-          ]
-    ).map((s: any) => extractText(s, "Follow up on lead"));
+    const suggestedReplies = rawSuggestions.length > 0
+      ? rawSuggestions.map((s: any) => extractText(s, ""))
+          .filter((s: string) => s.trim().length > 0)
+      : [];
+    // When the server returns no suggestions, the caller receives an empty array.
+    // The UI is responsible for showing "No suggestions available" — we must not fabricate.
 
     const intentStr = typeof raw.intent === "object" ? (raw.intent?.label || raw.intent?.intentLabel || extractText(raw.intent, "Unknown")) : (raw.intent || raw.intentLabel || "Unknown");
     const moodStr = typeof raw.mood === "object" ? (raw.mood?.label || raw.mood?.sentiment || extractText(raw.mood, "Neutral")) : (raw.mood || raw.sentiment || "Neutral");

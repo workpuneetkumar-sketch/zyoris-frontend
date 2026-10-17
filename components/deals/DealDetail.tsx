@@ -38,7 +38,9 @@ import { StageTransitionModal } from "./StageTransitionModal";
 import { DealWinProbabilityCard } from "./DealWinProbabilityCard";
 import { DealForecastDetailsCard } from "./DealForecastDetailsCard";
 import { DealEnterpriseCard } from "./DealEnterpriseCard";
+import { DealAISummaryCard } from "./DealAISummaryCard";
 import { createPortal } from "react-dom";
+
 import { OPPORTUNITY_TYPES } from "@/types/enterpriseDeals";
 import { formatCurrencyWithSnapshot } from "@/utils/currencyFormat";
 
@@ -409,8 +411,12 @@ export function DealDetail({ deal, onUpdate }: DealDetailProps) {
             </div>
           </div>
 
+          {/* CRM Deal AI Summary & Next Action (Consuming WhatsApp AI Context) */}
+          <DealAISummaryCard dealId={deal.dealId || (deal as any).id} />
+
           {/* Deal Health & Risks Section (FE-2 Day 2) */}
           <DealHealthCard dealId={deal.dealId || (deal as any).id} />
+
           <DealRiskSection
             dealId={deal.dealId || (deal as any).id}
             onRiskResolved={async () => {

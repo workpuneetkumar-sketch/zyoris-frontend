@@ -342,13 +342,13 @@ export async function getRevenueForecast(): Promise<RevenueForeCastData> {
   const pts = (raw?.forecast ?? []).map((d: any) => ({
     label:    d.date ?? d.label ?? "",
     forecast: d.value ?? d.forecast ?? 0,
-    upper:    d.upper ?? d.value ?? 0,
-    lower:    d.lower ?? d.value ?? 0,
+    upper:    typeof d.upper === "number" ? d.upper : undefined,
+    lower:    typeof d.lower === "number" ? d.lower : undefined,
   }));
   return {
     datapoints:  pts,
     currency:    raw?.currency ?? "USD",
-    period_days: raw?.period_days ?? 90,
+    period_days: typeof raw?.period_days === "number" ? raw.period_days : undefined,
   };
 }
 

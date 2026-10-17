@@ -38,6 +38,12 @@ function normalizeDashboardStats(payload: any): DashboardStatsResponse | null {
   return data as DashboardStatsResponse;
 }
 
+function fmtCurrency(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}M`;
+  if (n >= 1_000)     return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toLocaleString()}`;
+}
+
 // ── KPI Card ───────────────────────────────────────────────────────────────
 
 function KpiCard({ icon: Icon, label, value, accent = "blue" }: {
@@ -111,8 +117,8 @@ export default function DashboardPage() {
 
   const kpiCards = useMemo(() => [
     { icon: Users,     label: "Leads Count",      value: typeof dashboardStats?.leadsCount === "number" ? dashboardStats.leadsCount.toLocaleString() : "--", accent: "blue"    as const },
-    { icon: Briefcase, label: "Total Deal Value", value: typeof dashboardStats?.totalDealValue === "number" ? `₹${Math.round(dashboardStats.totalDealValue).toLocaleString()}` : "--", accent: "blue" as const },
-    { icon: DollarSign,label: "Revenue",          value: typeof dashboardStats?.revenue === "number" ? `₹${Math.round(dashboardStats.revenue).toLocaleString()}` : "--", accent: "emerald" as const },
+    { icon: Briefcase, label: "Total Deal Value", value: typeof dashboardStats?.totalDealValue === "number" ? fmtCurrency(Math.round(dashboardStats.totalDealValue)) : "--", accent: "blue" as const },
+    { icon: DollarSign,label: "Revenue",          value: typeof dashboardStats?.revenue === "number" ? fmtCurrency(Math.round(dashboardStats.revenue)) : "--", accent: "emerald" as const },
     { icon: Clock,     label: "Overdue Tasks",    value: typeof dashboardStats?.overdueTasks === "number" ? dashboardStats.overdueTasks.toLocaleString() : "--", accent: "amber" as const },
     { icon: Mail,      label: "Emails Sent",      value: typeof dashboardStats?.emailsSent === "number" ? dashboardStats.emailsSent.toLocaleString() : "--", accent: "blue"    as const },
     { icon: PhoneCall, label: "Calls Today",      value: typeof dashboardStats?.callsToday === "number" ? dashboardStats.callsToday.toLocaleString() : "--", accent: "emerald" as const },
@@ -227,7 +233,9 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
             <BriefCard icon={Sparkles}   label="Greeting" text={aiBriefing?.greeting ?? "AI briefing will appear here once available."} />
             <BriefCard icon={Briefcase}  label="Brief #1"  text={aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."} />
-            <BriefCard icon={Clock}      label="Brief #2"  text={aiBriefing?.summaryBullets?.[1] ?? aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."} />
+            {aiBriefing?.summaryBullets?.[1] != null && (
+              <BriefCard icon={Clock}    label="Brief #2"  text={aiBriefing.summaryBullets[1]} />
+            )}
             <BriefCard icon={DollarSign} label="Signal"    text={aiAnomalies?.[0]?.title ?? aiBriefing?.topPriorityAction ?? "No anomaly signal generated yet."} />
           </div>
         )}

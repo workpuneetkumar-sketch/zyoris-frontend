@@ -41,7 +41,7 @@ export const ChannelFilterBar: React.FC<ChannelFilterBarProps> = ({
           <button
             key={ch.key}
             type="button"
-            className={`sales-channel-tab ${
+            className={`sales-channel-tab sales-channel-tab-${ch.key.toLowerCase()} ${
               isActive ? "sales-channel-tab-active" : ""
             }`}
             onClick={() => onChange(ch.key)}

@@ -68,7 +68,8 @@ export default function CeoDashboardPage() {
       router.replace("/login");
       return;
     }
-    if (user.role !== "CEO" && user.role !== "ADMIN") {
+    const role = (user.role ?? "").toUpperCase();
+    if (role !== "CEO" && role !== "ADMIN") {
       router.replace("/dashboard");
     }
   }, [user, router]);
@@ -178,7 +179,7 @@ export default function CeoDashboardPage() {
           sub="Margin Health Indicator"
           icon={<Target className="text-violet-600" />}
           trendColor="violet"
-          status={risk?.marginPct != null ? (risk.marginPct >= 0.3 ? "Healthy" : "Needs Review") : "No data"}
+          status={undefined}
         />
         <SummaryCard
           title="Marketing ROI"

@@ -408,4 +408,59 @@ export interface SocketMessageSyncPayload {
   since: string;
 }
 
+export interface MessageAttachment {
+  id?: string;
+  name: string;
+  url?: string;
+  size?: number;
+  mimeType?: string;
+  fileType?: string;
+  type?: string;
+  fileUploadId?: string;
+}
+
+export interface SendReplyPayload {
+  content: string;
+  attachments?: MessageAttachment[];
+  mentionedUserIds?: string[];
+}
+
+export interface SearchCommunicationsParams {
+  q: string;
+  channelId?: string;
+  conversationId?: string;
+  limit?: number;
+  cursor?: string;
+}
+
+export interface SearchMessageResult {
+  id: string;
+  content: string;
+  createdAt: string;
+  channelId?: string | null;
+  conversationId?: string | null;
+  channelName?: string | null;
+  conversationName?: string | null;
+  sender?: {
+    id: string;
+    name: string;
+    email?: string;
+    avatarUrl?: string | null;
+  };
+  attachments?: MessageAttachment[];
+  parentMessageId?: string | null;
+}
+
+export interface SocketChannelReadPayload {
+  channelId: string;
+  userId?: string;
+  readAt?: string;
+}
+
+export interface SocketConversationReadPayload {
+  conversationId: string;
+  userId?: string;
+  readAt?: string;
+}
+
 

@@ -35,6 +35,7 @@ import {
   AuditLogFilterBar,
 } from "@/components/admin/AuditLogTable";
 import { toast } from "react-toastify";
+import { AccessDenied } from "@/components/ui/AccessDenied";
 import {
   Activity,
   RefreshCw,
@@ -175,9 +176,10 @@ export default function ObservabilityPage() {
 
   const isFirst = useRef(true);
 
+  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+
   useEffect(() => {
     if (!user) { router.replace("/login"); return; }
-    if (user.role !== "ADMIN") { router.replace("/dashboard"); }
   }, [user, router]);
 
   const loadMetrics = useCallback(async () => {
@@ -214,7 +216,7 @@ export default function ObservabilityPage() {
   }, [token]);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !isAdmin) return;
     if (_obsFetchInFlight) return;
     _obsFetchInFlight = true;
     Promise.all([loadMetrics(), loadEvents({})]).finally(() => {
@@ -222,7 +224,7 @@ export default function ObservabilityPage() {
     });
     isFirst.current = false;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, isAdmin]);
 
   // Re-fetch events when filters change (after first mount)
   useEffect(() => {
@@ -232,6 +234,9 @@ export default function ObservabilityPage() {
   }, [auditFilters]);
 
   if (!user) return null;
+  if (!isAdmin) {
+    return <AccessDenied />;
+  }
 
   const visibleMetrics = selectedAgent === "all"
     ? metrics

@@ -1,11 +1,35 @@
 import api from "./api";
 import type { User } from "@/context/AuthContext";
 
+// ── Login / register response ──────────────────────────────────────────────
+
 export interface AuthResponse {
     token: string;
     refreshToken: string;
     user: User;
 }
+
+// ── Refresh response (confirmed flat, user object is partial) ──────────────
+// The /auth/refresh user object has FEWER fields than /auth/me (no permissions
+// or memberships).  Do NOT merge this directly over a fuller in-memory User —
+// only update the tokens from this response and re-fetch /auth/me if you need
+// up-to-date profile data.
+export interface RefreshResponse {
+    token: string;
+    refreshToken: string;
+    user: {
+        id: string;
+        email: string;
+        name: string;
+        role: string;
+        organizationId?: string | null;
+        avatarUrl?: string | null;
+        organizationName?: string | null;
+        organizationSlug?: string | null;
+    };
+}
+
+// ── Register / update payloads ─────────────────────────────────────────────
 
 export interface RegisterPayload {
     name: string;
@@ -34,8 +58,17 @@ export const registerApi = async (
     return res.data;
 };
 
-export const getMeApi = async () => {
-    const res = await api.get("/auth/me");
+/**
+ * GET /auth/me — confirmed flat response shape:
+ * {
+ *   id, email, name, role, organizationId, avatarUrl, organizationName,
+ *   permissions: string[],
+ *   memberships: [{ id, role, organization: { id, name, slug } }],
+ *   createdAt, updatedAt
+ * }
+ */
+export const getMeApi = async (): Promise<User> => {
+    const res = await api.get<User>("/auth/me");
     return res.data;
 };
 

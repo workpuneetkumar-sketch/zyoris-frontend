@@ -107,7 +107,7 @@ export default function WorkflowDraftDetailPage() {
           <h1 className="text-xl font-bold text-[color:var(--color-text)] tracking-tight">
             {draft.workflowName}
           </h1>
-          <p className="text-xs text-[color:var(--color-text-muted)] font-mono mt-0.5">{draft.id}</p>
+          <p className="text-xs text-[color:var(--color-text-muted)] mt-0.5">Workflow Draft Review</p>
         </div>
       </div>
 

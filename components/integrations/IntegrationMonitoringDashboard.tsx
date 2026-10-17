@@ -1372,8 +1372,20 @@ export const IntegrationMonitoringDashboard: React.FC<IntegrationMonitoringDashb
 
                       <td className="py-2.5 px-3">
                         {log.metadata && Object.keys(log.metadata).length > 0 ? (
-                          <div className="font-mono text-[10px] bg-surface-secondary/70 p-1.5 rounded-lg border border-border text-text-muted max-w-md truncate">
-                            {JSON.stringify(log.metadata)}
+                          <div className="flex flex-wrap gap-1 max-w-md">
+                            {Object.entries(log.metadata).slice(0, 3).map(([k, v]) => (
+                              <span key={k} className="inline-flex items-center gap-1 text-[10px] bg-surface-secondary px-2 py-0.5 rounded border border-border text-text-muted">
+                                <span className="font-semibold text-text">
+                                  {k.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}:
+                                </span>
+                                <span className="truncate max-w-[120px] font-mono">
+                                  {typeof v === "object" ? "…" : String(v).length > 16 ? `${String(v).slice(0, 8)}…` : String(v)}
+                                </span>
+                              </span>
+                            ))}
+                            {Object.keys(log.metadata).length > 3 && (
+                              <span className="text-[10px] text-text-muted self-center">+{Object.keys(log.metadata).length - 3} more</span>
+                            )}
                           </div>
                         ) : (
                           <span className="text-text-muted text-[11px]">—</span>
