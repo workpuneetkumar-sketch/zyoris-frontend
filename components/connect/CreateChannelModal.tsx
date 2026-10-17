@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { X, Hash, Lock, Globe, Users, Loader2, AlertCircle } from "lucide-react";
-import { Channel, ChannelVisibility, MemberRole } from "@/types/connect";
+import { Channel, ChannelMember, ChannelVisibility, MemberRole } from "@/types/connect";
 import { createChannel, addChannelMember } from "@/lib/api/connectApi";
 import { TeamMember } from "@/lib/api/organizationsApi";
 
@@ -57,14 +57,37 @@ export default function CreateChannelModal({
         visibility,
       });
 
+      const baseMembers: ChannelMember[] = Array.isArray(channel.members) ? channel.members : [];
+      let finalMembers: ChannelMember[] = [...baseMembers];
+
       // If initial members were selected, add them
       if (selectedMemberIds.length > 0 && channel.id) {
         await Promise.allSettled(
           selectedMemberIds.map((uid) => addChannelMember(channel.id, uid, "MEMBER"))
         );
+        const now = new Date().toISOString();
+        const addedMembers: ChannelMember[] = selectedMemberIds.map((uid) => {
+          const tm = teamMembers.find((m) => m.id === uid);
+          return {
+            id: `mem-${uid}`,
+            organizationId: channel.organizationId || "",
+            channelId: channel.id,
+            userId: uid,
+            role: "MEMBER" as MemberRole,
+            createdAt: now,
+            updatedAt: now,
+            user: tm ? { id: tm.id, name: tm.name, email: tm.email } : undefined,
+          };
+        });
+        finalMembers = [...finalMembers, ...addedMembers];
       }
 
-      onCreated(channel);
+      const finalChannel: Channel = {
+        ...channel,
+        members: finalMembers,
+      };
+
+      onCreated(finalChannel);
       onClose();
     } catch (err: any) {
       console.error("Failed to create channel:", err);

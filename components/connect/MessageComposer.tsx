@@ -8,8 +8,12 @@ import {
   Edit2,
   CornerDownRight,
   Check,
+  AtSign,
+  Smile,
 } from "lucide-react";
 import { ConnectMessage } from "@/types/connect";
+import MentionAutocomplete, { MentionMember } from "./MentionAutocomplete";
+import ReactionPicker from "./ReactionPicker";
 
 interface MessageComposerProps {
   placeholder?: string;
@@ -17,10 +21,17 @@ interface MessageComposerProps {
   sending?: boolean;
   editingMessage?: ConnectMessage | null;
   replyingToMessage?: ConnectMessage | null;
-  onSendMessage: (content: string, parentMessageId?: string | null) => Promise<void> | void;
+  teamMembers?: MentionMember[];
+  onSendMessage: (
+    content: string,
+    parentMessageId?: string | null,
+    mentionedUserIds?: string[]
+  ) => Promise<void> | void;
   onSaveEdit?: (messageId: string, content: string) => Promise<void> | void;
   onCancelEdit?: () => void;
   onCancelReply?: () => void;
+  onTypingStart?: () => void;
+  onTypingStop?: () => void;
 }
 
 export default function MessageComposer({
@@ -29,21 +40,26 @@ export default function MessageComposer({
   sending = false,
   editingMessage = null,
   replyingToMessage = null,
+  teamMembers = [],
   onSendMessage,
   onSaveEdit,
   onCancelEdit,
   onCancelReply,
+  onTypingStart,
+  onTypingStop,
 }: MessageComposerProps) {
   const [content, setContent] = useState("");
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Sync content when entering / leaving edit mode
   useEffect(() => {
     if (editingMessage) {
       setContent(editingMessage.content);
       textareaRef.current?.focus();
-    } else if (!replyingToMessage) {
-      // If we exited edit mode and no reply, keep what user was typing or clear
     }
   }, [editingMessage]);
 
@@ -54,21 +70,77 @@ export default function MessageComposer({
     }
   }, [replyingToMessage]);
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setContent(val);
+
+    // Typing activity trigger
+    if (onTypingStart) {
+      onTypingStart();
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        onTypingStop?.();
+      }, 2000);
+    }
+
+    // Detect @mention trigger
+    const cursor = e.target.selectionStart;
+    const textBefore = val.slice(0, cursor);
+    const lastAt = textBefore.lastIndexOf("@");
+    if (lastAt !== -1 && (lastAt === 0 || /\s/.test(textBefore[lastAt - 1]))) {
+      const q = textBefore.slice(lastAt + 1);
+      if (!q.includes(" ")) {
+        setMentionQuery(q);
+        return;
+      }
+    }
+    setMentionQuery(null);
+  };
+
+  const handleSelectMention = (member: MentionMember) => {
+    if (!textareaRef.current) return;
+    const cursor = textareaRef.current.selectionStart;
+    const textBefore = content.slice(0, cursor);
+    const textAfter = content.slice(cursor);
+    const lastAt = textBefore.lastIndexOf("@");
+    const newContent = textBefore.slice(0, lastAt) + `@${member.name} ` + textAfter;
+    setContent(newContent);
+    setMentionQuery(null);
+    textareaRef.current.focus();
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanContent = content.trim();
     if (!cleanContent || sending || disabled) return;
 
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    onTypingStop?.();
+
     if (editingMessage && onSaveEdit) {
       await onSaveEdit(editingMessage.id, cleanContent);
       setContent("");
     } else {
+      // Find mentioned user IDs
+      const mentionedUserIds: string[] = [];
+      teamMembers.forEach((tm) => {
+        if (cleanContent.includes(`@${tm.name}`)) {
+          mentionedUserIds.push(tm.id);
+        }
+      });
+
       setContent("");
-      await onSendMessage(cleanContent, replyingToMessage ? replyingToMessage.id : null);
+      setMentionQuery(null);
+      await onSendMessage(
+        cleanContent,
+        replyingToMessage ? replyingToMessage.id : null,
+        mentionedUserIds
+      );
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery !== null) return; // allow mention autocomplete to capture Enter / Tab
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSubmit();
@@ -85,8 +157,32 @@ export default function MessageComposer({
   return (
     <div
       id="message-composer-container"
-      className="p-3 md:p-4 bg-surface border-t border-border shrink-0"
+      className="p-3 md:p-4 bg-surface border-t border-border shrink-0 relative"
     >
+      {/* Mention Autocomplete Popup */}
+      {mentionQuery !== null && (
+        <MentionAutocomplete
+          isOpen={true}
+          query={mentionQuery}
+          members={teamMembers}
+          onSelect={handleSelectMention}
+          onClose={() => setMentionQuery(null)}
+        />
+      )}
+
+      {/* Emoji Picker Popover */}
+      {isEmojiPickerOpen && (
+        <ReactionPicker
+          isOpen={true}
+          onClose={() => setIsEmojiPickerOpen(false)}
+          onSelectEmoji={(emoji) => {
+            setContent((prev) => prev + emoji);
+            textareaRef.current?.focus();
+          }}
+          className="left-4 bottom-full mb-2"
+        />
+      )}
+
       <div className="bg-surface-hover border border-border rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:border-primary focus-within:bg-surface transition-all shadow-inner">
         {/* Reply Mode Context Header */}
         {replyingToMessage && !editingMessage && (
@@ -140,13 +236,13 @@ export default function MessageComposer({
         )}
 
         {/* Input Form */}
-        <form onSubmit={handleSubmit} className="flex items-end gap-2 px-3 py-2">
+        <form onSubmit={handleSubmit} className="flex flex-col">
           <textarea
             ref={textareaRef}
             id="message-composer-input"
             rows={1}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             placeholder={
               editingMessage
@@ -156,42 +252,71 @@ export default function MessageComposer({
                 : placeholder
             }
             disabled={disabled || sending}
-            className="flex-1 bg-transparent text-xs text-text placeholder:text-text-muted focus:outline-none resize-none py-1.5 max-h-32 min-h-[36px]"
+            className="w-full px-4 pt-3 pb-1 bg-transparent text-xs text-text placeholder:text-text-muted focus:outline-none resize-none max-h-32 min-h-[36px]"
           />
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-1.5 shrink-0 pb-1">
-            {editingMessage ? (
-              <div className="flex items-center gap-1">
+          {/* Action Toolbar */}
+          <div className="flex items-center justify-between px-3 py-1.5 border-t border-border-light">
+            <div className="flex items-center gap-1 text-text-muted">
+              {/* Add @ mention */}
+              <button
+                type="button"
+                onClick={() => {
+                  setContent((prev) => prev + "@");
+                  setMentionQuery("");
+                  textareaRef.current?.focus();
+                }}
+                className="p-1.5 hover:text-primary hover:bg-surface rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+                title="Mention a teammate (@)"
+              >
+                <AtSign size={14} />
+              </button>
+
+              {/* Add Emoji */}
+              <button
+                type="button"
+                onClick={() => setIsEmojiPickerOpen((prev) => !prev)}
+                className="p-1.5 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+                title="Insert emoji"
+              >
+                <Smile size={14} />
+              </button>
+            </div>
+
+            {/* Submit Buttons */}
+            <div className="flex items-center gap-1.5">
+              {editingMessage ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    id="save-edit-btn"
+                    type="submit"
+                    disabled={disabled || sending || !content.trim()}
+                    className="px-3.5 py-1.5 bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold rounded-xl shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                  >
+                    {sending ? (
+                      <Loader2 size={14} className="animate-spin" />
+                    ) : (
+                      <Check size={14} />
+                    )}
+                    <span>Save</span>
+                  </button>
+                </div>
+              ) : (
                 <button
-                  id="save-edit-btn"
+                  id="send-message-btn"
                   type="submit"
                   disabled={disabled || sending || !content.trim()}
-                  className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold rounded-xl shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
+                  className="p-2 bg-primary hover:bg-primary-dark text-primary-foreground rounded-xl shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0 flex items-center justify-center"
+                  title="Send Message (Enter)"
                 >
                   {sending ? (
-                    <Loader2 size={14} className="animate-spin" />
+                    <Loader2 size={16} className="animate-spin" />
                   ) : (
-                    <Check size={14} />
+                    <Send size={16} />
                   )}
-                  <span>Save</span>
                 </button>
-              </div>
-            ) : (
-              <button
-                id="send-message-btn"
-                type="submit"
-                disabled={disabled || sending || !content.trim()}
-                className="p-2 bg-primary hover:bg-primary-dark text-primary-foreground rounded-xl shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0 flex items-center justify-center"
-                title="Send Message (Enter)"
-              >
-                {sending ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Send size={16} />
-                )}
-              </button>
-            )}
+              )}
+            </div>
           </div>
         </form>
       </div>

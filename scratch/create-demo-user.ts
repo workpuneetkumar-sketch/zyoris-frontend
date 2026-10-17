@@ -1,3 +1,5 @@
+export {};
+
 const BACKEND_URL = "https://zyoris.onrender.com";
 
 async function main() {

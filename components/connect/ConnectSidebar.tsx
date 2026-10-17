@@ -15,9 +15,13 @@ import {
   Sparkles,
   Settings,
   UserCircle2,
+  AlertCircle,
+  RefreshCw,
+  Loader2,
 } from "lucide-react";
-import { Channel, Conversation, ActiveTarget } from "@/types/connect";
+import { Channel, Conversation, ActiveTarget, PresenceStatus } from "@/types/connect";
 import { SocketStatus } from "@/hooks/useConnectSocket";
+import PresenceSelector from "./PresenceSelector";
 
 interface ConnectSidebarProps {
   channels: Channel[];
@@ -32,8 +36,23 @@ interface ConnectSidebarProps {
   currentUserId?: string | null;
   socketStatus: SocketStatus;
   unreadMap: Record<string, number>;
+  userPresenceMap?: Record<string, PresenceStatus>;
+  currentUserPresence?: PresenceStatus;
+  onChangePresence?: (status: PresenceStatus) => void;
+  channelsLoading?: boolean;
+  channelsError?: string | null;
+  conversationsLoading?: boolean;
+  conversationsError?: string | null;
+  onRetryLoad?: () => void;
   className?: string;
 }
+
+const PRESENCE_DOTS: Record<PresenceStatus, string> = {
+  ONLINE: "bg-emerald-500",
+  AWAY: "bg-amber-500",
+  BUSY: "bg-rose-500",
+  OFFLINE: "bg-gray-400",
+};
 
 export default function ConnectSidebar({
   channels,
@@ -48,6 +67,14 @@ export default function ConnectSidebar({
   currentUserId,
   socketStatus,
   unreadMap,
+  userPresenceMap = {},
+  currentUserPresence = "ONLINE",
+  onChangePresence,
+  channelsLoading = false,
+  channelsError = null,
+  conversationsLoading = false,
+  conversationsError = null,
+  onRetryLoad,
   className = "",
 }: ConnectSidebarProps) {
   const [search, setSearch] = useState("");
@@ -303,10 +330,42 @@ export default function ConnectSidebar({
 
           {channelsOpen && (
             <div className="space-y-0.5 mt-1">
-              {filteredChannels.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  {query ? "No matching channels" : "No channels yet. Create one!"}
+              {channelsError && filteredChannels.length > 0 && (
+                <div className="mx-2 mb-1 px-2 py-1 bg-amber-50 border border-amber-200/80 rounded-lg text-[10px] text-amber-800 flex items-center justify-between">
+                  <span className="truncate">Using cached data • {channelsError}</span>
+                  {onRetryLoad && (
+                    <button onClick={onRetryLoad} className="text-amber-900 font-bold ml-1 hover:underline shrink-0">
+                      Retry
+                    </button>
+                  )}
                 </div>
+              )}
+              {filteredChannels.length === 0 ? (
+                channelsLoading ? (
+                  <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+                    <Loader2 size={13} className="animate-spin text-blue-500" />
+                    <span>Loading channels...</span>
+                  </div>
+                ) : channelsError ? (
+                  <div className="mx-2 my-1 p-2.5 bg-red-50 border border-red-200/80 rounded-xl text-xs text-red-700 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                      <AlertCircle size={13} className="text-red-500 shrink-0" />
+                      <span>{channelsError}</span>
+                    </div>
+                    {onRetryLoad && (
+                      <button
+                        onClick={onRetryLoad}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-800 underline self-start"
+                      >
+                        <RefreshCw size={11} /> Retry loading
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    {query ? "No matching channels" : "No channels yet. Create one!"}
+                  </div>
+                )
               ) : (
                 filteredChannels.map((channel) => {
                   const isActive =
@@ -396,10 +455,42 @@ export default function ConnectSidebar({
 
           {directsOpen && (
             <div className="space-y-0.5 mt-1">
-              {filteredDirects.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  {query ? "No matching chats" : "No direct messages yet"}
+              {conversationsError && filteredDirects.length > 0 && (
+                <div className="mx-2 mb-1 px-2 py-1 bg-amber-50 border border-amber-200/80 rounded-lg text-[10px] text-amber-800 flex items-center justify-between">
+                  <span className="truncate">Using cached data • {conversationsError}</span>
+                  {onRetryLoad && (
+                    <button onClick={onRetryLoad} className="text-amber-900 font-bold ml-1 hover:underline shrink-0">
+                      Retry
+                    </button>
+                  )}
                 </div>
+              )}
+              {filteredDirects.length === 0 ? (
+                conversationsLoading ? (
+                  <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+                    <Loader2 size={13} className="animate-spin text-blue-500" />
+                    <span>Loading chats...</span>
+                  </div>
+                ) : conversationsError ? (
+                  <div className="mx-2 my-1 p-2.5 bg-red-50 border border-red-200/80 rounded-xl text-xs text-red-700 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                      <AlertCircle size={13} className="text-red-500 shrink-0" />
+                      <span>{conversationsError}</span>
+                    </div>
+                    {onRetryLoad && (
+                      <button
+                        onClick={onRetryLoad}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-800 underline self-start"
+                      >
+                        <RefreshCw size={11} /> Retry loading
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    {query ? "No matching chats" : "No direct messages yet"}
+                  </div>
+                )
               ) : (
                 filteredDirects.map((conv) => {
                   const isActive =
@@ -410,6 +501,8 @@ export default function ConnectSidebar({
                   const other = conv.members?.find((m) => m.userId !== currentUserId);
                   const name = other?.user?.name || other?.user?.email || "Colleague";
                   const avatar = other?.user?.avatarUrl;
+                  const presence = other?.userId ? userPresenceMap[other.userId] || "ONLINE" : "ONLINE";
+                  const dotColor = PRESENCE_DOTS[presence] || PRESENCE_DOTS.ONLINE;
 
                   return (
                     <div
@@ -432,7 +525,10 @@ export default function ConnectSidebar({
                               {name.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white" />
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${dotColor}`}
+                            title={`Status: ${presence}`}
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className="text-xs truncate">{name}</p>
@@ -480,9 +576,31 @@ export default function ConnectSidebar({
           {groupsOpen && (
             <div className="space-y-0.5 mt-1">
               {filteredGroups.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  {query ? "No matching groups" : "No group chats yet"}
-                </div>
+                conversationsLoading ? (
+                  <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+                    <Loader2 size={13} className="animate-spin text-purple-500" />
+                    <span>Loading group chats...</span>
+                  </div>
+                ) : conversationsError ? (
+                  <div className="mx-2 my-1 p-2.5 bg-red-50 border border-red-200/80 rounded-xl text-xs text-red-700 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                      <AlertCircle size={13} className="text-red-500 shrink-0" />
+                      <span>{conversationsError}</span>
+                    </div>
+                    {onRetryLoad && (
+                      <button
+                        onClick={onRetryLoad}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-800 underline self-start"
+                      >
+                        <RefreshCw size={11} /> Retry loading
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    {query ? "No matching groups" : "No group chats yet"}
+                  </div>
+                )
               ) : (
                 filteredGroups.map((group) => {
                   const isActive =
@@ -533,6 +651,20 @@ export default function ConnectSidebar({
           )}
         </div>
       </div>
+
+      {/* Footer User Presence Status Selector */}
+      {onChangePresence && (
+        <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <UserCircle2 size={16} className="text-gray-400 shrink-0" />
+            <span className="text-[11px] font-medium text-gray-600 truncate">Your Status:</span>
+          </div>
+          <PresenceSelector
+            currentStatus={currentUserPresence}
+            onChangeStatus={onChangePresence}
+          />
+        </div>
+      )}
     </div>
   );
 }

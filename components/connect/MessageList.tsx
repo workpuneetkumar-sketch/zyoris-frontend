@@ -7,6 +7,7 @@ import {
   RefreshCw,
   Hash,
   MessageSquare,
+  Bell,
 } from "lucide-react";
 import { ConnectMessage } from "@/types/connect";
 import MessageItem from "./MessageItem";
@@ -21,6 +22,7 @@ interface MessageListProps {
   canManage?: boolean;
   emptyTitle?: string;
   emptySubtitle?: string;
+  unreadCount?: number;
   onRetryFetch?: () => void;
   onReply: (message: ConnectMessage) => void;
   onEdit: (message: ConnectMessage) => void;
@@ -30,6 +32,8 @@ interface MessageListProps {
   onMention?: (message: ConnectMessage) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onLinkEntity?: (message: ConnectMessage) => void;
+  onOpenThread?: (message: ConnectMessage) => void;
 }
 
 export default function MessageList({
@@ -42,6 +46,7 @@ export default function MessageList({
   canManage = false,
   emptyTitle,
   emptySubtitle,
+  unreadCount = 0,
   onRetryFetch,
   onReply,
   onEdit,
@@ -51,6 +56,8 @@ export default function MessageList({
   onMention,
   onPin,
   onSave,
+  onLinkEntity,
+  onOpenThread,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -58,6 +65,11 @@ export default function MessageList({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, messages[messages.length - 1]?.id]);
+
+  // Index where unread marker should appear if there are unread messages
+  const unreadMarkerIndex = unreadCount > 0 && messages.length >= unreadCount
+    ? messages.length - unreadCount
+    : -1;
 
   return (
     <div
@@ -119,21 +131,36 @@ export default function MessageList({
       ) : (
         /* Message Stream */
         <div id="messages-stream" className="space-y-2">
-          {messages.map((message) => (
-            <MessageItem
-              key={message.id}
-              message={message}
-              currentUserId={currentUserId}
-              canManage={canManage}
-              onReply={onReply}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              onRetrySend={onRetrySend}
-              onReact={onReact}
-              onMention={onMention}
-              onPin={onPin}
-              onSave={onSave}
-            />
+          {messages.map((message, idx) => (
+            <React.Fragment key={message.id}>
+              {/* Unread Divider Marker */}
+              {idx === unreadMarkerIndex && (
+                <div className="my-4 flex items-center gap-3 select-none">
+                  <div className="h-px bg-error/40 flex-1" />
+                  <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-error/10 border border-error/20 text-error text-[10px] font-bold uppercase tracking-wider">
+                    <Bell size={11} />
+                    <span>New Messages</span>
+                  </div>
+                  <div className="h-px bg-error/40 flex-1" />
+                </div>
+              )}
+
+              <MessageItem
+                message={message}
+                currentUserId={currentUserId}
+                canManage={canManage}
+                onReply={onReply}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onRetrySend={onRetrySend}
+                onReact={onReact}
+                onMention={onMention}
+                onPin={onPin}
+                onSave={onSave}
+                onLinkEntity={onLinkEntity}
+                onOpenThread={onOpenThread}
+              />
+            </React.Fragment>
           ))}
         </div>
       )}

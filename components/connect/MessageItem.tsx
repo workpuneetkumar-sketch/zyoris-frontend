@@ -10,9 +10,15 @@ import {
   AlertCircle,
   RefreshCw,
   CornerDownRight,
+  Smile,
+  Pin,
+  Bookmark,
+  Link as LinkIcon,
+  MessageSquare,
 } from "lucide-react";
 import { ConnectMessage } from "@/types/connect";
 import MessageContextMenu from "./MessageContextMenu";
+import ReactionPicker from "./ReactionPicker";
 
 interface MessageItemProps {
   message: ConnectMessage;
@@ -22,10 +28,12 @@ interface MessageItemProps {
   onEdit: (message: ConnectMessage) => void;
   onDelete: (message: ConnectMessage) => void;
   onRetrySend?: (message: ConnectMessage) => void;
-  onReact?: (message: ConnectMessage, reaction: string) => void;
+  onReact?: (message: ConnectMessage, emoji: string) => void;
   onMention?: (message: ConnectMessage) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onLinkEntity?: (message: ConnectMessage) => void;
+  onOpenThread?: (message: ConnectMessage) => void;
 }
 
 export default function MessageItem({
@@ -40,8 +48,11 @@ export default function MessageItem({
   onMention,
   onPin,
   onSave,
+  onLinkEntity,
+  onOpenThread,
 }: MessageItemProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
 
   const isSelf = Boolean(
     (currentUserId && message.senderId === currentUserId) ||
@@ -66,11 +77,51 @@ export default function MessageItem({
     setIsMenuOpen(true);
   };
 
+  // Render mentions with styled badge
+  const renderMessageContent = (content: string) => {
+    // Match @Word or @First Last pattern
+    const mentionRegex = /(@[A-Za-z0-9_.\s]+?)(?=\s|$|[.,!?])/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+      const mentionText = match[0].trim();
+      const isMentioningMe =
+        currentUserId &&
+        (mentionText.toLowerCase() === `@you` ||
+          (senderName && mentionText.toLowerCase().includes(senderName.toLowerCase())));
+
+      parts.push(
+        <span
+          key={match.index}
+          className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold ${
+            isMentioningMe
+              ? "bg-amber-400/20 text-amber-900 border border-amber-300 dark:text-amber-200"
+              : "bg-primary/15 text-primary border border-primary/20"
+          }`}
+        >
+          {mentionText}
+        </span>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : content;
+  };
+
   return (
     <div
       id={`message-item-${message.id}`}
       onContextMenu={handleContextMenu}
-      className={`group relative flex items-start gap-3 transition-colors py-1 ${
+      className={`group relative flex items-start gap-3 transition-colors py-1.5 ${
         isSelf ? "flex-row-reverse" : "flex-row"
       }`}
     >
@@ -96,7 +147,7 @@ export default function MessageItem({
 
       {/* Message Body & Bubble */}
       <div
-        className={`max-w-[78%] md:max-w-[70%] space-y-1 relative ${
+        className={`max-w-[82%] md:max-w-[72%] space-y-1 relative ${
           isSelf ? "items-end text-right" : "items-start text-left"
         }`}
       >
@@ -116,20 +167,39 @@ export default function MessageItem({
               (edited)
             </span>
           )}
+          {message.isPinned && (
+            <span
+              id={`pinned-badge-${message.id}`}
+              className="flex items-center gap-0.5 text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200"
+            >
+              <Pin size={10} />
+              <span>Pinned</span>
+            </span>
+          )}
+          {message.isSaved && (
+            <span
+              id={`saved-badge-${message.id}`}
+              className="flex items-center gap-0.5 text-[10px] text-primary font-semibold bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20"
+            >
+              <Bookmark size={10} />
+              <span>Saved</span>
+            </span>
+          )}
         </div>
 
-        {/* Parent Message Reply Preview (if referencing a parent) */}
+        {/* Parent Message Reply Preview (if quoting a parent) */}
         {message.parentMessageId && (
           <div
             id={`reply-quote-${message.id}`}
-            className="msg-reply-quote text-[11px] px-2.5 py-1 mb-1 max-w-full text-left truncate flex items-center gap-1.5 text-text-secondary opacity-90"
+            onClick={() => onOpenThread?.(message)}
+            className="msg-reply-quote text-[11px] px-2.5 py-1 mb-1 max-w-full text-left truncate flex items-center gap-1.5 text-text-secondary opacity-90 cursor-pointer hover:underline"
           >
             <CornerDownRight size={12} className="shrink-0 text-primary" />
             <span className="font-semibold text-text truncate">
               {message.parentMessage?.sender?.name || "Replying"}:
             </span>
             <span className="truncate italic">
-              {message.parentMessage?.content || "Referenced message"}
+              {message.parentMessage?.content || "Referenced thread message"}
             </span>
           </div>
         )}
@@ -141,7 +211,24 @@ export default function MessageItem({
             isSelf ? "msg-bubble-self text-left" : "msg-bubble-peer text-left"
           } ${isFailed ? "border-error border" : ""}`}
         >
-          <div className="whitespace-pre-wrap">{message.content}</div>
+          <div className="whitespace-pre-wrap">{renderMessageContent(message.content)}</div>
+
+          {/* Business Entity Link Badges */}
+          {message.businessLinks && message.businessLinks.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-border-light flex flex-wrap gap-1">
+              {message.businessLinks.map((link) => (
+                <span
+                  key={link.id}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface border border-border text-[10px] font-semibold text-text hover:border-primary transition-colors cursor-pointer"
+                  title={`Linked to ${link.targetType}: ${link.targetId}`}
+                >
+                  <LinkIcon size={10} className="text-primary" />
+                  <span className="text-primary font-bold uppercase">{link.targetType}:</span>
+                  <span className="truncate max-w-[120px]">{link.title || link.targetId}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Sending / Failed Status Indicators */}
           {(isSending || isFailed) && (
@@ -176,19 +263,94 @@ export default function MessageItem({
           )}
         </div>
 
+        {/* Live Reaction Pills Stream */}
+        {message.reactions && message.reactions.length > 0 && (
+          <div
+            id={`reactions-bar-${message.id}`}
+            className={`flex flex-wrap items-center gap-1 mt-1 ${isSelf ? "justify-end" : "justify-start"}`}
+          >
+            {message.reactions.map((reaction) => {
+              const tooltipNames = reaction.users?.map((u) => u.name).join(", ") || `${reaction.count} reactions`;
+              return (
+                <button
+                  key={reaction.emoji}
+                  onClick={() => onReact?.(message, reaction.emoji)}
+                  title={`${tooltipNames} reacted with ${reaction.emoji}`}
+                  className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border transition-all active:scale-95 ${
+                    reaction.hasReacted
+                      ? "bg-primary/10 border-primary/40 text-primary font-bold shadow-xs"
+                      : "bg-surface hover:bg-surface-hover border-border text-text"
+                  }`}
+                >
+                  <span className="text-xs">{reaction.emoji}</span>
+                  <span className="text-[10px] font-bold">{reaction.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Thread Replies Indicator Pill */}
+        {Boolean(message.replyCount && message.replyCount > 0) && (
+          <div className={`mt-1.5 flex ${isSelf ? "justify-end" : "justify-start"}`}>
+            <button
+              onClick={() => onOpenThread?.(message)}
+              className="px-2.5 py-1 rounded-xl bg-surface-hover hover:bg-surface border border-border hover:border-primary text-text text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs group"
+            >
+              <MessageSquare size={13} className="text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-primary">
+                {message.replyCount} {message.replyCount === 1 ? "reply" : "replies"}
+              </span>
+              <span className="text-[10px] text-text-muted font-normal">View thread →</span>
+            </button>
+          </div>
+        )}
+
         {/* Quick Action Bar (Visible on Hover) */}
         {!isSending && (
           <div
             id={`action-bar-${message.id}`}
-            className={`msg-action-bar absolute top-0 hidden group-hover:flex items-center p-0.5 z-20 ${
+            className={`msg-action-bar absolute -top-3 hidden group-hover:flex items-center p-0.5 z-20 shadow-md ${
               isSelf ? "right-full mr-2" : "left-full ml-2"
             }`}
           >
-            {/* Quick Reply */}
+            {/* Quick Emoji Reaction Buttons */}
+            {["👍", "❤️", "😂"].map((emoji) => (
+              <button
+                key={emoji}
+                onClick={() => onReact?.(message, emoji)}
+                title={`React with ${emoji}`}
+                className="p-1 text-xs hover:scale-125 transition-transform"
+              >
+                {emoji}
+              </button>
+            ))}
+
+            {/* Reaction Picker Button */}
             <button
-              id={`quick-reply-${message.id}`}
-              onClick={() => onReply(message)}
-              title="Reply"
+              id={`reaction-picker-btn-${message.id}`}
+              onClick={() => setIsReactionPickerOpen((prev) => !prev)}
+              title="Add Reaction"
+              className="msg-action-btn p-1.5 rounded"
+            >
+              <Smile size={13} />
+            </button>
+
+            {/* Reaction Picker Popover */}
+            {isReactionPickerOpen && (
+              <ReactionPicker
+                isOpen={true}
+                onClose={() => setIsReactionPickerOpen(false)}
+                onSelectEmoji={(emoji) => onReact?.(message, emoji)}
+                className={isSelf ? "right-0 bottom-full mb-1" : "left-0 bottom-full mb-1"}
+              />
+            )}
+
+            {/* Reply in Thread Button */}
+            <button
+              id={`quick-thread-reply-${message.id}`}
+              onClick={() => onOpenThread?.(message) || onReply(message)}
+              title="Reply in Thread"
               className="msg-action-btn p-1.5 rounded"
             >
               <Reply size={13} />
@@ -236,12 +398,14 @@ export default function MessageItem({
               isSelf={isSelf}
               canManage={canManage}
               onReply={onReply}
+              onOpenThread={onOpenThread}
               onEdit={onEdit}
               onDelete={onDelete}
               onReact={onReact}
               onMention={onMention}
               onPin={onPin}
               onSave={onSave}
+              onLinkEntity={onLinkEntity}
             />
           </div>
         )}
