@@ -33,6 +33,7 @@ interface MessageListProps {
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
   onLinkEntity?: (message: ConnectMessage) => void;
+  onUnlinkEntity?: (message: ConnectMessage, linkId: string) => void;
   onOpenThread?: (message: ConnectMessage) => void;
 }
 
@@ -57,6 +58,7 @@ export default function MessageList({
   onPin,
   onSave,
   onLinkEntity,
+  onUnlinkEntity,
   onOpenThread,
 }: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -158,6 +160,7 @@ export default function MessageList({
                 onPin={onPin}
                 onSave={onSave}
                 onLinkEntity={onLinkEntity}
+                onUnlinkEntity={onUnlinkEntity}
                 onOpenThread={onOpenThread}
               />
             </React.Fragment>

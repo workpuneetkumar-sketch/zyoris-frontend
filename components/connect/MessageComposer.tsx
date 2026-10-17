@@ -10,8 +10,11 @@ import {
   Check,
   AtSign,
   Smile,
+  Lock,
+  Globe,
+  AlertTriangle,
 } from "lucide-react";
-import { ConnectMessage } from "@/types/connect";
+import { ConnectMessage, ChannelAudience } from "@/types/connect";
 import MentionAutocomplete, { MentionMember } from "./MentionAutocomplete";
 import ReactionPicker from "./ReactionPicker";
 
@@ -19,13 +22,18 @@ interface MessageComposerProps {
   placeholder?: string;
   disabled?: boolean;
   sending?: boolean;
+  isArchived?: boolean;
+  isReadOnly?: boolean;
+  canManage?: boolean;
+  audience?: ChannelAudience;
   editingMessage?: ConnectMessage | null;
   replyingToMessage?: ConnectMessage | null;
   teamMembers?: MentionMember[];
   onSendMessage: (
     content: string,
     parentMessageId?: string | null,
-    mentionedUserIds?: string[]
+    mentionedUserIds?: string[],
+    visibility?: "INTERNAL" | "CLIENT_SHARED"
   ) => Promise<void> | void;
   onSaveEdit?: (messageId: string, content: string) => Promise<void> | void;
   onCancelEdit?: () => void;
@@ -38,6 +46,10 @@ export default function MessageComposer({
   placeholder = "Type a message...",
   disabled = false,
   sending = false,
+  isArchived = false,
+  isReadOnly = false,
+  canManage = false,
+  audience = "INTERNAL",
   editingMessage = null,
   replyingToMessage = null,
   teamMembers = [],
@@ -51,6 +63,13 @@ export default function MessageComposer({
   const [content, setContent] = useState("");
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [isEmojiPickerOpen, setIsEmojiPickerOpen] = useState(false);
+  const [messageVisibility, setMessageVisibility] = useState<"INTERNAL" | "CLIENT_SHARED">(
+    audience === "CLIENT_SHARED" ? "CLIENT_SHARED" : "INTERNAL"
+  );
+
+  useEffect(() => {
+    setMessageVisibility(audience === "CLIENT_SHARED" ? "CLIENT_SHARED" : "INTERNAL");
+  }, [audience]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -109,10 +128,21 @@ export default function MessageComposer({
     textareaRef.current.focus();
   };
 
+  const isComposerLocked = disabled || isArchived || (isReadOnly && !canManage);
+  const effectivePlaceholder = isArchived
+    ? "This channel is archived. Message sending is disabled."
+    : isReadOnly && !canManage
+    ? "This channel is read-only. Only channel admins can post."
+    : editingMessage
+    ? "Edit your message..."
+    : replyingToMessage
+    ? `Reply to ${replyingToMessage.sender?.name || "user"}...`
+    : placeholder;
+
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanContent = content.trim();
-    if (!cleanContent || sending || disabled) return;
+    if (!cleanContent || sending || isComposerLocked) return;
 
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     onTypingStop?.();
@@ -134,7 +164,8 @@ export default function MessageComposer({
       await onSendMessage(
         cleanContent,
         replyingToMessage ? replyingToMessage.id : null,
-        mentionedUserIds
+        mentionedUserIds,
+        messageVisibility
       );
     }
   };
@@ -183,7 +214,9 @@ export default function MessageComposer({
         />
       )}
 
-      <div className="bg-surface-hover border border-border rounded-2xl overflow-hidden focus-within:ring-2 focus-within:ring-primary focus-within:border-primary focus-within:bg-surface transition-all shadow-inner">
+      <div className={`bg-surface-hover border rounded-2xl overflow-hidden transition-all shadow-inner ${
+        isComposerLocked ? "opacity-75 border-border bg-surface-hover/60" : "border-border focus-within:ring-2 focus-within:ring-primary focus-within:border-primary focus-within:bg-surface"
+      }`}>
         {/* Reply Mode Context Header */}
         {replyingToMessage && !editingMessage && (
           <div
@@ -244,29 +277,24 @@ export default function MessageComposer({
             value={content}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
-            placeholder={
-              editingMessage
-                ? "Edit your message..."
-                : replyingToMessage
-                ? `Reply to ${replyingToMessage.sender?.name || "user"}...`
-                : placeholder
-            }
-            disabled={disabled || sending}
-            className="w-full px-4 pt-3 pb-1 bg-transparent text-xs text-text placeholder:text-text-muted focus:outline-none resize-none max-h-32 min-h-[36px]"
+            placeholder={effectivePlaceholder}
+            disabled={isComposerLocked || sending}
+            className="w-full px-4 pt-3 pb-1 bg-transparent text-xs text-text placeholder:text-text-muted focus:outline-none resize-none max-h-32 min-h-[36px] disabled:cursor-not-allowed"
           />
 
           {/* Action Toolbar */}
           <div className="flex items-center justify-between px-3 py-1.5 border-t border-border-light">
-            <div className="flex items-center gap-1 text-text-muted">
+            <div className="flex items-center gap-1.5 text-text-muted">
               {/* Add @ mention */}
               <button
                 type="button"
+                disabled={isComposerLocked}
                 onClick={() => {
                   setContent((prev) => prev + "@");
                   setMentionQuery("");
                   textareaRef.current?.focus();
                 }}
-                className="p-1.5 hover:text-primary hover:bg-surface rounded-lg transition-colors flex items-center gap-1 text-[11px]"
+                className="p-1.5 hover:text-primary hover:bg-surface rounded-lg transition-colors flex items-center gap-1 text-[11px] disabled:opacity-40"
                 title="Mention a teammate (@)"
               >
                 <AtSign size={14} />
@@ -275,12 +303,45 @@ export default function MessageComposer({
               {/* Add Emoji */}
               <button
                 type="button"
+                disabled={isComposerLocked}
                 onClick={() => setIsEmojiPickerOpen((prev) => !prev)}
-                className="p-1.5 hover:text-primary hover:bg-surface rounded-lg transition-colors"
+                className="p-1.5 hover:text-primary hover:bg-surface rounded-lg transition-colors disabled:opacity-40"
                 title="Insert emoji"
               >
                 <Smile size={14} />
               </button>
+
+              {/* Client vs Internal Visibility Toggle (Audience Controls) */}
+              {audience === "CLIENT_SHARED" && !isComposerLocked && (
+                <div className="ml-2 flex items-center gap-0.5 bg-surface rounded-lg p-0.5 border border-border text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setMessageVisibility("CLIENT_SHARED")}
+                    className={`px-2 py-0.5 rounded-md flex items-center gap-1 font-semibold transition-all ${
+                      messageVisibility === "CLIENT_SHARED"
+                        ? "bg-blue-500 text-white shadow-2xs"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                    title="Visible to clients and portal"
+                  >
+                    <Globe size={11} />
+                    <span>Client</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMessageVisibility("INTERNAL")}
+                    className={`px-2 py-0.5 rounded-md flex items-center gap-1 font-semibold transition-all ${
+                      messageVisibility === "INTERNAL"
+                        ? "bg-amber-500 text-white shadow-2xs"
+                        : "text-text-muted hover:text-text"
+                    }`}
+                    title="Internal staff note (Hidden from clients)"
+                  >
+                    <Lock size={11} />
+                    <span>Internal</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Submit Buttons */}
@@ -290,7 +351,7 @@ export default function MessageComposer({
                   <button
                     id="save-edit-btn"
                     type="submit"
-                    disabled={disabled || sending || !content.trim()}
+                    disabled={isComposerLocked || sending || !content.trim()}
                     className="px-3.5 py-1.5 bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold rounded-xl shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5"
                   >
                     {sending ? (
@@ -305,7 +366,7 @@ export default function MessageComposer({
                 <button
                   id="send-message-btn"
                   type="submit"
-                  disabled={disabled || sending || !content.trim()}
+                  disabled={isComposerLocked || sending || !content.trim()}
                   className="p-2 bg-primary hover:bg-primary-dark text-primary-foreground rounded-xl shadow-xs disabled:opacity-40 disabled:cursor-not-allowed transition-all shrink-0 flex items-center justify-center"
                   title="Send Message (Enter)"
                 >

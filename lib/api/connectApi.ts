@@ -7,6 +7,7 @@ import {
   Channel,
   ChannelMember,
   ChannelVisibility,
+  ChannelAudience,
   Conversation,
   ConversationMember,
   ConnectMessage,
@@ -16,6 +17,8 @@ import {
   UnreadSummaryItem,
   BusinessEntityType,
   BusinessEntityLink,
+  CommunicationStats,
+  CommunicationInboxItem,
 } from "@/types/connect";
 
 const BASE_COMM = "/api/communications";
@@ -149,14 +152,24 @@ export async function createChannel(payload: {
   name: string;
   description?: string;
   visibility: ChannelVisibility;
+  audience?: ChannelAudience;
+  clientId?: string | null;
 }): Promise<Channel> {
   const cleanName = payload.name.trim().toLowerCase().replace(/\s+/g, "-");
   const normVisibility = (payload.visibility || "PUBLIC").toUpperCase() as ChannelVisibility;
-  const res = await api.post(`${BASE_COMM}/channels`, {
+  const body: Record<string, any> = {
     name: cleanName,
     description: payload.description?.trim() || undefined,
     visibility: normVisibility,
-  });
+  };
+  if (payload.audience) {
+    body.audience = payload.audience;
+    if (payload.audience === "CLIENT_SHARED" && payload.clientId) {
+      body.clientId = payload.clientId;
+    }
+  }
+
+  const res = await api.post(`${BASE_COMM}/channels`, body);
   const created: Channel = res.data?.data || res.data;
 
   // Persist into cache immediately upon creation
@@ -171,7 +184,7 @@ export async function createChannel(payload: {
 }
 
 /**
- * Update an existing channel
+ * Update an existing channel (name, description, visibility, audience, restrictions)
  */
 export async function updateChannel(
   channelId: string,
@@ -179,26 +192,155 @@ export async function updateChannel(
     name?: string;
     description?: string;
     visibility?: ChannelVisibility;
+    audience?: ChannelAudience;
+    clientId?: string | null;
+    isReadOnly?: boolean;
   }
 ): Promise<Channel> {
   const body: Record<string, any> = {};
   if (payload.name) body.name = payload.name.trim().toLowerCase().replace(/\s+/g, "-");
   if (payload.description !== undefined) body.description = payload.description.trim();
   if (payload.visibility) body.visibility = payload.visibility;
+  if (payload.isReadOnly !== undefined) body.isReadOnly = payload.isReadOnly;
+  if (payload.audience) {
+    body.audience = payload.audience;
+    if (payload.audience === "CLIENT_SHARED" && payload.clientId) {
+      body.clientId = payload.clientId;
+    }
+  }
 
   const res = await api.patch(`${BASE_COMM}/channels/${channelId}`, body);
-  return res.data?.data || res.data;
+  const updated: Channel = res.data?.data || res.data;
+
+  // Update in cache
+  const existing = getCachedChannels();
+  setCachedChannels(
+    existing.map((c) => (c.id === channelId ? { ...c, ...updated } : c))
+  );
+
+  return updated;
 }
 
 /**
- * Delete a channel
+ * Archive a channel: DELETE /api/communications/channels/:id
+ * (Backend marks archivedAt timestamp and archivedById)
  */
-export async function deleteChannel(channelId: string): Promise<boolean> {
+export async function archiveChannel(channelId: string): Promise<Channel | null> {
   try {
     const res = await api.delete(`${BASE_COMM}/channels/${channelId}`);
-    return res.status === 200 || res.status === 204 || res.data?.success === true;
+    const archived: Channel = res.data?.data || res.data;
+    // Update cache
+    const existing = getCachedChannels();
+    setCachedChannels(
+      existing.map((c) =>
+        c.id === channelId
+          ? { ...c, ...archived, archivedAt: archived?.archivedAt || new Date().toISOString() }
+          : c
+      )
+    );
+    return archived;
   } catch (error: any) {
-    console.warn(`Failed to delete channel ${channelId}:`, error);
+    console.warn(`Failed to archive channel ${channelId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Restore an archived channel: POST /api/communications/channels/:id/restore
+ */
+export async function restoreChannel(channelId: string): Promise<Channel | null> {
+  try {
+    const res = await api.post(`${BASE_COMM}/channels/${channelId}/restore`);
+    const restored: Channel = res.data?.data || res.data;
+    // Update cache
+    const existing = getCachedChannels();
+    setCachedChannels(
+      existing.map((c) =>
+        c.id === channelId
+          ? { ...c, ...restored, archivedAt: null, archivedById: null }
+          : c
+      )
+    );
+    return restored;
+  } catch (error: any) {
+    console.warn(`Failed to restore channel ${channelId}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Delete / Archive a channel (alias for archiveChannel)
+ */
+export async function deleteChannel(channelId: string): Promise<boolean> {
+  const result = await archiveChannel(channelId);
+  return result !== null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                           CHANNEL MUTE HELPERS                             */
+/* -------------------------------------------------------------------------- */
+
+const MUTED_CHANNELS_KEY = "zyoris_muted_channels";
+const MUTED_CONVERSATIONS_KEY = "zyoris_muted_conversations";
+
+export function getMutedChannels(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(MUTED_CHANNELS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function isChannelMuted(channelId: string): boolean {
+  return getMutedChannels().includes(channelId);
+}
+
+export function toggleMuteChannel(channelId: string, mute?: boolean): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const current = new Set(getMutedChannels());
+    const shouldMute = mute !== undefined ? mute : !current.has(channelId);
+    if (shouldMute) {
+      current.add(channelId);
+    } else {
+      current.delete(channelId);
+    }
+    localStorage.setItem(MUTED_CHANNELS_KEY, JSON.stringify(Array.from(current)));
+    return shouldMute;
+  } catch {
+    return false;
+  }
+}
+
+export function getMutedConversations(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(MUTED_CONVERSATIONS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function isConversationMuted(conversationId: string): boolean {
+  return getMutedConversations().includes(conversationId);
+}
+
+export function toggleMuteConversation(conversationId: string, mute?: boolean): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const current = new Set(getMutedConversations());
+    const shouldMute = mute !== undefined ? mute : !current.has(conversationId);
+    if (shouldMute) {
+      current.add(conversationId);
+    } else {
+      current.delete(conversationId);
+    }
+    localStorage.setItem(MUTED_CONVERSATIONS_KEY, JSON.stringify(Array.from(current)));
+    return shouldMute;
+  } catch {
     return false;
   }
 }
@@ -240,6 +382,18 @@ export async function addChannelMember(
 }
 
 /**
+ * Update a channel member's role or restriction
+ */
+export async function updateChannelMember(
+  channelId: string,
+  userId: string,
+  payload: { role?: MemberRole; restriction?: "NONE" | "READ_ONLY" | "MUTED" }
+): Promise<ChannelMember> {
+  const res = await api.patch(`${BASE_COMM}/channels/${channelId}/members/${userId}`, payload);
+  return res.data?.data || res.data;
+}
+
+/**
  * Update a channel member's role (e.g. promote to ADMIN or change to MEMBER)
  */
 export async function updateChannelMemberRole(
@@ -247,10 +401,7 @@ export async function updateChannelMemberRole(
   userId: string,
   role: MemberRole
 ): Promise<ChannelMember> {
-  const res = await api.patch(`${BASE_COMM}/channels/${channelId}/members/${userId}`, {
-    role,
-  });
-  return res.data?.data || res.data;
+  return updateChannelMember(channelId, userId, { role });
 }
 
 /**
@@ -466,6 +617,15 @@ export async function getChannelMessages(
   // Chronological ascending order (oldest to newest)
   list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+  // Attach stored/cached business links immediately so links persist upon refresh
+  list = list.map((m) => ({
+    ...m,
+    businessLinks:
+      m.businessLinks && m.businessLinks.length > 0
+        ? m.businessLinks
+        : getStoredLinksForMessage(m.id),
+  }));
+
   return { data: list, nextCursor };
 }
 
@@ -502,6 +662,15 @@ export async function getConversationMessages(
   // Chronological ascending order
   list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+  // Attach stored/cached business links immediately so links persist upon refresh
+  list = list.map((m) => ({
+    ...m,
+    businessLinks:
+      m.businessLinks && m.businessLinks.length > 0
+        ? m.businessLinks
+        : getStoredLinksForMessage(m.id),
+  }));
+
   return { data: list, nextCursor };
 }
 
@@ -517,6 +686,7 @@ export async function sendMessage(payload: SendMessagePayload): Promise<ConnectM
   if (payload.parentMessageId) body.parentMessageId = payload.parentMessageId;
   if (payload.attachments && payload.attachments.length > 0) body.attachments = payload.attachments;
   if (payload.mentionedUserIds && payload.mentionedUserIds.length > 0) body.mentionedUserIds = payload.mentionedUserIds;
+  if (payload.visibility) body.visibility = payload.visibility;
 
   const res = await api.post(`${BASE_COMM}/messages`, body);
   return res.data?.data || res.data;
@@ -973,12 +1143,70 @@ export async function searchMessages(
 }
 
 /* -------------------------------------------------------------------------- */
-/*                        BUSINESS ENTITY LINKS (DAY 2)                       */
+/*                        BUSINESS ENTITY LINKS (DAY 2 & 3)                   */
 /* -------------------------------------------------------------------------- */
+
+const MESSAGE_LINKS_STORAGE_KEY = "zyoris_connect_message_links";
+
+export function getStoredMessageLinks(): Record<string, BusinessEntityLink[]> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(MESSAGE_LINKS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+export function getStoredLinksForMessage(messageId: string): BusinessEntityLink[] {
+  const store = getStoredMessageLinks();
+  return store[messageId] || [];
+}
+
+export function saveMessageLinkToStorage(messageId: string, link: BusinessEntityLink) {
+  if (typeof window === "undefined") return;
+  try {
+    const store = getStoredMessageLinks();
+    const existing = store[messageId] || [];
+    const filtered = existing.filter((l) => l.id !== link.id);
+    store[messageId] = [...filtered, link];
+    localStorage.setItem(MESSAGE_LINKS_STORAGE_KEY, JSON.stringify(store));
+  } catch (e) {
+    console.warn("Failed to persist message link to storage:", e);
+  }
+}
+
+export function setStoredLinksForMessage(messageId: string, links: BusinessEntityLink[]) {
+  if (typeof window === "undefined") return;
+  try {
+    const store = getStoredMessageLinks();
+    store[messageId] = links;
+    localStorage.setItem(MESSAGE_LINKS_STORAGE_KEY, JSON.stringify(store));
+  } catch (e) {
+    console.warn("Failed to set message links to storage:", e);
+  }
+}
+
+export function removeMessageLinkFromStorage(messageId: string, linkId: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const store = getStoredMessageLinks();
+    if (store[messageId]) {
+      store[messageId] = store[messageId].filter((l) => l.id !== linkId);
+      if (store[messageId].length === 0) {
+        delete store[messageId];
+      }
+      localStorage.setItem(MESSAGE_LINKS_STORAGE_KEY, JSON.stringify(store));
+    }
+  } catch (e) {
+    console.warn("Failed to remove message link from storage:", e);
+  }
+}
 
 /**
  * Link message to a business entity:
  * POST /api/communications/messages/:messageId/links
+ * Must NOT mask backend failure with optimistic UI state.
  */
 export async function linkMessageToEntity(
   messageId: string,
@@ -991,20 +1219,32 @@ export async function linkMessageToEntity(
     targetId,
     metadata,
   };
-  try {
-    const res = await api.post(`${BASE_COMM}/messages/${messageId}/links`, body);
-    return res.data?.data || res.data;
-  } catch (error: any) {
-    console.warn(`Failed to link message ${messageId} to ${targetType}:${targetId}:`, error);
-    // Graceful client fallback
-    return {
-      id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      messageId,
-      targetType,
-      targetId,
-      createdAt: new Date().toISOString(),
-    };
-  }
+  const res = await api.post(`${BASE_COMM}/messages/${messageId}/links`, body);
+  const raw = res.data?.data || res.data;
+
+  const title =
+    raw.title ||
+    raw.target?.title ||
+    raw.target?.name ||
+    raw.target?.subject ||
+    metadata?.title ||
+    raw.metadata?.title ||
+    targetId;
+
+  const link: BusinessEntityLink = {
+    id: raw.id,
+    messageId: raw.messageId || messageId,
+    targetType: (raw.targetType || targetType) as BusinessEntityType,
+    targetId: raw.targetId || targetId,
+    title,
+    url: raw.url,
+    metadata: raw.metadata || metadata,
+    createdAt: raw.createdAt || new Date().toISOString(),
+    createdBy: raw.createdBy,
+  };
+
+  saveMessageLinkToStorage(messageId, link);
+  return link;
 }
 
 /**
@@ -1015,13 +1255,36 @@ export async function getMessageLinks(messageId: string): Promise<BusinessEntity
   try {
     const res = await api.get(`${BASE_COMM}/messages/${messageId}/links`);
     const data = res.data;
-    if (Array.isArray(data)) return data;
-    if (data?.data && Array.isArray(data.data)) return data.data;
-    if (data?.links && Array.isArray(data.links)) return data.links;
-    return [];
+    let list: any[] = [];
+    if (Array.isArray(data)) list = data;
+    else if (data?.data && Array.isArray(data.data)) list = data.data;
+    else if (data?.links && Array.isArray(data.links)) list = data.links;
+
+    const normalized: BusinessEntityLink[] = list.map((l) => ({
+      id: l.id,
+      messageId: l.messageId || messageId,
+      targetType: (l.targetType || "TASK") as BusinessEntityType,
+      targetId: l.targetId,
+      title:
+        l.title ||
+        l.target?.title ||
+        l.target?.name ||
+        l.target?.subject ||
+        l.metadata?.title ||
+        l.targetId,
+      url: l.url,
+      metadata: l.metadata,
+      createdAt: l.createdAt,
+      createdBy: l.createdBy,
+    }));
+
+    if (normalized.length > 0) {
+      setStoredLinksForMessage(messageId, normalized);
+    }
+    return normalized;
   } catch (error: any) {
     console.warn(`Failed to get links for message ${messageId}:`, error);
-    return [];
+    return getStoredLinksForMessage(messageId);
   }
 }
 
@@ -1035,9 +1298,14 @@ export async function removeMessageLink(
 ): Promise<boolean> {
   try {
     const res = await api.delete(`${BASE_COMM}/messages/${messageId}/links/${linkId}`);
-    return res.status === 200 || res.status === 204 || res.data?.success === true;
+    const ok = res.status === 200 || res.status === 204 || res.data?.success === true;
+    if (ok) {
+      removeMessageLinkFromStorage(messageId, linkId);
+    }
+    return ok;
   } catch (error: any) {
     console.warn(`Failed to delete message link ${linkId}:`, error);
+    removeMessageLinkFromStorage(messageId, linkId);
     return true;
   }
 }
@@ -1080,6 +1348,74 @@ export async function getLinksByEntity(
   }
 }
 
+/* -------------------------------------------------------------------------- */
+/*                     STATS, INBOX & ADVANCED LINKS (DAY 3)                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Get communication stats: GET /api/communications/stats
+ */
+export async function getCommunicationStats(): Promise<CommunicationStats | null> {
+  try {
+    const res = await api.get(`${BASE_COMM}/stats`);
+    return res.data?.data || res.data || null;
+  } catch (error: any) {
+    console.warn("Failed to fetch communication stats:", error);
+    return null;
+  }
+}
+
+/**
+ * Get unified communication inbox: GET /api/communications/inbox
+ */
+export async function getCommunicationInbox(
+  limit: number = 50,
+  offset: number = 0
+): Promise<{ total: number; data: CommunicationInboxItem[] }> {
+  try {
+    const res = await api.get(`${BASE_COMM}/inbox?limit=${limit}&offset=${offset}`);
+    const data = res.data;
+    if (data && Array.isArray(data.data)) {
+      return { total: data.total ?? data.data.length, data: data.data };
+    }
+    if (Array.isArray(data)) {
+      return { total: data.length, data };
+    }
+    return { total: 0, data: [] };
+  } catch (error: any) {
+    console.warn("Failed to fetch communication inbox:", error);
+    return { total: 0, data: [] };
+  }
+}
+
+/**
+ * Query all links across communications: GET /api/communications/links
+ */
+export async function getAllCommunicationLinks(params?: {
+  targetType?: BusinessEntityType;
+  targetId?: string;
+  limit?: number;
+  cursor?: string;
+}): Promise<{ data: BusinessEntityLink[]; nextCursor?: string | null }> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.targetType) query.set("targetType", params.targetType.toUpperCase());
+    if (params?.targetId) query.set("targetId", params.targetId);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.cursor) query.set("cursor", params.cursor);
+
+    const res = await api.get(`${BASE_COMM}/links?${query.toString()}`);
+    const data = res.data;
+    if (Array.isArray(data)) return { data, nextCursor: null };
+    if (data?.data && Array.isArray(data.data)) return { data: data.data, nextCursor: data.nextCursor ?? null };
+    if (data?.links && Array.isArray(data.links)) return { data: data.links, nextCursor: data.nextCursor ?? null };
+    return { data: [], nextCursor: null };
+  } catch (error: any) {
+    console.warn("Failed to fetch communication links:", error);
+    return { data: [], nextCursor: null };
+  }
+}
+
 /* Backward-compatibility aliases */
 export async function getConnectMessages(params: {
   channelId?: string;
@@ -1100,5 +1436,6 @@ export async function getConnectMessages(params: {
 export const sendConnectMessage = sendMessage;
 export const updateConnectMessage = updateMessage;
 export const deleteConnectMessage = deleteMessage;
+
 
 

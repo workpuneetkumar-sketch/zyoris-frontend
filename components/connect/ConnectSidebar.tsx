@@ -12,15 +12,19 @@ import {
   ChevronRight,
   Circle,
   Bell,
+  BellOff,
   Sparkles,
   Settings,
   UserCircle2,
   AlertCircle,
   RefreshCw,
   Loader2,
+  Archive,
+  Globe,
 } from "lucide-react";
 import { Channel, Conversation, ActiveTarget, PresenceStatus } from "@/types/connect";
 import { SocketStatus } from "@/hooks/useConnectSocket";
+import { isChannelMuted, isConversationMuted } from "@/lib/api/connectApi";
 import PresenceSelector from "./PresenceSelector";
 
 interface ConnectSidebarProps {
@@ -372,6 +376,9 @@ export default function ConnectSidebar({
                     activeTarget?.type === "channel" && activeTarget?.id === channel.id;
                   const isPrivate = channel.visibility === "PRIVATE";
                   const unread = unreadMap[channel.id] || 0;
+                  const isMuted = isChannelMuted(channel.id);
+                  const isArchived = Boolean(channel.archivedAt);
+                  const isClientShared = channel.audience === "CLIENT_SHARED";
 
                   return (
                     <div
@@ -385,7 +392,7 @@ export default function ConnectSidebar({
                       }`}
                       onClick={() => onSelectChannel(channel)}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         {isPrivate ? (
                           <Lock
                             size={14}
@@ -405,7 +412,25 @@ export default function ConnectSidebar({
                             }`}
                           />
                         )}
-                        <span className="text-xs truncate">{channel.name}</span>
+                        <span className={`text-xs truncate ${isArchived ? "line-through opacity-70" : ""}`}>
+                          {channel.name}
+                        </span>
+
+                        {isClientShared && (
+                          <span title="Client Shared Channel">
+                            <Globe size={11} className="text-emerald-500 shrink-0" />
+                          </span>
+                        )}
+                        {isArchived && (
+                          <span title="Archived Channel">
+                            <Archive size={11} className="text-amber-500 shrink-0" />
+                          </span>
+                        )}
+                        {isMuted && (
+                          <span title="Muted">
+                            <BellOff size={11} className="text-gray-400 shrink-0" />
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -531,7 +556,14 @@ export default function ConnectSidebar({
                           />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs truncate">{name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs truncate">{name}</p>
+                            {isConversationMuted(conv.id) && (
+                              <span title="Muted">
+                                <BellOff size={10} className="text-gray-400 shrink-0" />
+                              </span>
+                            )}
+                          </div>
                           {conv.lastMessage && (
                             <p className="text-[10px] text-gray-400 truncate font-normal">
                               {conv.lastMessage}
@@ -625,7 +657,14 @@ export default function ConnectSidebar({
                           <Users size={12} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs truncate">{group.name || "Group Chat"}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs truncate">{group.name || "Group Chat"}</p>
+                            {isConversationMuted(group.id) && (
+                              <span title="Muted">
+                                <BellOff size={10} className="text-gray-400 shrink-0" />
+                              </span>
+                            )}
+                          </div>
                           {group.lastMessage ? (
                             <p className="text-[10px] text-gray-400 truncate font-normal">
                               {group.lastMessage}

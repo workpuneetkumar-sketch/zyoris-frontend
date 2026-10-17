@@ -10,6 +10,9 @@ import {
   Info,
   Pin,
   Settings,
+  Archive,
+  RotateCcw,
+  Globe,
 } from "lucide-react";
 import ConnectSidebar from "./ConnectSidebar";
 import CreateChannelModal from "./CreateChannelModal";
@@ -67,6 +70,12 @@ import {
   getChannelPins,
   getConversationPins,
   getSavedMessages,
+  removeMessageLink,
+  restoreChannel,
+  getMessageLinks,
+  getStoredLinksForMessage,
+  saveMessageLinkToStorage,
+  removeMessageLinkFromStorage,
 } from "@/lib/api/connectApi";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { getEmployees } from "@/lib/api/hrApi";
@@ -278,9 +287,37 @@ export default function ConnectWorkspace() {
           ...m,
           isPinned: pinnedIds.has(m.id),
           isSaved: savedIds.has(m.id),
+          businessLinks:
+            m.businessLinks && m.businessLinks.length > 0
+              ? m.businessLinks
+              : getStoredLinksForMessage(m.id),
         }));
 
         setMessages(hydratedMessages);
+
+        // Concurrently fetch server-authoritative links for messages and reconcile state
+        Promise.allSettled(
+          hydratedMessages.map(async (m) => {
+            const serverLinks = await getMessageLinks(m.id);
+            return { messageId: m.id, links: serverLinks };
+          })
+        ).then((results) => {
+          if (controller.signal.aborted) return;
+          const freshMap: Record<string, BusinessEntityLink[]> = {};
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value.links && r.value.links.length > 0) {
+              freshMap[r.value.messageId] = r.value.links;
+            }
+          }
+          if (Object.keys(freshMap).length > 0) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                freshMap[m.id] ? { ...m, businessLinks: freshMap[m.id] } : m
+              )
+            );
+          }
+        });
+
         const lastMsgId = hydratedMessages[hydratedMessages.length - 1]?.id;
         if (lastMsgId) {
           if (target.type === "channel") {
@@ -676,7 +713,8 @@ export default function ConnectWorkspace() {
   const handleSendMessage = async (
     content: string,
     parentMessageId?: string | null,
-    mentionedUserIds?: string[]
+    mentionedUserIds?: string[],
+    visibility?: "INTERNAL" | "CLIENT_SHARED"
   ) => {
     const target = activeTargetRef.current;
     if (!target || !content.trim() || sending) return;
@@ -696,6 +734,7 @@ export default function ConnectWorkspace() {
       createdAt: new Date().toISOString(),
       status: "sending",
       mentionedUserIds,
+      visibility,
       sender: {
         id: currentUserId || "me",
         name: "You",
@@ -714,6 +753,7 @@ export default function ConnectWorkspace() {
         content,
         parentMessageId: parentMessageId || undefined,
         mentionedUserIds,
+        visibility,
       };
 
       const canonicalMsg = await sendMessage(payload);
@@ -1014,16 +1054,59 @@ export default function ConnectWorkspace() {
   };
 
   const handleEntityLinkCreated = (newLink: BusinessEntityLink) => {
+    saveMessageLinkToStorage(newLink.messageId, newLink);
     setMessages((prev) =>
       prev.map((m) =>
         m.id === newLink.messageId
           ? {
               ...m,
-              businessLinks: [...(m.businessLinks || []), newLink],
+              businessLinks: [
+                ...(m.businessLinks || []).filter((l) => l.id !== newLink.id),
+                newLink,
+              ],
             }
           : m
       )
     );
+  };
+
+  /**
+   * Unlink business entity from message
+   */
+  const handleUnlinkEntity = async (message: ConnectMessage, linkId: string) => {
+    try {
+      const ok = await removeMessageLink(message.id, linkId);
+      if (ok) {
+        removeMessageLinkFromStorage(message.id, linkId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === message.id
+              ? {
+                  ...m,
+                  businessLinks: (m.businessLinks || []).filter((l) => l.id !== linkId),
+                }
+              : m
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Failed to remove business link:", err);
+    }
+  };
+
+  /**
+   * Restore archived channel directly from banner
+   */
+  const handleRestoreActiveChannel = async () => {
+    if (activeTarget?.type !== "channel") return;
+    try {
+      const restored = await restoreChannel(activeTarget.id);
+      if (restored) {
+        handleChannelUpdated(restored);
+      }
+    } catch (err) {
+      console.error("Failed to restore channel:", err);
+    }
   };
 
   /**
@@ -1306,6 +1389,7 @@ export default function ConnectWorkspace() {
                 onPin={handlePin}
                 onSave={handleSave}
                 onLinkEntity={handleLinkEntity}
+                onUnlinkEntity={handleUnlinkEntity}
               />
 
               {/* Live Typing Indicator (Task 7) */}
@@ -1313,6 +1397,26 @@ export default function ConnectWorkspace() {
                 typingUsers={typingUsers}
                 currentUserId={currentUserId}
               />
+
+              {/* Channel Archived Notice */}
+              {activeTarget?.type === "channel" && activeChannelForModal?.archivedAt && (
+                <div className="mx-6 my-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-amber-900 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Archive size={16} className="text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold">This channel is archived</p>
+                      <p className="text-[11px] text-amber-700">Message posting is disabled. Channel history remains readable.</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleRestoreActiveChannel}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Restore Channel</span>
+                  </button>
+                </div>
+              )}
 
               {/* Message Composer */}
               <MessageComposer
@@ -1322,6 +1426,10 @@ export default function ConnectWorkspace() {
                 editingMessage={editingMessage}
                 replyingToMessage={replyingToMessage}
                 teamMembers={mentionMembers}
+                isArchived={Boolean(activeChannelForModal?.archivedAt)}
+                isReadOnly={Boolean(activeChannelForModal?.isReadOnly)}
+                canManage={canManageCurrent}
+                audience={activeChannelForModal?.audience || "INTERNAL"}
                 onSendMessage={handleSendMessage}
                 onSaveEdit={handleSaveEdit}
                 onCancelEdit={() => setEditingMessage(null)}
@@ -1381,6 +1489,21 @@ export default function ConnectWorkspace() {
             activeTarget={activeTarget}
             currentUserId={currentUserId}
             pinSaveVersion={pinSaveVersion}
+            messages={messages}
+            onChannelUpdated={handleChannelUpdated}
+            onOpenManageMembers={() => {
+              if (activeTarget?.type === "channel") {
+                setIsChannelMembersOpen(true);
+              }
+            }}
+            onJumpToMessage={(msgId) => {
+              const el = document.getElementById(`message-item-${msgId}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("ring-2", "ring-blue-500", "ring-offset-2");
+                setTimeout(() => el.classList.remove("ring-2", "ring-blue-500", "ring-offset-2"), 2500);
+              }
+            }}
             onMessageUnpinned={(msgId) => {
               setMessages((prev) =>
                 prev.map((m) => (m.id === msgId ? { ...m, isPinned: false } : m))

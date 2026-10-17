@@ -15,8 +15,19 @@ import {
   Bookmark,
   Link as LinkIcon,
   MessageSquare,
+  Lock,
+  Globe,
+  CheckSquare,
+  Target,
+  Briefcase,
+  FolderKanban,
+  Calendar,
+  FileText,
+  User,
+  Building,
+  X,
 } from "lucide-react";
-import { ConnectMessage } from "@/types/connect";
+import { ConnectMessage, BusinessEntityType } from "@/types/connect";
 import MessageContextMenu from "./MessageContextMenu";
 import ReactionPicker from "./ReactionPicker";
 
@@ -33,6 +44,7 @@ interface MessageItemProps {
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
   onLinkEntity?: (message: ConnectMessage) => void;
+  onUnlinkEntity?: (message: ConnectMessage, linkId: string) => void;
   onOpenThread?: (message: ConnectMessage) => void;
 }
 
@@ -49,6 +61,7 @@ export default function MessageItem({
   onPin,
   onSave,
   onLinkEntity,
+  onUnlinkEntity,
   onOpenThread,
 }: MessageItemProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -185,6 +198,26 @@ export default function MessageItem({
               <span>Saved</span>
             </span>
           )}
+          {message.visibility === "INTERNAL" && (
+            <span
+              id={`visibility-badge-${message.id}`}
+              className="flex items-center gap-0.5 text-[9px] text-amber-700 font-semibold bg-amber-50/80 px-1.5 py-0.2 rounded border border-amber-200"
+              title="Internal staff note (Hidden from clients)"
+            >
+              <Lock size={9} />
+              <span>Internal</span>
+            </span>
+          )}
+          {message.visibility === "CLIENT_SHARED" && (
+            <span
+              id={`visibility-badge-${message.id}`}
+              className="flex items-center gap-0.5 text-[9px] text-blue-700 font-semibold bg-blue-50/80 px-1.5 py-0.2 rounded border border-blue-200"
+              title="Client Visible"
+            >
+              <Globe size={9} />
+              <span>Client</span>
+            </span>
+          )}
         </div>
 
         {/* Parent Message Reply Preview (if quoting a parent) */}
@@ -215,18 +248,61 @@ export default function MessageItem({
 
           {/* Business Entity Link Badges */}
           {message.businessLinks && message.businessLinks.length > 0 && (
-            <div className="mt-2 pt-2 border-t border-border-light flex flex-wrap gap-1">
-              {message.businessLinks.map((link) => (
-                <span
-                  key={link.id}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface border border-border text-[10px] font-semibold text-text hover:border-primary transition-colors cursor-pointer"
-                  title={`Linked to ${link.targetType}: ${link.targetId}`}
-                >
-                  <LinkIcon size={10} className="text-primary" />
-                  <span className="text-primary font-bold uppercase">{link.targetType}:</span>
-                  <span className="truncate max-w-[120px]">{link.title || link.targetId}</span>
-                </span>
-              ))}
+            <div className="mt-2 pt-2 border-t border-border-light flex flex-wrap gap-1.5">
+              {message.businessLinks.map((link) => {
+                let Icon = LinkIcon;
+                let colorClass = "text-primary";
+                if (link.targetType === "TASK") {
+                  Icon = CheckSquare;
+                  colorClass = "text-amber-500";
+                } else if (link.targetType === "LEAD") {
+                  Icon = Target;
+                  colorClass = "text-blue-500";
+                } else if (link.targetType === "DEAL") {
+                  Icon = Briefcase;
+                  colorClass = "text-emerald-500";
+                } else if (link.targetType === "PROJECT") {
+                  Icon = FolderKanban;
+                  colorClass = "text-cyan-500";
+                } else if (link.targetType === "MEETING") {
+                  Icon = Calendar;
+                  colorClass = "text-rose-500";
+                } else if (link.targetType === "DOCUMENT") {
+                  Icon = FileText;
+                  colorClass = "text-orange-500";
+                } else if (link.targetType === "CONTACT") {
+                  Icon = User;
+                  colorClass = "text-indigo-500";
+                } else if (link.targetType === "COMPANY") {
+                  Icon = Building;
+                  colorClass = "text-purple-500";
+                }
+
+                return (
+                  <span
+                    key={link.id}
+                    className="group/link inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface border border-border text-[10px] font-semibold text-text hover:border-primary transition-all shadow-2xs"
+                    title={`Linked ${link.targetType}: ${link.title || link.targetId}`}
+                  >
+                    <Icon size={12} className={colorClass} />
+                    <span className="font-bold uppercase text-[9px] text-text-muted">{link.targetType}:</span>
+                    <span className="truncate max-w-[130px]">{link.title || link.targetId}</span>
+                    {onUnlinkEntity && (canManage || isSelf) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUnlinkEntity(message, link.id);
+                        }}
+                        title="Unlink entity"
+                        className="opacity-50 hover:opacity-100 hover:text-error transition-opacity ml-0.5 p-0.5 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
             </div>
           )}
 

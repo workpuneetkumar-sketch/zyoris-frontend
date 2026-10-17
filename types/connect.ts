@@ -14,6 +14,9 @@ export interface ChannelMember {
   role: MemberRole;
   createdAt: string;
   updatedAt: string;
+  restriction?: "NONE" | "READ_ONLY" | "MUTED";
+  restrictedUntil?: string | null;
+  mutedAt?: string | null;
   user?: {
     id: string;
     name: string;
@@ -21,6 +24,8 @@ export interface ChannelMember {
     avatarUrl?: string | null;
   };
 }
+
+export type ChannelAudience = "INTERNAL" | "CLIENT_SHARED";
 
 export interface Channel {
   id: string;
@@ -30,7 +35,12 @@ export interface Channel {
   description?: string | null;
   topic?: string | null;
   visibility: ChannelVisibility;
+  audience?: ChannelAudience;
+  clientId?: string | null;
+  isReadOnly?: boolean;
+  isMuted?: boolean;
   archivedAt?: string | null;
+  archivedById?: string | null;
   createdById?: string;
   createdAt: string;
   updatedAt: string;
@@ -147,6 +157,7 @@ export interface ConnectMessage {
     avatarUrl?: string | null;
   };
   attachments?: any[];
+  visibility?: "INTERNAL" | "CLIENT_SHARED";
   // Day 2 Collaboration Properties
   reactions?: MessageReactionSummary[];
   replyCount?: number;
@@ -173,6 +184,28 @@ export interface SendMessagePayload {
   parentMessageId?: string | null;
   attachments?: string[];
   mentionedUserIds?: string[];
+  visibility?: "INTERNAL" | "CLIENT_SHARED";
+}
+
+export interface CommunicationStats {
+  period: string;
+  emailsSent: number;
+  whatsAppMessages: number;
+  calls: number;
+  callsConnected: number;
+  totalCallDurationSeconds: number;
+  meetings: number;
+  total: number;
+}
+
+export interface CommunicationInboxItem {
+  id: string;
+  type: string;
+  subject?: string;
+  content?: string;
+  status?: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface SendThreadReplyPayload {

@@ -16,6 +16,17 @@ import {
   Trash2,
   ExternalLink,
   Loader2,
+  Bell,
+  BellOff,
+  RotateCcw,
+  Archive,
+  Globe,
+  FileText,
+  Calendar,
+  Briefcase,
+  Target,
+  CheckSquare,
+  Settings,
 } from "lucide-react";
 import {
   Channel,
@@ -31,6 +42,13 @@ import {
   getSavedMessages,
   unsaveMessage,
   getChannelMembers,
+  getAllCommunicationLinks,
+  removeMessageLink,
+  restoreChannel,
+  isChannelMuted,
+  toggleMuteChannel,
+  isConversationMuted,
+  toggleMuteConversation,
 } from "@/lib/api/connectApi";
 
 interface ChannelDetailsDrawerProps {
@@ -39,9 +57,12 @@ interface ChannelDetailsDrawerProps {
   activeTarget: ActiveTarget | null;
   currentUserId?: string | null;
   pinSaveVersion?: number;
+  messages?: ConnectMessage[];
   onJumpToMessage?: (messageId: string) => void;
   onMessageUnpinned?: (messageId: string) => void;
   onMessageUnsaved?: (messageId: string) => void;
+  onChannelUpdated?: (channel: Channel) => void;
+  onOpenManageMembers?: () => void;
 }
 
 export default function ChannelDetailsDrawer({
@@ -50,25 +71,38 @@ export default function ChannelDetailsDrawer({
   activeTarget,
   currentUserId,
   pinSaveVersion = 0,
+  messages = [],
   onJumpToMessage,
   onMessageUnpinned,
   onMessageUnsaved,
+  onChannelUpdated,
+  onOpenManageMembers,
 }: ChannelDetailsDrawerProps) {
-  const [activeTab, setActiveTab] = useState<"overview" | "pins" | "saved">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "pins" | "saved" | "links">("overview");
   const [pins, setPins] = useState<ConnectMessage[]>([]);
   const [saved, setSaved] = useState<ConnectMessage[]>([]);
+  const [links, setLinks] = useState<BusinessEntityLink[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [savedFilter, setSavedFilter] = useState<"current" | "all">("current");
+  const [isMuted, setIsMuted] = useState(false);
+  const [restoring, setRestoring] = useState(false);
 
-  // Load pins, saved messages, and overview immediately whenever drawer opens or target changes
+  // Load pins, saved messages, overview, and links immediately whenever drawer opens or target changes
   useEffect(() => {
     if (!isOpen || !activeTarget) return;
 
     loadPins();
     loadSaved();
     loadOverview();
-  }, [isOpen, activeTarget?.id, activeTarget?.type, pinSaveVersion]);
+    loadLinks();
+
+    if (activeTarget.type === "channel") {
+      setIsMuted(isChannelMuted(activeTarget.id));
+    } else {
+      setIsMuted(isConversationMuted(activeTarget.id));
+    }
+  }, [isOpen, activeTarget?.id, activeTarget?.type, pinSaveVersion, messages]);
 
   const loadPins = async () => {
     if (!activeTarget) return;
@@ -102,6 +136,25 @@ export default function ChannelDetailsDrawer({
     }
   };
 
+  const loadLinks = async () => {
+    try {
+      const res = await getAllCommunicationLinks();
+      const serverLinks = res?.data || (Array.isArray(res) ? res : []);
+      const msgLinks = (messages || []).flatMap((m) => m.businessLinks || []);
+      const combined = [...serverLinks];
+      for (const ml of msgLinks) {
+        if (!combined.some((c) => c.id === ml.id)) {
+          combined.push(ml);
+        }
+      }
+      setLinks(combined);
+    } catch (e) {
+      console.warn("Failed to load business links:", e);
+      const msgLinks = (messages || []).flatMap((m) => m.businessLinks || []);
+      setLinks(msgLinks);
+    }
+  };
+
   const loadOverview = async () => {
     if (!activeTarget) return;
     if (activeTarget.type === "channel") {
@@ -112,6 +165,32 @@ export default function ChannelDetailsDrawer({
     } else {
       const conv = activeTarget.item as Conversation;
       setMembers(conv?.members || []);
+    }
+  };
+
+  const handleToggleMute = () => {
+    if (!activeTarget) return;
+    if (activeTarget.type === "channel") {
+      const next = toggleMuteChannel(activeTarget.id);
+      setIsMuted(next);
+    } else {
+      const next = toggleMuteConversation(activeTarget.id);
+      setIsMuted(next);
+    }
+  };
+
+  const handleRestore = async () => {
+    if (!isChannel || !channel?.id) return;
+    setRestoring(true);
+    try {
+      const restored = await restoreChannel(channel.id);
+      if (restored) {
+        onChannelUpdated?.(restored);
+      }
+    } catch (e) {
+      console.warn("Failed to restore channel:", e);
+    } finally {
+      setRestoring(false);
     }
   };
 
@@ -128,6 +207,13 @@ export default function ChannelDetailsDrawer({
     if (ok) {
       setSaved((prev) => prev.filter((s) => s.id !== messageId));
       onMessageUnsaved?.(messageId);
+    }
+  };
+
+  const handleUnlink = async (messageId: string, linkId: string) => {
+    const ok = await removeMessageLink(messageId, linkId);
+    if (ok) {
+      setLinks((prev) => prev.filter((l) => l.id !== linkId));
     }
   };
 
@@ -215,6 +301,18 @@ export default function ChannelDetailsDrawer({
           <Bookmark size={13} />
           <span>Saved ({filteredSaved.length})</span>
         </button>
+        <button
+          id="details-tab-links"
+          onClick={() => setActiveTab("links")}
+          className={`px-3 py-2 font-medium border-b-2 transition-all flex items-center gap-1.5 shrink-0 ${
+            activeTab === "links"
+              ? "border-primary text-primary font-bold"
+              : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          <LinkIcon size={13} />
+          <span>Links ({links.length})</span>
+        </button>
       </div>
 
       {/* Tab Content */}
@@ -233,19 +331,95 @@ export default function ChannelDetailsDrawer({
               </div>
 
               {isChannel && (
-                <div className="flex items-center gap-2 pt-2 border-t border-border-light text-xs text-text-muted">
-                  {channel?.visibility === "PRIVATE" ? (
-                    <div className="flex items-center gap-1 text-warning font-medium">
-                      <Lock size={13} />
-                      <span>Private Channel</span>
+                <div className="space-y-2 pt-2 border-t border-border-light text-xs">
+                  {/* Visibility & Audience Badges */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {channel?.visibility === "PRIVATE" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                        <Lock size={12} />
+                        <span>Private</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-200">
+                        <Hash size={12} />
+                        <span>Public</span>
+                      </span>
+                    )}
+
+                    {channel?.audience === "CLIENT_SHARED" ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <Globe size={12} />
+                        <span>Client Shared</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200">
+                        <Shield size={12} />
+                        <span>Internal Team</span>
+                      </span>
+                    )}
+
+                    {channel?.isReadOnly && (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                        <Lock size={12} />
+                        <span>Read Only</span>
+                      </span>
+                    )}
+                  </div>
+
+                  {channel?.audience === "CLIENT_SHARED" && channel?.clientId && (
+                    <div className="text-[11px] text-emerald-800 bg-emerald-50/60 p-2 rounded-xl border border-emerald-100">
+                      <span className="font-semibold">Linked Client ID: </span>
+                      <span className="font-mono">{channel.clientId}</span>
                     </div>
-                  ) : (
-                    <div className="flex items-center gap-1 text-primary font-medium">
-                      <Hash size={13} />
-                      <span>Public Channel</span>
+                  )}
+
+                  {/* Archived Warning & Restore */}
+                  {channel?.archivedAt && (
+                    <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2 text-amber-900">
+                      <div className="flex items-center gap-1.5 font-bold text-xs">
+                        <Archive size={14} className="text-amber-600" />
+                        <span>This channel is archived</span>
+                      </div>
+                      <p className="text-[10px] text-amber-700">
+                        Posting is disabled. Restore this channel to resume communication.
+                      </p>
+                      <button
+                        onClick={handleRestore}
+                        disabled={restoring}
+                        className="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all"
+                      >
+                        {restoring ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />}
+                        <span>Restore Channel</span>
+                      </button>
                     </div>
                   )}
                 </div>
+              )}
+            </div>
+
+            {/* Notification & Member Settings Action */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleToggleMute}
+                className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+                  isMuted
+                    ? "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100"
+                    : "bg-surface hover:bg-surface-hover text-text border-border"
+                }`}
+              >
+                {isMuted ? <BellOff size={14} className="text-amber-600" /> : <Bell size={14} className="text-text-muted" />}
+                <span>{isMuted ? "Unmute Notifications" : "Mute Notifications"}</span>
+              </button>
+
+              {isChannel && onOpenManageMembers && (
+                <button
+                  onClick={onOpenManageMembers}
+                  className="py-2 px-3 rounded-xl border border-border bg-surface hover:bg-surface-hover text-text text-xs font-bold flex items-center justify-center gap-1.5 transition-all"
+                  title="Channel Settings & Members"
+                >
+                  <Settings size={14} />
+                  <span>Manage</span>
+                </button>
               )}
             </div>
 
@@ -276,9 +450,16 @@ export default function ChannelDetailsDrawer({
                             {userEmail && <p className="text-[10px] text-text-muted">{userEmail}</p>}
                           </div>
                         </div>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-hover border border-border text-text-muted font-medium">
-                          {role}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-hover border border-border text-text-muted font-medium">
+                            {role}
+                          </span>
+                          {m.restriction && m.restriction !== "NONE" && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 font-bold uppercase">
+                              {m.restriction}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     );
                   })
@@ -417,6 +598,75 @@ export default function ChannelDetailsDrawer({
                         </button>
                       </div>
                       <p className="text-xs text-text leading-relaxed whitespace-pre-wrap">{item.content}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tab 4: Business Links */}
+        {activeTab === "links" && (
+          <div className="space-y-3">
+            {links.length === 0 ? (
+              <div className="py-12 text-center text-text-muted text-xs flex flex-col items-center gap-2">
+                <LinkIcon size={24} className="opacity-40" />
+                <p>No business links created yet.</p>
+                <p className="text-[11px] opacity-75">
+                  Convert messages into Tasks, Leads, Meetings, or link existing objects from the message action menu.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {links.map((link) => {
+                  const typeColors: Record<string, string> = {
+                    TASK: "bg-blue-50 text-blue-700 border-blue-200",
+                    LEAD: "bg-amber-50 text-amber-700 border-amber-200",
+                    DEAL: "bg-emerald-50 text-emerald-700 border-emerald-200",
+                    PROJECT: "bg-indigo-50 text-indigo-700 border-indigo-200",
+                    MEETING: "bg-purple-50 text-purple-700 border-purple-200",
+                    DOCUMENT: "bg-teal-50 text-teal-700 border-teal-200",
+                  };
+                  const color = typeColors[link.targetType] || "bg-gray-50 text-gray-700 border-gray-200";
+
+                  return (
+                    <div
+                      key={link.id}
+                      className="p-3 bg-surface border border-border rounded-xl space-y-2 hover:border-border-hover transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wider ${color}`}>
+                          {link.targetType}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {link.messageId && onJumpToMessage && (
+                            <button
+                              onClick={() => onJumpToMessage(link.messageId)}
+                              className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+                              title="Jump to message"
+                            >
+                              <span>View Message</span>
+                            </button>
+                          )}
+                          {link.messageId && (
+                            <button
+                              onClick={() => handleUnlink(link.messageId, link.id)}
+                              className="p-1 text-text-muted hover:text-error hover:bg-error/10 rounded-md transition-all ml-1"
+                              title="Unlink"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 text-xs text-text truncate">
+                        <span className="font-semibold truncate">{link.title || link.targetId}</span>
+                        {link.title && link.title !== link.targetId && (
+                          <span className="text-[10px] text-text-muted font-mono truncate">({link.targetId.slice(0, 12)}...)</span>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
