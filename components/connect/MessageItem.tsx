@@ -10,53 +10,62 @@ import {
   AlertCircle,
   RefreshCw,
   CornerDownRight,
+  Smile,
   Pin,
   Bookmark,
-  Smile,
   Link as LinkIcon,
   MessageSquare,
+  Lock,
+  Globe,
+  CheckSquare,
+  Target,
+  Briefcase,
+  FolderKanban,
+  Calendar,
+  FileText,
+  User,
+  Building,
+  X,
 } from "lucide-react";
-import { ConnectMessage } from "@/types/connect";
+import { ConnectMessage, BusinessEntityType } from "@/types/connect";
 import MessageContextMenu from "./MessageContextMenu";
-import MessageAttachmentRenderer from "./MessageAttachmentRenderer";
+import ReactionPicker from "./ReactionPicker";
 
 interface MessageItemProps {
   message: ConnectMessage;
   currentUserId?: string | null;
   canManage?: boolean;
-  canPin?: boolean;
-  isHighlighted?: boolean;
   onReply: (message: ConnectMessage) => void;
   onEdit: (message: ConnectMessage) => void;
   onDelete: (message: ConnectMessage) => void;
   onRetrySend?: (message: ConnectMessage) => void;
   onReact?: (message: ConnectMessage, emoji: string) => void;
+  onMention?: (message: ConnectMessage) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
+  onLinkEntity?: (message: ConnectMessage) => void;
+  onUnlinkEntity?: (message: ConnectMessage, linkId: string) => void;
   onOpenThread?: (message: ConnectMessage) => void;
-  onOpenLinkModal?: (message: ConnectMessage) => void;
 }
-
-const QUICK_REACTION_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂"];
 
 export default function MessageItem({
   message,
   currentUserId,
   canManage = false,
-  canPin = true,
-  isHighlighted = false,
   onReply,
   onEdit,
   onDelete,
   onRetrySend,
   onReact,
+  onMention,
   onPin,
   onSave,
+  onLinkEntity,
+  onUnlinkEntity,
   onOpenThread,
-  onOpenLinkModal,
 }: MessageItemProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
 
   const isSelf = Boolean(
     (currentUserId && message.senderId === currentUserId) ||
@@ -81,18 +90,53 @@ export default function MessageItem({
     setIsMenuOpen(true);
   };
 
-  const handleEmojiClick = (emoji: string) => {
-    onReact?.(message, emoji);
-    setShowEmojiPicker(false);
+  // Render mentions with styled badge
+  const renderMessageContent = (content: string) => {
+    // Match @Word or @First Last pattern
+    const mentionRegex = /(@[A-Za-z0-9_.\s]+?)(?=\s|$|[.,!?])/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = mentionRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.substring(lastIndex, match.index));
+      }
+      const mentionText = match[0].trim();
+      const isMentioningMe =
+        currentUserId &&
+        (mentionText.toLowerCase() === `@you` ||
+          (senderName && mentionText.toLowerCase().includes(senderName.toLowerCase())));
+
+      parts.push(
+        <span
+          key={match.index}
+          className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[11px] font-bold ${
+            isMentioningMe
+              ? "bg-amber-400/20 text-amber-900 border border-amber-300 dark:text-amber-200"
+              : "bg-primary/15 text-primary border border-primary/20"
+          }`}
+        >
+          {mentionText}
+        </span>
+      );
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < content.length) {
+      parts.push(content.substring(lastIndex));
+    }
+
+    return parts.length > 0 ? parts : content;
   };
 
   return (
     <div
       id={`message-item-${message.id}`}
       onContextMenu={handleContextMenu}
-      className={`group relative flex items-start gap-3 transition-colors py-1.5 px-2 rounded-2xl ${
+      className={`group relative flex items-start gap-3 transition-colors py-1.5 ${
         isSelf ? "flex-row-reverse" : "flex-row"
-      } ${isHighlighted ? "msg-highlight-pulse bg-primary/5" : "hover:bg-surface-hover/40"}`}
+      }`}
     >
       {/* Sender Avatar */}
       <div
@@ -116,19 +160,18 @@ export default function MessageItem({
 
       {/* Message Body & Bubble */}
       <div
-        className={`max-w-[85%] md:max-w-[75%] space-y-1 relative ${
+        className={`max-w-[82%] md:max-w-[72%] space-y-1 relative ${
           isSelf ? "items-end text-right" : "items-start text-left"
         }`}
       >
-        {/* Author, Timestamp, Pin & Bookmark Header */}
+        {/* Author & Timestamp Header */}
         <div
-          className={`flex items-center gap-2 text-[11px] text-text-muted px-1 flex-wrap ${
+          className={`flex items-center gap-2 text-[11px] text-text-muted px-1 ${
             isSelf ? "justify-end" : "justify-start"
           }`}
         >
           <span className="font-semibold text-text">{senderName}</span>
           <span>{formattedTime}</span>
-
           {message.editedAt && (
             <span
               id={`edited-badge-${message.id}`}
@@ -137,45 +180,59 @@ export default function MessageItem({
               (edited)
             </span>
           )}
-
-          {/* Pinned Badge */}
           {message.isPinned && (
             <span
               id={`pinned-badge-${message.id}`}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-warning-light text-warning-foreground border border-warning/30"
-              title="Pinned message"
+              className="flex items-center gap-0.5 text-[10px] text-amber-600 font-semibold bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200"
             >
-              <Pin size={10} className="fill-warning-foreground" />
+              <Pin size={10} />
               <span>Pinned</span>
             </span>
           )}
-
-          {/* Saved Badge */}
           {message.isSaved && (
             <span
               id={`saved-badge-${message.id}`}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20"
-              title="Bookmarked message"
+              className="flex items-center gap-0.5 text-[10px] text-primary font-semibold bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20"
             >
-              <Bookmark size={10} className="fill-primary" />
+              <Bookmark size={10} />
               <span>Saved</span>
+            </span>
+          )}
+          {message.visibility === "INTERNAL" && (
+            <span
+              id={`visibility-badge-${message.id}`}
+              className="flex items-center gap-0.5 text-[9px] text-amber-700 font-semibold bg-amber-50/80 px-1.5 py-0.2 rounded border border-amber-200"
+              title="Internal staff note (Hidden from clients)"
+            >
+              <Lock size={9} />
+              <span>Internal</span>
+            </span>
+          )}
+          {message.visibility === "CLIENT_SHARED" && (
+            <span
+              id={`visibility-badge-${message.id}`}
+              className="flex items-center gap-0.5 text-[9px] text-blue-700 font-semibold bg-blue-50/80 px-1.5 py-0.2 rounded border border-blue-200"
+              title="Client Visible"
+            >
+              <Globe size={9} />
+              <span>Client</span>
             </span>
           )}
         </div>
 
-        {/* Parent Message Reply Preview (if quoting parent inline) */}
-        {message.parentMessageId && message.parentMessage && (
+        {/* Parent Message Reply Preview (if quoting a parent) */}
+        {message.parentMessageId && (
           <div
             id={`reply-quote-${message.id}`}
             onClick={() => onOpenThread?.(message)}
-            className="msg-reply-quote text-[11px] px-2.5 py-1 mb-1 max-w-full text-left truncate flex items-center gap-1.5 text-text-secondary opacity-90 cursor-pointer hover:opacity-100"
+            className="msg-reply-quote text-[11px] px-2.5 py-1 mb-1 max-w-full text-left truncate flex items-center gap-1.5 text-text-secondary opacity-90 cursor-pointer hover:underline"
           >
             <CornerDownRight size={12} className="shrink-0 text-primary" />
             <span className="font-semibold text-text truncate">
               {message.parentMessage?.sender?.name || "Replying"}:
             </span>
             <span className="truncate italic">
-              {message.parentMessage?.content || "Referenced message"}
+              {message.parentMessage?.content || "Referenced thread message"}
             </span>
           </div>
         )}
@@ -187,11 +244,66 @@ export default function MessageItem({
             isSelf ? "msg-bubble-self text-left" : "msg-bubble-peer text-left"
           } ${isFailed ? "border-error border" : ""}`}
         >
-          {message.content && <div className="whitespace-pre-wrap">{message.content}</div>}
+          <div className="whitespace-pre-wrap">{renderMessageContent(message.content)}</div>
 
-          {/* Attachments rendering */}
-          {message.attachments && message.attachments.length > 0 && (
-            <MessageAttachmentRenderer attachments={message.attachments} isSelf={isSelf} />
+          {/* Business Entity Link Badges */}
+          {message.businessLinks && message.businessLinks.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-border-light flex flex-wrap gap-1.5">
+              {message.businessLinks.map((link) => {
+                let Icon = LinkIcon;
+                let colorClass = "text-primary";
+                if (link.targetType === "TASK") {
+                  Icon = CheckSquare;
+                  colorClass = "text-amber-500";
+                } else if (link.targetType === "LEAD") {
+                  Icon = Target;
+                  colorClass = "text-blue-500";
+                } else if (link.targetType === "DEAL") {
+                  Icon = Briefcase;
+                  colorClass = "text-emerald-500";
+                } else if (link.targetType === "PROJECT") {
+                  Icon = FolderKanban;
+                  colorClass = "text-cyan-500";
+                } else if (link.targetType === "MEETING") {
+                  Icon = Calendar;
+                  colorClass = "text-rose-500";
+                } else if (link.targetType === "DOCUMENT") {
+                  Icon = FileText;
+                  colorClass = "text-orange-500";
+                } else if (link.targetType === "CONTACT") {
+                  Icon = User;
+                  colorClass = "text-indigo-500";
+                } else if (link.targetType === "COMPANY") {
+                  Icon = Building;
+                  colorClass = "text-purple-500";
+                }
+
+                return (
+                  <span
+                    key={link.id}
+                    className="group/link inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-surface border border-border text-[10px] font-semibold text-text hover:border-primary transition-all shadow-2xs"
+                    title={`Linked ${link.targetType}: ${link.title || link.targetId}`}
+                  >
+                    <Icon size={12} className={colorClass} />
+                    <span className="font-bold uppercase text-[9px] text-text-muted">{link.targetType}:</span>
+                    <span className="truncate max-w-[130px]">{link.title || link.targetId}</span>
+                    {onUnlinkEntity && (canManage || isSelf) && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUnlinkEntity(message, link.id);
+                        }}
+                        title="Unlink entity"
+                        className="opacity-50 hover:opacity-100 hover:text-error transition-opacity ml-0.5 p-0.5 rounded"
+                      >
+                        <X size={10} />
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
           )}
 
           {/* Sending / Failed Status Indicators */}
@@ -227,66 +339,45 @@ export default function MessageItem({
           )}
         </div>
 
-        {/* Business Entity Links badges */}
-        {message.links && message.links.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-            {message.links.map((link) => (
-              <button
-                key={link.id}
-                onClick={() => onOpenLinkModal?.(message)}
-                className="msg-link-badge group/link cursor-pointer"
-                title={`Linked ${link.targetType}: ${link.metadata?.title || link.targetId}`}
-              >
-                <LinkIcon size={11} className="text-primary shrink-0" />
-                <span className="font-semibold text-text uppercase text-[9px] px-1 py-0.2 rounded bg-surface border border-border">
-                  {link.targetType}
-                </span>
-                <span className="truncate max-w-[140px] text-text-secondary">
-                  {link.metadata?.title || link.targetId.slice(-6)}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* Reactions Bar */}
+        {/* Live Reaction Pills Stream */}
         {message.reactions && message.reactions.length > 0 && (
-          <div className="flex items-center gap-1 flex-wrap pt-0.5">
-            {message.reactions.map((react, i) => {
-              const active = Boolean(
-                react.hasReacted ||
-                  (currentUserId && react.userIds?.includes(currentUserId))
-              );
-
+          <div
+            id={`reactions-bar-${message.id}`}
+            className={`flex flex-wrap items-center gap-1 mt-1 ${isSelf ? "justify-end" : "justify-start"}`}
+          >
+            {message.reactions.map((reaction) => {
+              const tooltipNames = reaction.users?.map((u) => u.name).join(", ") || `${reaction.count} reactions`;
               return (
                 <button
-                  key={`${react.emoji}-${i}`}
-                  onClick={() => onReact?.(message, react.emoji)}
-                  className={`msg-reaction-pill ${
-                    active ? "msg-reaction-pill-active" : ""
+                  key={reaction.emoji}
+                  onClick={() => onReact?.(message, reaction.emoji)}
+                  title={`${tooltipNames} reacted with ${reaction.emoji}`}
+                  className={`px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border transition-all active:scale-95 ${
+                    reaction.hasReacted
+                      ? "bg-primary/10 border-primary/40 text-primary font-bold shadow-xs"
+                      : "bg-surface hover:bg-surface-hover border-border text-text"
                   }`}
-                  title={`${react.count} reaction${react.count > 1 ? "s" : ""}`}
                 >
-                  <span>{react.emoji}</span>
-                  <span>{react.count}</span>
+                  <span className="text-xs">{reaction.emoji}</span>
+                  <span className="text-[10px] font-bold">{reaction.count}</span>
                 </button>
               );
             })}
           </div>
         )}
 
-        {/* Thread Replies Link / Summary */}
+        {/* Thread Replies Indicator Pill */}
         {Boolean(message.replyCount && message.replyCount > 0) && (
-          <div className="pt-0.5">
+          <div className={`mt-1.5 flex ${isSelf ? "justify-end" : "justify-start"}`}>
             <button
               onClick={() => onOpenThread?.(message)}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+              className="px-2.5 py-1 rounded-xl bg-surface-hover hover:bg-surface border border-border hover:border-primary text-text text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs group"
             >
-              <MessageSquare size={13} />
-              <span>
+              <MessageSquare size={13} className="text-primary group-hover:scale-110 transition-transform" />
+              <span className="text-primary">
                 {message.replyCount} {message.replyCount === 1 ? "reply" : "replies"}
               </span>
-              <span className="text-[10px] text-text-muted font-normal">• View thread</span>
+              <span className="text-[10px] text-text-muted font-normal">View thread →</span>
             </button>
           </div>
         )}
@@ -295,83 +386,50 @@ export default function MessageItem({
         {!isSending && (
           <div
             id={`action-bar-${message.id}`}
-            className={`msg-action-bar absolute top-0 hidden group-hover:flex items-center p-0.5 z-20 ${
+            className={`msg-action-bar absolute -top-3 hidden group-hover:flex items-center p-0.5 z-20 shadow-md ${
               isSelf ? "right-full mr-2" : "left-full ml-2"
             }`}
           >
-            {/* Quick Emoji Reaction Toggle */}
-            <div className="relative">
+            {/* Quick Emoji Reaction Buttons */}
+            {["👍", "❤️", "😂"].map((emoji) => (
               <button
-                id={`quick-react-${message.id}`}
-                onClick={() => setShowEmojiPicker((prev) => !prev)}
-                title="Add Reaction"
-                className="msg-action-btn p-1.5 rounded"
+                key={emoji}
+                onClick={() => onReact?.(message, emoji)}
+                title={`React with ${emoji}`}
+                className="p-1 text-xs hover:scale-125 transition-transform"
               >
-                <Smile size={13} />
+                {emoji}
               </button>
+            ))}
 
-              {showEmojiPicker && (
-                <div className="absolute bottom-full left-0 mb-1 p-1 bg-surface border border-border shadow-lg rounded-xl flex items-center gap-1 z-30">
-                  {QUICK_REACTION_EMOJIS.map((emoji) => (
-                    <button
-                      key={emoji}
-                      onClick={() => handleEmojiClick(emoji)}
-                      className="p-1 hover:scale-125 transition-transform text-xs"
-                    >
-                      {emoji}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Reply in Thread */}
+            {/* Reaction Picker Button */}
             <button
-              id={`quick-reply-${message.id}`}
-              onClick={() => {
-                if (onOpenThread) onOpenThread(message);
-                else onReply(message);
-              }}
+              id={`reaction-picker-btn-${message.id}`}
+              onClick={() => setIsReactionPickerOpen((prev) => !prev)}
+              title="Add Reaction"
+              className="msg-action-btn p-1.5 rounded"
+            >
+              <Smile size={13} />
+            </button>
+
+            {/* Reaction Picker Popover */}
+            {isReactionPickerOpen && (
+              <ReactionPicker
+                isOpen={true}
+                onClose={() => setIsReactionPickerOpen(false)}
+                onSelectEmoji={(emoji) => onReact?.(message, emoji)}
+                className={isSelf ? "right-0 bottom-full mb-1" : "left-0 bottom-full mb-1"}
+              />
+            )}
+
+            {/* Reply in Thread Button */}
+            <button
+              id={`quick-thread-reply-${message.id}`}
+              onClick={() => onOpenThread?.(message) || onReply(message)}
               title="Reply in Thread"
               className="msg-action-btn p-1.5 rounded"
             >
               <Reply size={13} />
-            </button>
-
-            {/* Quick Pin / Unpin (Nitin's Authorization Rule) */}
-            {canPin && (
-              <button
-                id={`quick-pin-${message.id}`}
-                onClick={() => onPin?.(message)}
-                title={message.isPinned ? "Unpin Message" : "Pin Message"}
-                className={`msg-action-btn p-1.5 rounded ${
-                  message.isPinned ? "text-warning" : ""
-                }`}
-              >
-                <Pin size={13} />
-              </button>
-            )}
-
-            {/* Quick Save / Bookmark */}
-            <button
-              id={`quick-save-${message.id}`}
-              onClick={() => onSave?.(message)}
-              title={message.isSaved ? "Remove Bookmark" : "Save Message"}
-              className={`msg-action-btn p-1.5 rounded ${
-                message.isSaved ? "text-primary" : ""
-              }`}
-            >
-              <Bookmark size={13} />
-            </button>
-
-            {/* Quick Link to Business Record */}
-            <button
-              id={`quick-link-${message.id}`}
-              onClick={() => onOpenLinkModal?.(message)}
-              title="Link to Task or CRM Record"
-              className="msg-action-btn p-1.5 rounded"
-            >
-              <LinkIcon size={13} />
             </button>
 
             {/* Quick Edit (Self author only) */}
@@ -415,17 +473,15 @@ export default function MessageItem({
               message={message}
               isSelf={isSelf}
               canManage={canManage}
-              canPin={canPin}
-              onReply={(m) => {
-                if (onOpenThread) onOpenThread(m);
-                else onReply(m);
-              }}
+              onReply={onReply}
+              onOpenThread={onOpenThread}
               onEdit={onEdit}
               onDelete={onDelete}
               onReact={onReact}
+              onMention={onMention}
               onPin={onPin}
               onSave={onSave}
-              onOpenLinkModal={onOpenLinkModal}
+              onLinkEntity={onLinkEntity}
             />
           </div>
         )}
