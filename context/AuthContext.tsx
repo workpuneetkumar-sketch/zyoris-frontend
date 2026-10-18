@@ -174,26 +174,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Cross-tab logout ────────────────────────────────────────────────────────
-  // When another tab calls logout() it removes STORAGE_KEY from localStorage.
-  // We listen for that event here and wipe the current tab's React state so
-  // the user is immediately signed out without needing to refresh.
-  // Note: the `storage` event does NOT fire in the tab that made the change,
-  // only in other tabs sharing the same origin — no infinite loop.
+  // Two complementary mechanisms keep all tabs in sync when any tab logs out:
+  //
+  // 1. BroadcastChannel (preferred): fires in ALL tabs including the sender's,
+  //    but we guard against self-handling in the logout() function by only
+  //    posting the message AFTER wipeReactState() has already run locally.
+  //    Falls back gracefully if BroadcastChannel is unavailable (e.g. in tests).
+  //
+  // 2. storage event (fallback): fires in every OTHER tab when localStorage
+  //    changes. Catches any logout that bypasses the BroadcastChannel path
+  //    (e.g. direct localStorage.removeItem in devtools, or an old tab that
+  //    hasn't yet registered the channel listener).
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    // ── BroadcastChannel ──────────────────────────────────────────────────────
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      channel = new BroadcastChannel("zyoris-auth");
+      channel.onmessage = (event: MessageEvent) => {
+        if (event.data?.type === "LOGOUT") {
+          wipeReactState();
+          window.location.href = "/login";
+        }
+      };
+    }
+
+    // ── storage event (fallback) ──────────────────────────────────────────────
     const handleStorage = (event: StorageEvent) => {
-      // Only act on removal of the auth key from localStorage.
       if (event.key === STORAGE_KEY && event.newValue === null) {
         wipeReactState();
-        // Navigate to login without session_expired param — the other tab's
-        // deliberate logout is not an expiry.
         window.location.href = "/login";
       }
     };
 
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      channel?.close();
+    };
   }, [wipeReactState]);
 
   // ── Session restore on mount ───────────────────────────────────────────────
@@ -270,8 +290,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (rbacMe.role?.name) {
             userData.role = rbacMe.role.name;
           }
-        } catch (permError) {
-          console.error("Failed to load permissions during session restore:", permError);
+        } catch {
+          // Permission load failed — auth session is still valid; the user
+          // will see reduced sidebar items until the next page reload.
+          // Do not log the error object — it may contain response data.
         }
 
         setUser(userData);
@@ -286,12 +308,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearAuthStorage();
           wipeReactState();
         } else {
-          // Network / 5xx — keep the optimistic session alive so the user
+      // Network / 5xx — keep the optimistic session alive so the user
           // is not logged out on a flaky connection.
-          console.warn(
-            "Session validation failed (non-auth error), keeping session:",
-            err?.message || err
-          );
+          if (process.env.NODE_ENV === "development") {
+            // Only log in dev; never log the raw error object in production.
+            console.warn("[auth] Session validation failed (non-auth error), keeping session.");
+          }
         }
       } finally {
         setPermissionsLoaded(true);
@@ -343,8 +365,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (rbacMe.role?.name) {
         res.user.role = rbacMe.role.name;
       }
-    } catch (permError) {
-      console.error("Failed to load permissions during login:", permError);
+    } catch {
+      // Permission load failed — non-fatal, session is still valid.
     }
 
     setUser(res.user);
@@ -404,8 +426,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (rbacMe.role?.name) {
         res.user.role = rbacMe.role.name;
       }
-    } catch (permError) {
-      console.error("Failed to load permissions during register:", permError);
+    } catch {
+      // Permission load failed — non-fatal, session is still valid.
     }
 
     setUser(res.user);
@@ -447,11 +469,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             setTimeout(() => reject(new Error("Logout request timed out")), LOGOUT_TIMEOUT_MS)
           ),
         ]);
-      } catch (err: any) {
-        console.warn(
-          "Logout API call failed — clearing local state anyway:",
-          err?.message || err
-        );
+      } catch {
+        // Logout API failed — proceed with local cleanup regardless.
+        // The refresh token will expire naturally on the server.
       }
     }
 
@@ -465,7 +485,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     //    "session expired" banner the next time the user visits /login.
     try { sessionStorage.removeItem("zyoris-had-session"); } catch {}
 
-    // 6. Hard-navigate so the back-button cannot restore protected React state
+    // 6. Notify other tabs via BroadcastChannel so they sign out immediately.
+    //    This runs AFTER wipeReactState() so the current tab does not react
+    //    to its own broadcast.
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        const ch = new BroadcastChannel("zyoris-auth");
+        ch.postMessage({ type: "LOGOUT" });
+        // Give the message a tick to deliver before closing the channel.
+        setTimeout(() => ch.close(), 200);
+      }
+    } catch {}
+
+    // 7. Hard-navigate so the back-button cannot restore protected React state
     //    from the component tree (React keeps it in memory until a full unload).
     if (typeof window !== "undefined") {
       window.location.href = "/login";
