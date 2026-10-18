@@ -7,11 +7,13 @@ import LandingScreen from "../../components/auth/screens/LandingScreen";
 import EmployeeLoginScreen from "../../components/auth/screens/EmployeeLoginScreen";
 import AdminLoginStep1 from "../../components/auth/screens/AdminLoginStep1";
 import AdminLoginStep2 from "../../components/auth/screens/AdminLoginStep2";
-import AdminLoginStep3 from "../../components/auth/screens/AdminLoginStep3";
 import FeatureFooter from "../../components/auth/ui/FeatureFooter";
 import { useAuth, validateReturnTo } from "../../context/AuthContext";
 
-type AuthScreen = "landing" | "employee" | "admin-1" | "admin-2" | "admin-3";
+// Admin MFA (Step 3) is not in scope — dashboard access is gated via standard
+// RBAC post-login.  AdminLoginStep3 import removed accordingly.
+
+type AuthScreen = "landing" | "employee" | "admin-1" | "admin-2";
 
 const DEFAULT_DESTINATION = "/dashboard";
 
@@ -115,22 +117,15 @@ function LoginPageInner() {
         return;
       }
 
-      // Credentials accepted and role confirmed — advance to the OTP step.
-      // BD1: OTP endpoint not yet wired; AdminLoginStep3 has the TODO/warning.
-      setScreen("admin-3");
+      // Credentials accepted and role confirmed — go straight to dashboard.
+      // Dashboard access is gated by standard RBAC post-login; no Step 3 needed.
+      toast.success("Admin signed in successfully!");
+      redirectAfterLogin();
     } catch {
       // authError is already set by AuthContext; AdminLoginStep2 reads it via props.
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleAdminLoginComplete = (): void => {
-    // Admin MFA is NOT enforced. The session is issued at Step 2;
-    // Step 3 verifies nothing. Blocked on a backend admin-MFA endpoint
-    // that does not exist.
-    toast.success("Admin signed in successfully!");
-    redirectAfterLogin();
   };
 
   // ── Session-checking: show spinner, render nothing else ──────────────────
@@ -188,15 +183,6 @@ function LoginPageInner() {
             setPassword={setAdminPassword}
             isLoading={isLoading}
             authError={authError}
-          />
-        );
-
-      case "admin-3":
-        return (
-          <AdminLoginStep3
-            onBack={() => goTo("admin-2")}
-            onNext={handleAdminLoginComplete}
-            isLoading={isLoading}
           />
         );
 

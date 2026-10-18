@@ -186,7 +186,8 @@ api.interceptors.request.use(
             // Day 2 — public password-recovery and verification endpoints
             url.includes("/auth/forgot-password") ||
             url.includes("/auth/reset-password") ||
-            url.includes("/auth/verify-email");
+            url.includes("/auth/verify-email") ||
+            url.includes("/auth/resend-verification");
 
         if (!isUnauthenticatedEndpoint) {
             const token = getEffectiveAuthToken();
@@ -452,7 +453,8 @@ api.interceptors.response.use(
             // Day 2 — public password-recovery and verification endpoints
             reqUrl.includes("/auth/forgot-password") ||
             reqUrl.includes("/auth/reset-password") ||
-            reqUrl.includes("/auth/verify-email");
+            reqUrl.includes("/auth/verify-email") ||
+            reqUrl.includes("/auth/resend-verification");
 
         if (
             !isUnauthenticatedEndpoint &&

@@ -172,15 +172,12 @@ export const resetPasswordApi = async (
  * POST /auth/verify-email
  *
  * Verifies a user's email address with a 6-digit OTP.
+ * On success the backend flips isEmailVerified = true in the DB.
  *
  * Body:   { email: string; otp: string }
  * 200 OK: { success: true, message: "Email successfully verified." }
  *
  * Errors: OTP_INVALID, OTP_EXPIRED, TOO_MANY_ATTEMPTS, ALREADY_VERIFIED
- *
- * NOTE (BD3): The backend handler validates and deletes the OTP record but the
- * email-verification status update on the User model was not confirmed at time
- * of writing. Confirm with backend that isEmailVerified is set to true.
  */
 export const verifyEmailApi = async (
     email: string,
@@ -209,24 +206,25 @@ export const resendOtpApi = async (
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUB — Email Verification Resend
+// Email Verification Resend
 // ─────────────────────────────────────────────────────────────────────────────
-// BACKEND REQUEST (BD-RESEND-1):
-//   A dedicated resend endpoint for email-verification OTPs has NOT been
-//   confirmed in the backend contract.  This stub currently falls back to
-//   POST /auth/forgot-password which issues a password-reset OTP instead —
-//   semantically incorrect for email verification.
-//
-//   Once the backend exposes an endpoint (suggested: POST /auth/resend-verification
-//   Body: { email: string }
-//   200: { success: true, message: "Verification code resent." }),
-//   replace the body below with a call to that endpoint and remove this comment.
-// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * POST /auth/resend-verification
+ *
+ * Resends the email-verification OTP for the given address.
+ * Subject to a strict 60-second server-side cooldown — calling more frequently
+ * will return a rate-limit error.
+ *
+ * Body:   { email: string }
+ * 200 OK: { success: true, message: "Verification code resent." }
+ *
+ * Errors: RATE_LIMIT_EXCEEDED (cooldown active), TOO_MANY_ATTEMPTS
+ */
 export const resendVerificationOtpApi = async (
     email: string
 ): Promise<SimpleSuccessResponse> => {
-    // TODO(BD-RESEND-1): Replace with POST /auth/resend-verification when available.
-    const res = await api.post<SimpleSuccessResponse>("/auth/forgot-password", {
+    const res = await api.post<SimpleSuccessResponse>("/auth/resend-verification", {
         email,
     });
     return res.data;
