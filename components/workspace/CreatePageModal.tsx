@@ -13,6 +13,7 @@ interface CreatePageModalProps {
   onClose: () => void;
   onSuccess: () => void;
   initialParentId?: string | null;
+  initialType?: "document" | "folder" | "database";
   pageTree?: WorkspacePageNode[];
 }
 
@@ -23,6 +24,7 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
   onClose,
   onSuccess,
   initialParentId = null,
+  initialType = "document",
   pageTree = [],
 }) => {
   const router = useRouter();
@@ -41,6 +43,20 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
   useEffect(() => {
     setParentId(initialParentId);
   }, [initialParentId, isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const type = initialType || "document";
+      setPageType(type);
+      if (type === "folder") {
+        setIcon("📁");
+      } else if (type === "database") {
+        setIcon("📊");
+      } else {
+        setIcon("📄");
+      }
+    }
+  }, [isOpen, initialType]);
 
   if (!isOpen || !mounted || typeof document === "undefined") return null;
 
@@ -73,6 +89,8 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
     if (!title.trim()) {
       setError("Title is required");
       return;
@@ -154,16 +172,39 @@ export const CreatePageModal: React.FC<CreatePageModalProps> = ({
     } catch (err: any) {
       console.error("Page creation error:", err, err?.response?.data);
       const resData = err?.response?.data;
+      const status = err?.response?.status;
       let msg = "Failed to create page. Please check details and try again.";
-      if (resData) {
-        if (Array.isArray(resData.errors) && resData.errors.length > 0) {
-          msg = resData.errors.map((e: any) => (typeof e === "string" ? e : `${e.field ? e.field + ': ' : ''}${e.message || e.error || ''}`)).join("; ");
+
+      if (!err?.response || err?.code === "ERR_NETWORK" || err?.message === "Network Error") {
+        msg = "Network Error: Unable to connect to the backend server. Please check your internet connection or verify the server status.";
+      } else if (err?.code === "ECONNABORTED" || err?.message?.toLowerCase().includes("timeout")) {
+        msg = "Request timed out while creating the page. Please try again.";
+      } else if (status === 401) {
+        msg = "Authentication required. Please sign in again.";
+      } else if (status === 403) {
+        msg = "You do not have permission to create pages in this workspace.";
+      } else if (status === 404) {
+        msg = resData?.message || "Selected parent page could not be found or has been moved.";
+      } else if (resData) {
+        if (Array.isArray(resData.details) && resData.details.length > 0) {
+          msg = resData.details
+            .map((e: any) => (typeof e === "string" ? e : `${e.field ? e.field + ": " : ""}${e.message || e.error || ""}`))
+            .join("; ");
+        } else if (Array.isArray(resData.errors) && resData.errors.length > 0) {
+          msg = resData.errors
+            .map((e: any) => (typeof e === "string" ? e : `${e.field ? e.field + ": " : ""}${e.message || e.error || ""}`))
+            .join("; ");
         } else if (Array.isArray(resData.message) && resData.message.length > 0) {
           msg = resData.message.join("; ");
         } else if (typeof resData.message === "string") {
           msg = resData.message;
+        } else if (status >= 500) {
+          msg = "Internal server error occurred while creating page. Please try again.";
         }
+      } else if (status >= 500) {
+        msg = "Server error occurred while creating page. Please try again.";
       }
+
       setError(msg);
     } finally {
       setIsSubmitting(false);

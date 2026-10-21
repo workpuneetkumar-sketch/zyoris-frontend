@@ -2,10 +2,10 @@
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Plus, FileText, Database, ChevronDown } from "lucide-react";
+import { Plus, FileText, Folder, Database, ChevronDown } from "lucide-react";
 
 interface CreateMenuProps {
-  onOpenCreatePageModal: (parentId?: string | null) => void;
+  onOpenCreatePageModal: (parentId?: string | null, type?: "document" | "folder" | "database") => void;
 }
 
 interface DropdownCoords {
@@ -161,32 +161,48 @@ export const CreateMenu: React.FC<CreateMenuProps> = ({ onOpenCreatePageModal })
             <button
               onClick={() => {
                 setIsOpen(false);
-                onOpenCreatePageModal(null);
+                onOpenCreatePageModal(null, "document");
               }}
               className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition"
             >
-              <div className="p-1 rounded bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
+              <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400">
                 <FileText className="w-3.5 h-3.5" />
               </div>
               <div>
                 <div className="font-semibold text-slate-900 dark:text-white">Page</div>
-                <div className="text-[10px] text-slate-400">Document or note page</div>
+                <div className="text-[10px] text-slate-400">Document, spec, or notes</div>
               </div>
             </button>
 
             <button
               onClick={() => {
                 setIsOpen(false);
-                onOpenCreatePageModal(null);
+                onOpenCreatePageModal(null, "folder");
               }}
               className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition"
             >
-              <div className="p-1 rounded bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+              <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400">
+                <Folder className="w-3.5 h-3.5" />
+              </div>
+              <div>
+                <div className="font-semibold text-slate-900 dark:text-white">Folder</div>
+                <div className="text-[10px] text-slate-400">Category for nested pages</div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onOpenCreatePageModal(null, "database");
+              }}
+              className="w-full flex items-center space-x-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-left transition"
+            >
+              <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
                 <Database className="w-3.5 h-3.5" />
               </div>
               <div>
                 <div className="font-semibold text-slate-900 dark:text-white">Database</div>
-                <div className="text-[10px] text-slate-400">Structured data view</div>
+                <div className="text-[10px] text-slate-400">Structured table & views</div>
               </div>
             </button>
           </div>,
