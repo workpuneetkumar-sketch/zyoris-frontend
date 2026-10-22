@@ -237,11 +237,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         parsed?.data?.token ||
         parsed?.data?.accessToken ||
         parsed?.user?.token ||
-        (typeof parsed === "string" ? parsed : null) ||
-        getCookie(TOKEN_COOKIE) ||
-        localStorage.getItem("zyoris-token") ||
-        localStorage.getItem("token") ||
-        localStorage.getItem("accessToken");
+        (typeof parsed === "string" ? parsed : null);
+      // ── Cookie is a middleware hint only — NOT used for session restore ──────
+      // The zyoris-token cookie is written on login so that middleware.ts can
+      // optionally read it, but it must NOT be used as a fallback here.
+      // Reason: deleting localStorage["zyoris-auth"] (the canonical record)
+      // must result in unauthenticated status. If we fall back to the cookie,
+      // removing localStorage does not log the user out, breaking QA and
+      // security expectations.  The cookie is cleaned up by clearAuthStorage()
+      // and clearTokenCookie() — so on a legitimate logout it will be gone.
 
       const effectiveToken = sanitizeBearerToken(candidateToken);
 

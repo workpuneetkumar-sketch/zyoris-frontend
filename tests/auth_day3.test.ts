@@ -295,15 +295,20 @@ describe("authApi — resendVerificationOtpApi stub exists and is separate", () 
     assert.notEqual(vIdx, rIdx, "they must be at different positions (separate declarations)");
   });
 
-  it("resendVerificationOtpApi source contains STUB/TODO comment", async () => {
+  it("resendVerificationOtpApi calls the real /auth/resend-verification endpoint (stub promoted to live)", async () => {
     const fs = await import("node:fs");
     const src = fs.readFileSync(
       new URL("../lib/api/authApi.ts", import.meta.url),
       "utf8"
     );
+    // The stub comment was removed when the backend confirmed the endpoint is live.
+    // Now verify the function calls the real endpoint.
+    const fnStart = src.indexOf("export const resendVerificationOtpApi");
+    const fnEnd = src.indexOf("\nexport", fnStart + 1);
+    const fnBody = src.slice(fnStart, fnEnd === -1 ? undefined : fnEnd);
     assert.ok(
-      src.includes("BD-RESEND-1") || src.includes("TODO") || src.includes("STUB"),
-      "resendVerificationOtpApi must be marked as a stub"
+      fnBody.includes("/auth/resend-verification"),
+      "resendVerificationOtpApi must call POST /auth/resend-verification (real endpoint, stub promoted)"
     );
   });
 });
