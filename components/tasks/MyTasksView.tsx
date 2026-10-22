@@ -297,102 +297,49 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
           </div>
         </div>
 
-        {/* ── Task Counts Summary Metric Pills ─────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mt-5">
-          <button
-            onClick={() => onSelectBucket("all")}
-            className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-              bucket === "all"
-                ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-950 dark:text-blue-200 ring-2 ring-blue-500/20"
-                : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:bg-slate-100"
-            }`}
-          >
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                All My Tasks
-              </span>
-              <div className="text-xl font-extrabold text-slate-900 dark:text-white mt-0.5">
-                {counts.all}
-              </div>
-            </div>
-            <Inbox className="w-5 h-5 text-slate-400" />
-          </button>
-
-          <button
-            onClick={() => onSelectBucket("overdue")}
-            className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-              bucket === "overdue"
-                ? "bg-red-50 dark:bg-red-950/40 border-red-300 dark:border-red-700 text-red-950 dark:text-red-200 ring-2 ring-red-500/20"
-                : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:bg-red-50/40"
-            }`}
-          >
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400">
-                Overdue
-              </span>
-              <div className="text-xl font-extrabold text-red-600 dark:text-red-400 mt-0.5">
-                {counts.overdue}
-              </div>
-            </div>
-            <AlertCircle className="w-5 h-5 text-red-500" />
-          </button>
-
-          <button
-            onClick={() => onSelectBucket("dueToday")}
-            className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-              bucket === "dueToday"
-                ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200 ring-2 ring-amber-500/20"
-                : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:bg-amber-50/40"
-            }`}
-          >
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                Due Today
-              </span>
-              <div className="text-xl font-extrabold text-amber-600 dark:text-amber-400 mt-0.5">
-                {counts.dueToday}
-              </div>
-            </div>
-            <Clock className="w-5 h-5 text-amber-500" />
-          </button>
-
-          <button
-            onClick={() => onSelectBucket("upcoming")}
-            className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-              bucket === "upcoming"
-                ? "bg-indigo-50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 text-indigo-950 dark:text-indigo-200 ring-2 ring-indigo-500/20"
-                : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:bg-indigo-50/40"
-            }`}
-          >
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
-                Upcoming
-              </span>
-              <div className="text-xl font-extrabold text-indigo-600 dark:text-indigo-400 mt-0.5">
-                {counts.upcoming}
-              </div>
-            </div>
-            <Calendar className="w-5 h-5 text-indigo-500" />
-          </button>
-
-          <button
-            onClick={() => onSelectBucket("completed")}
-            className={`p-3 rounded-2xl border text-left transition flex items-center justify-between ${
-              bucket === "completed"
-                ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200 ring-2 ring-emerald-500/20"
-                : "bg-slate-50 dark:bg-slate-800/40 border-slate-200/80 dark:border-slate-800 hover:bg-emerald-50/40"
-            }`}
-          >
-            <div>
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                Completed
-              </span>
-              <div className="text-xl font-extrabold text-emerald-600 dark:text-emerald-400 mt-0.5">
-                {counts.completed}
-              </div>
-            </div>
-            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-          </button>
+        {/* ── Task Bucket Navigation Tabs ─────────────────────────────────── */}
+        <div className="flex items-center space-x-1 border-t border-slate-100 dark:border-slate-800 pt-3 mt-4 overflow-x-auto no-scrollbar">
+          {[
+            { id: "all" as const, label: "All Tasks", count: error && tasks.length === 0 ? "—" : counts.all, icon: Inbox },
+            { id: "dueToday" as const, label: "Due Today", count: error && tasks.length === 0 ? "—" : counts.dueToday, icon: Clock, alert: counts.dueToday > 0 },
+            { id: "overdue" as const, label: "Overdue", count: error && tasks.length === 0 ? "—" : counts.overdue, icon: AlertCircle, danger: counts.overdue > 0 },
+            { id: "upcoming" as const, label: "Upcoming", count: error && tasks.length === 0 ? "—" : counts.upcoming, icon: Calendar },
+            { id: "completed" as const, label: "Completed", count: error && tasks.length === 0 ? "—" : counts.completed, icon: CheckCircle2 },
+          ].map((tab) => {
+            const Icon = tab.icon;
+            const isSelected = bucket === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => onSelectBucket(tab.id)}
+                className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer ${
+                  isSelected
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs font-bold"
+                    : "bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70"
+                }`}
+              >
+                <Icon className={`w-3.5 h-3.5 ${tab.danger ? "text-rose-500" : tab.alert ? "text-amber-500" : ""}`} />
+                <span>{tab.label}</span>
+                <span
+                  className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                    tab.danger && Number(tab.count) > 0
+                      ? isSelected
+                        ? "bg-rose-500 text-white"
+                        : "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300"
+                      : tab.alert && Number(tab.count) > 0
+                      ? isSelected
+                        ? "bg-amber-500 text-white"
+                        : "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
+                      : isSelected
+                      ? "bg-white/20 text-white dark:bg-slate-800 dark:text-slate-200"
+                      : "bg-slate-200/80 dark:bg-slate-700/80 text-slate-600 dark:text-slate-300"
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -445,6 +392,27 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
         </div>
       )}
 
+      {/* ── Refresh / Network Error Alert Banner (When cached tasks exist) ─── */}
+      {error && tasks.length > 0 && (
+        <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-2xl flex items-center justify-between text-xs text-red-700 dark:text-red-300">
+          <div className="flex items-center space-x-2.5">
+            <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+            <span className="font-semibold">
+              {error === "Network Error"
+                ? "Network Error: Could not refresh assigned tasks. Showing cached data."
+                : error}
+            </span>
+          </div>
+          <button
+            onClick={onRefresh}
+            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-800/50 text-red-700 dark:text-red-200 rounded-xl text-xs font-bold transition cursor-pointer"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Retry</span>
+          </button>
+        </div>
+      )}
+
       {/* ── Filter Bar & Search Controls ──────────────────────────────────── */}
       <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5 flex-1 max-w-xl">
@@ -492,6 +460,27 @@ export const MyTasksView: React.FC<MyTasksViewProps> = ({
           <div className="flex flex-col items-center justify-center h-64 space-y-3">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             <p className="text-xs text-slate-500 font-medium">Loading your assigned tasks...</p>
+          </div>
+        ) : error && tasks.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl text-center space-y-3 shadow-xs">
+            <div className="p-4 bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-2xl">
+              <AlertCircle className="w-8 h-8" />
+            </div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+              {error === "Network Error" ? "Network Connection Error" : "Failed to load tasks"}
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm">
+              {error === "Network Error"
+                ? "Unable to reach the server. Please check your network connection or verify the backend service."
+                : error}
+            </p>
+            <button
+              onClick={onRefresh}
+              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Retry</span>
+            </button>
           </div>
         ) : filteredTasks.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-12 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl text-center space-y-3 shadow-xs">

@@ -604,7 +604,8 @@ export function TasksUI({
     onDeleteTask,
     onRetry,
 }: TasksUIProps) {
-    const [viewMode, setViewMode] = useState<ViewMode>("KANBAN");
+    const [viewMode, setViewMode] = useState<ViewMode>("LIST");
+    const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [bulkResult, setBulkResult] = useState<BulkUpdateResponse | null>(null);
     const [createColStatus, setCreateColStatus] = useState<TaskStatus>("TODO");
@@ -691,16 +692,24 @@ export function TasksUI({
         onOpenCreate();
     };
 
-    if (error) {
+    if (error && tasks.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-64 gap-3">
+            <div className="flex flex-col items-center justify-center h-64 gap-3 text-center px-4">
                 <AlertCircle size={32} className="text-red-400" />
-                <p className="text-red-500 text-sm font-medium">{error}</p>
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {error === "Network Error" ? "Network Connection Error" : "Failed to load tasks"}
+                </h3>
+                <p className="text-red-500 text-xs font-medium max-w-md">
+                    {error === "Network Error"
+                        ? "Unable to reach the server. Please verify your connection or backend status and try again."
+                        : error}
+                </p>
                 <button
                     onClick={onRetry}
-                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition"
+                    className="inline-flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition cursor-pointer shadow-xs"
                 >
-                    Retry
+                    <RotateCcw size={14} />
+                    <span>Retry</span>
                 </button>
             </div>
         );
@@ -802,37 +811,100 @@ export function TasksUI({
                     </div>
                 </div>
 
-                {/* ── Status Metrics Bar ──────────────────────────────────────── */}
-                <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 mt-5">
-                    <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200/60 dark:border-slate-800 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-slate-500">Total</span>
-                        <span className="text-sm font-bold text-slate-900 dark:text-white">{tasks.length}</span>
-                    </div>
-                    <div className="p-3 bg-slate-100/60 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-slate-600 dark:text-slate-300">To Do</span>
-                        <span className="text-sm font-bold text-slate-700 dark:text-slate-200">{todoCount}</span>
-                    </div>
-                    <div className="p-3 bg-blue-50/50 dark:bg-blue-950/30 rounded-xl border border-blue-100 dark:border-blue-900/50 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-blue-600 dark:text-blue-400">In Progress</span>
-                        <span className="text-sm font-bold text-blue-700 dark:text-blue-300">{inProgressCount}</span>
-                    </div>
-                    <div className="p-3 bg-purple-50/50 dark:bg-purple-950/30 rounded-xl border border-purple-100 dark:border-purple-900/50 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-purple-600 dark:text-purple-400">Review</span>
-                        <span className="text-sm font-bold text-purple-700 dark:text-purple-300">{reviewCount}</span>
-                    </div>
-                    <div className="p-3 bg-rose-50/50 dark:bg-rose-950/30 rounded-xl border border-rose-100 dark:border-rose-900/50 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">Blocked</span>
-                        <span className="text-sm font-bold text-rose-700 dark:text-rose-300">{blockedCount}</span>
-                    </div>
-                    <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/30 rounded-xl border border-emerald-100 dark:border-emerald-900/50 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">Done</span>
-                        <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">{doneCount}</span>
-                    </div>
+                {/* ── Status Summary Pills (Double as Interactive Status Filters) ── */}
+                <div className="flex items-center space-x-1.5 overflow-x-auto no-scrollbar pt-3 mt-1">
+                    <button
+                        onClick={() => onStatusFilterChange("all")}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition shrink-0 ${
+                            statusFilter === "all"
+                                ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold shadow-xs"
+                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70"
+                        }`}
+                    >
+                        <span>All</span>
+                        <span className="text-[10px] opacity-80 font-mono">({tasks.length})</span>
+                    </button>
+                    <button
+                        onClick={() => onStatusFilterChange(statusFilter === "TODO" ? "all" : "TODO")}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition shrink-0 ${
+                            statusFilter === "TODO"
+                                ? "bg-slate-700 text-white shadow-xs font-bold"
+                                : "bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70"
+                        }`}
+                    >
+                        <span>To Do</span>
+                        <span className="text-[10px] opacity-80 font-mono">({todoCount})</span>
+                    </button>
+                    <button
+                        onClick={() => onStatusFilterChange(statusFilter === "IN_PROGRESS" ? "all" : "IN_PROGRESS")}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition shrink-0 ${
+                            statusFilter === "IN_PROGRESS"
+                                ? "bg-blue-600 text-white shadow-xs font-bold"
+                                : "bg-blue-50/60 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 hover:bg-blue-100"
+                        }`}
+                    >
+                        <span>In Progress</span>
+                        <span className="text-[10px] opacity-80 font-mono">({inProgressCount})</span>
+                    </button>
+                    <button
+                        onClick={() => onStatusFilterChange(statusFilter === "REVIEW" ? "all" : "REVIEW")}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition shrink-0 ${
+                            statusFilter === "REVIEW"
+                                ? "bg-purple-600 text-white shadow-xs font-bold"
+                                : "bg-purple-50/60 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 hover:bg-purple-100"
+                        }`}
+                    >
+                        <span>Review</span>
+                        <span className="text-[10px] opacity-80 font-mono">({reviewCount})</span>
+                    </button>
+                    <button
+                        onClick={() => onStatusFilterChange(statusFilter === "BLOCKED" ? "all" : "BLOCKED")}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition shrink-0 ${
+                            statusFilter === "BLOCKED"
+                                ? "bg-rose-600 text-white shadow-xs font-bold"
+                                : "bg-rose-50/60 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 hover:bg-rose-100"
+                        }`}
+                    >
+                        <span>Blocked</span>
+                        <span className="text-[10px] opacity-80 font-mono">({blockedCount})</span>
+                    </button>
+                    <button
+                        onClick={() => onStatusFilterChange(statusFilter === "DONE" ? "all" : "DONE")}
+                        className={`inline-flex items-center space-x-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition shrink-0 ${
+                            statusFilter === "DONE"
+                                ? "bg-emerald-600 text-white shadow-xs font-bold"
+                                : "bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100"
+                        }`}
+                    >
+                        <span>Done</span>
+                        <span className="text-[10px] opacity-80 font-mono">({doneCount})</span>
+                    </button>
                 </div>
 
-                {/* ── Filters & Search Controls ──────────────────────────────── */}
-                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-                    <div className="flex flex-wrap items-center gap-2.5">
+                {/* ── Background Refresh Error Alert (When cached tasks exist) ── */}
+                {error && tasks.length > 0 && (
+                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900/50 rounded-2xl flex items-center justify-between text-xs text-red-700 dark:text-red-300">
+                        <div className="flex items-center space-x-2.5">
+                            <AlertCircle size={16} className="text-red-500 shrink-0" />
+                            <span className="font-semibold">
+                                {error === "Network Error"
+                                    ? "Network Error: Could not refresh tasks. Showing cached data."
+                                    : error}
+                            </span>
+                        </div>
+                        <button
+                            onClick={onRetry}
+                            className="inline-flex items-center space-x-1.5 px-3 py-1 bg-red-100 hover:bg-red-200 dark:bg-red-900/40 dark:hover:bg-red-800/50 text-red-700 dark:text-red-200 rounded-xl text-xs font-bold transition cursor-pointer"
+                        >
+                            <RotateCcw size={12} />
+                            <span>Retry</span>
+                        </button>
+                    </div>
+                )}
+
+                {/* ── Compact Controls Toolbar ──────────────────────────────── */}
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                    <div className="flex flex-wrap items-center gap-2">
                         {/* Search Input */}
                         <div className="relative min-w-[200px] max-w-xs">
                             <Search
@@ -862,98 +934,134 @@ export function TasksUI({
                                 <button
                                     key={f}
                                     onClick={() => onFilterChange(f)}
-                                    className={`px-3 py-1 rounded-lg transition capitalize ${
+                                    className={`px-2.5 py-1 rounded-lg transition capitalize text-xs ${
                                         filter === f
                                             ? "bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs font-bold"
                                             : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
                                     }`}
                                 >
-                                    {f === "all" ? "All Tasks" : f === "my" ? "My Tasks" : "Overdue"}
+                                    {f === "all" ? "All" : f === "my" ? "My Tasks" : "Overdue"}
                                 </button>
                             ))}
                         </div>
 
-                        {/* Status Filter */}
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => onStatusFilterChange(e.target.value)}
-                            className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500"
-                        >
-                            <option value="all">Status: All</option>
-                            <option value="TODO">To Do</option>
-                            <option value="IN_PROGRESS">In Progress</option>
-                            <option value="REVIEW">Review</option>
-                            <option value="BLOCKED">Blocked</option>
-                            <option value="DONE">Done</option>
-                        </select>
-
-                        {/* Priority Filter */}
-                        <select
-                            value={priorityFilter}
-                            onChange={(e) => onPriorityFilterChange(e.target.value)}
-                            className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500"
-                        >
-                            <option value="all">Priority: All</option>
-                            <option value="LOW">Low</option>
-                            <option value="MEDIUM">Medium</option>
-                            <option value="HIGH">High</option>
-                        </select>
-
-                        {/* Assignee Filter */}
-                        <select
-                            value={assigneeFilter}
-                            onChange={(e) => onAssigneeFilterChange(e.target.value)}
-                            className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500"
-                        >
-                            <option value="all">Assignee: All</option>
-                            <option value="unassigned">Unassigned</option>
-                            {members.map((m) => (
-                                <option key={m.id} value={m.id}>
-                                    {m.name}
-                                </option>
-                            ))}
-                        </select>
-
-                        {/* Project Filter */}
-                        {availableProjects.length > 0 && onProjectFilterChange && (
-                            <select
-                                value={projectFilter}
-                                onChange={(e) => onProjectFilterChange(e.target.value)}
-                                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500"
+                        {/* Compact Expandable Filters Popover */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setIsFiltersOpen((prev) => !prev)}
+                                className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                                    isFiltersOpen || (priorityFilter !== "all" || assigneeFilter !== "all" || projectFilter !== "all" || labelFilter !== "all")
+                                        ? "bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 shadow-xs"
+                                        : "bg-white dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50"
+                                }`}
                             >
-                                <option value="all">Project: All</option>
-                                {availableProjects.map((proj) => (
-                                    <option key={proj} value={proj}>
-                                        {proj}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
+                                <Filter size={13} className={priorityFilter !== "all" || assigneeFilter !== "all" || projectFilter !== "all" || labelFilter !== "all" ? "text-blue-600" : "text-slate-400"} />
+                                <span>Filters</span>
+                                {(priorityFilter !== "all" || assigneeFilter !== "all" || projectFilter !== "all" || labelFilter !== "all") && (
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 dark:bg-blue-400" />
+                                )}
+                                <ChevronDown size={12} className="text-slate-400" />
+                            </button>
 
-                        {/* Label Filter */}
-                        {availableLabels.length > 0 && onLabelFilterChange && (
-                            <select
-                                value={labelFilter}
-                                onChange={(e) => onLabelFilterChange(e.target.value)}
-                                className="px-3 py-1.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-300 outline-none focus:border-blue-500"
-                            >
-                                <option value="all">Label: All</option>
-                                {availableLabels.map((lbl) => (
-                                    <option key={lbl} value={lbl}>
-                                        {lbl}
-                                    </option>
-                                ))}
-                            </select>
-                        )}
+                            {/* Dropdown Popover */}
+                            {isFiltersOpen && (
+                                <div className="absolute left-0 top-full mt-1.5 z-40 w-72 p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl space-y-2.5">
+                                    <div className="flex items-center justify-between pb-1 border-b border-slate-100 dark:border-slate-800">
+                                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                                            Secondary Filters
+                                        </span>
+                                        {hasActiveFilters && (
+                                            <button
+                                                onClick={handleClearAllFilters}
+                                                className="text-[11px] font-semibold text-rose-600 hover:underline"
+                                            >
+                                                Reset all
+                                            </button>
+                                        )}
+                                    </div>
 
-                        {/* Clear Filters button */}
+                                    {/* Priority */}
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] font-medium text-slate-500">Priority</label>
+                                        <select
+                                            value={priorityFilter}
+                                            onChange={(e) => onPriorityFilterChange(e.target.value)}
+                                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-200 outline-none"
+                                        >
+                                            <option value="all">All Priorities</option>
+                                            <option value="HIGH">High Priority</option>
+                                            <option value="MEDIUM">Medium Priority</option>
+                                            <option value="LOW">Low Priority</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Assignee */}
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] font-medium text-slate-500">Assignee</label>
+                                        <select
+                                            value={assigneeFilter}
+                                            onChange={(e) => onAssigneeFilterChange(e.target.value)}
+                                            className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-200 outline-none"
+                                        >
+                                            <option value="all">All Assignees</option>
+                                            <option value="unassigned">Unassigned</option>
+                                            {members.map((m) => (
+                                                <option key={m.id} value={m.id}>
+                                                    {m.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Project */}
+                                    {availableProjects.length > 0 && onProjectFilterChange && (
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-medium text-slate-500">Project</label>
+                                            <select
+                                                value={projectFilter}
+                                                onChange={(e) => onProjectFilterChange(e.target.value)}
+                                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-200 outline-none"
+                                            >
+                                                <option value="all">All Projects</option>
+                                                {availableProjects.map((proj) => (
+                                                    <option key={proj} value={proj}>
+                                                        {proj}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+
+                                    {/* Label */}
+                                    {availableLabels.length > 0 && onLabelFilterChange && (
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] font-medium text-slate-500">Label</label>
+                                            <select
+                                                value={labelFilter}
+                                                onChange={(e) => onLabelFilterChange(e.target.value)}
+                                                className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium text-slate-800 dark:text-slate-200 outline-none"
+                                            >
+                                                <option value="all">All Labels</option>
+                                                {availableLabels.map((lbl) => (
+                                                    <option key={lbl} value={lbl}>
+                                                        {lbl}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Reset Pill */}
                         {hasActiveFilters && (
                             <button
                                 onClick={handleClearAllFilters}
-                                className="inline-flex items-center space-x-1 px-3 py-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition"
+                                className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 rounded-xl hover:bg-rose-100 transition cursor-pointer"
                             >
-                                <RotateCcw size={12} />
-                                <span>Reset Filters</span>
+                                <RotateCcw size={11} />
+                                <span>Reset filters</span>
                             </button>
                         )}
                     </div>

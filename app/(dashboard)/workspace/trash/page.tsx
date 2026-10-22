@@ -99,7 +99,7 @@ export default function WorkspaceTrashPage() {
   });
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-10 space-y-6">
+    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 md:py-8 space-y-6">
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-5">
         <div className="flex items-center space-x-3">

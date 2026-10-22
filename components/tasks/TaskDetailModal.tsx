@@ -1,8 +1,7 @@
 // components/tasks/TaskDetailModal.tsx
 "use client";
-import { cleanTaskDescription } from "@/utils/taskUtils";
 
-import { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
     X,
@@ -22,11 +21,8 @@ import {
     Network,
     History,
     FileText,
-    ExternalLink,
     Check,
     Edit2,
-    Sparkles,
-    AlertTriangle,
     Tag,
     FolderKanban,
     Paperclip,
@@ -35,6 +31,10 @@ import {
     Users,
     UserCheck,
     ArrowRightLeft,
+    ArrowLeft,
+    ChevronDown,
+    ChevronRight,
+    MoreHorizontal,
 } from "lucide-react";
 import { AttachmentSection } from "@/components/workspace/AttachmentSection";
 import { ExportModal } from "@/components/workspace/ExportModal";
@@ -152,7 +152,6 @@ function resolveAssigneeOrDepartment(
     ctx: ActivityHelperContext,
     isPrevious: boolean
 ): string | null {
-    // 1. Check explicit name fields in metadata
     if (metadata) {
         if (isPrevious) {
             const prevName = metadata.previousAssigneeName || metadata.prevAssigneeName || metadata.oldAssigneeName;
@@ -180,11 +179,8 @@ function resolveAssigneeOrDepartment(
         }
     }
 
-    // 2. If idOrValue is provided
     if (idOrValue) {
         const strVal = String(idOrValue).trim();
-
-        // Check if idOrValue is already a Department name
         if (strVal === "DEPARTMENT") {
             const deptFromMeta = metadata?.department || metadata?.targetDepartment || ctx.task.department || ctx.canonicalAssignment?.department;
             if (typeof deptFromMeta === "string" && deptFromMeta.trim()) {
@@ -199,35 +195,29 @@ function resolveAssigneeOrDepartment(
             return strVal.toLowerCase().includes("department") ? strVal : `${strVal} Department`;
         }
 
-        // Try lookup in members list by ID
         const matchedMember = ctx.members.find((m) => m.id === strVal);
         if (matchedMember?.name && !isRawId(matchedMember.name)) {
             return matchedMember.name.trim();
         }
 
-        // Try lookup in task.assignedTo
         if (ctx.task.assignedTo?.id === strVal && ctx.task.assignedTo.name && !isRawId(ctx.task.assignedTo.name)) {
             return ctx.task.assignedTo.name.trim();
         }
 
-        // Try lookup in canonicalAssignment
         if (ctx.canonicalAssignment?.assignedTo?.id === strVal && ctx.canonicalAssignment.assignedTo.name && !isRawId(ctx.canonicalAssignment.assignedTo.name)) {
             return ctx.canonicalAssignment.assignedTo.name.trim();
         }
 
-        // Try lookup in allTasks
         const taskMatch = ctx.allTasks.find((t) => t.assignedTo?.id === strVal);
         if (taskMatch?.assignedTo?.name && !isRawId(taskMatch.assignedTo.name)) {
             return taskMatch.assignedTo.name.trim();
         }
 
-        // If it's not a raw ID / CUID, it might be an actual human name already!
         if (!isRawId(strVal) && !strVal.startsWith("http") && !strVal.includes("/")) {
             return strVal;
         }
     }
 
-    // 3. Department fallback from metadata or task if it was a department assignment
     const isDeptContext =
         metadata?.assigneeType === "DEPARTMENT" ||
         (!isPrevious && !idOrValue && (metadata?.department || ctx.task.department));
@@ -390,7 +380,6 @@ function formatActivityMessage(act: TaskActivity, ctx: ActivityHelperContext): s
         return actorName ? `${actorName} removed dependency` : "Dependency removed";
     }
 
-    // Generic fallback for any other custom or unhandled event
     const oldFmt = formatActivityValue(act.oldValue);
     const newFmt = formatActivityValue(act.newValue);
     const typeLabel = act.type.replace(/_/g, " ").toLowerCase();
@@ -410,8 +399,6 @@ interface TeamMember {
     email?: string;
 }
 
-type TabType = "details" | "subtasks" | "dependencies" | "comments" | "activity" | "attachments";
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 export interface TaskDetailModalProps {
@@ -419,6 +406,7 @@ export interface TaskDetailModalProps {
     allTasks?: Task[];
     saving: boolean;
     saveError: string | null;
+    sourceView?: string;
     onClose: () => void;
     onUpdate: (id: string, data: UpdateTaskPayload) => Promise<boolean>;
     onDelete?: (id: string) => Promise<boolean>;
@@ -433,20 +421,33 @@ export function TaskDetailModal({
     allTasks = [],
     saving,
     saveError,
+    sourceView,
     onClose,
     onUpdate,
     onDelete,
     onReassigned,
     onRefresh,
 }: TaskDetailModalProps) {
-    const [activeTab, setActiveTab] = useState<TabType>("details");
-    const [isEditing, setIsEditing] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
     const [deleting, setDeleting] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+    const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
-    // Canonical assignment state from authoritative backend response or persistent storage
+    // Collapsible sections state (Notion style)
+    const [sectionsOpen, setSectionsOpen] = useState({
+        subtasks: true,
+        attachments: true,
+        dependencies: true,
+        comments: true,
+        activity: false,
+    });
+
+    const toggleSection = (section: keyof typeof sectionsOpen) => {
+        setSectionsOpen((prev) => ({ ...prev, [section]: !prev[section] }));
+    };
+
+    // Canonical assignment state
     const [canonicalAssignment, setCanonicalAssignment] = useState<EffectiveAssignmentResponse | null>(() => {
         if (task.effectiveAssignment) {
             return task.effectiveAssignment;
@@ -489,14 +490,24 @@ export function TaskDetailModal({
         };
     });
 
+    // Inline title editing
+    const [isEditingTitle, setIsEditingTitle] = useState(false);
+    const [titleInput, setTitleInput] = useState(task.title);
+    const titleInputRef = useRef<HTMLInputElement>(null);
+
+    // Inline description editing
+    const [isEditingDescription, setIsEditingDescription] = useState(false);
+    const [descInput, setDescInput] = useState(task.description ?? "");
+
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [projects, setProjects] = useState<Project[]>([]);
     const [localSaveError, setLocalSaveError] = useState<string | null>(null);
     const [newTagInput, setNewTagInput] = useState("");
+    const [isAddingTag, setIsAddingTag] = useState(false);
 
-    // Keep form in sync with task updates (e.g. status/priority changes) when not actively editing
+    // Synchronize form when task prop updates and not actively editing
     useEffect(() => {
-        if (!isEditing) {
+        if (!isEditingTitle && !isEditingDescription) {
             const stored = getTaskLabelsMap()[task.id];
             const currentLabels = task.labels && task.labels.length > 0 ? task.labels : (stored ?? []);
             setForm({
@@ -511,8 +522,10 @@ export function TaskDetailModal({
                 projectId: (task.projectId as string) ?? "",
                 labels: currentLabels,
             });
+            setTitleInput(task.title);
+            setDescInput(task.description ?? "");
         }
-    }, [task, isEditing]);
+    }, [task, isEditingTitle, isEditingDescription]);
 
     // Sub-resources states
     const [comments, setComments] = useState<TaskComment[]>([]);
@@ -544,15 +557,24 @@ export function TaskDetailModal({
     const [activityFilter, setActivityFilter] = useState<string>("ALL");
     const [subLoading, setSubLoading] = useState(false);
 
-    // Preload dependencies on task change so header badge count is immediately accurate
+    // Escape key listener for closing modal
     useEffect(() => {
-        if (!task?.id) return;
-        fetchTaskDependencies(task.id)
-            .then((data) => {
-                setDependencies(Array.isArray(data) ? data : []);
-            })
-            .catch(() => {});
-    }, [task.id]);
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && !isExportModalOpen && !isReassignModalOpen) {
+                if (isEditingTitle) {
+                    setIsEditingTitle(false);
+                    setTitleInput(task.title);
+                } else if (isEditingDescription) {
+                    setIsEditingDescription(false);
+                    setDescInput(task.description ?? "");
+                } else {
+                    onClose();
+                }
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onClose, isExportModalOpen, isReassignModalOpen, isEditingTitle, isEditingDescription, task.title, task.description]);
 
     // Load team members and projects
     useEffect(() => {
@@ -564,120 +586,43 @@ export function TaskDetailModal({
             .catch(() => setProjects([]));
     }, []);
 
-    // Load sub-resources when tabs change
+    // Load all sub-resources concurrently on task change for complete Notion-like document view
     useEffect(() => {
         if (!task?.id) return;
-        if (activeTab === "comments") {
-            setSubLoading(true);
-            fetchTaskComments(task.id)
-                .then(setComments)
-                .finally(() => setSubLoading(false));
-        } else if (activeTab === "subtasks") {
-            setSubLoading(true);
-            fetchTaskSubtasks(task.id)
-                .then(setSubtasks)
-                .finally(() => setSubLoading(false));
-        } else if (activeTab === "dependencies") {
-            setSubLoading(true);
-            setDependenciesError(null);
-            fetchTaskDependencies(task.id)
-                .then((data) => {
-                    setDependencies(Array.isArray(data) ? data : []);
-                })
-                .catch((err: any) => {
-                    const backendMsg = err?.response?.data?.message || err?.response?.data?.error;
-                    const msg = backendMsg || (err instanceof Error ? err.message : "Failed to load dependencies.");
-                    setDependenciesError(msg);
-                    setDependencies([]);
-                })
-                .finally(() => setSubLoading(false));
-        } else if (activeTab === "activity") {
-            setSubLoading(true);
-            const typeParam = activityFilter === "ALL" ? undefined : activityFilter;
-            fetchTaskActivity(task.id, 1, 30, typeParam)
-                .then(setActivities)
-                .finally(() => setSubLoading(false));
-        }
-    }, [activeTab, task.id, activityFilter]);
+        setSubLoading(true);
+        Promise.all([
+            fetchTaskComments(task.id).then(setComments).catch(() => setComments([])),
+            fetchTaskSubtasks(task.id).then(setSubtasks).catch(() => setSubtasks([])),
+            fetchTaskDependencies(task.id).then((data) => {
+                setDependencies(Array.isArray(data) ? data : []);
+            }).catch(() => setDependencies([])),
+            fetchTaskActivity(task.id, 1, 30, activityFilter === "ALL" ? undefined : activityFilter).then(setActivities).catch(() => setActivities([])),
+        ]).finally(() => setSubLoading(false));
+    }, [task.id, activityFilter]);
 
-    const handleChange = (
-        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-    ) => {
-        setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-    };
+    // ── Handlers ───────────────────────────────────────────────────────────────
 
-    const handleSave = async () => {
-        if (!form.title?.trim()) {
-            setLocalSaveError("Title cannot be empty");
+    const handleSaveTitle = async () => {
+        const trimmed = titleInput.trim();
+        if (!trimmed) {
+            setTitleInput(task.title);
+            setIsEditingTitle(false);
             return;
         }
-        setLocalSaveError(null);
-
-        // Build a clean payload containing ONLY modified fields
-        // Ensures title/description edits never send unrelated empty foreign keys (preventing DB_FOREIGN_KEY)
-        // and never send or alter status, priority, or other unmodified fields
-        const payload: UpdateTaskPayload = {};
-
-        if (form.title.trim() !== task.title) {
-            payload.title = form.title.trim();
+        if (trimmed !== task.title) {
+            setForm((prev) => ({ ...prev, title: trimmed }));
+            await onUpdate(task.id, { title: trimmed });
         }
-        if ((form.description ?? "") !== (task.description ?? "")) {
-            payload.description = form.description ?? "";
-        }
-        // NOTE: Assignment mutation is removed from generic Edit flow (Step 2).
-        // Task reassignment is handled authoritatively via POST /workspace/tasks/:id/reassign
-        const todayStr = new Date().toISOString().split("T")[0];
-        const initialDueDate = task.dueDate ? task.dueDate.split("T")[0] : "";
-        if ((form.dueDate ?? "") !== initialDueDate) {
-            if (form.dueDate && form.dueDate < todayStr) {
-                setLocalSaveError("Due date cannot be in the past. Please select today or a future date.");
-                return;
-            }
-            payload.dueDate = form.dueDate ? form.dueDate : null;
-        }
-        const initialProjectId = task.projectId ? String(task.projectId) : "";
-        if ((form.projectId ?? "") !== initialProjectId) {
-            payload.projectId = form.projectId?.trim() ? form.projectId.trim() : null;
-        }
-
-        // If no fields were modified, simply exit editing mode
-        if (Object.keys(payload).length === 0) {
-            setIsEditing(false);
-            return;
-        }
-
-        const ok = await onUpdate(task.id, payload);
-        if (ok) {
-            setIsEditing(false);
-        }
+        setIsEditingTitle(false);
     };
 
-    const handleReassignSuccess = (updatedAssignment: EffectiveAssignmentResponse) => {
-        // Persist to local storage map so reopening drawer preserves assignment
-        saveTaskAssignment(task.id, updatedAssignment);
-
-        // Update local canonical assignment state directly with returned canonical data
-        setCanonicalAssignment(updatedAssignment);
-
-        // Keep local form in sync if assignedTo changed
-        if (updatedAssignment.assignedTo) {
-            setForm((prev) => ({ ...prev, assignedToId: updatedAssignment.assignedTo?.id ?? "" }));
-        } else {
-            setForm((prev) => ({ ...prev, assignedToId: "" }));
+    const handleSaveDescription = async () => {
+        const trimmed = descInput;
+        if (trimmed !== (task.description ?? "")) {
+            setForm((prev) => ({ ...prev, description: trimmed }));
+            await onUpdate(task.id, { description: trimmed });
         }
-
-        // Refresh activity timeline if on activity tab or reload activity
-        fetchTaskActivity(task.id, 1, 30, activityFilter === "ALL" ? undefined : activityFilter)
-            .then(setActivities)
-            .catch(() => {});
-
-        // Invoke optional parent callbacks if provided
-        if (onReassigned) {
-            onReassigned(updatedAssignment);
-        }
-        if (onRefresh) {
-            onRefresh();
-        }
+        setIsEditingDescription(false);
     };
 
     const handleQuickStatusChange = async (newStatus: TaskStatus) => {
@@ -690,6 +635,22 @@ export function TaskDetailModal({
         await onUpdate(task.id, { priority: newPriority });
     };
 
+    const handleDueDateChange = async (newDate: string) => {
+        const todayStr = new Date().toISOString().split("T")[0];
+        if (newDate && newDate < todayStr) {
+            setLocalSaveError("Due date cannot be in the past. Please select today or a future date.");
+            return;
+        }
+        setLocalSaveError(null);
+        setForm((prev) => ({ ...prev, dueDate: newDate }));
+        await onUpdate(task.id, { dueDate: newDate ? newDate : null });
+    };
+
+    const handleProjectChange = async (newProjectId: string) => {
+        setForm((prev) => ({ ...prev, projectId: newProjectId }));
+        await onUpdate(task.id, { projectId: newProjectId ? newProjectId.trim() : null });
+    };
+
     const handleAddLabel = async () => {
         const trimmed = newTagInput.trim();
         if (trimmed && !form.labels?.includes(trimmed)) {
@@ -697,6 +658,7 @@ export function TaskDetailModal({
             setForm((prev) => ({ ...prev, labels: updated }));
             saveTaskLabels(task.id, updated);
             setNewTagInput("");
+            setIsAddingTag(false);
             await onUpdate(task.id, { labels: updated });
         }
     };
@@ -706,6 +668,21 @@ export function TaskDetailModal({
         setForm((prev) => ({ ...prev, labels: updated }));
         saveTaskLabels(task.id, updated);
         await onUpdate(task.id, { labels: updated });
+    };
+
+    const handleReassignSuccess = (updatedAssignment: EffectiveAssignmentResponse) => {
+        saveTaskAssignment(task.id, updatedAssignment);
+        setCanonicalAssignment(updatedAssignment);
+        if (updatedAssignment.assignedTo) {
+            setForm((prev) => ({ ...prev, assignedToId: updatedAssignment.assignedTo?.id ?? "" }));
+        } else {
+            setForm((prev) => ({ ...prev, assignedToId: "" }));
+        }
+        fetchTaskActivity(task.id, 1, 30, activityFilter === "ALL" ? undefined : activityFilter)
+            .then(setActivities)
+            .catch(() => {});
+        if (onReassigned) onReassigned(updatedAssignment);
+        if (onRefresh) onRefresh();
     };
 
     const handleDelete = async () => {
@@ -779,7 +756,6 @@ export function TaskDetailModal({
         try {
             await updateTaskSubtask(task.id, sub.id, { status: nextStatus });
         } catch {
-            // rollback
             setSubtasks((prev) =>
                 prev.map((s) => (s.id === sub.id ? { ...s, status: sub.status } : s))
             );
@@ -840,259 +816,402 @@ export function TaskDetailModal({
     };
 
     const completedSubtasksCount = subtasks.filter((s) => s.status === "DONE").length;
-
-    // Filter candidate tasks for dependency selector
     const dependencyCandidates = allTasks.filter((t) => t.id !== task.id);
 
-    return (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex justify-end animate-in fade-in duration-200">
-            {/* Slide-over Drawer */}
-            <div
-                className="w-full max-w-2xl bg-white dark:bg-slate-900 h-full shadow-2xl flex flex-col border-l border-slate-200 dark:border-slate-800 animate-in slide-in-from-right duration-300 overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {/* ── Top Header Bar ─────────────────────────────────────────── */}
-                <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/70 dark:bg-slate-900/80">
-                    <div className="flex items-center space-x-2.5">
-                        {/* Status dropdown quick toggle */}
-                        <select
-                            value={task.status}
-                            onChange={(e) => handleQuickStatusChange(e.target.value as TaskStatus)}
-                            className={`text-xs font-bold px-3 py-1 rounded-lg outline-none cursor-pointer ${STATUS_STYLES[task.status]}`}
-                        >
-                            <option value="TODO">To Do</option>
-                            <option value="IN_PROGRESS">In Progress</option>
-                            <option value="REVIEW">Review</option>
-                            <option value="BLOCKED">Blocked</option>
-                            <option value="DONE">Done</option>
-                        </select>
+    // Derived assignment display
+    const department = canonicalAssignment?.department ?? task.department ?? null;
+    const effectiveAssigneeType =
+        canonicalAssignment?.assigneeType ??
+        task.assigneeType ??
+        (department && !task.assignedTo ? "DEPARTMENT" : (task.assignedTo ? "USER" : null));
+    const hasIndividualAssignee = Boolean(canonicalAssignment?.assignedTo || task.assignedTo);
+    const isDeptQueue = effectiveAssigneeType === "DEPARTMENT" && !hasIndividualAssignee;
+    let displayAssigneeName = "Unassigned";
+    if (isDeptQueue) {
+        displayAssigneeName = department ? `${department} Queue` : "Department Queue";
+    } else if (canonicalAssignment?.assignedTo?.name) {
+        displayAssigneeName = canonicalAssignment.assignedTo.name;
+    } else if (task.assignedTo?.name) {
+        displayAssigneeName = task.assignedTo.name;
+    }
 
-                        {/* Priority dropdown quick toggle */}
-                        <select
-                            value={task.priority}
-                            onChange={(e) => handleQuickPriorityChange(e.target.value as TaskPriority)}
-                            className={`text-xs font-bold px-2.5 py-1 rounded-lg outline-none cursor-pointer ${PRIORITY_STYLES[task.priority]}`}
+    const assignmentTypeLabel =
+        effectiveAssigneeType === "DEPARTMENT"
+            ? "Department Queue"
+            : effectiveAssigneeType === "USER"
+            ? "Individual"
+            : null;
+
+    const sourcePageTitle =
+        canonicalAssignment?.pageContext?.pageTitle ||
+        (task as any).pageTitle ||
+        (task as any).page?.title ||
+        null;
+
+    const sourcePageId =
+        canonicalAssignment?.pageContext?.pageId ||
+        (task as any).pageId ||
+        (task as any).page?.id ||
+        null;
+
+    const matchedProject = projects.find((p) => p.id === (form.projectId || task.projectId));
+    const displayProjectName =
+        matchedProject?.name ||
+        (task as any).projectName ||
+        (task as any).project?.name ||
+        (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_")
+            ? String(task.projectId)
+            : null);
+
+    return (
+        <div className="w-full bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col">
+            {/* ── Top Header Navigation Bar (non-sticky, natural scrolling) ───────────────────────────────── */}
+            <div className="px-6 sm:px-10 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                    {/* Left: Back button & Breadcrumbs */}
+                    <div className="flex items-center space-x-3 overflow-hidden">
+                        <button
+                            onClick={onClose}
+                            className="inline-flex items-center space-x-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
+                            title="Back to tasks"
                         >
-                            <option value="LOW">Low</option>
-                            <option value="MEDIUM">Medium</option>
-                            <option value="HIGH">High</option>
-                        </select>
+                            <ArrowLeft size={14} />
+                            <span>Back</span>
+                        </button>
+
+                        <div className="hidden sm:flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500 truncate">
+                            <span className="text-slate-300 dark:text-slate-700">/</span>
+                            <Link
+                                href="/workspace"
+                                className="hover:text-slate-700 dark:hover:text-slate-300 transition shrink-0"
+                            >
+                                Workspace
+                            </Link>
+                            <span className="text-slate-300 dark:text-slate-700">/</span>
+                            <button
+                                onClick={onClose}
+                                className="hover:text-slate-700 dark:hover:text-slate-300 transition shrink-0"
+                            >
+                                {sourceView || "Tasks"}
+                            </button>
+                            <span className="text-slate-300 dark:text-slate-700">/</span>
+                            <span className="text-slate-700 dark:text-slate-300 font-semibold truncate max-w-[200px]">
+                                {task.title}
+                            </span>
+                        </div>
                     </div>
 
+                    {/* Right: Contextual Actions & Close */}
                     <div className="flex items-center space-x-2">
-                        <button
-                            onClick={() => setIsExportModalOpen(true)}
-                            title="Export Task"
-                            className="flex items-center space-x-1 px-2.5 py-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 rounded-lg transition"
-                        >
-                            <Download size={14} />
-                            <span>Export</span>
-                        </button>
-                        {onDelete && !confirmDelete && (
+                        {/* Contextual Options Menu */}
+                        <div className="relative">
                             <button
-                                onClick={() => setConfirmDelete(true)}
-                                title="Delete Task"
-                                className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition"
+                                onClick={() => setIsActionsMenuOpen(!isActionsMenuOpen)}
+                                className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                                title="More options"
                             >
-                                <Trash2 size={16} />
+                                <MoreHorizontal size={18} />
                             </button>
-                        )}
+
+                            {isActionsMenuOpen && (
+                                <div
+                                    className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30 animate-in fade-in duration-150"
+                                    onClick={() => setIsActionsMenuOpen(false)}
+                                >
+                                    <button
+                                        onClick={() => setIsReassignModalOpen(true)}
+                                        className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                                    >
+                                        <ArrowRightLeft size={14} className="text-indigo-500" />
+                                        <span>Reassign Task</span>
+                                    </button>
+
+                                    <button
+                                        onClick={() => setIsExportModalOpen(true)}
+                                        className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                                    >
+                                        <Download size={14} className="text-blue-500" />
+                                        <span>Export Task</span>
+                                    </button>
+
+                                    {onDelete && (
+                                        <>
+                                            <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setConfirmDelete(true);
+                                                    setIsActionsMenuOpen(false);
+                                                }}
+                                                className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition"
+                                            >
+                                                <Trash2 size={14} />
+                                                <span>Delete Task</span>
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Inline Delete Confirmation Dialog */}
                         {confirmDelete && (
-                            <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-950/60 p-1 rounded-lg border border-rose-200 dark:border-rose-900">
+                            <div className="flex items-center space-x-2 bg-rose-50 dark:bg-rose-950/60 p-1.5 rounded-lg border border-rose-200 dark:border-rose-900">
                                 <span className="text-[11px] font-semibold text-rose-600 dark:text-rose-400 px-1">
-                                    Delete?
+                                    Delete this task?
                                 </span>
                                 <button
                                     onClick={handleDelete}
                                     disabled={deleting}
-                                    className="px-2 py-0.5 bg-rose-600 text-white rounded text-[11px] font-bold hover:bg-rose-700 transition"
+                                    className="px-2.5 py-1 bg-rose-600 text-white rounded text-[11px] font-bold hover:bg-rose-700 transition"
                                 >
-                                    {deleting ? "..." : "Yes"}
+                                    {deleting ? "Deleting..." : "Yes, Delete"}
                                 </button>
                                 <button
                                     onClick={() => setConfirmDelete(false)}
-                                    className="px-2 py-0.5 bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded text-[11px] font-bold"
+                                    className="px-2.5 py-1 bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 rounded text-[11px] font-bold"
                                 >
-                                    No
+                                    Cancel
                                 </button>
                             </div>
                         )}
+
+                        {/* Close Button */}
                         <button
                             onClick={onClose}
-                            className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
+                            title="Close (Esc)"
                         >
                             <X size={18} />
                         </button>
                     </div>
                 </div>
 
-                {/* ── Tabs Navigation ────────────────────────────────────────── */}
-                <div className="flex border-b border-slate-200 dark:border-slate-800 px-6 bg-white dark:bg-slate-900 space-x-6 text-xs font-semibold text-slate-500 overflow-x-auto">
-                    {[
-                        { key: "details", label: "Details", icon: FileText },
-                        { key: "attachments", label: "Attachments", icon: Paperclip },
-                        { key: "subtasks", label: `Subtasks (${subtasks.length})`, icon: ListTree },
-                        {
-                            key: "dependencies",
-                            label: `Dependencies (${Array.isArray(dependencies) ? dependencies.length : 0})`,
-                            icon: Network,
-                        },
-                        { key: "comments", label: `Comments (${comments.length})`, icon: MessageSquare },
-                        { key: "activity", label: "Activity", icon: History },
-                    ].map((tab) => {
-                        const Icon = tab.icon;
-                        const isCurrent = activeTab === tab.key;
-                        return (
-                            <button
-                                key={tab.key}
-                                onClick={() => setActiveTab(tab.key as TabType)}
-                                className={`flex items-center space-x-1.5 py-3 border-b-2 transition whitespace-nowrap ${
-                                    isCurrent
-                                        ? "border-blue-600 text-blue-600 dark:text-blue-400 font-bold"
-                                        : "border-transparent hover:text-slate-800 dark:hover:text-slate-200"
-                                }`}
-                            >
-                                <Icon size={14} />
-                                <span>{tab.label}</span>
-                            </button>
-                        );
-                    })}
-                </div>
-
                 {/* Error Banner */}
                 {(saveError || localSaveError) && (
-                    <div className="mx-6 mt-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2 text-rose-600 dark:text-rose-400 text-xs font-medium">
-                        <AlertCircle size={15} className="shrink-0" />
-                        <span>{saveError || localSaveError}</span>
+                    <div className="mx-6 sm:mx-10 mt-4 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center justify-between text-rose-600 dark:text-rose-400 text-xs font-medium">
+                        <div className="flex items-center space-x-2">
+                            <AlertCircle size={15} className="shrink-0" />
+                            <span>{saveError || localSaveError}</span>
+                        </div>
+                        <button
+                            onClick={() => setLocalSaveError(null)}
+                            className="text-xs font-bold hover:underline"
+                        >
+                            Dismiss
+                        </button>
                     </div>
                 )}
 
-                {/* ── Scrollable Body ────────────────────────────────────────── */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                    {/* TAB 1: DETAILS & ATTRIBUTES */}
-                    {activeTab === "details" && (
-                        <div className="space-y-6">
-                            {/* Title & Inline Edit */}
-                            <div className="flex items-start justify-between gap-4">
-                                {isEditing ? (
-                                    <div className="flex-1">
-                                        <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                                            Task Title
-                                        </label>
-                                        <input
-                                            name="title"
-                                            value={form.title ?? ""}
-                                            onChange={handleChange}
-                                            className="w-full text-base font-bold px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                        />
-                                    </div>
-                                ) : (
-                                    <div className="flex-1">
-                                        <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">
-                                            {task.title}
-                                        </h2>
-                                    </div>
+                {/* ── Notion Document Body ───────────────────────────────────── */}
+                <div className="px-6 sm:px-12 md:px-16 py-8 sm:py-10 space-y-8 flex-1">
+                    {/* 1. Large Content-First Task Heading */}
+                    <div className="space-y-1">
+                        {isEditingTitle ? (
+                            <div className="relative">
+                                <input
+                                    ref={titleInputRef}
+                                    type="text"
+                                    value={titleInput}
+                                    onChange={(e) => setTitleInput(e.target.value)}
+                                    onBlur={handleSaveTitle}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") handleSaveTitle();
+                                        if (e.key === "Escape") {
+                                            setTitleInput(task.title);
+                                            setIsEditingTitle(false);
+                                        }
+                                    }}
+                                    autoFocus
+                                    className="w-full text-2xl sm:text-3xl md:text-4xl font-extrabold text-slate-900 dark:text-white bg-transparent border-b-2 border-blue-500 outline-none pb-1 tracking-tight"
+                                    placeholder="Task title..."
+                                />
+                                <span className="absolute right-0 -bottom-5 text-[10px] text-slate-400">
+                                    Press Enter or click away to save
+                                </span>
+                            </div>
+                        ) : (
+                            <div className="group flex items-start justify-between gap-3">
+                                <h1
+                                    onClick={() => setIsEditingTitle(true)}
+                                    className="text-2xl sm:text-3xl md:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-800/60 rounded-xl -ml-2 p-2 cursor-text transition leading-tight flex-1"
+                                    title="Click to edit title"
+                                >
+                                    {form.title || task.title}
+                                </h1>
+                                <button
+                                    onClick={() => setIsEditingTitle(true)}
+                                    className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-blue-600 rounded-lg transition shrink-0"
+                                    title="Edit title"
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* 2. Compact 2-Column Notion Property List */}
+                    <div className="grid grid-cols-[130px_1fr] sm:grid-cols-[160px_1fr] gap-y-3.5 gap-x-4 items-center text-sm py-4 border-y border-slate-100 dark:border-slate-800">
+                        {/* Status */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <Circle size={14} className="text-slate-400" />
+                            <span>Status</span>
+                        </div>
+                        <div>
+                            <select
+                                value={task.status}
+                                onChange={(e) => handleQuickStatusChange(e.target.value as TaskStatus)}
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none cursor-pointer border transition ${STATUS_STYLES[task.status]}`}
+                            >
+                                <option value="TODO">To Do</option>
+                                <option value="IN_PROGRESS">In Progress</option>
+                                <option value="REVIEW">Review</option>
+                                <option value="BLOCKED">Blocked</option>
+                                <option value="DONE">Done</option>
+                            </select>
+                        </div>
+
+                        {/* Priority */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <Flag size={14} className="text-slate-400" />
+                            <span>Priority</span>
+                        </div>
+                        <div>
+                            <select
+                                value={task.priority}
+                                onChange={(e) => handleQuickPriorityChange(e.target.value as TaskPriority)}
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none cursor-pointer border transition ${PRIORITY_STYLES[task.priority]}`}
+                            >
+                                <option value="LOW">Low</option>
+                                <option value="MEDIUM">Medium</option>
+                                <option value="HIGH">High</option>
+                            </select>
+                        </div>
+
+                        {/* Assignee */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <User size={14} className="text-slate-400" />
+                            <span>Assignee</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="flex items-center space-x-2 py-1 px-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200/60 dark:border-slate-700/60 text-xs font-semibold text-slate-800 dark:text-slate-200">
+                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold shrink-0">
+                                    {displayAssigneeName && displayAssigneeName !== "Unassigned" ? (
+                                        displayAssigneeName.slice(0, 2).toUpperCase()
+                                    ) : (
+                                        <User size={11} />
+                                    )}
+                                </div>
+                                <span className="truncate max-w-[180px]">{displayAssigneeName}</span>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsReassignModalOpen(true)}
+                                className="inline-flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition"
+                                title="Reassign task"
+                            >
+                                <ArrowRightLeft size={11} />
+                                <span>Reassign</span>
+                            </button>
+
+                            {department && (
+                                <span className="text-[11px] text-slate-400 dark:text-slate-500">
+                                    in {department}
+                                </span>
+                            )}
+
+                            {sourcePageId && (
+                                <div className="flex items-center space-x-1 text-[11px] text-slate-500 dark:text-slate-400 ml-1">
+                                    <FileText size={11} className="text-purple-500" />
+                                    <Link
+                                        href={`/workspace/pages/${sourcePageId}`}
+                                        className="text-blue-600 dark:text-blue-400 hover:underline"
+                                    >
+                                        {sourcePageTitle || "Document"}
+                                    </Link>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Due Date */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <Calendar size={14} className="text-slate-400" />
+                            <span>Due date</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="date"
+                                name="dueDate"
+                                value={form.dueDate ?? ""}
+                                onChange={(e) => handleDueDateChange(e.target.value)}
+                                className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer"
+                            />
+                            {task.dueDate && (
+                                <span className="text-xs text-slate-500 dark:text-slate-400 hidden sm:inline">
+                                    (
+                                    {new Date(task.dueDate).toLocaleDateString("en-US", {
+                                        month: "short",
+                                        day: "numeric",
+                                        year: "numeric",
+                                    })}
+                                    )
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Project */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <FolderKanban size={14} className="text-slate-400" />
+                            <span>Project</span>
+                        </div>
+                        <div>
+                            <select
+                                value={form.projectId ?? ""}
+                                onChange={(e) => handleProjectChange(e.target.value)}
+                                className="text-xs px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 outline-none focus:border-blue-500 cursor-pointer max-w-xs"
+                            >
+                                <option value="">General Workspace (No Project)</option>
+                                {projects.map((p) => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.name}
+                                    </option>
+                                ))}
+                                {form.projectId && !projects.some((p) => p.id === form.projectId) && (
+                                    <option value={form.projectId}>
+                                        {displayProjectName || "Selected Project"}
+                                    </option>
                                 )}
-                                <div className="flex items-center space-x-2">
-                                    {isEditing && (
+                            </select>
+                        </div>
+
+                        {/* Labels / Tags */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <Tag size={14} className="text-slate-400" />
+                            <span>Labels</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {form.labels && form.labels.length > 0 ? (
+                                form.labels.map((lbl) => (
+                                    <span
+                                        key={lbl}
+                                        className="inline-flex items-center space-x-1 px-2 py-0.5 bg-blue-50 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 rounded-md text-xs font-medium"
+                                    >
+                                        <span>#{lbl}</span>
                                         <button
                                             type="button"
-                                            onClick={() => {
-                                                setIsEditing(false);
-                                                setLocalSaveError(null);
-                                                setForm({
-                                                    title: task.title,
-                                                    description: task.description ?? "",
-                                                    priority: task.priority,
-                                                    dueDate: task.dueDate?.split("T")[0] ?? "",
-                                                    assignedToId: task.assignedToId ?? "",
-                                                    status: task.status,
-                                                    leadId: (task.leadId as string) ?? "",
-                                                    dealId: (task.dealId as string) ?? "",
-                                                    projectId: (task.projectId as string) ?? "",
-                                                    labels:
-                                                        task.labels && task.labels.length > 0
-                                                            ? task.labels
-                                                            : getTaskLabelsMap()[task.id] ?? [],
-                                                });
-                                            }}
-                                            disabled={saving}
-                                            className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800 transition"
+                                            onClick={() => handleRemoveLabel(lbl)}
+                                            className="hover:text-rose-500 transition ml-0.5"
                                         >
-                                            Cancel
+                                            <X size={10} />
                                         </button>
-                                    )}
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            if (isEditing) handleSave();
-                                            else setIsEditing(true);
-                                        }}
-                                        disabled={saving}
-                                        className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition ${
-                                            isEditing
-                                                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-sm"
-                                                : "border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800"
-                                        }`}
-                                    >
-                                        {saving ? "Saving..." : isEditing ? "Save" : "Edit"}
-                                    </button>
-                                </div>
-                            </div>
+                                    </span>
+                                ))
+                            ) : null}
 
-                            {/* Description */}
-                            <div>
-                                <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                                    Description
-                                </label>
-                                {isEditing ? (
-                                    <textarea
-                                        name="description"
-                                        rows={4}
-                                        value={form.description ?? ""}
-                                        onChange={handleChange}
-                                        placeholder="Add a detailed description..."
-                                        className="w-full text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white resize-none"
-                                    />
-                                ) : (
-                                    <div className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-xs text-slate-700 dark:text-slate-300 leading-relaxed min-h-[70px]">
-                                        {task.description || (
-                                            <span className="text-slate-400 italic">No description provided.</span>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Labels & Tags Manager */}
-                            <div>
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                                        Labels & Tags
-                                    </label>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                                    {form.labels && form.labels.length > 0 ? (
-                                        form.labels.map((lbl) => (
-                                            <span
-                                                key={lbl}
-                                                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900/60 rounded-lg text-xs font-semibold"
-                                            >
-                                                <span>#{lbl}</span>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => handleRemoveLabel(lbl)}
-                                                    className="hover:text-rose-500 transition"
-                                                >
-                                                    <X size={11} />
-                                                </button>
-                                            </span>
-                                        ))
-                                    ) : (
-                                        <span className="text-xs text-slate-400 italic">No labels assigned.</span>
-                                    )}
-                                </div>
-                                <div className="flex space-x-1.5 max-w-xs">
+                            {isAddingTag ? (
+                                <div className="inline-flex items-center space-x-1">
                                     <input
+                                        type="text"
                                         value={newTagInput}
                                         onChange={(e) => setNewTagInput(e.target.value)}
                                         onKeyDown={(e) => {
@@ -1100,472 +1219,362 @@ export function TaskDetailModal({
                                                 e.preventDefault();
                                                 handleAddLabel();
                                             }
+                                            if (e.key === "Escape") {
+                                                setIsAddingTag(false);
+                                                setNewTagInput("");
+                                            }
                                         }}
-                                        placeholder="Add a label..."
-                                        className="flex-1 px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500"
+                                        autoFocus
+                                        placeholder="Tag name..."
+                                        className="text-xs px-2 py-0.5 border border-blue-400 rounded-md outline-none w-28 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleAddLabel}
-                                        className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl"
+                                        className="px-2 py-0.5 bg-blue-600 text-white rounded text-[11px] font-bold"
                                     >
                                         Add
                                     </button>
-                                </div>
-                            </div>
-
-                            {/* Attributes Grid */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
-                                {/* Assignment Section (formerly Assignee) */}
-                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
-                                    <div className="flex items-center justify-between">
-                                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
-                                            Assignment
-                                        </p>
-                                        <button
-                                            type="button"
-                                            onClick={() => setIsReassignModalOpen(true)}
-                                            className="inline-flex items-center space-x-1 px-2 py-0.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 border border-indigo-200/80 dark:border-indigo-800/60 rounded-lg transition"
-                                        >
-                                            <ArrowRightLeft size={11} />
-                                            <span>Reassign</span>
-                                        </button>
-                                    </div>
-
-                                    {/* Assignee display */}
-                                    {(() => {
-                                        const department = canonicalAssignment?.department ?? task.department ?? null;
-                                        const effectiveAssigneeType =
-                                            canonicalAssignment?.assigneeType ??
-                                            task.assigneeType ??
-                                            (department && !task.assignedTo ? "DEPARTMENT" : (task.assignedTo ? "USER" : null));
-                                        const hasIndividualAssignee = Boolean(canonicalAssignment?.assignedTo || task.assignedTo);
-                                        const isDeptQueue = effectiveAssigneeType === "DEPARTMENT" && !hasIndividualAssignee;
-                                        let displayAssigneeName = "Unassigned";
-                                        if (isDeptQueue) {
-                                            displayAssigneeName = department ? `${department} Queue` : "Department Queue";
-                                        } else if (canonicalAssignment?.assignedTo?.name) {
-                                            displayAssigneeName = canonicalAssignment.assignedTo.name;
-                                        } else if (task.assignedTo?.name) {
-                                            displayAssigneeName = task.assignedTo.name;
-                                        }
-
-                                        const assignmentTypeLabel =
-                                            effectiveAssigneeType === "DEPARTMENT"
-                                                ? "Department Queue"
-                                                : effectiveAssigneeType === "USER"
-                                                ? "Individual"
-                                                : null;
-
-                                        const assignedByName =
-                                            canonicalAssignment?.assignedBy?.name ??
-                                            task.assignedBy?.name ??
-                                            null;
-
-                                        const rawAssignedAt =
-                                            canonicalAssignment?.assignedAt ??
-                                            task.assignedAt ??
-                                            null;
-
-                                        const assignedAtFormatted = rawAssignedAt
-                                            ? new Date(rawAssignedAt).toLocaleDateString("en-US", {
-                                                  month: "short",
-                                                  day: "numeric",
-                                                  year: "numeric",
-                                              })
-                                            : null;
-
-                                        const sourcePageTitle =
-                                            canonicalAssignment?.pageContext?.pageTitle ||
-                                            (task as any).pageTitle ||
-                                            (task as any).page?.title ||
-                                            null;
-
-                                        const sourcePageId =
-                                            canonicalAssignment?.pageContext?.pageId ||
-                                            (task as any).pageId ||
-                                            (task as any).page?.id ||
-                                            null;
-
-                                        return (
-                                            <>
-                                                <div className="flex items-center space-x-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                                                    <div className="w-6 h-6 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                                        {displayAssigneeName && displayAssigneeName !== "Unassigned" ? (
-                                                            displayAssigneeName.slice(0, 2).toUpperCase()
-                                                        ) : (
-                                                            <User size={12} />
-                                                        )}
-                                                    </div>
-                                                    <span className="truncate">{displayAssigneeName}</span>
-                                                </div>
-
-                                                {/* Department (if available) */}
-                                                {department && (
-                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                                                        <Building2 size={12} className="text-slate-400 shrink-0" />
-                                                        <span className="text-slate-400">Department:</span>
-                                                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                                                            {department}
-                                                        </span>
-                                                    </div>
-                                                )}
-
-                                                {/* Assignment Type (if available) */}
-                                                {assignmentTypeLabel && (
-                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                                                        <Users size={12} className="text-slate-400 shrink-0" />
-                                                        <span className="text-slate-400">Assignment:</span>
-                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                            {assignmentTypeLabel}
-                                                        </span>
-                                                    </div>
-                                                )}
-
-                                                {/* Source Page (if available) */}
-                                                {sourcePageId && (
-                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                                                        <FileText size={12} className="text-purple-500 shrink-0" />
-                                                        <span className="text-slate-400">Source Page:</span>
-                                                        <Link
-                                                            href={`/workspace/pages/${sourcePageId}`}
-                                                            className="font-semibold text-blue-600 dark:text-blue-400 hover:underline truncate"
-                                                        >
-                                                            {sourcePageTitle || "Document"}
-                                                        </Link>
-                                                    </div>
-                                                )}
-
-                                                {/* Assigned by (only from canonical assignment) */}
-                                                {assignedByName && (
-                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                                                        <UserCheck size={12} className="text-slate-400 shrink-0" />
-                                                        <span className="text-slate-400">Assigned by:</span>
-                                                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate">
-                                                            {assignedByName}
-                                                        </span>
-                                                    </div>
-                                                )}
-
-                                                {/* Assigned at (only from canonical assignment) */}
-                                                {assignedAtFormatted && (
-                                                    <div className="flex items-center space-x-1.5 text-[11px] text-slate-600 dark:text-slate-400">
-                                                        <Clock size={12} className="text-slate-400 shrink-0" />
-                                                        <span className="text-slate-400">Assigned:</span>
-                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                            {assignedAtFormatted}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-
-                                {/* Due Date */}
-                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                                        Due Date
-                                    </p>
-                                    {isEditing ? (
-                                        <input
-                                            type="date"
-                                            name="dueDate"
-                                            min={new Date().toISOString().split("T")[0]}
-                                            value={form.dueDate ?? ""}
-                                            onChange={handleChange}
-                                            className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none"
-                                        />
-                                    ) : (
-                                        <div className="flex items-center space-x-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
-                                            <Calendar size={14} className="text-slate-400" />
-                                            <span>
-                                                {task.dueDate
-                                                    ? new Date(task.dueDate).toLocaleDateString("en-US", {
-                                                          month: "short",
-                                                          day: "numeric",
-                                                          year: "numeric",
-                                                      })
-                                                    : "No due date"}
-                                            </span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Project Context */}
-                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                                        Project
-                                    </p>
-                                    {isEditing ? (
-                                        <select
-                                            name="projectId"
-                                            value={form.projectId ?? ""}
-                                            onChange={handleChange}
-                                            className="w-full text-xs p-1.5 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none cursor-pointer"
-                                        >
-                                            <option value="">General Workspace (No Project)</option>
-                                            {projects.map((p) => (
-                                                <option key={p.id} value={p.id}>
-                                                    {p.name}
-                                                </option>
-                                            ))}
-                                            {form.projectId && !projects.some((p) => p.id === form.projectId) && (
-                                                <option value={form.projectId}>
-                                                    {(task as any).projectName || "Selected Project"}
-                                                </option>
-                                            )}
-                                        </select>
-                                    ) : (
-                                        (() => {
-                                            const matchedProject = projects.find((p) => p.id === task.projectId);
-                                            const displayProjectName =
-                                                matchedProject?.name ||
-                                                (task as any).projectName ||
-                                                (task as any).project?.name ||
-                                                (task.projectId && !task.projectId.startsWith("cm") && !task.projectId.startsWith("proj_")
-                                                    ? String(task.projectId)
-                                                    : null);
-
-                                            return (
-                                                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                                    {displayProjectName || "General Workspace"}
-                                                </span>
-                                            );
-                                        })()
-                                    )}
-                                </div>
-
-                                {/* Created At */}
-                                <div className="p-3 bg-slate-50/60 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800">
-                                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                                        Created
-                                    </p>
-                                    <div className="flex items-center space-x-2 text-xs text-slate-600 dark:text-slate-400">
-                                        <Clock size={14} />
-                                        <span>
-                                            {new Date(task.createdAt).toLocaleString("en-US", {
-                                                month: "short",
-                                                day: "numeric",
-                                                hour: "numeric",
-                                                minute: "2-digit",
-                                            })}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* TAB 2: SUBTASKS */}
-                    {activeTab === "subtasks" && (
-                        <div className="space-y-4">
-                            {/* Progress bar */}
-                            <div className="space-y-1.5">
-                                <div className="flex justify-between text-xs font-semibold text-slate-600 dark:text-slate-400">
-                                    <span>Subtasks Progress</span>
-                                    <span>
-                                        {completedSubtasksCount}/{subtasks.length} Completed
-                                    </span>
-                                </div>
-                                <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-blue-600 transition-all duration-300"
-                                        style={{
-                                            width: `${
-                                                subtasks.length > 0
-                                                    ? (completedSubtasksCount / subtasks.length) * 100
-                                                    : 0
-                                            }%`,
-                                        }}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Subtask list */}
-                            <div className="space-y-2">
-                                {subtasks.map((s) => (
-                                    <div
-                                        key={s.id}
-                                        className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 transition"
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAddingTag(false)}
+                                        className="text-slate-400 hover:text-slate-600 text-xs px-1"
                                     >
-                                        <div className="flex items-center space-x-3 flex-1 mr-3">
-                                            <button
-                                                onClick={() => handleToggleSubtask(s)}
-                                                className={`w-5 h-5 rounded-md border flex items-center justify-center transition ${
-                                                    s.status === "DONE"
-                                                        ? "bg-emerald-500 border-emerald-500 text-white"
-                                                        : "border-slate-300 dark:border-slate-600 hover:border-emerald-500"
-                                                }`}
-                                            >
-                                                {s.status === "DONE" && <Check size={13} />}
-                                            </button>
-
-                                            {editingSubtaskId === s.id ? (
-                                                <div className="flex items-center space-x-2 flex-1">
-                                                    <input
-                                                        value={editingSubtaskTitle}
-                                                        onChange={(e) => setEditingSubtaskTitle(e.target.value)}
-                                                        className="flex-1 text-xs px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                                    />
-                                                    <button
-                                                        onClick={() => handleSaveEditedSubtask(s.id)}
-                                                        className="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold"
-                                                    >
-                                                        Save
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setEditingSubtaskId(null)}
-                                                        className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px]"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span
-                                                    className={`text-xs font-medium flex-1 ${
-                                                        s.status === "DONE"
-                                                            ? "line-through text-slate-400 dark:text-slate-500"
-                                                            : "text-slate-800 dark:text-slate-200"
-                                                    }`}
-                                                >
-                                                    {s.title}
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <div className="flex items-center space-x-2">
-                                            <span
-                                                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${STATUS_STYLES[s.status]}`}
-                                            >
-                                                {STATUS_LABELS[s.status]}
-                                            </span>
-                                            <button
-                                                onClick={() => {
-                                                    setEditingSubtaskId(s.id);
-                                                    setEditingSubtaskTitle(s.title);
-                                                }}
-                                                className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
-                                                title="Edit subtask"
-                                            >
-                                                <Edit2 size={13} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDeleteSubtask(s.id)}
-                                                className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                                                title="Delete subtask"
-                                            >
-                                                <Trash2 size={13} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-
-                                {subtasks.length === 0 && !subLoading && (
-                                    <p className="text-xs text-slate-400 text-center py-6">
-                                        No subtasks yet. Add one below.
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Create subtask form */}
-                            <form onSubmit={handleAddSubtask} className="flex gap-2 pt-2">
-                                <input
-                                    type="text"
-                                    placeholder="Add new subtask title..."
-                                    value={newSubtaskTitle}
-                                    onChange={(e) => setNewSubtaskTitle(e.target.value)}
-                                    className="flex-1 text-xs px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                />
+                                        ✕
+                                    </button>
+                                </div>
+                            ) : (
                                 <button
-                                    type="submit"
-                                    disabled={submittingSubtask || !newSubtaskTitle.trim()}
-                                    className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
+                                    type="button"
+                                    onClick={() => setIsAddingTag(true)}
+                                    className="inline-flex items-center space-x-1 px-2 py-0.5 text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 border border-dashed border-slate-200 dark:border-slate-700 hover:border-slate-400 rounded-md transition"
                                 >
-                                    {submittingSubtask && <Loader2 size={13} className="animate-spin" />}
-                                    <Plus size={14} />
-                                    <span>Add Subtask</span>
+                                    <Plus size={11} />
+                                    <span>Add tag</span>
                                 </button>
-                            </form>
+                            )}
                         </div>
-                    )}
 
-                    {/* TAB 3: DEPENDENCIES */}
-                    {activeTab === "dependencies" && (
-                        <div className="space-y-4">
-                            <p className="text-xs text-slate-500">
-                                Link blocker and dependent tasks. Cycle detection is enforced by BE-2.
-                            </p>
+                        {/* Created At */}
+                        <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                            <Clock size={14} className="text-slate-400" />
+                            <span>Created</span>
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                            {new Date(task.createdAt).toLocaleString("en-US", {
+                                month: "short",
+                                day: "numeric",
+                                year: "numeric",
+                                hour: "numeric",
+                                minute: "2-digit",
+                            })}
+                        </div>
+                    </div>
 
-                            {/* Error state */}
-                            {dependenciesError && (
-                                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 rounded-xl border border-rose-200 dark:border-rose-900 text-xs text-rose-600 dark:text-rose-400 flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                        <AlertCircle size={14} className="shrink-0" />
-                                        <span>{dependenciesError}</span>
-                                    </div>
+                    {/* 3. Description & Content-First Body */}
+                    <div className="space-y-3 pt-2">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                Description
+                            </h2>
+                            {!isEditingDescription && (
+                                <button
+                                    onClick={() => setIsEditingDescription(true)}
+                                    className="inline-flex items-center space-x-1 text-xs text-slate-400 hover:text-blue-600 transition"
+                                >
+                                    <Edit2 size={12} />
+                                    <span>Edit</span>
+                                </button>
+                            )}
+                        </div>
+
+                        {isEditingDescription ? (
+                            <div className="space-y-2">
+                                <textarea
+                                    value={descInput}
+                                    onChange={(e) => setDescInput(e.target.value)}
+                                    placeholder="Write a description, acceptance criteria, or notes..."
+                                    rows={5}
+                                    autoFocus
+                                    className="w-full text-base p-3.5 border border-blue-500/80 rounded-xl outline-none focus:ring-2 focus:ring-blue-500/20 bg-white dark:bg-slate-800 text-slate-900 dark:text-white leading-relaxed resize-y"
+                                />
+                                <div className="flex items-center justify-end space-x-2">
                                     <button
                                         type="button"
                                         onClick={() => {
-                                            setSubLoading(true);
-                                            setDependenciesError(null);
-                                            fetchTaskDependencies(task.id)
-                                                .then((data) => setDependencies(Array.isArray(data) ? data : []))
-                                                .catch((err) => {
-                                                    setDependenciesError(
-                                                        err instanceof Error
-                                                            ? err.message
-                                                            : "Failed to load dependencies."
-                                                    );
-                                                })
-                                                .finally(() => setSubLoading(false));
+                                            setDescInput(task.description ?? "");
+                                            setIsEditingDescription(false);
                                         }}
-                                        className="text-[11px] font-bold underline hover:no-underline ml-2"
+                                        className="px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition"
                                     >
-                                        Retry
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleSaveDescription}
+                                        disabled={saving}
+                                        className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition"
+                                    >
+                                        {saving ? "Saving..." : "Save Description"}
                                     </button>
                                 </div>
-                            )}
+                            </div>
+                        ) : (
+                            <div
+                                onClick={() => setIsEditingDescription(true)}
+                                className="group cursor-text p-3 -ml-3 rounded-xl hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition"
+                                title="Click to edit description"
+                            >
+                                {task.description?.trim() ? (
+                                    <p className="text-base text-slate-800 dark:text-slate-200 leading-relaxed whitespace-pre-wrap">
+                                        {task.description}
+                                    </p>
+                                ) : (
+                                    <p className="text-base text-slate-400 dark:text-slate-500 italic">
+                                        Write a description, acceptance criteria, or notes... (click to add)
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
 
-                            {/* Loading state */}
-                            {subLoading && (
-                                <div className="flex items-center justify-center py-8 text-slate-400 space-x-2">
-                                    <Loader2 size={16} className="animate-spin text-blue-500" />
-                                    <span className="text-xs">Loading dependencies...</span>
+                    {/* ── Secondary Information Sections (Sequential, Notion-like) ──── */}
+                    <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-6">
+                        {/* Section A: Subtasks */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => toggleSection("subtasks")}
+                                className="w-full flex items-center justify-between text-left py-1 group"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    {sectionsOpen.subtasks ? (
+                                        <ChevronDown size={16} className="text-slate-400" />
+                                    ) : (
+                                        <ChevronRight size={16} className="text-slate-400" />
+                                    )}
+                                    <ListTree size={16} className="text-blue-500" />
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                        Subtasks
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                        {completedSubtasksCount} / {subtasks.length}
+                                    </span>
+                                </div>
+                            </button>
+
+                            {sectionsOpen.subtasks && (
+                                <div className="pl-6 space-y-3 pt-1">
+                                    {/* Progress bar */}
+                                    {subtasks.length > 0 && (
+                                        <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-blue-600 transition-all duration-300"
+                                                style={{
+                                                    width: `${(completedSubtasksCount / subtasks.length) * 100}%`,
+                                                }}
+                                            />
+                                        </div>
+                                    )}
+
+                                    {/* Subtask items */}
+                                    <div className="space-y-1.5">
+                                        {subtasks.map((s) => (
+                                            <div
+                                                key={s.id}
+                                                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 group transition"
+                                            >
+                                                <div className="flex items-center space-x-3 flex-1 mr-2">
+                                                    <button
+                                                        onClick={() => handleToggleSubtask(s)}
+                                                        className={`w-4 h-4 rounded border flex items-center justify-center transition ${
+                                                            s.status === "DONE"
+                                                                ? "bg-emerald-500 border-emerald-500 text-white"
+                                                                : "border-slate-300 dark:border-slate-600 hover:border-emerald-500"
+                                                        }`}
+                                                    >
+                                                        {s.status === "DONE" && <Check size={11} />}
+                                                    </button>
+
+                                                    {editingSubtaskId === s.id ? (
+                                                        <div className="flex items-center space-x-2 flex-1">
+                                                            <input
+                                                                value={editingSubtaskTitle}
+                                                                onChange={(e) => setEditingSubtaskTitle(e.target.value)}
+                                                                className="flex-1 text-xs px-2 py-1 border border-blue-400 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                                            />
+                                                            <button
+                                                                onClick={() => handleSaveEditedSubtask(s.id)}
+                                                                className="px-2 py-1 bg-blue-600 text-white rounded text-[11px] font-bold"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setEditingSubtaskId(null)}
+                                                                className="px-2 py-1 bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[11px]"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span
+                                                            className={`text-xs flex-1 ${
+                                                                s.status === "DONE"
+                                                                    ? "line-through text-slate-400 dark:text-slate-500"
+                                                                    : "text-slate-800 dark:text-slate-200"
+                                                            }`}
+                                                        >
+                                                            {s.title}
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition">
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingSubtaskId(s.id);
+                                                            setEditingSubtaskTitle(s.title);
+                                                        }}
+                                                        className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
+                                                        title="Edit subtask"
+                                                    >
+                                                        <Edit2 size={12} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteSubtask(s.id)}
+                                                        className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
+                                                        title="Delete subtask"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {subtasks.length === 0 && (
+                                            <p className="text-xs text-slate-400 italic py-1">
+                                                No subtasks yet. Add one below.
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {/* Add subtask form */}
+                                    <form onSubmit={handleAddSubtask} className="flex gap-2 pt-1 max-w-md">
+                                        <input
+                                            type="text"
+                                            placeholder="Add a new subtask..."
+                                            value={newSubtaskTitle}
+                                            onChange={(e) => setNewSubtaskTitle(e.target.value)}
+                                            className="flex-1 text-xs px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={submittingSubtask || !newSubtaskTitle.trim()}
+                                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
+                                        >
+                                            {submittingSubtask ? (
+                                                <Loader2 size={12} className="animate-spin" />
+                                            ) : (
+                                                <Plus size={12} />
+                                            )}
+                                            <span>Add</span>
+                                        </button>
+                                    </form>
                                 </div>
                             )}
+                        </div>
 
-                            {/* Dependencies list */}
-                            {!subLoading && (
-                                <div className="space-y-2">
-                                    {(Array.isArray(dependencies) ? dependencies : []).map((dep) => {
-                                        const linkedTask = allTasks.find((t) => t.id === dep.dependencyId) || dep.task;
-                                        const isBlocker = dep.direction !== "DEPENDED_ON_BY";
-                                        return (
-                                            <div
-                                                key={dep.id}
-                                                className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs flex justify-between items-center"
+                        {/* Section B: Attachments */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => toggleSection("attachments")}
+                                className="w-full flex items-center justify-between text-left py-1 group"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    {sectionsOpen.attachments ? (
+                                        <ChevronDown size={16} className="text-slate-400" />
+                                    ) : (
+                                        <ChevronRight size={16} className="text-slate-400" />
+                                    )}
+                                    <Paperclip size={16} className="text-amber-500" />
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                        Attachments
+                                    </span>
+                                </div>
+                            </button>
+
+                            {sectionsOpen.attachments && (
+                                <div className="pl-6 pt-1">
+                                    <AttachmentSection
+                                        entityType="TASK"
+                                        entityId={task.id}
+                                        canManage={true}
+                                    />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Section C: Dependencies */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => toggleSection("dependencies")}
+                                className="w-full flex items-center justify-between text-left py-1 group"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    {sectionsOpen.dependencies ? (
+                                        <ChevronDown size={16} className="text-slate-400" />
+                                    ) : (
+                                        <ChevronRight size={16} className="text-slate-400" />
+                                    )}
+                                    <Network size={16} className="text-purple-500" />
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                        Dependencies
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                        {Array.isArray(dependencies) ? dependencies.length : 0}
+                                    </span>
+                                </div>
+                            </button>
+
+                            {sectionsOpen.dependencies && (
+                                <div className="pl-6 space-y-3 pt-1">
+                                    {/* Error */}
+                                    {dependenciesError && (
+                                        <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 rounded-lg border border-rose-200 dark:border-rose-900 text-xs text-rose-600 dark:text-rose-400 flex items-center justify-between">
+                                            <span>{dependenciesError}</span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setDependenciesError(null)}
+                                                className="text-[11px] font-bold underline ml-2"
                                             >
-                                                <div className="flex items-center space-x-2.5">
-                                                    <Network size={15} className="text-amber-500" />
-                                                    <div>
-                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                            {isBlocker ? "Depends on: " : "Depended on by: "}
-                                                            <span className="text-blue-600 dark:text-blue-400 font-medium">
-                                                                {linkedTask ? linkedTask.title : "Linked Task"}
-                                                            </span>
+                                                Dismiss
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* List */}
+                                    <div className="space-y-1.5">
+                                        {(Array.isArray(dependencies) ? dependencies : []).map((dep) => {
+                                            const linkedTask = allTasks.find((t) => t.id === dep.dependencyId) || dep.task;
+                                            const isBlocker = dep.direction !== "DEPENDED_ON_BY";
+                                            return (
+                                                <div
+                                                    key={dep.id}
+                                                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 text-xs"
+                                                >
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="text-slate-400">
+                                                            {isBlocker ? "Depends on:" : "Depended on by:"}
+                                                        </span>
+                                                        <span className="font-semibold text-blue-600 dark:text-blue-400">
+                                                            {linkedTask ? linkedTask.title : "Linked Task"}
                                                         </span>
                                                         {linkedTask?.status && (
-                                                            <span className="ml-2 text-[10px] text-slate-400">
-                                                                ({linkedTask.status})
+                                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                                                                {linkedTask.status}
                                                             </span>
                                                         )}
                                                     </div>
-                                                </div>
-                                                <div className="flex items-center space-x-3">
-                                                    <span className="text-[10px] text-slate-400">
-                                                        {new Date(dep.createdAt).toLocaleDateString()}
-                                                    </span>
+
                                                     <button
                                                         onClick={() => handleDeleteDependency(dep)}
                                                         className="p-1 text-slate-400 hover:text-rose-600 transition"
@@ -1574,273 +1583,291 @@ export function TaskDetailModal({
                                                         <Trash2 size={13} />
                                                     </button>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
 
-                                    {(Array.isArray(dependencies) ? dependencies.length : 0) === 0 &&
-                                        !dependenciesError && (
-                                            <p className="text-xs text-slate-400 text-center py-6">
+                                        {(Array.isArray(dependencies) ? dependencies.length : 0) === 0 && (
+                                            <p className="text-xs text-slate-400 italic py-1">
                                                 No dependencies linked to this task.
                                             </p>
                                         )}
+                                    </div>
+
+                                    {/* Add dependency form */}
+                                    <form onSubmit={handleAddDependency} className="flex gap-2 pt-1 max-w-md">
+                                        {dependencyCandidates.length > 0 ? (
+                                            <select
+                                                value={newDepId}
+                                                onChange={(e) => setNewDepId(e.target.value)}
+                                                className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                            >
+                                                <option value="">Select task to depend on...</option>
+                                                {dependencyCandidates.map((t) => (
+                                                    <option key={t.id} value={t.id}>
+                                                        {t.title}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                placeholder="Enter task ID to depend on..."
+                                                value={newDepId}
+                                                onChange={(e) => setNewDepId(e.target.value)}
+                                                className="flex-1 text-xs px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                            />
+                                        )}
+                                        <button
+                                            type="submit"
+                                            disabled={submittingDep || !newDepId.trim()}
+                                            className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition"
+                                        >
+                                            {submittingDep ? "Linking..." : "Link Blocker"}
+                                        </button>
+                                    </form>
                                 </div>
                             )}
-
-                            {/* Add Dependency form */}
-                            <form onSubmit={handleAddDependency} className="space-y-2 pt-2">
-                                <div className="flex gap-2">
-                                    {dependencyCandidates.length > 0 ? (
-                                        <select
-                                            value={newDepId}
-                                            onChange={(e) => setNewDepId(e.target.value)}
-                                            className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                        >
-                                            <option value="">Select task to depend on...</option>
-                                            {dependencyCandidates.map((t) => (
-                                                <option key={t.id} value={t.id}>
-                                                    {t.title}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    ) : (
-                                        <input
-                                            type="text"
-                                            placeholder="Select task to depend on..."
-                                            value={newDepId}
-                                            onChange={(e) => setNewDepId(e.target.value)}
-                                            className="flex-1 text-xs px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                        />
-                                    )}
-                                    <button
-                                        type="submit"
-                                        disabled={submittingDep || !newDepId.trim()}
-                                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
-                                    >
-                                        {submittingDep && <Loader2 size={13} className="animate-spin" />}
-                                        <span>Link Blocker</span>
-                                    </button>
-                                </div>
-                            </form>
                         </div>
-                    )}
 
-                    {/* TAB 4: COMMENTS */}
-                    {activeTab === "comments" && (
-                        <div className="space-y-4">
-                            {/* Comments thread */}
-                            <div className="space-y-3">
-                                {comments.map((c) => (
-                                    <div
-                                        key={c.id}
-                                        className="p-3.5 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2 group"
-                                    >
-                                        <div className="flex items-center justify-between text-[11px]">
-                                            <div className="flex items-center space-x-2">
-                                                <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[9px] font-bold">
-                                                    {(c.author?.name || "U").slice(0, 1).toUpperCase()}
-                                                </div>
-                                                <span className="font-bold text-slate-800 dark:text-slate-200">
-                                                    {c.author?.name || "Team Member"}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center space-x-2">
-                                                <span className="text-slate-400 text-[10px]">
-                                                    {new Date(c.createdAt).toLocaleString("en-US", {
-                                                        month: "short",
-                                                        day: "numeric",
-                                                        hour: "numeric",
-                                                        minute: "2-digit",
-                                                    })}
-                                                </span>
-                                                <button
-                                                    onClick={() => {
-                                                        setEditingCommentId(c.id);
-                                                        setEditingCommentText(c.content);
-                                                    }}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-blue-600 rounded transition"
-                                                    title="Edit comment"
-                                                >
-                                                    <Edit2 size={12} />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeleteComment(c.id)}
-                                                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-600 rounded transition"
-                                                    title="Delete comment"
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            </div>
-                                        </div>
+                        {/* Section D: Comments & Discussion */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => toggleSection("comments")}
+                                className="w-full flex items-center justify-between text-left py-1 group"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    {sectionsOpen.comments ? (
+                                        <ChevronDown size={16} className="text-slate-400" />
+                                    ) : (
+                                        <ChevronRight size={16} className="text-slate-400" />
+                                    )}
+                                    <MessageSquare size={16} className="text-emerald-500" />
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                        Discussion & Comments
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                                        {comments.length}
+                                    </span>
+                                </div>
+                            </button>
 
-                                        {editingCommentId === c.id ? (
-                                            <div className="space-y-2 pt-1">
-                                                <textarea
-                                                    rows={2}
-                                                    value={editingCommentText}
-                                                    onChange={(e) => setEditingCommentText(e.target.value)}
-                                                    className="w-full text-xs p-2.5 border border-slate-200 dark:border-slate-700 rounded-xl bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none focus:border-blue-500 resize-none"
-                                                />
-                                                <div className="flex justify-end space-x-2">
-                                                    <button
-                                                        onClick={() => setEditingCommentId(null)}
-                                                        className="px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                    <button
-                                                        onClick={() => handleSaveEditedComment(c.id)}
-                                                        className="px-3 py-1 bg-blue-600 text-white text-[11px] font-bold rounded-lg hover:bg-blue-700"
-                                                    >
-                                                        Save
-                                                    </button>
+                            {sectionsOpen.comments && (
+                                <div className="pl-6 space-y-4 pt-1">
+                                    {/* Comments list */}
+                                    <div className="space-y-3">
+                                        {comments.map((c) => (
+                                            <div
+                                                key={c.id}
+                                                className="p-3.5 bg-slate-50/70 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2 group"
+                                            >
+                                                <div className="flex items-center justify-between text-[11px]">
+                                                    <div className="flex items-center space-x-2">
+                                                        <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 flex items-center justify-center text-[9px] font-bold">
+                                                            {(c.author?.name || "U").slice(0, 1).toUpperCase()}
+                                                        </div>
+                                                        <span className="font-bold text-slate-800 dark:text-slate-200">
+                                                            {c.author?.name || "Team Member"}
+                                                        </span>
+                                                        <span className="text-slate-400 text-[10px]">
+                                                            {new Date(c.createdAt).toLocaleString("en-US", {
+                                                                month: "short",
+                                                                day: "numeric",
+                                                                hour: "numeric",
+                                                                minute: "2-digit",
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition">
+                                                        <button
+                                                            onClick={() => {
+                                                                setEditingCommentId(c.id);
+                                                                setEditingCommentText(c.content);
+                                                            }}
+                                                            className="p-1 text-slate-400 hover:text-blue-600 rounded transition"
+                                                            title="Edit comment"
+                                                        >
+                                                            <Edit2 size={12} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteComment(c.id)}
+                                                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition"
+                                                            title="Delete comment"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </div>
                                                 </div>
+
+                                                {editingCommentId === c.id ? (
+                                                    <div className="space-y-2 pt-1">
+                                                        <textarea
+                                                            rows={2}
+                                                            value={editingCommentText}
+                                                            onChange={(e) => setEditingCommentText(e.target.value)}
+                                                            className="w-full text-xs p-2 border border-blue-400 rounded-lg bg-white dark:bg-slate-800 text-slate-900 dark:text-white outline-none resize-none"
+                                                        />
+                                                        <div className="flex justify-end space-x-2">
+                                                            <button
+                                                                onClick={() => setEditingCommentId(null)}
+                                                                className="px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 rounded-lg"
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleSaveEditedComment(c.id)}
+                                                                className="px-3 py-1 bg-blue-600 text-white text-[11px] font-bold rounded-lg hover:bg-blue-700"
+                                                            >
+                                                                Save
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap pl-7">
+                                                        {c.content}
+                                                    </p>
+                                                )}
                                             </div>
-                                        ) : (
-                                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
-                                                {c.content}
+                                        ))}
+
+                                        {comments.length === 0 && (
+                                            <p className="text-xs text-slate-400 italic py-1">
+                                                No comments yet. Leave a note below.
                                             </p>
                                         )}
                                     </div>
-                                ))}
 
-                                {comments.length === 0 && !subLoading && (
-                                    <p className="text-xs text-slate-400 text-center py-6">
-                                        No comments yet. Leave a note below.
-                                    </p>
-                                )}
-                            </div>
-
-                            {/* Comment Input */}
-                            <form onSubmit={handleAddComment} className="flex gap-2 pt-2">
-                                <input
-                                    type="text"
-                                    placeholder="Write a comment..."
-                                    value={newComment}
-                                    onChange={(e) => setNewComment(e.target.value)}
-                                    className="flex-1 text-xs px-3.5 py-2.5 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                                />
-                                <button
-                                    type="submit"
-                                    disabled={submittingComment || !newComment.trim()}
-                                    className="px-4 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
-                                >
-                                    {submittingComment && <Loader2 size={13} className="animate-spin" />}
-                                    <Send size={13} />
-                                    <span>Send</span>
-                                </button>
-                            </form>
-                        </div>
-                    )}
-
-                    {/* TAB 5: ACTIVITY TIMELINE */}
-                    {activeTab === "activity" && (
-                        <div className="space-y-4">
-                            {/* Activity Type Filter */}
-                            <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px] font-semibold">
-                                {[
-                                    { key: "ALL", label: "All Events" },
-                                    { key: "STATUS_CHANGED", label: "Status" },
-                                    { key: "COMMENT_ADDED", label: "Comments" },
-                                    { key: "SUBTASK_CREATED", label: "Subtasks" },
-                                    { key: "DEPENDENCY_ADDED", label: "Dependencies" },
-                                ].map((item) => (
-                                    <button
-                                        key={item.key}
-                                        onClick={() => setActivityFilter(item.key)}
-                                        className={`px-2.5 py-1 rounded-lg transition whitespace-nowrap ${
-                                            activityFilter === item.key
-                                                ? "bg-blue-600 text-white font-bold"
-                                                : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
-                                        }`}
-                                    >
-                                        {item.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            {/* Timeline items */}
-                            <div className="relative pl-6 border-l-2 border-slate-100 dark:border-slate-800 space-y-4 pt-1">
-                                {activities.map((act) => {
-                                    const actorDisplayName = getValidActorName(act.actor, members) || "System";
-                                    const activityMessage = formatActivityMessage(act, {
-                                        members,
-                                        task,
-                                        canonicalAssignment,
-                                        allTasks,
-                                        projects,
-                                    });
-                                    const meta = act.metadata as Record<string, unknown> | null | undefined;
-                                    const isAssignmentEvent =
-                                        act.type === "TASK_ASSIGNED" ||
-                                        act.type === "TASK_REASSIGNED" ||
-                                        act.type === "TASK_UNASSIGNED" ||
-                                        meta?.source === "TASK_REASSIGN" ||
-                                        meta?.source === "MANUAL_REASSIGN";
-                                    const reasonText =
-                                        meta?.reason && typeof meta.reason === "string" && !isRawId(meta.reason)
-                                            ? meta.reason.trim()
-                                            : null;
-
-                                    return (
-                                        <div key={act.id} className="relative space-y-1">
-                                            <div className="absolute -left-[31px] top-1 w-3.5 h-3.5 rounded-full bg-blue-500 ring-4 ring-white dark:ring-slate-900" />
-                                            <div className="flex items-center justify-between text-[11px]">
-                                                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                                                    {!isAssignmentEvent ? actorDisplayName : null}
-                                                </span>
-                                                <span className="text-slate-400 text-[10px]">
-                                                    {new Date(act.createdAt).toLocaleString("en-US", {
-                                                        month: "short",
-                                                        day: "numeric",
-                                                        hour: "numeric",
-                                                        minute: "2-digit",
-                                                    })}
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed">
-                                                {activityMessage}
-                                            </p>
-                                            {reasonText && (
-                                                <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
-                                                    Reason: &ldquo;{reasonText}&rdquo;
-                                                </p>
+                                    {/* Comment input form */}
+                                    <form onSubmit={handleAddComment} className="flex gap-2 pt-1">
+                                        <input
+                                            type="text"
+                                            placeholder="Write a comment..."
+                                            value={newComment}
+                                            onChange={(e) => setNewComment(e.target.value)}
+                                            className="flex-1 text-xs px-3.5 py-2 border border-slate-200 dark:border-slate-700 rounded-xl outline-none focus:border-blue-500 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={submittingComment || !newComment.trim()}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition flex items-center space-x-1"
+                                        >
+                                            {submittingComment ? (
+                                                <Loader2 size={13} className="animate-spin" />
+                                            ) : (
+                                                <Send size={13} />
                                             )}
-                                        </div>
-                                    );
-                                })}
-
-                                {activities.length === 0 && !subLoading && (
-                                    <p className="text-xs text-slate-400 text-center py-6">
-                                        No activity recorded for this task.
-                                    </p>
-                                )}
-                            </div>
+                                            <span>Send</span>
+                                        </button>
+                                    </form>
+                                </div>
+                            )}
                         </div>
-                    )}
 
-                    {/* ── Tab 6: Attachments ────────────────────────────────────── */}
-                    {activeTab === "attachments" && (
-                        <div className="p-6">
-                            <AttachmentSection
-                                entityType="TASK"
-                                entityId={task.id}
-                                canManage={true}
-                            />
+                        {/* Section E: Activity Timeline */}
+                        <div className="space-y-3">
+                            <button
+                                onClick={() => toggleSection("activity")}
+                                className="w-full flex items-center justify-between text-left py-1 group"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    {sectionsOpen.activity ? (
+                                        <ChevronDown size={16} className="text-slate-400" />
+                                    ) : (
+                                        <ChevronRight size={16} className="text-slate-400" />
+                                    )}
+                                    <History size={16} className="text-slate-500" />
+                                    <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                        Activity History
+                                    </span>
+                                </div>
+                            </button>
+
+                            {sectionsOpen.activity && (
+                                <div className="pl-6 space-y-3 pt-1">
+                                    {/* Activity Filter */}
+                                    <div className="flex items-center space-x-1.5 overflow-x-auto pb-1 text-[11px] font-semibold">
+                                        {[
+                                            { key: "ALL", label: "All Events" },
+                                            { key: "STATUS_CHANGED", label: "Status" },
+                                            { key: "COMMENT_ADDED", label: "Comments" },
+                                            { key: "SUBTASK_CREATED", label: "Subtasks" },
+                                            { key: "DEPENDENCY_ADDED", label: "Dependencies" },
+                                        ].map((item) => (
+                                            <button
+                                                key={item.key}
+                                                onClick={() => setActivityFilter(item.key)}
+                                                className={`px-2 py-0.5 rounded-md transition whitespace-nowrap ${
+                                                    activityFilter === item.key
+                                                        ? "bg-blue-600 text-white font-bold"
+                                                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700"
+                                                }`}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* Timeline items */}
+                                    <div className="relative pl-5 border-l-2 border-slate-100 dark:border-slate-800 space-y-3 pt-1">
+                                        {activities.map((act) => {
+                                            const actorDisplayName = getValidActorName(act.actor, members) || "System";
+                                            const activityMessage = formatActivityMessage(act, {
+                                                members,
+                                                task,
+                                                canonicalAssignment,
+                                                allTasks,
+                                                projects,
+                                            });
+                                            const meta = act.metadata as Record<string, unknown> | null | undefined;
+                                            const isAssignmentEvent =
+                                                act.type === "TASK_ASSIGNED" ||
+                                                act.type === "TASK_REASSIGNED" ||
+                                                act.type === "TASK_UNASSIGNED" ||
+                                                meta?.source === "TASK_REASSIGN" ||
+                                                meta?.source === "MANUAL_REASSIGN";
+                                            const reasonText =
+                                                meta?.reason && typeof meta.reason === "string" && !isRawId(meta.reason)
+                                                    ? meta.reason.trim()
+                                                    : null;
+
+                                            return (
+                                                <div key={act.id} className="relative space-y-0.5">
+                                                    <div className="absolute -left-[27px] top-1.5 w-2.5 h-2.5 rounded-full bg-blue-500 ring-4 ring-white dark:ring-slate-900" />
+                                                    <div className="flex items-center justify-between text-[11px]">
+                                                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                                                            {!isAssignmentEvent ? actorDisplayName : null}
+                                                        </span>
+                                                        <span className="text-slate-400 text-[10px]">
+                                                            {new Date(act.createdAt).toLocaleString("en-US", {
+                                                                month: "short",
+                                                                day: "numeric",
+                                                                hour: "numeric",
+                                                                minute: "2-digit",
+                                                            })}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-600 dark:text-slate-300 font-medium">
+                                                        {activityMessage}
+                                                    </p>
+                                                    {reasonText && (
+                                                        <p className="text-[11px] text-slate-500 dark:text-slate-400 italic">
+                                                            Reason: &ldquo;{reasonText}&rdquo;
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {activities.length === 0 && (
+                                            <p className="text-xs text-slate-400 italic py-2">
+                                                No activity recorded for this task.
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </div>
                 </div>
-
-                {/* ── Footer ─────────────────────────────────────────────────── */}
-                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/80 flex justify-end items-center">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl text-xs font-bold hover:opacity-90 transition"
-                    >
-                        Close Drawer
-                    </button>
-                </div>
-            </div>
 
             {/* Export Modal Dialog */}
             <ExportModal

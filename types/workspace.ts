@@ -5,6 +5,8 @@ export interface WorkspacePageNode {
   parentId?: string | null;
   isFolder?: boolean;
   isDatabase?: boolean;
+  isWiki?: boolean;
+  isLocked?: boolean;
   position?: number | null;
   children?: WorkspacePageNode[];
   createdAt?: string;
