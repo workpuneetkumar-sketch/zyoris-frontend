@@ -120,7 +120,9 @@ function validateMappedHeaders(mapping: Record<string, TargetLeadFieldKey>): str
   const mapped = Object.values(mapping);
   const missing: string[] = [];
   if (!mapped.includes("name")) missing.push("Full Name");
-  if (!mapped.includes("email")) missing.push("Email Address");
+  if (!mapped.includes("email") && !mapped.includes("phone")) {
+    missing.push("Email Address or Phone Number");
+  }
   return missing;
 }
 
@@ -1130,11 +1132,21 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   {downloadingErrors ? "Downloading…" : "Download Error Report"}
                 </button>
               )}
-              <div className="flex gap-3 w-full">
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleReset();
+                    setActiveTab("paste");
+                  }}
+                  className="flex-1 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-extrabold rounded-2xl transition-all flex items-center justify-center gap-2"
+                >
+                  <ClipboardPaste size={15} /> Paste Unstructured Text (AI)
+                </button>
                 <button onClick={handleReset} className="flex-1 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-extrabold rounded-2xl transition-all flex items-center justify-center gap-2">
                   <RefreshCw size={14} /> Try Again
                 </button>
-                <button onClick={onClose} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all">
+                <button onClick={onClose} className="py-3 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-extrabold rounded-2xl transition-all">
                   Close
                 </button>
               </div>
@@ -1151,11 +1163,21 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                 <h4 className="text-base font-extrabold text-gray-900 mb-1">Upload Failed</h4>
                 <p className="text-sm text-red-600 max-w-sm">{error}</p>
               </div>
-              <div className="flex gap-3 w-full">
+              <div className="flex flex-col sm:flex-row gap-3 w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleReset();
+                    setActiveTab("paste");
+                  }}
+                  className="flex-1 py-3 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-sm font-extrabold rounded-2xl transition-all flex items-center justify-center gap-2"
+                >
+                  <ClipboardPaste size={15} /> Paste Unstructured Text (AI)
+                </button>
                 <button onClick={handleReset} className="flex-1 py-3 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-extrabold rounded-2xl transition-all flex items-center justify-center gap-2">
                   <RefreshCw size={14} /> Try Again
                 </button>
-                <button onClick={onClose} className="flex-1 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-extrabold rounded-2xl transition-all">
+                <button onClick={onClose} className="py-3 px-5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-extrabold rounded-2xl transition-all">
                   Close
                 </button>
               </div>
