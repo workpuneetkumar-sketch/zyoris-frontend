@@ -115,7 +115,14 @@ const SETTINGS_NAV: { label: string; icon: any }[] = [
 
 const DEFAULT_NOTIFS = DEFAULT_NOTIF_MATRIX;
 
-const DEFAULT_PREFS = {
+const DEFAULT_PREFS: {
+  theme: ThemeMode;
+  language: string;
+  timezone: string;
+  dateFormat: string;
+  currency: string;
+  timeFormat: string;
+} = {
   theme: "light",
   language: "en",
   timezone: "Asia/Kolkata",
@@ -179,10 +186,19 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
       // (done via loadNotificationPrefs below)
 
       // Hydrate app prefs
-      const hydratedPrefs = { ...DEFAULT_PREFS };
+      const hydratedPrefs: typeof DEFAULT_PREFS = { ...DEFAULT_PREFS };
       (Object.keys(PREF_KEYS) as (keyof typeof PREF_KEYS)[]).forEach((k) => {
         const apiKey = PREF_KEYS[k];
-        if (apiKey in map) (hydratedPrefs as any)[k] = map[apiKey];
+        if (apiKey in map) {
+          if (k === "theme") {
+            const val = map[apiKey];
+            if (val === "light" || val === "dark" || val === "system") {
+              hydratedPrefs.theme = val;
+            }
+          } else {
+            (hydratedPrefs as any)[k] = map[apiKey];
+          }
+        }
       });
 
       // Synchronize theme: prioritize active localStorage theme if set, otherwise server theme
