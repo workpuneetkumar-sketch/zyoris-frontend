@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, DragEvent, ChangeEvent } from "react";
+import PasteLeadImport from "./PasteLeadImport";
 import {
-  Upload, X, FileText, CheckCircle2, AlertCircle, Loader2,
+  Upload, X, FileText, CheckCircle2, AlertCircle, Loader2, ClipboardPaste,
   Eye, FileSpreadsheet, SkipForward, AlertTriangle, RefreshCw,
   Download, Info, ChevronDown, ChevronUp, SlidersHorizontal, ArrowRight,
 } from "lucide-react";
@@ -136,6 +137,7 @@ function statusLabel(status: LeadImportJobStatus["status"]): string {
 }
 
 export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModalProps) {
+  const [activeTab,         setActiveTab]         = useState<"file" | "paste">("file");
   const [file,              setFile]              = useState<File | null>(null);
   const [phase,             setPhase]             = useState<UploadPhase>("idle");
   const [error,             setError]             = useState<string | null>(null);
@@ -431,7 +433,41 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           </button>
         </div>
 
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200 bg-slate-50 px-6 pt-3 gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveTab("file")}
+            className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+              activeTab === "file"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FileSpreadsheet size={15} />
+            <span>Upload File (CSV, Excel, PDF)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("paste")}
+            className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+              activeTab === "paste"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <ClipboardPaste size={15} />
+            <span>Paste Unstructured Text</span>
+            <span className="text-[10px] bg-blue-100 text-blue-700 font-extrabold px-1.5 py-0.5 rounded-full">AI</span>
+          </button>
+        </div>
         <div className="p-6 space-y-5 max-h-[82vh] overflow-y-auto">
+          {activeTab === "paste" && (
+            <PasteLeadImport onSuccess={onSuccess} onClose={onClose} showListingRedirect={false} />
+          )}
+          {activeTab === "file" && (
+            <>
+
 
           {/* ── PARSING PDF STATE ── */}
           {isParsingPdf && (
@@ -1126,6 +1162,8 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
             </div>
           )}
 
+            </>
+          )}
         </div>
       </div>
     </div>
