@@ -18,7 +18,6 @@ import {
 } from "@/lib/api/leadsApi";
 import * as XLSX from "xlsx";
 import {
-  extractLeadsFromPdf,
   autoMapField,
   convertMappedRowsToCsv,
   TARGET_LEAD_FIELDS,
@@ -65,6 +64,17 @@ function isValidFile(f: File) {
     f.name.endsWith(".png") ||
     f.name.endsWith(".jpg") ||
     f.name.endsWith(".jpeg")
+  );
+}
+
+function isDocumentFile(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return (
+    lower.endsWith(".pdf") ||
+    lower.endsWith(".docx") ||
+    lower.endsWith(".doc") ||
+    lower.endsWith(".ppt") ||
+    lower.endsWith(".pptx")
   );
 }
 
@@ -154,7 +164,6 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   const [duplicatesInFile,  setDuplicatesInFile]  = useState(0);
   const [allExtractedRows,  setAllExtractedRows]  = useState<PreviewRow[]>([]);
   const [fieldMapping,      setFieldMapping]      = useState<Record<string, TargetLeadFieldKey>>({});
-  const [isParsingPdf,      setIsParsingPdf]      = useState(false);
   const [allowReimport,     setAllowReimport]     = useState(false);
   const [importMode,        setImportMode]        = useState<LeadImportMode>("auto");
   const [duplicateStrategy, setDuplicateStrategy] = useState<LeadDuplicateHandling>("skip");
@@ -235,65 +244,14 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
         setMissingHeaders(validateMappedHeaders(initialMapping));
         setDuplicatesInFile(detectDuplicates(parsed.rows));
         setPhase("previewing");
-      } else if (lowerName.endsWith(".pdf") || lowerName.endsWith(".docx") || lowerName.endsWith(".ppt") || lowerName.endsWith(".pptx")) {
-        // Fast client-side preview if available, but NEVER block upload!
-        // Backend /api/leads/import natively supports PDF, DOCX, XLSX with Grok AI & deterministic parser.
-        setIsParsingPdf(true);
-        let extracted: any = null;
-        if (lowerName.endsWith(".pdf")) {
-          try {
-            extracted = await extractLeadsFromPdf(selected);
-          } catch (pdfErr) {
-            console.debug("[UploadLeadsModal] Client-side PDF preview note:", pdfErr);
-          }
-        }
-        setIsParsingPdf(false);
-
-        if (extracted && extracted.totalLeadsFound > 0) {
-          setAllExtractedRows(extracted.rows);
-          const initialMapping: Record<string, TargetLeadFieldKey> = {};
-          extracted.headers.forEach((h: string) => {
-            initialMapping[h] = autoMapField(h);
-          });
-
-          // Smart fallback: if email or name was not auto-mapped from header name, inspect row values
-          const mappedTargets = Object.values(initialMapping);
-          if (!mappedTargets.includes("email") && extracted.rows.length > 0) {
-            const emailCol = extracted.headers.find((h: string) =>
-              extracted.rows.some((r: any) => r[h] && r[h].includes("@") && r[h].includes("."))
-            );
-            if (emailCol) initialMapping[emailCol] = "email";
-          }
-          if (!mappedTargets.includes("phone") && extracted.rows.length > 0) {
-            const phoneCol = extracted.headers.find((h: string) =>
-              extracted.rows.some((r: any) => r[h] && r[h].replace(/\D/g, "").length >= 7)
-            );
-            if (phoneCol) initialMapping[phoneCol] = "phone";
-          }
-          if (!mappedTargets.includes("name") && extracted.rows.length > 0) {
-            const nameCol = extracted.headers.find(
-              (h: string) =>
-                initialMapping[h] === "__skip__" &&
-                extracted.rows.some((r: any) => {
-                  const val = (r[h] || "").trim();
-                  return val.length >= 2 && !/^\d+$/.test(val) && !val.includes("@");
-                })
-            );
-            if (nameCol) initialMapping[nameCol] = "name";
-          }
-
-          setFieldMapping(initialMapping);
-          setPreview({ headers: extracted.headers, rows: extracted.rows.slice(0, 5) });
-          setMissingHeaders(validateMappedHeaders(initialMapping));
-          setDuplicatesInFile(detectDuplicates(extracted.rows));
-        } else {
-          // Direct backend Grok AI & parser processing (/api/leads/import)
-          setAllExtractedRows([]);
-          setFieldMapping({});
-          setPreview(null);
-          setMissingHeaders([]);
-          setDuplicatesInFile(0);
-        }
+      } else if (isDocumentFile(selected.name)) {
+        // Multi-format documents (PDF, DOCX, PPT):
+        // Handled directly by backend AI & parser ingestion pipeline (/api/leads/import)
+        setAllExtractedRows([]);
+        setFieldMapping({});
+        setPreview(null);
+        setMissingHeaders([]);
+        setDuplicatesInFile(0);
         setPhase("previewing");
       } else {
         setPreview(null);
@@ -305,7 +263,6 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       }
     } catch (err: any) {
       console.error('[processFile] Error parsing file:', err);
-      setIsParsingPdf(false);
       setError(err?.message || "Error reading file. Please check file format.");
       setPhase("error");
     }
@@ -332,7 +289,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       return;
     }
 
-    if (allExtractedRows.length > 0 && missingHeaders.length > 0) {
+    if (!isDocumentFile(file.name) && allExtractedRows.length > 0 && missingHeaders.length > 0) {
       setError(`Please map ${missingHeaders.join(" and ")} before starting import.`);
       return;
     }
@@ -350,9 +307,9 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       console.log('[handleUpload] Preparing file for import...');
       let fileToUpload = file;
 
-      // Only convert mapped rows to clean CSV for non-PDF files where client-side mapping was performed
-      // For PDFs, always upload original document directly to /api/leads/import with Grok AI
-      if (!file.name.toLowerCase().endsWith(".pdf") && allExtractedRows.length > 0) {
+      // Only convert mapped rows to clean CSV for non-document files where client-side mapping was performed
+      // For PDFs and documents, always upload original document directly to /api/leads/import with Grok AI
+      if (!isDocumentFile(file.name) && allExtractedRows.length > 0) {
         let rowsToExport = allExtractedRows;
         if (allowReimport) {
           const ts = Date.now().toString().slice(-4);
@@ -430,7 +387,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
     setFile(null); setPhase("idle"); setError(null);
     setJobId(null); setJobStatus(null);
     setPreview(null); setMissingHeaders([]); setDuplicatesInFile(0);
-    setAllExtractedRows([]); setFieldMapping({}); setIsParsingPdf(false);
+    setAllExtractedRows([]); setFieldMapping({});
     setHasErrorCsv(false);
   };
 
@@ -454,7 +411,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           </div>
           <button
             onClick={onClose}
-            disabled={phase === "uploading" || phase === "polling" || isParsingPdf}
+            disabled={phase === "uploading" || phase === "polling"}
             className="text-blue-100 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors disabled:opacity-40"
             aria-label="Close"
           >
@@ -496,23 +453,8 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
           )}
           {activeTab === "file" && (
             <>
-
-
-          {/* ── PARSING PDF STATE ── */}
-          {isParsingPdf && (
-            <div className="flex flex-col items-center text-center py-12 space-y-4">
-              <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 shadow-inner">
-                <Loader2 size={32} className="text-blue-600 animate-spin" />
-              </div>
-              <div>
-                <h4 className="text-base font-extrabold text-slate-900 mb-1">Analyzing PDF Document…</h4>
-                <p className="text-xs text-slate-500 font-medium">Decompressing document streams and extracting lead records…</p>
-              </div>
-            </div>
-          )}
-
           {/* ── IDLE: file picker ─────────────────────────────────────────── */}
-          {!isParsingPdf && phase === "idle" && (
+          {phase === "idle" && (
             <>
               <div
                 onDrop={handleDrop}
@@ -689,7 +631,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
             <>
               {/* File pill */}
               <div className="flex items-center gap-3 bg-blue-50/80 border border-blue-100 rounded-2xl px-4 py-3">
-                {file.name.toLowerCase().endsWith(".pdf") ? (
+                {isDocumentFile(file.name) ? (
                   <FileText size={22} className="text-red-500 shrink-0" />
                 ) : (
                   <FileSpreadsheet size={22} className="text-blue-600 shrink-0" />
@@ -701,6 +643,10 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                       <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
                         PDF
                       </span>
+                    ) : isDocumentFile(file.name) ? (
+                      <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        Document
+                      </span>
                     ) : (
                       <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase tracking-wider">
                         Spreadsheet
@@ -708,7 +654,11 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                     )}
                   </div>
                   <p className="text-xs text-slate-500">
-                    {(file.size / 1024).toFixed(1)} KB · <span className="font-semibold text-blue-700">{allExtractedRows.length} lead records retrieved</span>
+                    {(file.size / 1024).toFixed(1)} KB · {isDocumentFile(file.name) ? (
+                      <span className="font-semibold text-blue-700">Document ready for server AI ingestion</span>
+                    ) : (
+                      <span className="font-semibold text-blue-700">{allExtractedRows.length} lead records retrieved</span>
+                    )}
                   </p>
                 </div>
                 <button
@@ -720,187 +670,182 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                 </button>
               </div>
 
-              {/* Missing required columns warning */}
-              {missingHeaders.length > 0 ? (
-                <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                  <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-bold text-amber-900 mb-0.5">Required field mapping missing</p>
-                    <p className="text-xs text-amber-700 leading-snug">
-                      Please map <span className="font-bold">{missingHeaders.join(" and ")}</span> using the field selectors below to proceed with lead creation.
-                    </p>
+              {/* Document Direct AI Ingestion Banner */}
+              {isDocumentFile(file.name) ? (
+                <div className="p-4 bg-gradient-to-r from-blue-50/90 to-indigo-50/90 border border-blue-200/80 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles size={16} className="text-blue-600 shrink-0" />
+                    <p className="text-xs font-extrabold text-blue-900">Direct Server AI & Parser Ingestion</p>
                   </div>
+                  <p className="text-xs text-blue-700 leading-relaxed">
+                    This document will be processed directly by the backend using xAI Grok and deterministic parsers. Contact names, company titles, phone numbers, and email addresses will be automatically retrieved without manual column mapping.
+                  </p>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5">
-                  <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
-                  <p className="text-xs font-bold text-emerald-800">
-                    All required fields (Full Name, Email Address) are mapped and ready for import.
-                  </p>
-                </div>
-              )}
-
-              {/* In-file duplicates warning */}
-              {duplicatesInFile > 0 && (
-                <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3">
-                  <SkipForward size={15} className="text-orange-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-xs font-bold text-orange-800 mb-0.5">
-                      {duplicatesInFile} potential duplicate row{duplicatesInFile > 1 ? "s" : ""} detected
-                    </p>
-                    <p className="text-xs text-orange-600">
-                      The server will automatically deduplicate against your existing leads database.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Field Mapping Configuration Card ── */}
-              {preview && preview.headers.length > 0 && (
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <SlidersHorizontal size={15} className="text-blue-600" />
-                      <span className="text-xs font-bold text-slate-800">Field Mapping</span>
+                <>
+                  {/* Missing required columns warning */}
+                  {missingHeaders.length > 0 ? (
+                    <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                      <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-amber-900 mb-0.5">Required field mapping missing</p>
+                        <p className="text-xs text-amber-700 leading-snug">
+                          Please map <span className="font-bold">{missingHeaders.join(" and ")}</span> using the field selectors below to proceed with lead creation.
+                        </p>
+                      </div>
                     </div>
-                    <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
-                      {Object.values(fieldMapping).filter(v => v !== "__skip__").length} of {preview.headers.length} Columns Mapped
-                    </span>
-                  </div>
+                  ) : (
+                    <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2.5">
+                      <CheckCircle2 size={15} className="text-emerald-600 shrink-0" />
+                      <p className="text-xs font-bold text-emerald-800">
+                        All required fields (Full Name, Email Address) are mapped and ready for import.
+                      </p>
+                    </div>
+                  )}
 
-                  <p className="text-[11px] text-slate-500 leading-snug">
-                    Confirm or adjust how the detected columns connect to standard Zyoris Lead attributes:
-                  </p>
+                  {/* In-file duplicates warning */}
+                  {duplicatesInFile > 0 && (
+                    <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 rounded-xl px-4 py-3">
+                      <SkipForward size={15} className="text-orange-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-xs font-bold text-orange-800 mb-0.5">
+                          {duplicatesInFile} potential duplicate row{duplicatesInFile > 1 ? "s" : ""} detected
+                        </p>
+                        <p className="text-xs text-orange-600">
+                          The server will automatically deduplicate against your existing leads database.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
-                    {preview.headers.map((h) => {
-                      const current = fieldMapping[h] || "__skip__";
-                      const isReq = current === "name" || current === "email";
-                      return (
-                        <div
-                          key={h}
-                          className={`flex items-center justify-between gap-2 p-2 rounded-xl border text-xs transition-colors ${
-                            isReq
-                              ? "bg-blue-50/60 border-blue-200"
-                              : current === "__skip__"
-                              ? "bg-slate-100/50 border-slate-200/60 opacity-80"
-                              : "bg-white border-slate-200"
-                          }`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="font-bold text-slate-800 truncate" title={h}>{h}</p>
-                            <p className="text-[10px] text-slate-400">File column</p>
-                          </div>
-                          <ArrowRight size={12} className="text-slate-400 shrink-0" />
-                          <select
-                            value={current}
-                            onChange={(e) => handleMappingChange(h, e.target.value as TargetLeadFieldKey)}
-                            className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 max-w-[140px] truncate"
-                          >
-                            <optgroup label="Required">
-                              <option value="name">Full Name *</option>
-                              <option value="email">Email Address *</option>
-                            </optgroup>
-                            <optgroup label="Contact Info">
-                              <option value="phone">Phone Number</option>
-                              <option value="city">City / Location</option>
-                              <option value="state">State / Province</option>
-                              <option value="country">Country</option>
-                            </optgroup>
-                            <optgroup label="Company Info">
-                              <option value="company">Company / Org</option>
-                              <option value="jobTitle">Job Title / Role</option>
-                              <option value="industry">Industry</option>
-                            </optgroup>
-                            <optgroup label="Lead Details">
-                              <option value="status">Status</option>
-                              <option value="source">Source</option>
-                              <option value="estimatedValue">Deal Value</option>
-                              <option value="tags">Tags</option>
-                              <option value="note">Notes / Details</option>
-                            </optgroup>
-                            <option value="__skip__">— Do Not Import —</option>
-                          </select>
+                  {/* ── Field Mapping Configuration Card ── */}
+                  {preview && preview.headers.length > 0 && (
+                    <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <SlidersHorizontal size={15} className="text-blue-600" />
+                          <span className="text-xs font-bold text-slate-800">Field Mapping</span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+                        <span className="text-[10px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                          {Object.values(fieldMapping).filter(v => v !== "__skip__").length} of {preview.headers.length} Columns Mapped
+                        </span>
+                      </div>
 
-              {/* Data preview table */}
-              {preview && preview.headers.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <Eye size={13} className="text-slate-400" />
-                      <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">
-                        Preview — First {preview.rows.length} of {allExtractedRows.length} Leads
+                      <p className="text-[11px] text-slate-500 leading-snug">
+                        Confirm or adjust how the detected columns connect to standard Zyoris Lead attributes:
                       </p>
-                    </div>
-                    <span className="text-[10px] text-slate-400">Showing first {preview.rows.length} rows</span>
-                  </div>
-                  <div className="overflow-x-auto rounded-xl border border-slate-200/80 shadow-xs max-h-52 overflow-y-auto">
-                    <table className="w-full text-xs min-w-max border-collapse">
-                      <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs">
-                        <tr className="border-b border-slate-200">
-                          {preview.headers.map((h) => {
-                            const target = fieldMapping[h];
-                            const isReq = target === "name" || target === "email";
-                            const label = TARGET_LEAD_FIELDS.find(f => f.key === target)?.label;
-                            return (
-                              <th key={h} className="text-left px-3 py-2 font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap">
-                                <div>{h}</div>
-                                {target && target !== "__skip__" ? (
-                                  <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${
-                                    isReq ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
-                                  }`}>
-                                    → {label || target} {isReq ? "*" : ""}
-                                  </span>
-                                ) : (
-                                  <span className="inline-block text-[9px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-200/60 rounded mt-0.5">
-                                    Skipped
-                                  </span>
-                                )}
-                              </th>
-                            );
-                          })}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 bg-white">
-                        {preview.rows.map((row, i) => (
-                          <tr key={i} className="hover:bg-blue-50/30 transition-colors">
-                            {preview.headers.map((h) => (
-                              <td key={h} className="px-3 py-2 text-slate-600 whitespace-nowrap max-w-[150px] truncate">
-                                {row[h] || <span className="text-slate-300">—</span>}
-                              </td>
-                            ))}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
 
-              {/* Document Overview (when uploading raw document for server-side AI ingestion) */}
-              {(!preview || allExtractedRows.length === 0) && (
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
-                      <FileText size={20} />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto pr-1">
+                        {preview.headers.map((h) => {
+                          const current = fieldMapping[h] || "__skip__";
+                          const isReq = current === "name" || current === "email";
+                          return (
+                            <div
+                              key={h}
+                              className={`flex items-center justify-between gap-2 p-2 rounded-xl border text-xs transition-colors ${
+                                isReq
+                                  ? "bg-blue-50/60 border-blue-200"
+                                  : current === "__skip__"
+                                  ? "bg-slate-100/50 border-slate-200/60 opacity-80"
+                                  : "bg-white border-slate-200"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="font-bold text-slate-800 truncate" title={h}>{h}</p>
+                                <p className="text-[10px] text-slate-400">File column</p>
+                              </div>
+                              <ArrowRight size={12} className="text-slate-400 shrink-0" />
+                              <select
+                                value={current}
+                                onChange={(e) => handleMappingChange(h, e.target.value as TargetLeadFieldKey)}
+                                className="text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700 max-w-[140px] truncate"
+                              >
+                                <optgroup label="Required">
+                                  <option value="name">Full Name *</option>
+                                  <option value="email">Email Address *</option>
+                                </optgroup>
+                                <optgroup label="Contact Info">
+                                  <option value="phone">Phone Number</option>
+                                  <option value="city">City / Location</option>
+                                  <option value="state">State / Province</option>
+                                  <option value="country">Country</option>
+                                </optgroup>
+                                <optgroup label="Company Info">
+                                  <option value="company">Company / Org</option>
+                                  <option value="jobTitle">Job Title / Role</option>
+                                  <option value="industry">Industry</option>
+                                </optgroup>
+                                <optgroup label="Lead Details">
+                                  <option value="status">Status</option>
+                                  <option value="source">Source</option>
+                                  <option value="estimatedValue">Deal Value</option>
+                                  <option value="tags">Tags</option>
+                                  <option value="note">Notes / Details</option>
+                                </optgroup>
+                                <option value="__skip__">— Do Not Import —</option>
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
+                  )}
+
+                  {/* Data preview table */}
+                  {preview && preview.headers.length > 0 && (
                     <div>
-                      <p className="text-sm font-bold text-slate-900">{file?.name}</p>
-                      <p className="text-xs text-slate-500 font-medium">
-                        {file ? (file.size / 1024).toFixed(1) : 0} KB · Ready for server-side AI & Parser Ingestion
-                      </p>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Eye size={13} className="text-slate-400" />
+                          <p className="text-xs font-bold text-slate-600 uppercase tracking-wide">
+                            Preview — First {preview.rows.length} of {allExtractedRows.length} Leads
+                          </p>
+                        </div>
+                        <span className="text-[10px] text-slate-400">Showing first {preview.rows.length} rows</span>
+                      </div>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200/80 shadow-xs max-h-52 overflow-y-auto">
+                        <table className="w-full text-xs min-w-max border-collapse">
+                          <thead className="sticky top-0 z-10 bg-slate-100/95 backdrop-blur-xs">
+                            <tr className="border-b border-slate-200">
+                              {preview.headers.map((h) => {
+                                const target = fieldMapping[h];
+                                const isReq = target === "name" || target === "email";
+                                const label = TARGET_LEAD_FIELDS.find(f => f.key === target)?.label;
+                                return (
+                                  <th key={h} className="text-left px-3 py-2 font-bold text-slate-700 uppercase tracking-wide whitespace-nowrap">
+                                    <div>{h}</div>
+                                    {target && target !== "__skip__" ? (
+                                      <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded mt-0.5 ${
+                                        isReq ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
+                                      }`}>
+                                        → {label || target} {isReq ? "*" : ""}
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block text-[9px] text-slate-400 font-normal px-1.5 py-0.5 bg-slate-200/60 rounded mt-0.5">
+                                        Skipped
+                                      </span>
+                                    )}
+                                  </th>
+                                );
+                              })}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 bg-white">
+                            {preview.rows.map((row, i) => (
+                              <tr key={i} className="hover:bg-blue-50/30 transition-colors">
+                                {preview.headers.map((h) => (
+                                  <td key={h} className="px-3 py-2 text-slate-600 whitespace-nowrap max-w-[150px] truncate">
+                                    {row[h] || <span className="text-slate-300">—</span>}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
-                  <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-1 rounded-lg">
-                    {importMode.toUpperCase()} Engine
-                  </span>
-                </div>
+                  )}
+                </>
               )}
 
               {/* Engine Mode Selector */}
@@ -966,10 +911,18 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
               <div className="flex flex-col gap-2.5 pt-1">
                 <button
                   onClick={handleUpload}
-                  disabled={allExtractedRows.length > 0 && missingHeaders.length > 0}
+                  disabled={!isDocumentFile(file.name) && allExtractedRows.length > 0 && missingHeaders.length > 0}
                   className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-extrabold rounded-2xl transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
                 >
-                  <FileText size={16} /> {allExtractedRows.length > 0 ? `Start Import (${allExtractedRows.length} Leads)` : "Start Server AI & Parser Import"}
+                  {isDocumentFile(file.name) ? (
+                    <>
+                      <Sparkles size={16} /> Start AI Document Import
+                    </>
+                  ) : (
+                    <>
+                      <FileText size={16} /> {allExtractedRows.length > 0 ? `Start Import (${allExtractedRows.length} Leads)` : "Start Lead Import"}
+                    </>
+                  )}
                 </button>
                 <button onClick={handleReset} className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-2xl border border-slate-200 transition-all">
                   Choose Different File
