@@ -603,6 +603,57 @@ export async function startLeadImport(file: File): Promise<LeadImportStartRespon
     }
 }
 
+
+export interface ExtractedLeadItem {
+    name: string;
+    company?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    jobTitle?: string | null;
+    city?: string | null;
+    state?: string | null;
+    country?: string | null;
+    budget?: number | null;
+    source?: string | null;
+    status?: string;
+    tags?: string[];
+    note?: string | null;
+}
+
+export interface FailedTextLeadRecord {
+    lead: ExtractedLeadItem;
+    reason: string;
+}
+
+export interface TextLeadImportResponse {
+    success: boolean;
+    totalExtracted: number;
+    importedCount: number;
+    failedCount: number;
+    importedLeads: Lead[];
+    failedLeads: FailedTextLeadRecord[];
+    extractedLeads: ExtractedLeadItem[];
+    message?: string;
+}
+
+/**
+ * POST /leads/import-text
+ * Bulk import multiple leads from unstructured copied and pasted text.
+ */
+export async function importLeadsFromText(text: string): Promise<TextLeadImportResponse> {
+    console.log('[importLeadsFromText] Sending pasted text for extraction & import, length:', text.length);
+    try {
+        const res = await api.post<TextLeadImportResponse>("/leads/import-text", { text }, {
+            timeout: 120_000,
+        });
+        console.log('[importLeadsFromText] Response:', res.data);
+        return res.data;
+    } catch (error: any) {
+        console.error('[importLeadsFromText] Error:', error.response?.data || error.message);
+        throw error;
+    }
+}
+
 /**
  * GET /leads/import/{jobId}
  * Poll import job status and progress.
