@@ -165,7 +165,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   const [allExtractedRows,  setAllExtractedRows]  = useState<PreviewRow[]>([]);
   const [fieldMapping,      setFieldMapping]      = useState<Record<string, TargetLeadFieldKey>>({});
   const [allowReimport,     setAllowReimport]     = useState(false);
-  const [importMode,        setImportMode]        = useState<LeadImportMode>("auto");
+  const importMode: LeadImportMode = "auto";
   const [duplicateStrategy, setDuplicateStrategy] = useState<LeadDuplicateHandling>("skip");
   const [hasErrorCsv,       setHasErrorCsv]       = useState(false);
   const [downloadingErrors, setDownloadingErrors] = useState(false);
@@ -847,52 +847,6 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                   )}
                 </>
               )}
-
-              {/* Engine Mode Selector */}
-              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-blue-600" />
-                    <span>Extraction Engine Mode</span>
-                  </label>
-                  <span className="text-[10px] text-slate-400">Powered by xAI Grok & Backend Parser</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setImportMode("auto")}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all border text-center ${
-                      importMode === "auto"
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    Auto (Hybrid)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setImportMode("ai")}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all border text-center ${
-                      importMode === "ai"
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    Grok AI
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setImportMode("parser")}
-                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all border text-center ${
-                      importMode === "parser"
-                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
-                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    Parser
-                  </button>
-                </div>
-              </div>
 
               {/* Duplicate Handling Option */}
               <label className="flex items-center gap-3 p-3 bg-blue-50/70 border border-blue-100 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
