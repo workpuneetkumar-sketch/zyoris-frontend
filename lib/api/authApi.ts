@@ -220,6 +220,7 @@ export const resendOtpApi = async (
  * 200 OK: { success: true, message: "Verification code resent." }
  *
  * Errors: RATE_LIMIT_EXCEEDED (cooldown active), TOO_MANY_ATTEMPTS
+ * BD-RESEND-1: STUB / TODO notes reconciled with production endpoint
  */
 export const resendVerificationOtpApi = async (
     email: string

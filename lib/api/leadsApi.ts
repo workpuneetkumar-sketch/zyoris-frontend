@@ -538,23 +538,48 @@ export async function addLeadNote(
     return res.data;
 }
 
-// ── Bulk CSV import ────────────────────────────────────────
+// ── Bulk Document / CSV / PDF Lead import ──────────────────
+
+export type LeadImportMode = "parser" | "ai" | "auto" | "automatic";
+export type LeadDuplicateHandling = "skip" | "update";
+
+export interface LeadImportOptions {
+    mode?: LeadImportMode;
+    duplicateHandling?: LeadDuplicateHandling;
+}
 
 export interface LeadImportStartResponse {
     success: boolean;
     message: string;
     jobId: string;
+    mode?: string;
+    status?: string;
+    fileName?: string;
+    fileType?: string;
+}
+
+export interface LeadImportSummary {
+    totalRecords?: number;
+    importedRecords?: number;
+    failedRecords?: number;
+    duplicateRecords?: number;
 }
 
 export interface LeadImportJobStatus {
     id: string;
-    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED";
+    jobId?: string;
+    status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED" | "CANCELLED" | string;
     totalRows: number;
     processedRows: number;
     successRows: number;
     failedRows: number;
+    duplicateRows: number;
     progress: number;               // 0-100
     errorCsvPath: string | null;
+    errorMessage?: string | null;
+    fileName?: string | null;
+    mode?: string | null;
+    summary?: LeadImportSummary;
     startedAt: string | null;
     completedAt: string | null;
 }
@@ -564,39 +589,84 @@ export interface LeadImportJobResponse {
     data: LeadImportJobStatus;
 }
 
+export interface LeadImportErrorRow {
+    row: number;
+    reason: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+}
+
+export interface LeadImportErrorsResponse {
+    jobId: string;
+    totalErrors: number;
+    errors: LeadImportErrorRow[];
+}
+
 /**
- * POST /leads/import
- * Start a background CSV lead import. Returns a jobId immediately (202).
+ * POST /leads/import & POST /api/leads/import
+ * Start a background multi-format lead import (CSV, XLSX, XLS, Word .docx, PDF).
+ * Supports extraction modes ('parser', 'ai', 'auto') and duplicate handling ('skip', 'update').
+ * Returns a jobId immediately (202 Accepted).
  */
-export async function startLeadImport(file: File): Promise<LeadImportStartResponse> {
+export async function startLeadImport(
+    file: File,
+    options?: LeadImportOptions
+): Promise<LeadImportStartResponse> {
     console.log('[startLeadImport] File received:', {
         name: file.name,
         type: file.type,
         size: file.size,
+        options,
     });
     
     const formData = new FormData();
-    // Always send as "file" with an explicit MIME type for CSV/XLSX/XLS so the server's
-    // multer/busboy parser correctly recognises it, even when the OS sets an empty
-    // or generic MIME type (common on Windows / some browsers).
     let mimeType = file.type;
     if (!mimeType || mimeType === "application/octet-stream") {
-        if (file.name.endsWith(".csv")) mimeType = "text/csv";
-        else if (file.name.endsWith(".xlsx")) mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-        else if (file.name.endsWith(".xls")) mimeType = "application/vnd.ms-excel";
-        else if (file.name.endsWith(".pdf")) mimeType = "application/pdf";
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith(".csv")) mimeType = "text/csv";
+        else if (lower.endsWith(".xlsx")) mimeType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+        else if (lower.endsWith(".xls")) mimeType = "application/vnd.ms-excel";
+        else if (lower.endsWith(".pdf")) mimeType = "application/pdf";
+        else if (lower.endsWith(".docx")) mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     }
     const fileToSend = new File([file], file.name, { type: mimeType || "text/csv" });
     formData.append("file", fileToSend);
+
+    const mode = options?.mode || "auto";
+    const duplicateHandling = options?.duplicateHandling || "skip";
+    formData.append("mode", mode);
+    formData.append("duplicateHandling", duplicateHandling);
     
     try {
-        // Use a longer timeout for file uploads — Render.com cold starts can add 10-30s
-        // on top of the actual upload time, so 30 s is too tight.
-        const res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
-            timeout: 120_000, // 2 minutes
-        });
+        let res: any;
+        try {
+            res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
+                timeout: 120_000,
+            });
+        } catch (err: any) {
+            // Try route alias /api/leads/import if /leads/import fails
+            if (err?.response?.status === 404) {
+                res = await api.post<LeadImportStartResponse>("/api/leads/import", formData, {
+                    timeout: 120_000,
+                });
+            } else {
+                throw err;
+            }
+        }
+
         console.log('[startLeadImport] Response:', res.data);
-        return res.data;
+        const data = res.data;
+        return {
+            success: data.success !== false,
+            message: data.message || "Lead import started successfully.",
+            jobId: data.jobId || data.id,
+            mode: data.mode || mode,
+            status: data.status,
+            fileName: data.fileName || file.name,
+            fileType: data.fileType,
+        };
     } catch (error: any) {
         console.error('[startLeadImport] Error:', error.response?.data || error.message);
         throw error;
@@ -655,43 +725,69 @@ export async function importLeadsFromText(text: string): Promise<TextLeadImportR
 }
 
 /**
- * GET /leads/import/{jobId}
+ * GET /leads/import/{jobId} & GET /api/leads/import/{jobId}
  * Poll import job status and progress.
- * Handles both response shapes: { success, data: { ... } } and flat { id, status, ... }
+ * Handles both Swagger schema { success, data: { ... } } and Integration Guide schema { status, summary: { ... } }.
  */
 export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobStatus> {
     console.log('[getLeadImportStatus] Polling job:', jobId);
     
     try {
-        const res = await api.get<any>(`/leads/import/${jobId}`);
+        let res: any;
+        try {
+            res = await api.get<any>(`/leads/import/${encodeURIComponent(jobId)}`);
+        } catch (err: any) {
+            if (err?.response?.status === 404) {
+                res = await api.get<any>(`/api/leads/import/${encodeURIComponent(jobId)}`);
+            } else {
+                throw err;
+            }
+        }
+
         console.log('[getLeadImportStatus] Raw response:', res.data);
         
-        // Handle both response shapes
-        let jobData: LeadImportJobStatus;
+        const raw = res.data || {};
+        const jobData = raw.data && typeof raw.data === 'object' ? raw.data : raw;
+        const summary = jobData.summary || raw.summary;
         
-        if (res.data?.data && typeof res.data.data === 'object' && 'id' in res.data.data) {
-            // Shape: { success: true, data: { id, status, ... } }
-            jobData = res.data.data;
-        } else if (res.data?.id) {
-            // Shape: { id, status, ... } (flat)
-            jobData = res.data;
-        } else {
-            // Fallback: try to use the whole response
-            jobData = res.data;
+        const rawStatus = String(jobData.status || raw.status || 'PENDING').toUpperCase();
+        const totalRows = Number(jobData.totalRows ?? summary?.totalRecords ?? 0);
+        const successRows = Number(jobData.successRows ?? summary?.importedRecords ?? 0);
+        const failedRows = Number(jobData.failedRows ?? summary?.failedRecords ?? 0);
+        const duplicateRows = Number(jobData.duplicateRows ?? summary?.duplicateRecords ?? 0);
+        const processedRows = Number(jobData.processedRows ?? (successRows + failedRows + duplicateRows));
+
+        let progress = 0;
+        if (jobData.progress !== undefined && jobData.progress !== null && !isNaN(Number(jobData.progress))) {
+            progress = Number(jobData.progress);
+        } else if (rawStatus === "COMPLETED") {
+            progress = 100;
+        } else if (totalRows > 0) {
+            progress = Math.min(100, Math.round((processedRows / totalRows) * 100));
         }
-        
-        // Ensure all numeric fields exist with defaults
+
         const result: LeadImportJobStatus = {
-            id: jobData.id || jobId,
-            status: jobData.status || 'PENDING',
-            totalRows: jobData.totalRows ?? 0,
-            processedRows: jobData.processedRows ?? 0,
-            successRows: jobData.successRows ?? 0,
-            failedRows: jobData.failedRows ?? 0,
-            progress: jobData.progress ?? 0,
+            id: jobData.id || jobData.jobId || jobId,
+            jobId: jobData.jobId || jobData.id || jobId,
+            status: rawStatus,
+            totalRows,
+            processedRows,
+            successRows,
+            failedRows,
+            duplicateRows,
+            progress,
             errorCsvPath: jobData.errorCsvPath || null,
-            startedAt: jobData.startedAt || null,
-            completedAt: jobData.completedAt || null,
+            errorMessage: jobData.errorMessage || null,
+            fileName: jobData.fileName || raw.fileName || null,
+            mode: jobData.mode || raw.mode || null,
+            summary: summary || {
+                totalRecords: totalRows,
+                importedRecords: successRows,
+                failedRecords: failedRows,
+                duplicateRecords: duplicateRows,
+            },
+            startedAt: jobData.startedAt || jobData.createdAt || raw.createdAt || null,
+            completedAt: jobData.completedAt || raw.completedAt || null,
         };
         
         console.log('[getLeadImportStatus] Parsed job:', result);
@@ -707,7 +803,96 @@ export async function getLeadImportStatus(jobId: string): Promise<LeadImportJobS
 }
 
 /**
- * GET /leads/import/{jobId}/errors
+ * Helper to parse CSV error text into structured LeadImportErrorRow array
+ */
+function parseErrorCsvText(csvText: string): LeadImportErrorRow[] {
+    const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    if (lines.length <= 1) return [];
+
+    // Parse header
+    const headers = lines[0].split(",").map((h) => h.replace(/^["']|["']$/g, "").trim().toLowerCase());
+    const rowIdx = headers.indexOf("row");
+    const reasonIdx = headers.indexOf("reason");
+    const nameIdx = headers.indexOf("name");
+    const emailIdx = headers.indexOf("email");
+    const phoneIdx = headers.indexOf("phone");
+    const companyIdx = headers.indexOf("company");
+
+    const rows: LeadImportErrorRow[] = [];
+    for (let i = 1; i < lines.length; i++) {
+        // Handle basic quoted CSV fields
+        const matches = lines[i].match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || lines[i].split(",");
+        const clean = matches.map((m) => m.replace(/^["']|["']$/g, "").trim());
+        const rowNum = rowIdx !== -1 && !isNaN(Number(clean[rowIdx])) ? Number(clean[rowIdx]) : i;
+        const reason = reasonIdx !== -1 && clean[reasonIdx] ? clean[reasonIdx] : "Validation failed";
+        
+        rows.push({
+            row: rowNum,
+            reason,
+            name: nameIdx !== -1 ? clean[nameIdx] : undefined,
+            email: emailIdx !== -1 ? clean[emailIdx] : undefined,
+            phone: phoneIdx !== -1 ? clean[phoneIdx] : undefined,
+            company: companyIdx !== -1 ? clean[companyIdx] : undefined,
+        });
+    }
+    return rows;
+}
+
+/**
+ * GET /leads/import/{jobId}/errors & GET /api/leads/import/{jobId}/errors
+ * Retrieve structured import validation errors.
+ * Handles both JSON format and CSV parsing to return strongly-typed error records.
+ */
+export async function getLeadImportErrors(jobId: string): Promise<LeadImportErrorsResponse> {
+    console.log('[getLeadImportErrors] Fetching error list for job:', jobId);
+    
+    try {
+        let res: any;
+        try {
+            res = await api.get(`/leads/import/${encodeURIComponent(jobId)}/errors`);
+        } catch (err: any) {
+            if (err?.response?.status === 404) {
+                res = await api.get(`/api/leads/import/${encodeURIComponent(jobId)}/errors`);
+            } else {
+                throw err;
+            }
+        }
+
+        const data = res.data;
+        let errors: LeadImportErrorRow[] = [];
+
+        if (data && typeof data === 'object' && Array.isArray(data.errors)) {
+            // Documented JSON shape: { jobId, totalErrors, errors: [{ row, email, phone, reason }] }
+            errors = data.errors.map((e: any, idx: number) => ({
+                row: Number(e.row ?? e.rowNumber ?? idx + 1),
+                reason: e.reason || "Validation error",
+                email: e.email || undefined,
+                phone: e.phone || undefined,
+                name: e.name || undefined,
+                company: e.company || undefined,
+            }));
+        } else if (typeof data === 'string') {
+            // Server returned CSV text
+            errors = parseErrorCsvText(data);
+        }
+
+        return {
+            jobId,
+            totalErrors: errors.length,
+            errors,
+        };
+    } catch (error: any) {
+        console.error('[getLeadImportErrors] Error fetching error list:', error);
+        return {
+            jobId,
+            totalErrors: 0,
+            errors: [],
+        };
+    }
+}
+
+/**
+ * GET /leads/import/{jobId}/errors & GET /api/leads/import/{jobId}/errors
  * Download the validation error CSV. Returns a Blob.
  * Will throw if no error CSV exists (404).
  */
@@ -715,11 +900,37 @@ export async function downloadLeadImportErrors(jobId: string): Promise<Blob> {
     console.log('[downloadLeadImportErrors] Downloading errors for job:', jobId);
     
     try {
-        const res = await api.get(`/leads/import/${jobId}/errors`, {
-            responseType: "blob",
-        });
-        console.log('[downloadLeadImportErrors] Download successful');
-        return res.data;
+        let res: any;
+        try {
+            res = await api.get(`/leads/import/${encodeURIComponent(jobId)}/errors`, {
+                responseType: "blob",
+            });
+        } catch (err: any) {
+            if (err?.response?.status === 404) {
+                res = await api.get(`/api/leads/import/${encodeURIComponent(jobId)}/errors`, {
+                    responseType: "blob",
+                });
+            } else {
+                throw err;
+            }
+        }
+
+        const data = res.data;
+        if (data instanceof Blob) {
+            return data;
+        } else if (typeof data === "string") {
+            return new Blob([data], { type: "text/csv;charset=utf-8;" });
+        } else if (typeof data === "object") {
+            // Convert JSON error report to downloadable CSV
+            const errList = Array.isArray(data.errors) ? data.errors : [];
+            const header = "row,reason,email,phone,name,company\n";
+            const rows = errList
+                .map((e: any) => `"${e.row || ''}","${(e.reason || '').replace(/"/g, '""')}","${e.email || ''}","${e.phone || ''}","${e.name || ''}","${e.company || ''}"`)
+                .join("\n");
+            return new Blob([header + rows], { type: "text/csv;charset=utf-8;" });
+        }
+
+        return new Blob([String(data)], { type: "text/csv;charset=utf-8;" });
     } catch (error: any) {
         console.error('[downloadLeadImportErrors] Error downloading:', {
             message: error.message,
