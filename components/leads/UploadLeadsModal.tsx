@@ -22,7 +22,7 @@ import {
   convertMappedRowsToCsv,
   TARGET_LEAD_FIELDS,
   TargetLeadFieldKey,
-} from "@/lib/utils/pdfLeadExtractor";
+} from "@/lib/utils/leadFieldMapping";
 
 interface UploadLeadsModalProps {
   onClose: () => void;
