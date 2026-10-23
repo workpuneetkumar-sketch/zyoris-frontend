@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../../context/AuthContext";
 import { getDashboardForRole } from "@/utils/roleRedirect";
@@ -181,14 +182,14 @@ export default function LoginForm() {
                   >
                     Password
                   </label>
-                  {/* Forgot password — pending BD2 */}
-                  <span
-                    className="text-[12px] text-slate-400 cursor-default select-none"
-                    title="Password reset is not yet available."
-                    aria-label="Forgot password — not yet available"
+                  {/* Forgot password — links to /forgot-password */}
+                  <Link
+                    href="/forgot-password"
+                    className="text-[12px] text-[#002B7F] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002B7F] rounded font-semibold"
+                    aria-label="Forgot password — go to password recovery"
                   >
                     Forgot password?
-                  </span>
+                  </Link>
                 </div>
 
                 <div className="relative">

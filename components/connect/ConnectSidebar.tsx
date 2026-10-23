@@ -12,13 +12,20 @@ import {
   ChevronRight,
   Circle,
   Bell,
+  BellOff,
   Sparkles,
   Settings,
   UserCircle2,
-  Bookmark,
+  AlertCircle,
+  RefreshCw,
+  Loader2,
+  Archive,
+  Globe,
 } from "lucide-react";
-import { Channel, Conversation, ActiveTarget } from "@/types/connect";
+import { Channel, Conversation, ActiveTarget, PresenceStatus } from "@/types/connect";
 import { SocketStatus } from "@/hooks/useConnectSocket";
+import { isChannelMuted, isConversationMuted } from "@/lib/api/connectApi";
+import PresenceSelector from "./PresenceSelector";
 
 interface ConnectSidebarProps {
   channels: Channel[];
@@ -30,13 +37,26 @@ interface ConnectSidebarProps {
   onOpenCreateDirect: () => void;
   onOpenCreateGroup: () => void;
   onOpenManageChannel: (channel: Channel) => void;
-  onOpenSearchModal?: () => void;
-  onOpenSavedModal?: () => void;
   currentUserId?: string | null;
   socketStatus: SocketStatus;
   unreadMap: Record<string, number>;
+  userPresenceMap?: Record<string, PresenceStatus>;
+  currentUserPresence?: PresenceStatus;
+  onChangePresence?: (status: PresenceStatus) => void;
+  channelsLoading?: boolean;
+  channelsError?: string | null;
+  conversationsLoading?: boolean;
+  conversationsError?: string | null;
+  onRetryLoad?: () => void;
   className?: string;
 }
+
+const PRESENCE_DOTS: Record<PresenceStatus, string> = {
+  ONLINE: "bg-emerald-500",
+  AWAY: "bg-amber-500",
+  BUSY: "bg-rose-500",
+  OFFLINE: "bg-gray-400",
+};
 
 export default function ConnectSidebar({
   channels,
@@ -48,11 +68,17 @@ export default function ConnectSidebar({
   onOpenCreateDirect,
   onOpenCreateGroup,
   onOpenManageChannel,
-  onOpenSearchModal,
-  onOpenSavedModal,
   currentUserId,
   socketStatus,
   unreadMap,
+  userPresenceMap = {},
+  currentUserPresence = "ONLINE",
+  onChangePresence,
+  channelsLoading = false,
+  channelsError = null,
+  conversationsLoading = false,
+  conversationsError = null,
+  onRetryLoad,
   className = "",
 }: ConnectSidebarProps) {
   const [search, setSearch] = useState("");
@@ -203,35 +229,17 @@ export default function ConnectSidebar({
 
         {/* Quick action buttons */}
         <div className="flex items-center gap-1">
-          {onOpenSearchModal && (
-            <button
-              onClick={onOpenSearchModal}
-              title="Search all messages"
-              className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
-            >
-              <Search size={16} />
-            </button>
-          )}
-          {onOpenSavedModal && (
-            <button
-              onClick={onOpenSavedModal}
-              title="Saved Bookmarks"
-              className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
-            >
-              <Bookmark size={16} />
-            </button>
-          )}
           <button
             onClick={onOpenCreateDirect}
             title="New Direct Message"
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
           >
             <MessageSquare size={16} />
           </button>
           <button
             onClick={onOpenCreateChannel}
             title="New Channel"
-            className="p-1.5 text-gray-500 hover:text-primary hover:bg-surface-hover rounded-lg transition-colors"
+            className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
           >
             <Plus size={18} />
           </button>
@@ -240,29 +248,15 @@ export default function ConnectSidebar({
 
       {/* Search Input */}
       <div className="px-3 pt-3 pb-2 shrink-0">
-        <div className="relative flex items-center">
-          <Search size={14} className="absolute left-3 text-gray-400" />
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && onOpenSearchModal) {
-                onOpenSearchModal();
-              }
-            }}
             placeholder="Search channels & chats..."
-            className="w-full pl-8 pr-14 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
+            className="w-full pl-8 pr-3 py-1.5 bg-gray-50/80 hover:bg-gray-100/80 focus:bg-white border border-gray-200/80 rounded-xl text-xs font-medium text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
           />
-          {onOpenSearchModal && (
-            <button
-              onClick={onOpenSearchModal}
-              title="Global communication search"
-              className="absolute right-1 px-1.5 py-0.5 text-[10px] font-bold text-primary hover:bg-primary/10 rounded-md transition-colors"
-            >
-              Search
-            </button>
-          )}
         </div>
       </div>
 
@@ -340,16 +334,51 @@ export default function ConnectSidebar({
 
           {channelsOpen && (
             <div className="space-y-0.5 mt-1">
-              {filteredChannels.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  {query ? "No matching channels" : "No channels yet. Create one!"}
+              {channelsError && filteredChannels.length > 0 && (
+                <div className="mx-2 mb-1 px-2 py-1 bg-amber-50 border border-amber-200/80 rounded-lg text-[10px] text-amber-800 flex items-center justify-between">
+                  <span className="truncate">Using cached data • {channelsError}</span>
+                  {onRetryLoad && (
+                    <button onClick={onRetryLoad} className="text-amber-900 font-bold ml-1 hover:underline shrink-0">
+                      Retry
+                    </button>
+                  )}
                 </div>
+              )}
+              {filteredChannels.length === 0 ? (
+                channelsLoading ? (
+                  <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+                    <Loader2 size={13} className="animate-spin text-blue-500" />
+                    <span>Loading channels...</span>
+                  </div>
+                ) : channelsError ? (
+                  <div className="mx-2 my-1 p-2.5 bg-red-50 border border-red-200/80 rounded-xl text-xs text-red-700 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                      <AlertCircle size={13} className="text-red-500 shrink-0" />
+                      <span>{channelsError}</span>
+                    </div>
+                    {onRetryLoad && (
+                      <button
+                        onClick={onRetryLoad}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-800 underline self-start"
+                      >
+                        <RefreshCw size={11} /> Retry loading
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    {query ? "No matching channels" : "No channels yet. Create one!"}
+                  </div>
+                )
               ) : (
                 filteredChannels.map((channel) => {
                   const isActive =
                     activeTarget?.type === "channel" && activeTarget?.id === channel.id;
                   const isPrivate = channel.visibility === "PRIVATE";
                   const unread = unreadMap[channel.id] || 0;
+                  const isMuted = isChannelMuted(channel.id);
+                  const isArchived = Boolean(channel.archivedAt);
+                  const isClientShared = channel.audience === "CLIENT_SHARED";
 
                   return (
                     <div
@@ -363,7 +392,7 @@ export default function ConnectSidebar({
                       }`}
                       onClick={() => onSelectChannel(channel)}
                     >
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 min-w-0 flex-1">
                         {isPrivate ? (
                           <Lock
                             size={14}
@@ -383,7 +412,25 @@ export default function ConnectSidebar({
                             }`}
                           />
                         )}
-                        <span className="text-xs truncate">{channel.name}</span>
+                        <span className={`text-xs truncate ${isArchived ? "line-through opacity-70" : ""}`}>
+                          {channel.name}
+                        </span>
+
+                        {isClientShared && (
+                          <span title="Client Shared Channel">
+                            <Globe size={11} className="text-emerald-500 shrink-0" />
+                          </span>
+                        )}
+                        {isArchived && (
+                          <span title="Archived Channel">
+                            <Archive size={11} className="text-amber-500 shrink-0" />
+                          </span>
+                        )}
+                        {isMuted && (
+                          <span title="Muted">
+                            <BellOff size={11} className="text-gray-400 shrink-0" />
+                          </span>
+                        )}
                       </div>
 
                       <div className="flex items-center gap-1.5 shrink-0">
@@ -433,10 +480,42 @@ export default function ConnectSidebar({
 
           {directsOpen && (
             <div className="space-y-0.5 mt-1">
-              {filteredDirects.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  {query ? "No matching chats" : "No direct messages yet"}
+              {conversationsError && filteredDirects.length > 0 && (
+                <div className="mx-2 mb-1 px-2 py-1 bg-amber-50 border border-amber-200/80 rounded-lg text-[10px] text-amber-800 flex items-center justify-between">
+                  <span className="truncate">Using cached data • {conversationsError}</span>
+                  {onRetryLoad && (
+                    <button onClick={onRetryLoad} className="text-amber-900 font-bold ml-1 hover:underline shrink-0">
+                      Retry
+                    </button>
+                  )}
                 </div>
+              )}
+              {filteredDirects.length === 0 ? (
+                conversationsLoading ? (
+                  <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+                    <Loader2 size={13} className="animate-spin text-blue-500" />
+                    <span>Loading chats...</span>
+                  </div>
+                ) : conversationsError ? (
+                  <div className="mx-2 my-1 p-2.5 bg-red-50 border border-red-200/80 rounded-xl text-xs text-red-700 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                      <AlertCircle size={13} className="text-red-500 shrink-0" />
+                      <span>{conversationsError}</span>
+                    </div>
+                    {onRetryLoad && (
+                      <button
+                        onClick={onRetryLoad}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-800 underline self-start"
+                      >
+                        <RefreshCw size={11} /> Retry loading
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    {query ? "No matching chats" : "No direct messages yet"}
+                  </div>
+                )
               ) : (
                 filteredDirects.map((conv) => {
                   const isActive =
@@ -447,6 +526,8 @@ export default function ConnectSidebar({
                   const other = conv.members?.find((m) => m.userId !== currentUserId);
                   const name = other?.user?.name || other?.user?.email || "Colleague";
                   const avatar = other?.user?.avatarUrl;
+                  const presence = other?.userId ? userPresenceMap[other.userId] || "ONLINE" : "ONLINE";
+                  const dotColor = PRESENCE_DOTS[presence] || PRESENCE_DOTS.ONLINE;
 
                   return (
                     <div
@@ -469,10 +550,20 @@ export default function ConnectSidebar({
                               {name.slice(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border border-white" />
+                          <span
+                            className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-white ${dotColor}`}
+                            title={`Status: ${presence}`}
+                          />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs truncate">{name}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs truncate">{name}</p>
+                            {isConversationMuted(conv.id) && (
+                              <span title="Muted">
+                                <BellOff size={10} className="text-gray-400 shrink-0" />
+                              </span>
+                            )}
+                          </div>
                           {conv.lastMessage && (
                             <p className="text-[10px] text-gray-400 truncate font-normal">
                               {conv.lastMessage}
@@ -517,9 +608,31 @@ export default function ConnectSidebar({
           {groupsOpen && (
             <div className="space-y-0.5 mt-1">
               {filteredGroups.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  {query ? "No matching groups" : "No group chats yet"}
-                </div>
+                conversationsLoading ? (
+                  <div className="px-3 py-3 text-xs text-gray-500 flex items-center gap-2">
+                    <Loader2 size={13} className="animate-spin text-purple-500" />
+                    <span>Loading group chats...</span>
+                  </div>
+                ) : conversationsError ? (
+                  <div className="mx-2 my-1 p-2.5 bg-red-50 border border-red-200/80 rounded-xl text-xs text-red-700 flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5 font-medium text-[11px]">
+                      <AlertCircle size={13} className="text-red-500 shrink-0" />
+                      <span>{conversationsError}</span>
+                    </div>
+                    {onRetryLoad && (
+                      <button
+                        onClick={onRetryLoad}
+                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 hover:text-red-800 underline self-start"
+                      >
+                        <RefreshCw size={11} /> Retry loading
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    {query ? "No matching groups" : "No group chats yet"}
+                  </div>
+                )
               ) : (
                 filteredGroups.map((group) => {
                   const isActive =
@@ -544,7 +657,14 @@ export default function ConnectSidebar({
                           <Users size={12} />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="text-xs truncate">{group.name || "Group Chat"}</p>
+                          <div className="flex items-center gap-1">
+                            <p className="text-xs truncate">{group.name || "Group Chat"}</p>
+                            {isConversationMuted(group.id) && (
+                              <span title="Muted">
+                                <BellOff size={10} className="text-gray-400 shrink-0" />
+                              </span>
+                            )}
+                          </div>
                           {group.lastMessage ? (
                             <p className="text-[10px] text-gray-400 truncate font-normal">
                               {group.lastMessage}
@@ -570,6 +690,20 @@ export default function ConnectSidebar({
           )}
         </div>
       </div>
+
+      {/* Footer User Presence Status Selector */}
+      {onChangePresence && (
+        <div className="p-3 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <UserCircle2 size={16} className="text-gray-400 shrink-0" />
+            <span className="text-[11px] font-medium text-gray-600 truncate">Your Status:</span>
+          </div>
+          <PresenceSelector
+            currentStatus={currentUserPresence}
+            onChangeStatus={onChangePresence}
+          />
+        </div>
+      )}
     </div>
   );
 }

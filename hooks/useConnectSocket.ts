@@ -1,6 +1,6 @@
 // hooks/useConnectSocket.ts
 // Real-time Socket.IO integration for Connect workspace
-// Conforming to Sakshi's Day 1 & Day 2 Socket Event Contracts and Day 3 Recovery/Typing
+// Conforming to Sakshi's Day 1 & Day 2 Socket Event Contracts
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
@@ -11,40 +11,37 @@ import {
   SocketMessageDeletePayload,
   SocketChannelUpdatedPayload,
   SocketConversationUpdatedPayload,
-  SocketChannelReadPayload,
-  SocketConversationReadPayload,
+  SocketReactionAddPayload,
+  SocketReactionRemovePayload,
+  SocketThreadReplyPayload,
+  SocketTypingEventPayload,
+  SocketPresenceUpdatePayload,
   SocketMessageReadPayload,
-  SocketReactionPayload,
-  SocketPinPayload,
+  SocketMessageSyncPayload,
+  PresenceStatus,
 } from "@/types/connect";
 
 export type SocketStatus = "connected" | "connecting" | "offline";
-
-export interface SocketTypingPayload {
-  userId: string;
-  userName?: string;
-  channelId?: string | null;
-  conversationId?: string | null;
-  channel?: string | null;
-}
 
 interface UseConnectSocketOptions {
   activeChannelId?: string | null;
   activeChannelName?: string | null;
   activeConversationId?: string | null;
+  // Day 1
   onNewMessage?: (payload: SocketMessageNewPayload) => void;
   onUpdateMessage?: (payload: SocketMessageUpdatePayload) => void;
   onDeleteMessage?: (payload: SocketMessageDeletePayload) => void;
   onChannelUpdated?: (payload: SocketChannelUpdatedPayload) => void;
   onConversationUpdated?: (payload: SocketConversationUpdatedPayload) => void;
-  onChannelRead?: (payload: SocketChannelReadPayload) => void;
-  onConversationRead?: (payload: SocketConversationReadPayload) => void;
+  // Day 2
+  onReactionAdd?: (payload: SocketReactionAddPayload) => void;
+  onReactionRemove?: (payload: SocketReactionRemovePayload) => void;
+  onThreadReply?: (payload: SocketThreadReplyPayload) => void;
+  onTypingStart?: (payload: SocketTypingEventPayload) => void;
+  onTypingStop?: (payload: SocketTypingEventPayload) => void;
+  onPresenceUpdate?: (payload: SocketPresenceUpdatePayload) => void;
   onMessageRead?: (payload: SocketMessageReadPayload) => void;
-  onReaction?: (payload: SocketReactionPayload) => void;
-  onPinUpdated?: (payload: SocketPinPayload) => void;
-  onTypingStart?: (payload: SocketTypingPayload) => void;
-  onTypingStop?: (payload: SocketTypingPayload) => void;
-  onMessageSync?: (payload: { messages: any[]; channelId?: string; conversationId?: string }) => void;
+  onMessageSync?: (payload: SocketMessageSyncPayload) => void;
 }
 
 export function useConnectSocket({
@@ -56,13 +53,13 @@ export function useConnectSocket({
   onDeleteMessage,
   onChannelUpdated,
   onConversationUpdated,
-  onChannelRead,
-  onConversationRead,
-  onMessageRead,
-  onReaction,
-  onPinUpdated,
+  onReactionAdd,
+  onReactionRemove,
+  onThreadReply,
   onTypingStart,
   onTypingStop,
+  onPresenceUpdate,
+  onMessageRead,
   onMessageSync,
 }: UseConnectSocketOptions) {
   const [status, setStatus] = useState<SocketStatus>("connecting");
@@ -75,13 +72,13 @@ export function useConnectSocket({
     onDeleteMessage,
     onChannelUpdated,
     onConversationUpdated,
-    onChannelRead,
-    onConversationRead,
-    onMessageRead,
-    onReaction,
-    onPinUpdated,
+    onReactionAdd,
+    onReactionRemove,
+    onThreadReply,
     onTypingStart,
     onTypingStop,
+    onPresenceUpdate,
+    onMessageRead,
     onMessageSync,
   });
 
@@ -92,13 +89,13 @@ export function useConnectSocket({
       onDeleteMessage,
       onChannelUpdated,
       onConversationUpdated,
-      onChannelRead,
-      onConversationRead,
-      onMessageRead,
-      onReaction,
-      onPinUpdated,
+      onReactionAdd,
+      onReactionRemove,
+      onThreadReply,
       onTypingStart,
       onTypingStop,
+      onPresenceUpdate,
+      onMessageRead,
       onMessageSync,
     };
   }, [
@@ -107,13 +104,13 @@ export function useConnectSocket({
     onDeleteMessage,
     onChannelUpdated,
     onConversationUpdated,
-    onChannelRead,
-    onConversationRead,
-    onMessageRead,
-    onReaction,
-    onPinUpdated,
+    onReactionAdd,
+    onReactionRemove,
+    onThreadReply,
     onTypingStart,
     onTypingStop,
+    onPresenceUpdate,
+    onMessageRead,
     onMessageSync,
   ]);
 
@@ -147,20 +144,18 @@ export function useConnectSocket({
           channel: activeChannelName || activeChannelId,
           channelId: activeChannelId,
         });
-        socket.emit("recovery:sync", {
-          channelId: activeChannelId,
-        });
       }
       if (activeConversationId) {
         socket.emit("conversation:join", { conversationId: activeConversationId });
-        socket.emit("recovery:sync", {
-          conversationId: activeConversationId,
-        });
       }
+      // Trigger recovery sync since last disconnect/now
+      const lastSync = localStorage.getItem("zyoris_last_sync") || new Date(Date.now() - 3600000).toISOString();
+      socket.emit("recovery:sync", { since: lastSync });
     });
 
     socket.on("disconnect", () => {
       setStatus("offline");
+      localStorage.setItem("zyoris_last_sync", new Date().toISOString());
     });
 
     socket.on("connect_error", (err) => {
@@ -168,12 +163,12 @@ export function useConnectSocket({
       setStatus("offline");
     });
 
-    // Sakshi's Event 2: message:new
+    // Sakshi's Event: message:new
     socket.on("message:new", (payload: any) => {
       callbacksRef.current.onNewMessage?.(payload);
     });
 
-    // Fallback generic message events if emitted by other microservices
+    // Fallback generic message
     socket.on("newMessage", (payload: any) => {
       callbacksRef.current.onNewMessage?.({
         id: payload.id,
@@ -187,7 +182,7 @@ export function useConnectSocket({
       });
     });
 
-    // Sakshi's Event 3: message:update
+    // Sakshi's Event: message:update
     socket.on("message:update", (payload: any) => {
       callbacksRef.current.onUpdateMessage?.({
         messageId: payload.messageId || payload.id,
@@ -199,7 +194,7 @@ export function useConnectSocket({
       });
     });
 
-    // Sakshi's Event 4: message:delete
+    // Sakshi's Event: message:delete
     socket.on("message:delete", (payload: any) => {
       callbacksRef.current.onDeleteMessage?.({
         messageId: payload.messageId || payload.id,
@@ -208,63 +203,54 @@ export function useConnectSocket({
       });
     });
 
-    // Sakshi's Event: typing:start & typing:stop
-    socket.on("typing:start", (payload: any) => {
-      callbacksRef.current.onTypingStart?.(payload);
-    });
-
-    socket.on("typing:stop", (payload: any) => {
-      callbacksRef.current.onTypingStop?.(payload);
-    });
-
-    // Sakshi's Event: message:sync (Missed message recovery)
-    socket.on("message:sync", (payload: any) => {
-      callbacksRef.current.onMessageSync?.(payload);
-    });
-
-    // Sakshi's Event 9: channel:updated
+    // Sakshi's Event: channel:updated
     socket.on("channel:updated", (payload: any) => {
       callbacksRef.current.onChannelUpdated?.(payload);
     });
 
-    // Sakshi's Event 10: conversation:updated
+    // Sakshi's Event: conversation:updated
     socket.on("conversation:updated", (payload: any) => {
       callbacksRef.current.onConversationUpdated?.(payload);
     });
 
-    // Sakshi's Live Read Events
-    socket.on("channel:read", (payload: any) => {
-      callbacksRef.current.onChannelRead?.(payload);
+    // Sakshi's Day 2 Event: reaction:add
+    socket.on("reaction:add", (payload: any) => {
+      callbacksRef.current.onReactionAdd?.(payload);
     });
 
-    socket.on("conversation:read", (payload: any) => {
-      callbacksRef.current.onConversationRead?.(payload);
+    // Sakshi's Day 2 Event: reaction:remove
+    socket.on("reaction:remove", (payload: any) => {
+      callbacksRef.current.onReactionRemove?.(payload);
     });
 
+    // Sakshi's Day 2 Event: thread:reply
+    socket.on("thread:reply", (payload: any) => {
+      callbacksRef.current.onThreadReply?.(payload);
+    });
+
+    // Sakshi's Day 2 Event: typing:start
+    socket.on("typing:start", (payload: any) => {
+      callbacksRef.current.onTypingStart?.(payload);
+    });
+
+    // Sakshi's Day 2 Event: typing:stop
+    socket.on("typing:stop", (payload: any) => {
+      callbacksRef.current.onTypingStop?.(payload);
+    });
+
+    // Sakshi's Day 2 Event: presence:update
+    socket.on("presence:update", (payload: any) => {
+      callbacksRef.current.onPresenceUpdate?.(payload);
+    });
+
+    // Sakshi's Day 2 Event: message:read
     socket.on("message:read", (payload: any) => {
       callbacksRef.current.onMessageRead?.(payload);
     });
 
-    // Sakshi's Live Message Reaction Events
-    socket.on("message:reaction", (payload: any) => {
-      callbacksRef.current.onReaction?.(payload);
-    });
-
-    socket.on("reaction:add", (payload: any) => {
-      callbacksRef.current.onReaction?.({ ...payload, action: "add" });
-    });
-
-    socket.on("reaction:remove", (payload: any) => {
-      callbacksRef.current.onReaction?.({ ...payload, action: "remove" });
-    });
-
-    // Sakshi's Live Pin / Unpin Events
-    socket.on("message:pinned", (payload: any) => {
-      callbacksRef.current.onPinUpdated?.({ ...payload, isPinned: true });
-    });
-
-    socket.on("message:unpinned", (payload: any) => {
-      callbacksRef.current.onPinUpdated?.({ ...payload, isPinned: false });
+    // Sakshi's Day 2 Event: message:sync
+    socket.on("message:sync", (payload: any) => {
+      callbacksRef.current.onMessageSync?.(payload);
     });
 
     return () => {
@@ -313,7 +299,7 @@ export function useConnectSocket({
     prevConversationRef.current = activeConversationId || null;
   }, [activeConversationId, status]);
 
-  // Client emission: message:send
+  // Client emissions
   const emitSendMessage = useCallback((payload: {
     messageId?: string;
     clientMessageId?: string;
@@ -322,6 +308,7 @@ export function useConnectSocket({
     conversationId?: string | null;
     receiverId?: string | null;
     content: string;
+    attachments?: string[];
   }) => {
     if (socketRef.current && socketRef.current.connected) {
       const socketPayload: Record<string, any> = {
@@ -336,36 +323,78 @@ export function useConnectSocket({
       if (payload.clientMessageId || payload.messageId) {
         socketPayload.clientMessageId = payload.clientMessageId || payload.messageId;
       }
+      if (payload.attachments && payload.attachments.length > 0) {
+        socketPayload.attachments = payload.attachments;
+      }
       socketRef.current.emit("message:send", socketPayload);
     }
   }, []);
 
-  // Client emission: typing:start
-  const emitTypingStart = useCallback((target: { channelId?: string; conversationId?: string; userName?: string }) => {
+  const emitThreadReply = useCallback((payload: { messageId: string; content: string }) => {
     if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit("typing:start", target);
+      socketRef.current.emit("thread:reply", payload);
     }
   }, []);
 
-  // Client emission: typing:stop
-  const emitTypingStop = useCallback((target: { channelId?: string; conversationId?: string; userName?: string }) => {
+  const emitReactionAdd = useCallback((payload: { messageId: string; emoji: string }) => {
     if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit("typing:stop", target);
+      socketRef.current.emit("reaction:add", payload);
     }
   }, []);
 
-  // Client emission: recovery:sync
-  const emitRecoverySync = useCallback((target: { channelId?: string; conversationId?: string; lastMessageId?: string }) => {
+  const emitReactionRemove = useCallback((payload: { messageId: string; emoji: string }) => {
     if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit("recovery:sync", target);
+      socketRef.current.emit("reaction:remove", payload);
+    }
+  }, []);
+
+  const emitMentionNew = useCallback((payload: { messageId: string; mentionedUserIds: string[] }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("mention:new", payload);
+    }
+  }, []);
+
+  const emitTypingStart = useCallback((payload: { channel?: string; conversationId?: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("typing:start", payload);
+    }
+  }, []);
+
+  const emitTypingStop = useCallback((payload: { channel?: string; conversationId?: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("typing:stop", payload);
+    }
+  }, []);
+
+  const emitPresenceUpdate = useCallback((payload: { status: PresenceStatus; customStatus?: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("presence:update", payload);
+    }
+  }, []);
+
+  const emitMessageRead = useCallback((payload: { messageId: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("message:read", payload);
+    }
+  }, []);
+
+  const emitRecoverySync = useCallback((payload: { since: string }) => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("recovery:sync", payload);
     }
   }, []);
 
   return {
     status,
     emitSendMessage,
+    emitThreadReply,
+    emitReactionAdd,
+    emitReactionRemove,
+    emitMentionNew,
     emitTypingStart,
     emitTypingStop,
+    emitPresenceUpdate,
+    emitMessageRead,
     emitRecoverySync,
   };
 }

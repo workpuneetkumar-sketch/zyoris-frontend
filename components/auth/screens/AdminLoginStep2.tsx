@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useRef, useState } from "react";
+import Link from "next/link";
 import BackButton from "../ui/BackButton";
 import PasswordField from "../ui/PasswordField";
 import PrimaryButton from "../ui/PrimaryButton";
@@ -107,16 +108,15 @@ export default function AdminLoginStep2({
             error={passwordError}
             disabled={busy}
           />
-          {/* Forgot password — pending BD2 */}
+          {/* Forgot password — links to /forgot-password */}
           <div className="flex justify-end">
-            <span
-              className="text-sm text-gray-400 cursor-default select-none"
-              title="Password reset is not yet available. Contact your administrator."
-              aria-label="Forgot password — not yet available"
+            <Link
+              href="/forgot-password"
+              className="text-sm text-[#002B7F] font-semibold hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#002B7F] rounded"
+              aria-label="Forgot password — go to password recovery"
             >
-              Forgot password?{" "}
-              <span className="text-xs text-gray-400 italic">(coming soon)</span>
-            </span>
+              Forgot password?
+            </Link>
           </div>
         </div>
 

@@ -79,7 +79,12 @@ export function useSalesEntities() {
 
       // 3. Fetch Deals
       try {
-        const resDeals = await api.get("/api/deals");
+        let resDeals = null;
+        try {
+          resDeals = await api.get("/deals/get-deals");
+        } catch {
+          resDeals = await api.get("/api/deals/get-deals");
+        }
         const rawDeals = resDeals?.data?.data || resDeals?.data;
         if (Array.isArray(rawDeals) && rawDeals.length > 0) {
           setDeals(
@@ -91,10 +96,10 @@ export function useSalesEntities() {
             }))
           );
         } else {
-          setDeals(fallbackDeals);
+          setDeals([]);
         }
       } catch {
-        setDeals(fallbackDeals);
+        setDeals([]);
       }
     } finally {
       setLoading(false);

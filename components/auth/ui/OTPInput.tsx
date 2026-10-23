@@ -3,11 +3,18 @@ import classNames from "classnames";
 
 interface OTPInputProps {
   length?: number;
+  /** Fires when all digits are filled (existing behaviour). */
   onComplete?: (otp: string) => void;
+  /**
+   * Fires on every keystroke with the current partial/full value.
+   * Use this to reset `otpComplete` when the user edits a digit after
+   * filling all 6, or clears one digit from a completed code.
+   */
+  onChange?: (otp: string) => void;
   className?: string;
 }
 
-export default function OTPInput({ length = 6, onComplete, className }: OTPInputProps) {
+export default function OTPInput({ length = 6, onComplete, onChange, className }: OTPInputProps) {
   const [otp, setOtp] = useState<string[]>(new Array(length).fill(""));
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -25,13 +32,17 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
     newOtp[index] = value.substring(value.length - 1);
     setOtp(newOtp);
 
+    // Always fire onChange so callers can react to partial edits
+    const joined = newOtp.join("");
+    onChange?.(joined);
+
     // Move to next input
     if (value && index < length - 1 && inputRefs.current[index + 1]) {
       inputRefs.current[index + 1]?.focus();
     }
 
-    if (newOtp.join("").length === length && onComplete) {
-      onComplete(newOtp.join(""));
+    if (joined.length === length && onComplete) {
+      onComplete(joined);
     }
   };
 
@@ -43,6 +54,7 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
       const newOtp = [...otp];
       newOtp[index] = "";
       setOtp(newOtp);
+      onChange?.(newOtp.join(""));
     } else if (e.key === "ArrowLeft" && index > 0) {
       inputRefs.current[index - 1]?.focus();
     } else if (e.key === "ArrowRight" && index < length - 1) {
@@ -63,8 +75,11 @@ export default function OTPInput({ length = 6, onComplete, className }: OTPInput
       const nextIndex = Math.min(pastedData.length, length - 1);
       inputRefs.current[nextIndex]?.focus();
 
-      if (newOtp.join("").length === length && onComplete) {
-        onComplete(newOtp.join(""));
+      const joined = newOtp.join("");
+      onChange?.(joined);
+
+      if (joined.length === length && onComplete) {
+        onComplete(joined);
       }
     }
   };

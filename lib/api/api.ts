@@ -171,6 +171,29 @@ export function getEffectiveAuthToken(): string | null {
    Automatically attach sanitized access token
 --------------------------------------------------- */
 
+export function getEffectiveOrganizationId(): string | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = localStorage.getItem("zyoris-auth");
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const candidate = parsed?.user?.organizationId || parsed?.organizationId || parsed?.data?.organizationId;
+            if (candidate && typeof candidate === "string" && candidate.trim()) {
+                return candidate.trim();
+            }
+            const token = parsed?.token || parsed?.accessToken;
+            if (token && typeof token === "string" && token.includes(".")) {
+                const parts = token.split(".");
+                if (parts.length >= 2) {
+                    const decoded = JSON.parse(atob(parts[1]));
+                    if (decoded?.organizationId) return decoded.organizationId;
+                }
+            }
+        }
+    } catch {}
+    return null;
+}
+
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
         // Always attach the token for every request — including /auth/me, /workspace/pages etc.
@@ -182,7 +205,12 @@ api.interceptors.request.use(
             url.includes("/auth/login") ||
             url.includes("/auth/register") ||
             url.includes("/auth/refresh") ||
-            url.includes("/auth/logout");
+            url.includes("/auth/logout") ||
+            // Day 2 — public password-recovery and verification endpoints
+            url.includes("/auth/forgot-password") ||
+            url.includes("/auth/reset-password") ||
+            url.includes("/auth/verify-email") ||
+            url.includes("/auth/resend-verification");
 
         if (!isUnauthenticatedEndpoint) {
             const token = getEffectiveAuthToken();
@@ -194,6 +222,15 @@ api.interceptors.request.use(
                 }
                 config.headers.Authorization = bearerVal;
                 config.headers['Authorization'] = bearerVal;
+            }
+
+            const orgId = getEffectiveOrganizationId();
+            if (orgId) {
+                if (typeof config.headers.set === 'function') {
+                    config.headers.set('x-organization-id', orgId);
+                }
+                config.headers['x-organization-id'] = orgId;
+                config.headers['X-Organization-Id'] = orgId;
             }
         }
 
@@ -444,7 +481,12 @@ api.interceptors.response.use(
             reqUrl.includes("/auth/login") ||
             reqUrl.includes("/auth/register") ||
             reqUrl.includes("/auth/refresh") ||
-            reqUrl.includes("/auth/logout");
+            reqUrl.includes("/auth/logout") ||
+            // Day 2 — public password-recovery and verification endpoints
+            reqUrl.includes("/auth/forgot-password") ||
+            reqUrl.includes("/auth/reset-password") ||
+            reqUrl.includes("/auth/verify-email") ||
+            reqUrl.includes("/auth/resend-verification");
 
         if (
             !isUnauthenticatedEndpoint &&

@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { X, Hash, Lock, Globe, Users, Loader2, AlertCircle } from "lucide-react";
-import { Channel, ChannelVisibility, MemberRole } from "@/types/connect";
+import { Channel, ChannelMember, ChannelVisibility, ChannelAudience, MemberRole } from "@/types/connect";
 import { createChannel, addChannelMember } from "@/lib/api/connectApi";
 import { TeamMember } from "@/lib/api/organizationsApi";
 
@@ -22,6 +22,8 @@ export default function CreateChannelModal({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [visibility, setVisibility] = useState<ChannelVisibility>("PUBLIC");
+  const [audience, setAudience] = useState<ChannelAudience>("INTERNAL");
+  const [clientId, setClientId] = useState("");
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +48,10 @@ export default function CreateChannelModal({
       setError("Channel name is required");
       return;
     }
+    if (audience === "CLIENT_SHARED" && !clientId.trim()) {
+      setError("Client ID is required for Client Shared channels");
+      return;
+    }
 
     setLoading(true);
     setError(null);
@@ -55,16 +61,41 @@ export default function CreateChannelModal({
         name: name.trim(),
         description: description.trim() || undefined,
         visibility,
+        audience,
+        clientId: audience === "CLIENT_SHARED" ? clientId.trim() : undefined,
       });
+
+      const baseMembers: ChannelMember[] = Array.isArray(channel.members) ? channel.members : [];
+      let finalMembers: ChannelMember[] = [...baseMembers];
 
       // If initial members were selected, add them
       if (selectedMemberIds.length > 0 && channel.id) {
         await Promise.allSettled(
           selectedMemberIds.map((uid) => addChannelMember(channel.id, uid, "MEMBER"))
         );
+        const now = new Date().toISOString();
+        const addedMembers: ChannelMember[] = selectedMemberIds.map((uid) => {
+          const tm = teamMembers.find((m) => m.id === uid);
+          return {
+            id: `mem-${uid}`,
+            organizationId: channel.organizationId || "",
+            channelId: channel.id,
+            userId: uid,
+            role: "MEMBER" as MemberRole,
+            createdAt: now,
+            updatedAt: now,
+            user: tm ? { id: tm.id, name: tm.name, email: tm.email } : undefined,
+          };
+        });
+        finalMembers = [...finalMembers, ...addedMembers];
       }
 
-      onCreated(channel);
+      const finalChannel: Channel = {
+        ...channel,
+        members: finalMembers,
+      };
+
+      onCreated(finalChannel);
       onClose();
     } catch (err: any) {
       console.error("Failed to create channel:", err);
@@ -193,6 +224,65 @@ export default function CreateChannelModal({
                 </p>
               </button>
             </div>
+          </div>
+
+          {/* Target Audience Controls (Internal vs Client Shared) */}
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider mb-2">
+              Target Audience
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setAudience("INTERNAL")}
+                className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                  audience === "INTERNAL"
+                    ? "bg-amber-50/70 border-amber-500 text-amber-900 ring-2 ring-amber-500/20 shadow-sm"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 font-semibold text-xs">
+                  <Lock size={15} className={audience === "INTERNAL" ? "text-amber-600" : "text-gray-500"} />
+                  Internal Staff Only
+                </div>
+                <p className="text-[10px] text-gray-500 leading-tight">
+                  Staff-only discussions; not visible to portal clients
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAudience("CLIENT_SHARED")}
+                className={`p-3 rounded-xl border text-left flex flex-col gap-1 transition-all ${
+                  audience === "CLIENT_SHARED"
+                    ? "bg-blue-50/70 border-blue-500 text-blue-900 ring-2 ring-blue-500/20 shadow-sm"
+                    : "bg-white border-gray-200 text-gray-700 hover:border-gray-300"
+                }`}
+              >
+                <div className="flex items-center gap-2 font-semibold text-xs">
+                  <Globe size={15} className={audience === "CLIENT_SHARED" ? "text-blue-600" : "text-gray-500"} />
+                  Client Shared
+                </div>
+                <p className="text-[10px] text-gray-500 leading-tight">
+                  Connects to Client Portal for external client visibility
+                </p>
+              </button>
+            </div>
+            {audience === "CLIENT_SHARED" && (
+              <div className="mt-3">
+                <label className="block text-[11px] font-semibold text-gray-700 uppercase tracking-wider mb-1">
+                  Client ID <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  placeholder="e.g. client-101"
+                  required
+                  className="w-full px-3.5 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            )}
           </div>
 
           {/* Invite Members */}
