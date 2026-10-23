@@ -642,13 +642,13 @@ export async function startLeadImport(
     try {
         let res: any;
         try {
-            res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
+            res = await api.post<LeadImportStartResponse>("/api/leads/import", formData, {
                 timeout: 120_000,
             });
         } catch (err: any) {
-            // Try route alias /api/leads/import if /leads/import fails
+            // Try route alias /leads/import if /api/leads/import returns 404
             if (err?.response?.status === 404) {
-                res = await api.post<LeadImportStartResponse>("/api/leads/import", formData, {
+                res = await api.post<LeadImportStartResponse>("/leads/import", formData, {
                     timeout: 120_000,
                 });
             } else {

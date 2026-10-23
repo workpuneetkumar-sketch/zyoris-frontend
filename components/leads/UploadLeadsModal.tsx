@@ -6,12 +6,15 @@ import {
   Upload, X, FileText, CheckCircle2, AlertCircle, Loader2, ClipboardPaste,
   Eye, FileSpreadsheet, SkipForward, AlertTriangle, RefreshCw,
   Download, Info, ChevronDown, ChevronUp, SlidersHorizontal, ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import {
   startLeadImport,
   getLeadImportStatus,
   downloadLeadImportErrors,
   LeadImportJobStatus,
+  LeadImportMode,
+  LeadDuplicateHandling,
 } from "@/lib/api/leadsApi";
 import * as XLSX from "xlsx";
 import {
@@ -153,6 +156,8 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
   const [fieldMapping,      setFieldMapping]      = useState<Record<string, TargetLeadFieldKey>>({});
   const [isParsingPdf,      setIsParsingPdf]      = useState(false);
   const [allowReimport,     setAllowReimport]     = useState(false);
+  const [importMode,        setImportMode]        = useState<LeadImportMode>("auto");
+  const [duplicateStrategy, setDuplicateStrategy] = useState<LeadDuplicateHandling>("skip");
   const [hasErrorCsv,       setHasErrorCsv]       = useState(false);
   const [downloadingErrors, setDownloadingErrors] = useState(false);
   const [showFormatGuide,   setShowFormatGuide]   = useState(false);
@@ -230,47 +235,65 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
         setMissingHeaders(validateMappedHeaders(initialMapping));
         setDuplicatesInFile(detectDuplicates(parsed.rows));
         setPhase("previewing");
-      } else if (lowerName.endsWith(".pdf")) {
+      } else if (lowerName.endsWith(".pdf") || lowerName.endsWith(".docx") || lowerName.endsWith(".ppt") || lowerName.endsWith(".pptx")) {
+        // Fast client-side preview if available, but NEVER block upload!
+        // Backend /api/leads/import natively supports PDF, DOCX, XLSX with Grok AI & deterministic parser.
         setIsParsingPdf(true);
-        const extracted = await extractLeadsFromPdf(selected);
+        let extracted: any = null;
+        if (lowerName.endsWith(".pdf")) {
+          try {
+            extracted = await extractLeadsFromPdf(selected);
+          } catch (pdfErr) {
+            console.debug("[UploadLeadsModal] Client-side PDF preview note:", pdfErr);
+          }
+        }
         setIsParsingPdf(false);
 
-        if (extracted.totalLeadsFound === 0) {
-          setError("No readable lead records could be retrieved from this PDF. Please ensure the PDF contains contact text or table rows.");
-          setPhase("error");
-          return;
-        }
+        if (extracted && extracted.totalLeadsFound > 0) {
+          setAllExtractedRows(extracted.rows);
+          const initialMapping: Record<string, TargetLeadFieldKey> = {};
+          extracted.headers.forEach((h: string) => {
+            initialMapping[h] = autoMapField(h);
+          });
 
-        setAllExtractedRows(extracted.rows);
-        const initialMapping: Record<string, TargetLeadFieldKey> = {};
-        extracted.headers.forEach((h) => {
-          initialMapping[h] = autoMapField(h);
-        });
+          // Smart fallback: if email or name was not auto-mapped from header name, inspect row values
+          const mappedTargets = Object.values(initialMapping);
+          if (!mappedTargets.includes("email") && extracted.rows.length > 0) {
+            const emailCol = extracted.headers.find((h: string) =>
+              extracted.rows.some((r: any) => r[h] && r[h].includes("@") && r[h].includes("."))
+            );
+            if (emailCol) initialMapping[emailCol] = "email";
+          }
+          if (!mappedTargets.includes("phone") && extracted.rows.length > 0) {
+            const phoneCol = extracted.headers.find((h: string) =>
+              extracted.rows.some((r: any) => r[h] && r[h].replace(/\D/g, "").length >= 7)
+            );
+            if (phoneCol) initialMapping[phoneCol] = "phone";
+          }
+          if (!mappedTargets.includes("name") && extracted.rows.length > 0) {
+            const nameCol = extracted.headers.find(
+              (h: string) =>
+                initialMapping[h] === "__skip__" &&
+                extracted.rows.some((r: any) => {
+                  const val = (r[h] || "").trim();
+                  return val.length >= 2 && !/^\d+$/.test(val) && !val.includes("@");
+                })
+            );
+            if (nameCol) initialMapping[nameCol] = "name";
+          }
 
-        // Smart fallback: if email or name was not auto-mapped from header name, inspect row values
-        const mappedTargets = Object.values(initialMapping);
-        if (!mappedTargets.includes("email") && extracted.rows.length > 0) {
-          const emailCol = extracted.headers.find((h) =>
-            extracted.rows.some((r) => r[h] && r[h].includes("@") && r[h].includes("."))
-          );
-          if (emailCol) initialMapping[emailCol] = "email";
+          setFieldMapping(initialMapping);
+          setPreview({ headers: extracted.headers, rows: extracted.rows.slice(0, 5) });
+          setMissingHeaders(validateMappedHeaders(initialMapping));
+          setDuplicatesInFile(detectDuplicates(extracted.rows));
+        } else {
+          // Direct backend Grok AI & parser processing (/api/leads/import)
+          setAllExtractedRows([]);
+          setFieldMapping({});
+          setPreview(null);
+          setMissingHeaders([]);
+          setDuplicatesInFile(0);
         }
-        if (!mappedTargets.includes("name") && extracted.rows.length > 0) {
-          const nameCol = extracted.headers.find(
-            (h) =>
-              initialMapping[h] === "__skip__" &&
-              extracted.rows.some((r) => {
-                const val = (r[h] || "").trim();
-                return val.length >= 2 && !/^\d+$/.test(val) && !val.includes("@");
-              })
-          );
-          if (nameCol) initialMapping[nameCol] = "name";
-        }
-
-        setFieldMapping(initialMapping);
-        setPreview({ headers: extracted.headers, rows: extracted.rows.slice(0, 5) });
-        setMissingHeaders(validateMappedHeaders(initialMapping));
-        setDuplicatesInFile(detectDuplicates(extracted.rows));
         setPhase("previewing");
       } else {
         setPreview(null);
@@ -309,7 +332,7 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       return;
     }
 
-    if (missingHeaders.length > 0) {
+    if (allExtractedRows.length > 0 && missingHeaders.length > 0) {
       setError(`Please map ${missingHeaders.join(" and ")} before starting import.`);
       return;
     }
@@ -327,8 +350,9 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
       console.log('[handleUpload] Preparing file for import...');
       let fileToUpload = file;
 
-      // For PDF files or customized mappings, convert mapped rows into clean CSV
-      if (file.name.toLowerCase().endsWith(".pdf") || allExtractedRows.length > 0) {
+      // Only convert mapped rows to clean CSV for non-PDF files where client-side mapping was performed
+      // For PDFs, always upload original document directly to /api/leads/import with Grok AI
+      if (!file.name.toLowerCase().endsWith(".pdf") && allExtractedRows.length > 0) {
         let rowsToExport = allExtractedRows;
         if (allowReimport) {
           const ts = Date.now().toString().slice(-4);
@@ -350,8 +374,11 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
         fileToUpload = new File([blob], cleanName, { type: "text/csv" });
       }
 
-      console.log('[handleUpload] Calling startLeadImport with:', fileToUpload.name, fileToUpload.size);
-      const res = await startLeadImport(fileToUpload);
+      console.log('[handleUpload] Calling startLeadImport with:', fileToUpload.name, fileToUpload.size, { mode: importMode, duplicateHandling: duplicateStrategy });
+      const res = await startLeadImport(fileToUpload, {
+        mode: importMode,
+        duplicateHandling: allowReimport ? "update" : duplicateStrategy,
+      });
       console.log('[handleUpload] Import started successfully:', res);
       
       if (!res.jobId) {
@@ -856,6 +883,72 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
                 </div>
               )}
 
+              {/* Document Overview (when uploading raw document for server-side AI ingestion) */}
+              {(!preview || allExtractedRows.length === 0) && (
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold">
+                      <FileText size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-900">{file?.name}</p>
+                      <p className="text-xs text-slate-500 font-medium">
+                        {file ? (file.size / 1024).toFixed(1) : 0} KB · Ready for server-side AI & Parser Ingestion
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-extrabold uppercase tracking-wider bg-blue-100 text-blue-700 px-2 py-1 rounded-lg">
+                    {importMode.toUpperCase()} Engine
+                  </span>
+                </div>
+              )}
+
+              {/* Engine Mode Selector */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Sparkles size={14} className="text-blue-600" />
+                    <span>Extraction Engine Mode</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400">Powered by xAI Grok & Backend Parser</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setImportMode("auto")}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all border text-center ${
+                      importMode === "auto"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Auto (Hybrid)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode("ai")}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all border text-center ${
+                      importMode === "ai"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Grok AI
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImportMode("parser")}
+                    className={`py-2 px-2.5 rounded-lg text-xs font-bold transition-all border text-center ${
+                      importMode === "parser"
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-100"
+                    }`}
+                  >
+                    Parser
+                  </button>
+                </div>
+              </div>
+
               {/* Duplicate Handling Option */}
               <label className="flex items-center gap-3 p-3 bg-blue-50/70 border border-blue-100 rounded-xl cursor-pointer hover:bg-blue-50 transition-colors">
                 <input
@@ -873,10 +966,10 @@ export default function UploadLeadsModal({ onClose, onSuccess }: UploadLeadsModa
               <div className="flex flex-col gap-2.5 pt-1">
                 <button
                   onClick={handleUpload}
-                  disabled={missingHeaders.length > 0}
+                  disabled={allExtractedRows.length > 0 && missingHeaders.length > 0}
                   className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-extrabold rounded-2xl transition-all shadow-lg shadow-blue-100 flex items-center justify-center gap-2"
                 >
-                  <FileText size={16} /> Start Import ({allExtractedRows.length} Leads)
+                  <FileText size={16} /> {allExtractedRows.length > 0 ? `Start Import (${allExtractedRows.length} Leads)` : "Start Server AI & Parser Import"}
                 </button>
                 <button onClick={handleReset} className="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-600 text-xs font-bold rounded-2xl border border-slate-200 transition-all">
                   Choose Different File
