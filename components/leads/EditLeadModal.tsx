@@ -100,27 +100,10 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
     const [loading, setLoading] = useState(false);
     const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
-    // Tracks whether form has ever been dirtied (to avoid popup on initial mount)
-    const isFirstRender = useRef(true);
 
     const isDirty = !deepEqual(form, initialForm);
 
-    // Auto-show the save/discard popup as soon as any field changes
-    useEffect(() => {
-        if (isFirstRender.current) {
-            isFirstRender.current = false;
-            return;
-        }
-        if (isDirty && !showUnsavedPopup && !loading) {
-            setShowUnsavedPopup(true);
-        }
-        // If user reverts all changes back to initial, hide the popup
-        if (!isDirty) {
-            setShowUnsavedPopup(false);
-        }
-    }, [form]); // eslint-disable-line react-hooks/exhaustive-deps
-
-    // Intercept close attempts
+    // Intercept close attempts (only show popup if there are unsaved changes)
     const handleRequestClose = useCallback(() => {
         if (isDirty) {
             setShowUnsavedPopup(true);
@@ -160,7 +143,12 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
 
     return (
         <>
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                onClick={(e) => {
+                    if (e.target === e.currentTarget) handleRequestClose();
+                }}
+            >
                 <div className="bg-gray-50 w-full max-w-4xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
 
                     {/* Header */}
@@ -180,6 +168,7 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
                             </div>
                         </div>
                         <button
+                            type="button"
                             onClick={handleRequestClose}
                             className="w-9 h-9 rounded-lg border border-gray-200 flex items-center justify-center hover:bg-gray-100 text-gray-500"
                         >
@@ -192,24 +181,40 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
                         <LeadForm form={form} setForm={setForm} errors={errors} />
                     </div>
 
-                    {/* Footer — no Save button; changes trigger popup automatically */}
+                    {/* Footer */}
                     <div className="flex justify-between items-center px-6 py-4 bg-white border-t border-gray-200 shrink-0">
                         <p className="text-xs text-gray-400">
                             {isDirty
-                                ? "Changes detected — save or discard above"
+                                ? "You have unsaved changes"
                                 : "No changes yet"}
                         </p>
-                        <button
-                            onClick={handleRequestClose}
-                            className="h-10 px-5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100"
-                        >
-                            Close
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={handleRequestClose}
+                                disabled={loading}
+                                className="h-10 px-5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSave}
+                                disabled={loading}
+                                className="flex items-center justify-center gap-2 h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-70 shadow-sm transition-all"
+                            >
+                                {loading ? (
+                                    <><Loader2 size={16} className="animate-spin" /> Saving…</>
+                                ) : (
+                                    <><Save size={16} /> Save Changes</>
+                                )}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {/* Unsaved changes popup — appears automatically when form is dirty */}
+            {/* Unsaved changes popup — appears ONLY when closing with dirty changes */}
             {showUnsavedPopup && (
                 <UnsavedChangesPopup
                     onSave={handleSave}

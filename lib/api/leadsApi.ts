@@ -347,7 +347,33 @@ export async function updateLead(
     id: Lead["id"],
     data: Partial<Lead>
 ): Promise<Lead> {
-    const res = await api.patch(`/leads/update-lead/${id}`, data);
+    const payload: Record<string, any> = { ...data };
+
+    // Sanitize assignedToId: empty string violates FK constraint in PostgreSQL
+    if ("assignedToId" in payload) {
+        payload.assignedToId = payload.assignedToId?.trim() || null;
+    }
+
+    // Sanitize email: empty string fails email format validation
+    if ("email" in payload) {
+        payload.email = payload.email?.trim() || null;
+    }
+
+    // Sanitize other string fields
+    if ("phone" in payload && typeof payload.phone === "string") {
+        payload.phone = payload.phone.trim() || null;
+    }
+    if ("company" in payload && typeof payload.company === "string") {
+        payload.company = payload.company.trim() || null;
+    }
+    if ("city" in payload && typeof payload.city === "string") {
+        payload.city = payload.city.trim() || null;
+    }
+    if ("source" in payload && typeof payload.source === "string") {
+        payload.source = payload.source.trim() || null;
+    }
+
+    const res = await api.patch(`/leads/update-lead/${id}`, payload);
     return res.data;
 }
 

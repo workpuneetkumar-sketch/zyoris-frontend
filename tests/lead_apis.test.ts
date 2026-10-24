@@ -139,3 +139,55 @@ test("5. Error fallback handling across all 4 APIs", () => {
   assert.equal(parseEnrichmentResponse({}).provider, "default");
   assert.equal(parseQualifyResponse({ fitScore: 40 }).status, "REVIEW_NEEDED");
 });
+
+export function sanitizeUpdateLeadPayload(data: Record<string, any>) {
+  const payload: Record<string, any> = { ...data };
+  if ("assignedToId" in payload) {
+    payload.assignedToId = payload.assignedToId?.trim() || null;
+  }
+  if ("email" in payload) {
+    payload.email = payload.email?.trim() || null;
+  }
+  if ("phone" in payload && typeof payload.phone === "string") {
+    payload.phone = payload.phone.trim() || null;
+  }
+  if ("company" in payload && typeof payload.company === "string") {
+    payload.company = payload.company.trim() || null;
+  }
+  if ("city" in payload && typeof payload.city === "string") {
+    payload.city = payload.city.trim() || null;
+  }
+  if ("source" in payload && typeof payload.source === "string") {
+    payload.source = payload.source.trim() || null;
+  }
+  return payload;
+}
+
+test("6. Update Lead Payload Sanitization (PATCH /leads/update-lead/:id)", () => {
+  const rawFormValues = {
+    name: "Quality Std",
+    email: "quality.std@plastindia.org",
+    phone: "9705807551",
+    company: "Sudhakar Pipes and Fittings Hyderabad",
+    city: "Mumbai",
+    source: "",
+    status: "WARM",
+    assignedToId: "",
+    tags: ["industry"],
+  };
+
+  const sanitized = sanitizeUpdateLeadPayload(rawFormValues);
+  // Empty assignedToId must become null to avoid PostgreSQL foreign key constraint failure
+  assert.strictEqual(sanitized.assignedToId, null);
+  // Valid status is preserved
+  assert.strictEqual(sanitized.status, "WARM");
+  // Empty source becomes null
+  assert.strictEqual(sanitized.source, null);
+  // Name and phone preserved
+  assert.strictEqual(sanitized.name, "Quality Std");
+  assert.strictEqual(sanitized.phone, "9705807551");
+
+  // Empty email string must become null to avoid validation failure
+  const withEmptyEmail = sanitizeUpdateLeadPayload({ email: "   " });
+  assert.strictEqual(withEmptyEmail.email, null);
+});

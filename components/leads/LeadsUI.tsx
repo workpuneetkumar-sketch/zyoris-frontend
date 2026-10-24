@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EditLeadModal from "./EditLeadModal";
 import ViewLeadModal from "./ViewLeadModal";
-import { updateLead, deleteLead, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
+import { updateLead, deleteLead, addLeadNote, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
 
 import { toast } from "react-toastify";
 import { LeadCheckbox } from "./BulkActionsToolbar";
@@ -960,19 +960,38 @@ export function LeadsTable({
                     onClose={() => { setIsEditOpen(false); setEditingLead(null); }}
                     onSave={async (updatedData) => {
                         try {
-                            const payload = {
-                                ...updatedData,
-                                estimatedValue: (updatedData.estimatedValue !== "" && updatedData.estimatedValue !== undefined && updatedData.estimatedValue !== null)
-                                    ? Number(updatedData.estimatedValue)
-                                    : undefined,
+                            const payload: Partial<Lead> = {
+                                name: updatedData.name.trim(),
+                                email: updatedData.email.trim() || undefined,
+                                phone: updatedData.phone.trim() || undefined,
+                                company: updatedData.company.trim() || undefined,
+                                city: updatedData.city.trim() || undefined,
+                                source: updatedData.source.trim() || undefined,
+                                status: updatedData.status,
+                                assignedToId: updatedData.assignedToId?.trim() || null,
+                                tags: Array.isArray(updatedData.tags)
+                                    ? updatedData.tags.map((tag: any) => typeof tag === "string" ? tag : tag.label)
+                                    : [],
                             };
-                            await updateLead(editingLead.id, payload as unknown as Partial<Lead>);
+                            await updateLead(editingLead.id, payload);
+
+                            // If note was entered and changed, save it via the dedicated note endpoint
+                            if (updatedData.note && updatedData.note.trim() && updatedData.note.trim() !== editingLead.note?.trim()) {
+                                try {
+                                    await addLeadNote(editingLead.id, updatedData.note.trim());
+                                } catch (noteErr) {
+                                    console.warn("Failed to add note to lead:", noteErr);
+                                }
+                            }
+
                             setIsEditOpen(false);
                             setEditingLead(null);
                             await onRefreshLeads();
                             toast.success("Lead updated successfully");
                         } catch (error) {
+                            console.error("Failed to update lead:", error);
                             toast.error("Failed to update lead");
+                            throw error;
                         }
                     }}
                 />
