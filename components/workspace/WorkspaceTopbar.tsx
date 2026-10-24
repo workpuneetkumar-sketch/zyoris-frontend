@@ -11,33 +11,21 @@ import { GlobalSearchModal } from "./GlobalSearchModal";
 import {
   Menu,
   ChevronRight,
-  Home,
-  CheckSquare,
-  FolderKanban,
-  Database,
-  BookOpen,
-  Folder,
-  Trash2,
+  ChevronLeft,
   Search,
 } from "lucide-react";
 
 interface WorkspaceTopbarProps {
   onToggleMobileSidebar: () => void;
-  onOpenCreatePageModal: (parentId?: string | null) => void;
+  onToggleDesktopSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
+  onOpenCreatePageModal: (parentId?: string | null, type?: "document" | "folder" | "database") => void;
 }
-
-const WORKSPACE_NAV_ITEMS = [
-  { name: "Home", href: "/workspace", icon: Home },
-  { name: "My Tasks", href: "/workspace/tasks", icon: CheckSquare },
-  { name: "Projects", href: "/workspace/projects", icon: FolderKanban },
-  { name: "Databases", href: "/workspace/databases", icon: Database },
-  { name: "Knowledge", href: "/workspace/knowledge", icon: BookOpen },
-  { name: "Files", href: "/workspace/files", icon: Folder },
-  { name: "Trash", href: "/workspace/trash", icon: Trash2 },
-];
 
 export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
   onToggleMobileSidebar,
+  onToggleDesktopSidebar,
+  isSidebarCollapsed = false,
   onOpenCreatePageModal,
 }) => {
   const { user } = useAuth();
@@ -61,7 +49,10 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
   const findBreadcrumbPath = (): { id?: string; title: string; href: string }[] => {
     const currentPath = pathname || "";
     if (currentPath === "/workspace") return [{ title: "Home", href: "/workspace" }];
-    if (currentPath.startsWith("/workspace/tasks")) return [{ title: "My Tasks", href: "/workspace/tasks" }];
+    if (currentPath.startsWith("/workspace/tasks")) {
+      const isAll = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "all";
+      return [{ title: isAll ? "Team Tasks / Board" : "My Tasks", href: isAll ? "/workspace/tasks?tab=all" : "/workspace/tasks?tab=my" }];
+    }
     if (currentPath.startsWith("/workspace/projects")) return [{ title: "Projects", href: "/workspace/projects" }];
     if (currentPath.startsWith("/workspace/databases")) return [{ title: "Databases", href: "/workspace/databases" }];
     if (currentPath.startsWith("/workspace/knowledge")) return [{ title: "Knowledge", href: "/workspace/knowledge" }];
@@ -106,32 +97,51 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
   const breadcrumbs = findBreadcrumbPath();
 
   return (
-    <div className="w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 rounded-xl shadow-xs overflow-hidden">
+    <div className="w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs overflow-hidden">
       {/* Top Header Row */}
-      <header className="h-14 w-full px-4 md:px-6 flex items-center justify-between z-30 shrink-0 border-b border-slate-100 dark:border-slate-800">
-        {/* Left Area: Mobile Toggle + Breadcrumbs */}
-        <div className="flex items-center space-x-3 min-w-0">
+      <header className="h-12 w-full px-3 md:px-5 flex items-center justify-between z-30 shrink-0">
+        {/* Left Area: Sidebar Toggles + Breadcrumbs */}
+        <div className="flex items-center space-x-2 md:space-x-3 min-w-0">
+          {/* Mobile Sidebar Toggle Button */}
           <button
             onClick={onToggleMobileSidebar}
-            className="md:hidden p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition flex-shrink-0"
+            className="md:hidden p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
+            title="Open workspace menu"
+            aria-label="Open workspace menu"
           >
-            <Menu className="w-5 h-5" />
+            <Menu className="w-4 h-4" />
           </button>
+
+          {/* Desktop Sidebar Toggle Button */}
+          {onToggleDesktopSidebar && (
+            <button
+              onClick={onToggleDesktopSidebar}
+              className="hidden md:flex items-center justify-center p-1.5 rounded-lg text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition shrink-0"
+              title={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+              aria-label={isSidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
+            >
+              {isSidebarCollapsed ? (
+                <ChevronRight className="w-4 h-4" />
+              ) : (
+                <ChevronLeft className="w-4 h-4" />
+              )}
+            </button>
+          )}
 
           <nav className="flex items-center space-x-1.5 text-xs font-medium text-slate-500 dark:text-slate-400 min-w-0 overflow-hidden">
             <Link
               href="/workspace"
-              className="hover:text-slate-900 dark:hover:text-white transition flex-shrink-0"
+              className="hover:text-slate-900 dark:hover:text-white transition shrink-0 font-medium"
             >
               Workspace
             </Link>
 
             {breadcrumbs.map((crumb, idx) => (
               <React.Fragment key={crumb.href + idx}>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-300 dark:text-slate-600 flex-shrink-0" />
+                <ChevronRight className="w-3 h-3 text-slate-300 dark:text-slate-600 shrink-0" />
                 <Link
                   href={crumb.href}
-                  className={`truncate max-w-[140px] md:max-w-[200px] transition ${
+                  className={`truncate max-w-[130px] md:max-w-[200px] transition ${
                     idx === breadcrumbs.length - 1
                       ? "text-slate-900 dark:text-white font-semibold"
                       : "hover:text-slate-900 dark:hover:text-white"
@@ -144,16 +154,17 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
           </nav>
         </div>
 
-        {/* Right Area: Search, Create Menu & User Context */}
-        <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
+        {/* Right Area: Search & Create Menu */}
+        <div className="flex items-center space-x-2 shrink-0">
           {/* Global Search Button */}
           <button
             onClick={() => setIsSearchOpen(true)}
-            className="flex items-center space-x-2 px-2.5 py-1.5 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-500 dark:text-slate-400 rounded-xl text-xs font-medium transition"
+            className="flex items-center space-x-2 px-2.5 py-1.5 bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-500 dark:text-slate-400 rounded-xl text-xs font-medium transition cursor-pointer"
+            title="Search workspace (⌘K)"
           >
             <Search className="w-3.5 h-3.5 text-slate-400" />
-            <span className="hidden sm:inline">Search...</span>
-            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-[10px] font-mono text-slate-400 border border-slate-200 dark:border-slate-700 shadow-2xs">
+            <span className="hidden sm:inline">Search</span>
+            <kbd className="hidden sm:inline-flex items-center px-1.5 py-0.2 rounded bg-white dark:bg-slate-900 text-[10px] font-mono text-slate-400 border border-slate-200 dark:border-slate-700 shadow-2xs">
               ⌘K
             </kbd>
           </button>
@@ -161,32 +172,6 @@ export const WorkspaceTopbar: React.FC<WorkspaceTopbarProps> = ({
           <CreateMenu onOpenCreatePageModal={onOpenCreatePageModal} />
         </div>
       </header>
-
-      {/* Horizontal Nav Tabs Row */}
-      <div className="px-4 md:px-6 py-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar bg-slate-50/50 dark:bg-slate-900/50">
-        {WORKSPACE_NAV_ITEMS.map((item) => {
-          const Icon = item.icon;
-          const isActive =
-            item.href === "/workspace"
-              ? pathname === "/workspace"
-              : pathname?.startsWith(item.href);
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all shrink-0 ${
-                isActive
-                  ? "bg-blue-600 text-white shadow-xs font-semibold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800"
-              }`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              <span>{item.name}</span>
-            </Link>
-          );
-        })}
-      </div>
 
       {/* Global Search Modal */}
       <GlobalSearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />

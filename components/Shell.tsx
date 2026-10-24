@@ -63,6 +63,7 @@ import {
 import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
+import { TourHeaderButton } from "./tour/TourHeaderButton";
 
 type NavItem = {
   href: string;
@@ -1206,7 +1207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const UserFooter = () =>
     user ? (
-      <div className="px-4 py-4 mt-2 border-t border-border">
+      <div className="px-4 py-4 mt-2 border-t border-border" data-tour="user-profile">
         <div className="w-full flex items-center gap-3 rounded-xl px-1 py-1">
           {/* Left: avatar + name → goes to profile */}
           <button
@@ -1349,12 +1350,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* Search component */}
-          <div className="flex-1 flex justify-start">
+          <div className="flex-1 flex justify-start" data-tour="crm-search">
             <CrmSearch />
           </div>
 
-          {/* Notification bell — single instance for both mobile & desktop */}
-          <NotificationBell />
+          <div className="flex items-center gap-2">
+            <TourHeaderButton />
+            <div data-tour="notifications-bell">
+              <NotificationBell />
+            </div>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-6">

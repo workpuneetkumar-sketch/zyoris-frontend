@@ -2,6 +2,8 @@
 "use client";
 
 import { useState } from "react";
+import { ClipboardPaste, UserPlus } from "lucide-react";
+import PasteLeadImport from "./PasteLeadImport";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 
@@ -34,6 +36,7 @@ export default function NewLeadPage() {
     }>({});
 
     const [loading, setLoading] = useState(false);
+    const [creationMode, setCreationMode] = useState<"form" | "paste">("form");
 
     const handleSubmit = async () => {
         console.log('[NewLeadPage] Form values before submission:', form);
@@ -93,46 +96,78 @@ export default function NewLeadPage() {
         <div className="p-6 bg-gray-50 min-h-screen">
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-6">
-
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">
                         New Lead
                     </h1>
-
                     <p className="text-sm text-gray-400 mt-1">
-                        Create and manage lead information
+                        Create a single lead manually or bulk import multiple leads from copied & pasted text
                     </p>
                 </div>
 
+                {/* Mode Selector Tabs */}
+                <div className="flex items-center gap-1.5 p-1 bg-white border border-gray-200 rounded-xl shadow-xs">
+                    <button
+                        type="button"
+                        onClick={() => setCreationMode("form")}
+                        className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                            creationMode === "form"
+                                ? "bg-blue-600 text-white shadow-xs"
+                                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                        }`}
+                    >
+                        <UserPlus size={14} />
+                        <span>Single Lead Form</span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setCreationMode("paste")}
+                        className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
+                            creationMode === "paste"
+                                ? "bg-blue-600 text-white shadow-xs"
+                                : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                        }`}
+                    >
+                        <ClipboardPaste size={14} />
+                        <span>Bulk Paste Import</span>
+                        <span className="text-[10px] bg-blue-100 text-blue-800 font-extrabold px-1.5 py-0.5 rounded-full">AI</span>
+                    </button>
+                </div>
             </div>
 
-            {/* Shared Form */}
-            <LeadForm
-                form={form}
-                setForm={setForm}
-                errors={errors}
-            />
+            {creationMode === "paste" ? (
+                <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-xs">
+                    <PasteLeadImport showListingRedirect={true} />
+                </div>
+            ) : (
+                <>
+                    {/* Shared Form */}
+                    <LeadForm
+                        form={form}
+                        setForm={setForm}
+                        errors={errors}
+                    />
 
-            {/* Footer */}
-            <div className="flex justify-end gap-3 mt-6">
+                    {/* Footer */}
+                    <div className="flex justify-end gap-3 mt-6">
+                        <button
+                            onClick={() => router.push("/leads")}
+                            className="h-10 px-5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-100"
+                        >
+                            Cancel
+                        </button>
 
-                <button
-                    onClick={() => router.push("/leads")}
-                    className="h-10 px-5 rounded-lg border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-100"
-                >
-                    Cancel
-                </button>
-
-                <button
-                    onClick={handleSubmit}
-                    disabled={loading}
-                    className="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-70"
-                >
-                    {loading ? "Creating..." : "Create Lead"}
-                </button>
-
-            </div>
+                        <button
+                            onClick={handleSubmit}
+                            disabled={loading}
+                            className="h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-70"
+                        >
+                            {loading ? "Creating..." : "Create Lead"}
+                        </button>
+                    </div>
+                </>
+            )}
         </div>
     );
 }

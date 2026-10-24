@@ -171,6 +171,29 @@ export function getEffectiveAuthToken(): string | null {
    Automatically attach sanitized access token
 --------------------------------------------------- */
 
+export function getEffectiveOrganizationId(): string | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = localStorage.getItem("zyoris-auth");
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            const candidate = parsed?.user?.organizationId || parsed?.organizationId || parsed?.data?.organizationId;
+            if (candidate && typeof candidate === "string" && candidate.trim()) {
+                return candidate.trim();
+            }
+            const token = parsed?.token || parsed?.accessToken;
+            if (token && typeof token === "string" && token.includes(".")) {
+                const parts = token.split(".");
+                if (parts.length >= 2) {
+                    const decoded = JSON.parse(atob(parts[1]));
+                    if (decoded?.organizationId) return decoded.organizationId;
+                }
+            }
+        }
+    } catch {}
+    return null;
+}
+
 api.interceptors.request.use(
     (config: InternalAxiosRequestConfig) => {
         // Always attach the token for every request — including /auth/me, /workspace/pages etc.
@@ -199,6 +222,15 @@ api.interceptors.request.use(
                 }
                 config.headers.Authorization = bearerVal;
                 config.headers['Authorization'] = bearerVal;
+            }
+
+            const orgId = getEffectiveOrganizationId();
+            if (orgId) {
+                if (typeof config.headers.set === 'function') {
+                    config.headers.set('x-organization-id', orgId);
+                }
+                config.headers['x-organization-id'] = orgId;
+                config.headers['X-Organization-Id'] = orgId;
             }
         }
 

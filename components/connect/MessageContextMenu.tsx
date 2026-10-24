@@ -5,9 +5,12 @@ import {
   Reply,
   Edit2,
   Trash2,
+  Smile,
+  AtSign,
   Pin,
   Bookmark,
   Link as LinkIcon,
+  MessageSquare,
 } from "lucide-react";
 import { ConnectMessage, MessageActionItem } from "@/types/connect";
 
@@ -17,17 +20,16 @@ interface MessageContextMenuProps {
   message: ConnectMessage;
   isSelf: boolean;
   canManage?: boolean;
-  canPin?: boolean;
   onReply: (message: ConnectMessage) => void;
+  onOpenThread?: (message: ConnectMessage) => void;
   onEdit: (message: ConnectMessage) => void;
   onDelete: (message: ConnectMessage) => void;
-  onReact?: (message: ConnectMessage, emoji: string) => void;
+  onReact?: (message: ConnectMessage, reaction: string) => void;
+  onMention?: (message: ConnectMessage) => void;
   onPin?: (message: ConnectMessage) => void;
   onSave?: (message: ConnectMessage) => void;
-  onOpenLinkModal?: (message: ConnectMessage) => void;
+  onLinkEntity?: (message: ConnectMessage) => void;
 }
-
-const QUICK_EMOJIS = ["👍", "❤️", "🎉", "🚀", "😂", "👀", "🙌"];
 
 export default function MessageContextMenu({
   isOpen,
@@ -35,14 +37,15 @@ export default function MessageContextMenu({
   message,
   isSelf,
   canManage = false,
-  canPin = true,
   onReply,
+  onOpenThread,
   onEdit,
   onDelete,
   onReact,
+  onMention,
   onPin,
   onSave,
-  onOpenLinkModal,
+  onLinkEntity,
 }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -71,29 +74,38 @@ export default function MessageContextMenu({
 
   if (!isOpen) return null;
 
-  const primaryActions: MessageActionItem[] = [
+  const actions: MessageActionItem[] = [
     {
       id: "reply",
       label: "Reply in Thread",
-      icon: Reply,
+      icon: MessageSquare,
       onClick: (msg) => {
-        onReply(msg);
+        if (onOpenThread) onOpenThread(msg);
+        else onReply(msg);
         onClose();
       },
     },
     {
-      id: message.isPinned ? "unpin" : "pin",
-      label: message.isPinned ? "Unpin Message" : "Pin Message",
+      id: "react",
+      label: "Add Reaction",
+      icon: Smile,
+      onClick: (msg) => {
+        onReact?.(msg, "👍");
+        onClose();
+      },
+    },
+    {
+      id: "pin",
+      label: msgPinnedLabel(message),
       icon: Pin,
-      hidden: !canPin,
       onClick: (msg) => {
         onPin?.(msg);
         onClose();
       },
     },
     {
-      id: message.isSaved ? "unsave" : "save",
-      label: message.isSaved ? "Remove Bookmark" : "Save Message",
+      id: "save",
+      label: message.isSaved ? "Remove Bookmark" : "Save Bookmark",
       icon: Bookmark,
       onClick: (msg) => {
         onSave?.(msg);
@@ -102,10 +114,19 @@ export default function MessageContextMenu({
     },
     {
       id: "link",
-      label: "Link to Business Record",
+      label: "Link to Business Entity",
       icon: LinkIcon,
       onClick: (msg) => {
-        onOpenLinkModal?.(msg);
+        onLinkEntity?.(msg);
+        onClose();
+      },
+    },
+    {
+      id: "mention",
+      label: "Mention Author",
+      icon: AtSign,
+      onClick: (msg) => {
+        onMention?.(msg);
         onClose();
       },
     },
@@ -132,32 +153,18 @@ export default function MessageContextMenu({
     },
   ];
 
+  function msgPinnedLabel(msg: ConnectMessage) {
+    return msg.isPinned ? "Unpin Message" : msg.channelId ? "Pin to Channel" : "Pin Message";
+  }
+
   return (
     <div
       ref={menuRef}
       id={`msg-context-menu-${message.id}`}
-      className="msg-context-menu absolute right-0 top-full mt-1 w-56 p-1.5 shadow-xl rounded-xl z-50 text-xs bg-surface border border-border"
+      className="msg-context-menu absolute right-0 top-full mt-1 w-56 p-1.5 shadow-2xl rounded-2xl z-50 text-xs border border-border bg-surface"
     >
-      {/* Quick emoji reactions bar */}
-      <div className="px-2 py-1.5 mb-1 bg-surface-hover rounded-lg flex items-center justify-between border border-border/50">
-        {QUICK_EMOJIS.map((emoji) => (
-          <button
-            key={emoji}
-            onClick={() => {
-              onReact?.(message, emoji);
-              onClose();
-            }}
-            className="p-1 text-sm hover:scale-125 transition-transform"
-            title={`React with ${emoji}`}
-          >
-            {emoji}
-          </button>
-        ))}
-      </div>
-
-      {/* Menu Actions */}
       <div className="space-y-0.5">
-        {primaryActions
+        {actions
           .filter((a) => !a.hidden)
           .map((action) => {
             const Icon = action.icon;
@@ -167,14 +174,14 @@ export default function MessageContextMenu({
                 id={`context-action-${action.id}-${message.id}`}
                 onClick={() => action.onClick(message)}
                 disabled={action.disabled}
-                className={`w-full flex items-center justify-between px-3 py-2 text-left rounded-lg transition-colors ${
+                className={`w-full flex items-center justify-between px-3 py-2 text-left rounded-xl transition-colors ${
                   action.isDestructive
-                    ? "text-error hover:bg-error-light hover:text-error-foreground font-medium"
+                    ? "text-error hover:bg-error/10 font-medium"
                     : "text-text hover:bg-surface-hover font-medium"
                 }`}
               >
                 <div className="flex items-center gap-2.5">
-                  <Icon size={14} className="shrink-0" />
+                  <Icon size={14} className={action.isDestructive ? "text-error" : "text-text-muted"} />
                   <span>{action.label}</span>
                 </div>
               </button>

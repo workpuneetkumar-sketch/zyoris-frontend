@@ -7,24 +7,25 @@ import {
   MessageSquare,
   Users,
   ChevronLeft,
+  Info,
   Pin,
-  Bookmark,
-  Search,
-  Sparkles,
+  Settings,
+  Archive,
+  RotateCcw,
+  Globe,
 } from "lucide-react";
 import ConnectSidebar from "./ConnectSidebar";
 import CreateChannelModal from "./CreateChannelModal";
 import ChannelMembersModal from "./ChannelMembersModal";
 import CreateDirectMessageModal from "./CreateDirectMessageModal";
 import CreateGroupConversationModal from "./CreateGroupConversationModal";
+import GroupMembersModal from "./GroupMembersModal";
+import ChannelDetailsDrawer from "./ChannelDetailsDrawer";
+import BusinessLinkModal from "./BusinessLinkModal";
+import ThreadPanel from "./ThreadPanel";
+import TypingIndicator from "./TypingIndicator";
 import MessageList from "./MessageList";
 import MessageComposer from "./MessageComposer";
-import ThreadDrawer from "./ThreadDrawer";
-import PinnedMessagesModal from "./PinnedMessagesModal";
-import SavedMessagesModal from "./SavedMessagesModal";
-import CommunicationSearchModal from "./CommunicationSearchModal";
-import BusinessLinkModal from "./BusinessLinkModal";
-import ZiiConversationModal from "./ZiiConversationModal";
 import {
   Channel,
   Conversation,
@@ -35,19 +36,23 @@ import {
   SocketMessageDeletePayload,
   SocketChannelUpdatedPayload,
   SocketConversationUpdatedPayload,
-  SocketChannelReadPayload,
-  SocketConversationReadPayload,
-  SocketMessageReadPayload,
-  SocketReactionPayload,
-  SocketPinPayload,
+  SocketReactionAddPayload,
+  SocketReactionRemovePayload,
+  SocketThreadReplyPayload,
+  SocketTypingEventPayload,
+  SocketPresenceUpdatePayload,
   SendMessagePayload,
-  MessageAttachment,
+  PresenceStatus,
+  TypingIndicatorInfo,
   BusinessEntityLink,
-  SearchMessageResult,
 } from "@/types/connect";
 import {
   getChannels,
   getConversations,
+  fetchChannelsResult,
+  fetchConversationsResult,
+  getCachedChannels,
+  getCachedConversations,
   getChannelMessages,
   getConversationMessages,
   sendMessage,
@@ -55,22 +60,46 @@ import {
   deleteMessage,
   addReaction,
   removeReaction,
+  markChannelAsRead,
+  markConversationAsRead,
+  getUnreadSummary,
   pinMessage,
   unpinMessage,
   saveMessage,
   unsaveMessage,
-  markChannelRead,
-  markConversationRead,
-  getUnreadCounts,
+  getChannelPins,
+  getConversationPins,
+  getSavedMessages,
+  removeMessageLink,
+  restoreChannel,
+  getMessageLinks,
+  getStoredLinksForMessage,
+  saveMessageLinkToStorage,
+  removeMessageLinkFromStorage,
 } from "@/lib/api/connectApi";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { getEmployees } from "@/lib/api/hrApi";
 import { useConnectSocket } from "@/hooks/useConnectSocket";
+import { MentionMember } from "./MentionAutocomplete";
 
 export default function ConnectWorkspace() {
-  // Navigation & Data State
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  // Navigation & Data State - initialized from local cache to prevent data loss on reload
+  const [channels, setChannels] = useState<Channel[]>(() => {
+    if (typeof window !== "undefined") {
+      return getCachedChannels();
+    }
+    return [];
+  });
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    if (typeof window !== "undefined") {
+      return getCachedConversations();
+    }
+    return [];
+  });
+  const [channelsLoading, setChannelsLoading] = useState(false);
+  const [channelsError, setChannelsError] = useState<string | null>(null);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
+  const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [activeTarget, setActiveTarget] = useState<ActiveTarget | null>(null);
 
@@ -86,23 +115,27 @@ export default function ConnectWorkspace() {
   // Mobile navigation state
   const [showMobileChat, setShowMobileChat] = useState(false);
 
-  // Modals
+  // Modals & Drawers State
   const [isCreateChannelOpen, setIsCreateChannelOpen] = useState(false);
   const [isChannelMembersOpen, setIsChannelMembersOpen] = useState(false);
   const [isCreateDirectOpen, setIsCreateDirectOpen] = useState(false);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isGroupMembersOpen, setIsGroupMembersOpen] = useState(false);
+  const [isChannelDetailsOpen, setIsChannelDetailsOpen] = useState(false);
+  const [linkingMessage, setLinkingMessage] = useState<ConnectMessage | null>(null);
 
-  // Day 2 Modals, Drawers & Navigation
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isSavedOpen, setIsSavedOpen] = useState(false);
-  const [isPinnedOpen, setIsPinnedOpen] = useState(false);
-  const [isZiiModalOpen, setIsZiiModalOpen] = useState(false);
+  // Thread Panel State (Day 2)
   const [activeThreadMessage, setActiveThreadMessage] = useState<ConnectMessage | null>(null);
-  const [selectedMessageForLinks, setSelectedMessageForLinks] = useState<ConnectMessage | null>(null);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
-  // Typing status: userId -> { userName, timestamp }
-  const [typingUsers, setTypingUsers] = useState<Record<string, { userName: string; timestamp: number }>>({});
+  // Typing Indicators State (Day 2)
+  const [typingUsers, setTypingUsers] = useState<TypingIndicatorInfo[]>([]);
+
+  // Presence State (Day 2)
+  const [currentUserPresence, setCurrentUserPresence] = useState<PresenceStatus>("ONLINE");
+  const [userPresenceMap, setUserPresenceMap] = useState<Record<string, PresenceStatus>>({});
+
+  // Pin & Save sync version for Details Drawer
+  const [pinSaveVersion, setPinSaveVersion] = useState(0);
 
   // Message Editing & Replying Modes
   const [editingMessage, setEditingMessage] = useState<ConnectMessage | null>(null);
@@ -133,31 +166,47 @@ export default function ConnectWorkspace() {
 
   // Fetch all initial server-backed data
   const loadInitialData = async () => {
+    setChannelsLoading(true);
+    setConversationsLoading(true);
     try {
-      const [channelsData, convsData, teamData, empData, unreadData] = await Promise.all([
-        getChannels(),
-        getConversations(),
+      const [channelsRes, convsRes, teamData, empData, unreadData] = await Promise.all([
+        fetchChannelsResult(),
+        fetchConversationsResult(),
         getTeamMembers().catch(() => []),
         getEmployees().catch(() => []),
-        getUnreadCounts().catch(() => ({ channels: {}, conversations: {}, total: 0 })),
+        getUnreadSummary().catch(() => []),
       ]);
 
-      setChannels(channelsData);
-      setConversations(convsData);
+      // Channels state: only overwrite if successful or if result has data
+      if (channelsRes.error) {
+        setChannelsError(channelsRes.error);
+        if (channelsRes.data.length > 0) {
+          setChannels(channelsRes.data);
+        }
+      } else {
+        setChannelsError(null);
+        setChannels(channelsRes.data);
+      }
 
-      // Populate unread map from server
-      const newUnreadMap: Record<string, number> = {};
-      if (unreadData.channels) {
-        Object.entries(unreadData.channels).forEach(([k, v]) => {
-          if (v > 0) newUnreadMap[k] = v;
-        });
+      // Conversations state:
+      if (convsRes.error) {
+        setConversationsError(convsRes.error);
+        if (convsRes.data.length > 0) {
+          setConversations(convsRes.data);
+        }
+      } else {
+        setConversationsError(null);
+        setConversations(convsRes.data);
       }
-      if (unreadData.conversations) {
-        Object.entries(unreadData.conversations).forEach(([k, v]) => {
-          if (v > 0) newUnreadMap[k] = v;
+
+      // Merge unread counts
+      if (unreadData && unreadData.length > 0) {
+        const map: Record<string, number> = {};
+        unreadData.forEach((u) => {
+          map[u.id] = u.unreadCount;
         });
+        setUnreadMap(map);
       }
-      setUnreadMap(newUnreadMap);
 
       // Merge and deduplicate team members and employees
       const memberMap = new Map<string, TeamMember>();
@@ -179,15 +228,21 @@ export default function ConnectWorkspace() {
       setTeamMembers(Array.from(memberMap.values()));
 
       // Automatically select first channel or conversation if none active
+      const effectiveChannels = channelsRes.data.length > 0 ? channelsRes.data : channels;
+      const effectiveConvs = convsRes.data.length > 0 ? convsRes.data : conversations;
+
       if (!activeTargetRef.current) {
-        if (channelsData.length > 0) {
-          selectChannel(channelsData[0]);
-        } else if (convsData.length > 0) {
-          selectConversation(convsData[0]);
+        if (effectiveChannels.length > 0) {
+          selectChannel(effectiveChannels[0]);
+        } else if (effectiveConvs.length > 0) {
+          selectConversation(effectiveConvs[0]);
         }
       }
     } catch (err: any) {
-      console.error("Failed to load initial Connect data:", err);
+      console.error("[Connect] Failed to load initial Connect data:", err);
+    } finally {
+      setChannelsLoading(false);
+      setConversationsLoading(false);
     }
   };
 
@@ -203,36 +258,81 @@ export default function ConnectWorkspace() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
-    // Immediately clear previous messages to ensure no stale protected content is visible
-    setMessages([]);
-    setHighlightedMessageId(null);
     setMessagesLoading(true);
     setMessagesError(null);
     setEditingMessage(null);
     setReplyingToMessage(null);
+    setTypingUsers([]);
 
     try {
-      let res: { data: ConnectMessage[]; nextCursor?: string | null };
-      if (target.type === "channel") {
-        res = await getChannelMessages(target.id, 50, undefined, controller.signal);
-      } else {
-        res = await getConversationMessages(target.id, 50, undefined, controller.signal);
-      }
+      const [messagesRes, pinsRes, savedRes] = await Promise.all([
+        target.type === "channel"
+          ? getChannelMessages(target.id, 50, undefined, controller.signal)
+          : getConversationMessages(target.id, 50, undefined, controller.signal),
+        target.type === "channel"
+          ? getChannelPins(target.id)
+          : getConversationPins(target.id),
+        getSavedMessages(),
+      ]);
 
       if (!controller.signal.aborted) {
-        setMessages(res.data);
+        const pinnedIds = new Set(
+          pinsRes.map((p) => p.id || (p as any).messageId)
+        );
+        const savedIds = new Set(
+          savedRes.data.map((s) => s.id || (s as any).messageId)
+        );
+
+        const hydratedMessages = messagesRes.data.map((m) => ({
+          ...m,
+          isPinned: pinnedIds.has(m.id),
+          isSaved: savedIds.has(m.id),
+          businessLinks:
+            m.businessLinks && m.businessLinks.length > 0
+              ? m.businessLinks
+              : getStoredLinksForMessage(m.id),
+        }));
+
+        setMessages(hydratedMessages);
+
+        // Concurrently fetch server-authoritative links for messages and reconcile state
+        Promise.allSettled(
+          hydratedMessages.map(async (m) => {
+            const serverLinks = await getMessageLinks(m.id);
+            return { messageId: m.id, links: serverLinks };
+          })
+        ).then((results) => {
+          if (controller.signal.aborted) return;
+          const freshMap: Record<string, BusinessEntityLink[]> = {};
+          for (const r of results) {
+            if (r.status === "fulfilled" && r.value.links && r.value.links.length > 0) {
+              freshMap[r.value.messageId] = r.value.links;
+            }
+          }
+          if (Object.keys(freshMap).length > 0) {
+            setMessages((prev) =>
+              prev.map((m) =>
+                freshMap[m.id] ? { ...m, businessLinks: freshMap[m.id] } : m
+              )
+            );
+          }
+        });
+
+        const lastMsgId = hydratedMessages[hydratedMessages.length - 1]?.id;
+        if (lastMsgId) {
+          if (target.type === "channel") {
+            markChannelAsRead(target.id, lastMsgId);
+          } else {
+            markConversationAsRead(target.id, lastMsgId);
+          }
+        }
       }
     } catch (err: any) {
       if (err.name === "CanceledError" || err.name === "AbortError" || controller.signal.aborted) {
         return; // Ignore aborted stale request
       }
       console.error("Failed to load messages for target:", err);
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        setMessages([]);
-        setMessagesError("You do not have authorization to view this conversation.");
-      } else {
-        setMessagesError("Unable to load message history. Please check your network connection.");
-      }
+      setMessagesError("Unable to load message history. Please check your network connection.");
     } finally {
       if (!controller.signal.aborted) {
         setMessagesLoading(false);
@@ -240,18 +340,11 @@ export default function ConnectWorkspace() {
     }
   }, []);
 
-  // Reload messages whenever active context changes
+  // Reload messages whenever active context changes & mark as read
   useEffect(() => {
     if (!activeTarget) {
       setMessages([]);
       return;
-    }
-
-    // Call server read state API
-    if (activeTarget.type === "channel") {
-      markChannelRead(activeTarget.id).catch(() => {});
-    } else if (activeTarget.type === "conversation") {
-      markConversationRead(activeTarget.id).catch(() => {});
     }
 
     // Clear unread count for opened context
@@ -297,6 +390,8 @@ export default function ConnectWorkspace() {
         createdAt: payload.createdAt || new Date().toISOString(),
         sender: payload.sender,
         status: "sent",
+        attachments: payload.attachments,
+        mentionedUserIds: payload.mentionedUserIds,
       };
 
       const current = activeTargetRef.current;
@@ -331,6 +426,14 @@ export default function ConnectWorkspace() {
 
           return [...prev, newMsg];
         });
+
+        if (newMsg?.id && !newMsg.id.startsWith("opt-") && !newMsg.id.startsWith("socket-")) {
+          if (targetChannelId) {
+            markChannelAsRead(targetChannelId, newMsg.id);
+          } else if (targetConvId) {
+            markConversationAsRead(targetConvId, newMsg.id);
+          }
+        }
       } else {
         // Mark as unread in sidebar for inactive channels/conversations
         const targetId = targetChannelId || targetConvId;
@@ -340,21 +443,6 @@ export default function ConnectWorkspace() {
             [targetId]: (prev[targetId] || 0) + 1,
           }));
         }
-      }
-
-      // If this is a reply to an active message, update parent message's replyCount
-      if (payload.parentMessageId) {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === payload.parentMessageId
-              ? {
-                  ...m,
-                  replyCount: (m.replyCount || 0) + 1,
-                  lastReplyAt: newMsg.createdAt,
-                }
-              : m
-          )
-        );
       }
 
       // Update last message in channels / conversations list
@@ -414,199 +502,118 @@ export default function ConnectWorkspace() {
     []
   );
 
-  // Sakshi's Live Read Events
-  const handleSocketChannelRead = useCallback(
-    (payload: SocketChannelReadPayload) => {
-      if (!payload?.channelId) return;
-      if (!payload.userId || payload.userId === currentUserId || activeTargetRef.current?.id === payload.channelId) {
-        setUnreadMap((prev) => {
-          if (!prev[payload.channelId]) return prev;
-          const copy = { ...prev };
-          delete copy[payload.channelId];
-          return copy;
-        });
-      }
-    },
-    [currentUserId]
-  );
+  // Day 2 Reaction Event Handlers
+  const handleSocketReactionAdd = useCallback((payload: SocketReactionAddPayload) => {
+    if (!payload?.messageId || !payload?.emoji) return;
 
-  const handleSocketConversationRead = useCallback(
-    (payload: SocketConversationReadPayload) => {
-      if (!payload?.conversationId) return;
-      if (!payload.userId || payload.userId === currentUserId || activeTargetRef.current?.id === payload.conversationId) {
-        setUnreadMap((prev) => {
-          if (!prev[payload.conversationId]) return prev;
-          const copy = { ...prev };
-          delete copy[payload.conversationId];
-          return copy;
-        });
-      }
-    },
-    [currentUserId]
-  );
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== payload.messageId) return msg;
+        const currentReactions = [...(msg.reactions || [])];
+        const rIndex = currentReactions.findIndex((r) => r.emoji === payload.emoji);
 
-  const handleSocketMessageRead = useCallback(
-    (payload: SocketMessageReadPayload) => {
-      const targetId = payload.channelId || payload.conversationId;
-      if (targetId && (!payload.userId || payload.userId === currentUserId || activeTargetRef.current?.id === targetId)) {
-        setUnreadMap((prev) => {
-          if (!prev[targetId]) return prev;
-          const copy = { ...prev };
-          delete copy[targetId];
-          return copy;
-        });
-      }
-    },
-    [currentUserId]
-  );
+        if (rIndex !== -1) {
+          const item = currentReactions[rIndex];
+          const userExists = item.users.some((u) => u.id === payload.userId);
+          const users = userExists
+            ? item.users
+            : [...item.users, { id: payload.userId, name: payload.userName || "Teammate" }];
+          currentReactions[rIndex] = {
+            ...item,
+            count: item.count + (userExists ? 0 : 1),
+            hasReacted: item.hasReacted || payload.userId === currentUserId,
+            users,
+          };
+        } else {
+          currentReactions.push({
+            emoji: payload.emoji,
+            count: 1,
+            hasReacted: payload.userId === currentUserId,
+            users: [{ id: payload.userId, name: payload.userName || "Teammate" }],
+          });
+        }
+        return { ...msg, reactions: currentReactions };
+      })
+    );
+  }, [currentUserId]);
 
-  // Sakshi's Live Reaction Events
-  const handleSocketReaction = useCallback(
-    (payload: SocketReactionPayload) => {
-      if (!payload?.messageId) return;
-      setMessages((prev) =>
-        prev.map((m) => {
-          if (m.id !== payload.messageId) return m;
+  const handleSocketReactionRemove = useCallback((payload: SocketReactionRemovePayload) => {
+    if (!payload?.messageId || !payload?.emoji) return;
 
-          if (payload.reactions) {
-            return { ...m, reactions: payload.reactions };
-          }
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (msg.id !== payload.messageId) return msg;
+        const currentReactions = [...(msg.reactions || [])];
+        const rIndex = currentReactions.findIndex((r) => r.emoji === payload.emoji);
 
-          const existing = m.reactions || [];
-          const match = existing.find((r) => r.emoji === payload.emoji);
-          const isUser = payload.userId === currentUserId;
-
-          if (payload.action === "remove") {
-            if (!match) return m;
-            if (match.count <= 1) {
-              return { ...m, reactions: existing.filter((r) => r.emoji !== payload.emoji) };
-            }
-            return {
-              ...m,
-              reactions: existing.map((r) =>
-                r.emoji === payload.emoji
-                  ? {
-                      ...r,
-                      count: Math.max(0, r.count - 1),
-                      hasReacted: isUser ? false : r.hasReacted,
-                      userIds: r.userIds.filter((id) => id !== payload.userId),
-                    }
-                  : r
-              ),
-            };
+        if (rIndex !== -1) {
+          const item = currentReactions[rIndex];
+          const newUsers = item.users.filter((u) => u.id !== payload.userId);
+          const newCount = item.count - 1;
+          if (newCount <= 0) {
+            currentReactions.splice(rIndex, 1);
           } else {
-            if (match) {
-              const userAlreadyIn = match.userIds.includes(payload.userId);
-              return {
-                ...m,
-                reactions: existing.map((r) =>
-                  r.emoji === payload.emoji
-                    ? {
-                        ...r,
-                        count: userAlreadyIn ? r.count : r.count + 1,
-                        hasReacted: isUser ? true : r.hasReacted,
-                        userIds: userAlreadyIn ? r.userIds : [...r.userIds, payload.userId],
-                      }
-                    : r
-                ),
-              };
-            } else {
-              return {
-                ...m,
-                reactions: [
-                  ...existing,
-                  {
-                    emoji: payload.emoji,
-                    count: 1,
-                    hasReacted: isUser,
-                    userIds: [payload.userId],
-                  },
-                ],
-              };
-            }
+            currentReactions[rIndex] = {
+              ...item,
+              count: newCount,
+              hasReacted: item.hasReacted && payload.userId !== currentUserId,
+              users: newUsers,
+            };
           }
-        })
-      );
-    },
-    [currentUserId]
-  );
+        }
+        return { ...msg, reactions: currentReactions };
+      })
+    );
+  }, [currentUserId]);
 
-  // Sakshi's Live Pin / Unpin Events
-  const handleSocketPinUpdated = useCallback((payload: SocketPinPayload) => {
+  // Day 2 Thread Reply Socket Handler
+  const handleSocketThreadReply = useCallback((payload: SocketThreadReplyPayload) => {
     if (!payload?.messageId) return;
+
+    // Increment reply count on parent message
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === payload.messageId ? { ...m, isPinned: payload.isPinned } : m
+        m.id === payload.messageId
+          ? {
+              ...m,
+              replyCount: (m.replyCount || 0) + 1,
+              lastReplyAt: new Date().toISOString(),
+            }
+          : m
       )
     );
   }, []);
 
-  // Sakshi's Typing Events
-  const handleSocketTypingStart = useCallback((payload: any) => {
+  // Day 2 Typing Socket Handlers
+  const handleSocketTypingStart = useCallback((payload: SocketTypingEventPayload) => {
     if (!payload?.userId || payload.userId === currentUserId) return;
-    const current = activeTargetRef.current;
-    const isCurrent =
-      (current?.type === "channel" && (current.id === payload.channelId || (current.item as Channel)?.name === payload.channel)) ||
-      (current?.type === "conversation" && current.id === payload.conversationId);
-    if (!isCurrent) return;
-
-    setTypingUsers((prev) => ({
-      ...prev,
-      [payload.userId]: {
-        userName: payload.userName || "Teammate",
-        timestamp: Date.now(),
-      },
-    }));
+    setTypingUsers((prev) => {
+      const filtered = prev.filter((u) => u.userId !== payload.userId);
+      return [
+        ...filtered,
+        {
+          userId: payload.userId!,
+          userName: payload.userName || "Someone",
+          channelId: payload.channel,
+          conversationId: payload.conversationId,
+          timestamp: Date.now(),
+        },
+      ];
+    });
   }, [currentUserId]);
 
-  const handleSocketTypingStop = useCallback((payload: any) => {
+  const handleSocketTypingStop = useCallback((payload: SocketTypingEventPayload) => {
     if (!payload?.userId) return;
-    setTypingUsers((prev) => {
-      if (!prev[payload.userId]) return prev;
-      const copy = { ...prev };
-      delete copy[payload.userId];
-      return copy;
-    });
+    setTypingUsers((prev) => prev.filter((u) => u.userId !== payload.userId));
   }, []);
 
-  // Sakshi's Reconnect Recovery: message:sync
-  const handleSocketMessageSync = useCallback((payload: any) => {
-    if (!payload?.messages || !Array.isArray(payload.messages)) return;
-    const current = activeTargetRef.current;
-    const isCurrent =
-      (current?.type === "channel" && current.id === payload.channelId) ||
-      (current?.type === "conversation" && current.id === payload.conversationId);
-
-    if (isCurrent) {
-      setMessages((prev) => {
-        const existingIds = new Set(prev.map((m) => m.id));
-        const newOnes = payload.messages.filter((m: any) => !existingIds.has(m.id));
-        if (newOnes.length === 0) return prev;
-        const merged = [...prev, ...newOnes];
-        merged.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-        return merged;
-      });
-    }
-  }, []);
-
-  // Auto-expire typing users after 3.5s
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const now = Date.now();
-      setTypingUsers((prev) => {
-        let changed = false;
-        const next: typeof prev = {};
-        for (const [id, val] of Object.entries(prev)) {
-          if (now - val.timestamp < 3500) {
-            next[id] = val;
-          } else {
-            changed = true;
-          }
-        }
-        return changed ? next : prev;
-      });
-    }, 1500);
-    return () => clearInterval(timer);
+  // Day 2 Presence Socket Handler
+  const handleSocketPresenceUpdate = useCallback((payload: SocketPresenceUpdatePayload) => {
+    if (!payload?.userId || !payload?.status) return;
+    setUserPresenceMap((prev) => ({
+      ...prev,
+      [payload.userId]: payload.status,
+    }));
   }, []);
 
   // Active channel name for socket room subscription
@@ -618,8 +625,19 @@ export default function ConnectWorkspace() {
     return null;
   }, [activeTarget, channels]);
 
-  // Hook into real-time socket
-  const { status: socketStatus, emitTypingStart, emitTypingStop } = useConnectSocket({
+  // Hook into real-time socket with Day 1 & Day 2 contracts
+  const {
+    status: socketStatus,
+    emitSendMessage,
+    emitThreadReply,
+    emitReactionAdd,
+    emitReactionRemove,
+    emitMentionNew,
+    emitTypingStart,
+    emitTypingStop,
+    emitPresenceUpdate,
+    emitMessageRead,
+  } = useConnectSocket({
     activeChannelId: activeTarget?.type === "channel" ? activeTarget.id : null,
     activeChannelName,
     activeConversationId: activeTarget?.type === "conversation" ? activeTarget.id : null,
@@ -628,15 +646,19 @@ export default function ConnectWorkspace() {
     onDeleteMessage: handleSocketDeleteMessage,
     onChannelUpdated: handleSocketChannelUpdated,
     onConversationUpdated: handleSocketConversationUpdated,
-    onChannelRead: handleSocketChannelRead,
-    onConversationRead: handleSocketConversationRead,
-    onMessageRead: handleSocketMessageRead,
-    onReaction: handleSocketReaction,
-    onPinUpdated: handleSocketPinUpdated,
+    onReactionAdd: handleSocketReactionAdd,
+    onReactionRemove: handleSocketReactionRemove,
+    onThreadReply: handleSocketThreadReply,
     onTypingStart: handleSocketTypingStart,
     onTypingStop: handleSocketTypingStop,
-    onMessageSync: handleSocketMessageSync,
+    onPresenceUpdate: handleSocketPresenceUpdate,
   });
+
+  // Handle Presence change by current user
+  const handleChangePresence = (status: PresenceStatus) => {
+    setCurrentUserPresence(status);
+    emitPresenceUpdate({ status });
+  };
 
   /* -------------------------------------------------------------------------- */
   /*                            NAVIGATION ACTIONS                              */
@@ -645,11 +667,13 @@ export default function ConnectWorkspace() {
   const selectChannel = (channel: Channel) => {
     setActiveTarget({ type: "channel", id: channel.id, item: channel });
     setShowMobileChat(true);
+    setActiveThreadMessage(null);
   };
 
   const selectConversation = (conv: Conversation) => {
     setActiveTarget({ type: "conversation", id: conv.id, item: conv });
     setShowMobileChat(true);
+    setActiveThreadMessage(null);
   };
 
   const handleChannelCreated = (newChannel: Channel) => {
@@ -689,11 +713,11 @@ export default function ConnectWorkspace() {
   const handleSendMessage = async (
     content: string,
     parentMessageId?: string | null,
-    attachments?: MessageAttachment[],
-    mentionedUserIds?: string[]
+    mentionedUserIds?: string[],
+    visibility?: "INTERNAL" | "CLIENT_SHARED"
   ) => {
     const target = activeTargetRef.current;
-    if (!target || (!content.trim() && (!attachments || attachments.length === 0)) || sending) return;
+    if (!target || !content.trim() || sending) return;
 
     setSending(true);
 
@@ -707,10 +731,10 @@ export default function ConnectWorkspace() {
       parentMessageId: parentMessageId || null,
       content,
       type: "TEXT",
-      attachments,
-      mentionedUserIds,
       createdAt: new Date().toISOString(),
       status: "sending",
+      mentionedUserIds,
+      visibility,
       sender: {
         id: currentUserId || "me",
         name: "You",
@@ -726,10 +750,10 @@ export default function ConnectWorkspace() {
       const payload: SendMessagePayload = {
         channelId: target.type === "channel" ? target.id : undefined,
         conversationId: target.type === "conversation" ? target.id : undefined,
-        content: content.trim(),
+        content,
         parentMessageId: parentMessageId || undefined,
-        attachments: attachments && attachments.length > 0 ? attachments : undefined,
-        mentionedUserIds: mentionedUserIds && mentionedUserIds.length > 0 ? mentionedUserIds : undefined,
+        mentionedUserIds,
+        visibility,
       };
 
       const canonicalMsg = await sendMessage(payload);
@@ -742,6 +766,14 @@ export default function ConnectWorkspace() {
             : m
         )
       );
+
+      // Emit mention socket event if any teammates were mentioned
+      if (mentionedUserIds && mentionedUserIds.length > 0) {
+        emitMentionNew({
+          messageId: canonicalMsg.id || tempId,
+          mentionedUserIds,
+        });
+      }
 
       // Update sidebar preview
       if (target.type === "channel") {
@@ -761,13 +793,22 @@ export default function ConnectWorkspace() {
           )
         );
       }
+
+      // Mark as read with newly sent canonical message ID
+      if (canonicalMsg?.id) {
+        if (target.type === "channel") {
+          markChannelAsRead(target.id, canonicalMsg.id);
+        } else {
+          markConversationAsRead(target.id, canonicalMsg.id);
+        }
+      }
     } catch (err: any) {
-      console.error("Failed to send message:", err?.response?.data || err.message, err);
+      console.error("Failed to send message:", err);
       // Mark as failed and preserve content so user can Retry
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
-            ? { ...m, status: "failed", error: err?.response?.data?.message || "Failed to send message" }
+            ? { ...m, status: "failed", error: "Failed to send message" }
             : m
         )
       );
@@ -783,11 +824,6 @@ export default function ConnectWorkspace() {
     const target = activeTargetRef.current;
     if (!target) return;
 
-    const isCurrentContext =
-      (target.type === "channel" && failedMsg.channelId === target.id) ||
-      (target.type === "conversation" && failedMsg.conversationId === target.id);
-    if (!isCurrentContext) return;
-
     setMessages((prev) =>
       prev.map((m) => (m.id === failedMsg.id ? { ...m, status: "sending", error: undefined } : m))
     );
@@ -798,8 +834,6 @@ export default function ConnectWorkspace() {
         conversationId: target.type === "conversation" ? target.id : undefined,
         content: failedMsg.content,
         parentMessageId: failedMsg.parentMessageId || undefined,
-        attachments: failedMsg.attachments,
-        mentionedUserIds: failedMsg.mentionedUserIds,
       };
 
       const canonicalMsg = await sendMessage(payload);
@@ -807,14 +841,10 @@ export default function ConnectWorkspace() {
       setMessages((prev) =>
         prev.map((m) => (m.id === failedMsg.id ? { ...canonicalMsg, status: "sent" } : m))
       );
-    } catch (err: any) {
-      console.error("Failed to retry message:", err?.response?.data || err.message, err);
+    } catch (err) {
+      console.error("Failed to retry send:", err);
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === failedMsg.id
-            ? { ...m, status: "failed", error: err?.response?.data?.message || "Failed to send message" }
-            : m
-        )
+        prev.map((m) => (m.id === failedMsg.id ? { ...m, status: "failed", error: "Retry failed" } : m))
       );
     }
   };
@@ -843,11 +873,18 @@ export default function ConnectWorkspace() {
   };
 
   /**
-   * Reply in thread foundation
+   * Start in-composer reply
    */
   const handleStartReply = (msg: ConnectMessage) => {
     setEditingMessage(null);
     setReplyingToMessage(msg);
+  };
+
+  /**
+   * Open dedicated side Thread Panel
+   */
+  const handleOpenThread = (msg: ConnectMessage) => {
+    setActiveThreadMessage(msg);
   };
 
   /**
@@ -860,6 +897,9 @@ export default function ConnectWorkspace() {
       const ok = await deleteMessage(msg.id);
       if (ok) {
         setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+        if (activeThreadMessage?.id === msg.id) {
+          setActiveThreadMessage(null);
+        }
       }
     } catch (err) {
       console.error("Failed to delete message:", err);
@@ -867,253 +907,235 @@ export default function ConnectWorkspace() {
     }
   };
 
-  /* -------------------------------------------------------------------------- */
-  /*                            DAY 2 ACTIONS                                   */
-  /* -------------------------------------------------------------------------- */
-
   /**
-   * Reactions: POST /api/communications/messages/:messageId/reactions
-   * DELETE /api/communications/messages/:messageId/reactions/:emoji
+   * Reaction handling (Day 2)
    */
   const handleReact = async (msg: ConnectMessage, emoji: string) => {
-    const existingReactions = msg.reactions || [];
-    const currentReaction = existingReactions.find((r) => r.emoji === emoji);
-    const hasUserReacted = Boolean(
-      currentReaction?.hasReacted ||
-        (currentUserId && currentReaction?.userIds?.includes(currentUserId))
-    );
+    const existing = msg.reactions?.find((r) => r.emoji === emoji);
+    const hasReacted = existing?.hasReacted;
 
-    // Optimistic reaction update
-    let updatedReactions = [...existingReactions];
-    if (hasUserReacted) {
-      if (currentReaction && currentReaction.count <= 1) {
-        updatedReactions = updatedReactions.filter((r) => r.emoji !== emoji);
-      } else if (currentReaction) {
-        updatedReactions = updatedReactions.map((r) =>
-          r.emoji === emoji
-            ? {
-                ...r,
-                count: r.count - 1,
-                hasReacted: false,
-                userIds: currentUserId ? r.userIds.filter((id) => id !== currentUserId) : r.userIds,
-              }
-            : r
-        );
-      }
-    } else {
-      if (currentReaction) {
-        updatedReactions = updatedReactions.map((r) =>
-          r.emoji === emoji
-            ? {
-                ...r,
-                count: r.count + 1,
-                hasReacted: true,
-                userIds: currentUserId ? [...r.userIds, currentUserId] : r.userIds,
-              }
-            : r
-        );
-      } else {
-        updatedReactions.push({
-          emoji,
-          count: 1,
-          hasReacted: true,
-          userIds: currentUserId ? [currentUserId] : [],
-        });
-      }
-    }
-
+    // Optimistically update reactions
     setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, reactions: updatedReactions } : m))
+      prev.map((m) => {
+        if (m.id !== msg.id) return m;
+        const currentReactions = [...(m.reactions || [])];
+        const rIndex = currentReactions.findIndex((r) => r.emoji === emoji);
+
+        if (hasReacted) {
+          if (rIndex !== -1) {
+            const count = currentReactions[rIndex].count - 1;
+            if (count <= 0) {
+              currentReactions.splice(rIndex, 1);
+            } else {
+              currentReactions[rIndex] = {
+                ...currentReactions[rIndex],
+                count,
+                hasReacted: false,
+                users: currentReactions[rIndex].users.filter((u) => u.id !== currentUserId),
+              };
+            }
+          }
+        } else {
+          if (rIndex !== -1) {
+            currentReactions[rIndex] = {
+              ...currentReactions[rIndex],
+              count: currentReactions[rIndex].count + 1,
+              hasReacted: true,
+              users: [...currentReactions[rIndex].users, { id: currentUserId || "me", name: "You" }],
+            };
+          } else {
+            currentReactions.push({
+              emoji,
+              count: 1,
+              hasReacted: true,
+              users: [{ id: currentUserId || "me", name: "You" }],
+            });
+          }
+        }
+        return { ...m, reactions: currentReactions };
+      })
     );
 
-    try {
-      if (hasUserReacted) {
-        await removeReaction(msg.id, emoji);
-      } else {
-        await addReaction(msg.id, emoji);
-      }
-    } catch (err) {
-      console.error("Failed to update reaction:", err);
-      // Revert on failure
-      setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, reactions: existingReactions } : m))
-      );
+    // Call REST API and emit socket event
+    if (hasReacted) {
+      await removeReaction(msg.id, emoji);
+      emitReactionRemove({ messageId: msg.id, emoji });
+    } else {
+      await addReaction(msg.id, emoji);
+      emitReactionAdd({ messageId: msg.id, emoji });
     }
   };
 
   /**
-   * Pin / Unpin Message: POST /api/communications/messages/:messageId/pin
-   * DELETE /api/communications/messages/:messageId/pin
-   * Nitin's Authorization Rule: Channel Owners/Admins for channels; participants for conversations.
+   * Pin message handling (Day 2)
    */
   const handlePin = async (msg: ConnectMessage) => {
-    const isChannel = activeTarget?.type === "channel" || Boolean(msg.channelId);
-    if (isChannel && !canManageCurrent) {
-      alert("Only channel owners and admins are authorized to pin or unpin messages in this channel.");
-      return;
-    }
-
-    const nextPinned = !msg.isPinned;
+    const isCurrentlyPinned = Boolean(msg.isPinned);
+    // Optimistic UI update
     setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, isPinned: nextPinned } : m))
+      prev.map((m) => (m.id === msg.id ? { ...m, isPinned: !isCurrentlyPinned } : m))
     );
 
     try {
-      if (nextPinned) {
-        await pinMessage(msg.id);
+      if (isCurrentlyPinned) {
+        const ok = await unpinMessage(msg.id);
+        if (!ok) {
+          // Revert if rejected
+          setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...m, isPinned: true } : m))
+          );
+        } else {
+          setPinSaveVersion((v) => v + 1);
+        }
       } else {
-        await unpinMessage(msg.id);
+        const res = await pinMessage(msg.id);
+        if (!res || !res.success) {
+          // Revert if rejected
+          setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...m, isPinned: false } : m))
+          );
+        } else {
+          setPinSaveVersion((v) => v + 1);
+        }
       }
     } catch (err) {
-      console.error("Failed to toggle pin state:", err);
-      // Revert
+      console.error("Failed to toggle pin:", err);
       setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, isPinned: !nextPinned } : m))
+        prev.map((m) => (m.id === msg.id ? { ...m, isPinned: isCurrentlyPinned } : m))
       );
-      alert("Failed to update pin state. Please verify your permissions.");
     }
   };
 
   /**
-   * Save / Unsave Message: POST /api/communications/messages/:messageId/save
-   * DELETE /api/communications/messages/:messageId/save
+   * Save / bookmark message handling (Day 2)
    */
   const handleSave = async (msg: ConnectMessage) => {
-    const nextSaved = !msg.isSaved;
+    const isCurrentlySaved = Boolean(msg.isSaved);
+    // Optimistic UI update
     setMessages((prev) =>
-      prev.map((m) => (m.id === msg.id ? { ...m, isSaved: nextSaved } : m))
+      prev.map((m) => (m.id === msg.id ? { ...m, isSaved: !isCurrentlySaved } : m))
     );
 
     try {
-      if (nextSaved) {
-        await saveMessage(msg.id);
+      if (isCurrentlySaved) {
+        const ok = await unsaveMessage(msg.id);
+        if (!ok) {
+          // Revert if rejected
+          setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...m, isSaved: true } : m))
+          );
+        } else {
+          setPinSaveVersion((v) => v + 1);
+        }
       } else {
-        await unsaveMessage(msg.id);
+        const res = await saveMessage(msg.id);
+        if (!res || !res.success) {
+          // Revert if rejected
+          setMessages((prev) =>
+            prev.map((m) => (m.id === msg.id ? { ...m, isSaved: false } : m))
+          );
+        } else {
+          setPinSaveVersion((v) => v + 1);
+        }
       }
     } catch (err) {
-      console.error("Failed to bookmark message:", err);
-      // Revert
+      console.error("Failed to toggle save:", err);
       setMessages((prev) =>
-        prev.map((m) => (m.id === msg.id ? { ...m, isSaved: !nextSaved } : m))
+        prev.map((m) => (m.id === msg.id ? { ...m, isSaved: isCurrentlySaved } : m))
       );
-      alert("Failed to update bookmark state.");
     }
   };
 
   /**
-   * Search result navigation: jump to message, select context, and highlight
+   * Link message to Business Entity (Day 2)
    */
-  const handleSelectSearchResult = (result: SearchMessageResult) => {
-    if (result.channelId) {
-      const ch = channels.find((c) => c.id === result.channelId);
-      if (ch) {
-        selectChannel(ch);
-      } else {
-        selectChannel({
-          id: result.channelId,
-          name: result.channelName || "channel",
-          visibility: "PUBLIC",
-          organizationId: "",
-          createdAt: "",
-          updatedAt: "",
-        });
-      }
-    } else if (result.conversationId) {
-      const conv = conversations.find((c) => c.id === result.conversationId);
-      if (conv) {
-        selectConversation(conv);
-      } else {
-        selectConversation({
-          id: result.conversationId,
-          type: "DIRECT",
-          organizationId: "",
-          members: [],
-          createdAt: "",
-          updatedAt: "",
-        });
-      }
-    }
-
-    setHighlightedMessageId(result.id);
-    setTimeout(() => {
-      const el = document.getElementById(`message-item-${result.id}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, 450);
-
-    setTimeout(() => {
-      setHighlightedMessageId(null);
-    }, 4500);
+  const handleLinkEntity = (msg: ConnectMessage) => {
+    setLinkingMessage(msg);
   };
 
-  /**
-   * Jump to saved message
-   */
-  const handleJumpToSavedMessage = (savedMsg: ConnectMessage) => {
-    if (savedMsg.channelId) {
-      const ch = channels.find((c) => c.id === savedMsg.channelId);
-      if (ch) selectChannel(ch);
-    } else if (savedMsg.conversationId) {
-      const conv = conversations.find((c) => c.id === savedMsg.conversationId);
-      if (conv) selectConversation(conv);
-    }
-
-    setHighlightedMessageId(savedMsg.id);
-    setTimeout(() => {
-      const el = document.getElementById(`message-item-${savedMsg.id}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, 450);
-
-    setTimeout(() => {
-      setHighlightedMessageId(null);
-    }, 4500);
-  };
-
-  /**
-   * Jump to pinned message
-   */
-  const handleJumpToPinnedMessage = (pinnedMessageId: string) => {
-    setHighlightedMessageId(pinnedMessageId);
-    setTimeout(() => {
-      const el = document.getElementById(`message-item-${pinnedMessageId}`);
-      if (el) {
-        el.scrollIntoView({ behavior: "smooth", block: "center" });
-      }
-    }, 150);
-
-    setTimeout(() => {
-      setHighlightedMessageId(null);
-    }, 4500);
-  };
-
-  /**
-   * Business entity links updated
-   */
-  const handleLinksUpdated = (messageId: string, updatedLinks: BusinessEntityLink[]) => {
-    setMessages((prev) =>
-      prev.map((m) => (m.id === messageId ? { ...m, links: updatedLinks } : m))
-    );
-  };
-
-  /**
-   * Thread reply sent callback
-   */
-  const handleThreadReplySent = (parentMessageId: string, reply: ConnectMessage) => {
+  const handleEntityLinkCreated = (newLink: BusinessEntityLink) => {
+    saveMessageLinkToStorage(newLink.messageId, newLink);
     setMessages((prev) =>
       prev.map((m) =>
-        m.id === parentMessageId
+        m.id === newLink.messageId
           ? {
               ...m,
-              replyCount: (m.replyCount || 0) + 1,
-              lastReplyAt: reply.createdAt,
+              businessLinks: [
+                ...(m.businessLinks || []).filter((l) => l.id !== newLink.id),
+                newLink,
+              ],
             }
           : m
       )
     );
   };
+
+  /**
+   * Unlink business entity from message
+   */
+  const handleUnlinkEntity = async (message: ConnectMessage, linkId: string) => {
+    try {
+      const ok = await removeMessageLink(message.id, linkId);
+      if (ok) {
+        removeMessageLinkFromStorage(message.id, linkId);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === message.id
+              ? {
+                  ...m,
+                  businessLinks: (m.businessLinks || []).filter((l) => l.id !== linkId),
+                }
+              : m
+          )
+        );
+      }
+    } catch (err) {
+      console.error("Failed to remove business link:", err);
+    }
+  };
+
+  /**
+   * Restore archived channel directly from banner
+   */
+  const handleRestoreActiveChannel = async () => {
+    if (activeTarget?.type !== "channel") return;
+    try {
+      const restored = await restoreChannel(activeTarget.id);
+      if (restored) {
+        handleChannelUpdated(restored);
+      }
+    } catch (err) {
+      console.error("Failed to restore channel:", err);
+    }
+  };
+
+  /**
+   * Mention author of message
+   */
+  const handleMentionAuthor = (msg: ConnectMessage) => {
+    const name = msg.sender?.name;
+    if (name) {
+      // Focus composer with @name
+      const el = document.getElementById("message-composer-input") as HTMLTextAreaElement;
+      if (el) {
+        el.value = el.value ? `${el.value} @${name} ` : `@${name} `;
+        el.focus();
+      }
+    }
+  };
+
+  // Convert teamMembers to MentionMember format
+  const mentionMembers: MentionMember[] = useMemo(
+    () =>
+      teamMembers.map((tm) => ({
+        id: tm.id,
+        name: tm.name,
+        email: tm.email,
+        role: tm.role,
+        avatarUrl: tm.avatar || (tm as any).avatarUrl,
+      })),
+    [teamMembers]
+  );
 
   /* -------------------------------------------------------------------------- */
   /*                            ACTIVE TARGET DETAILS                           */
@@ -1139,12 +1161,14 @@ export default function ConnectWorkspace() {
       if (conv?.type === "DIRECT") {
         const other = conv.members?.find((m) => m.userId !== currentUserId);
         const name = other?.user?.name || other?.user?.email || "Direct Message";
+        const peerStatus = other?.userId ? userPresenceMap[other.userId] || "ONLINE" : "ONLINE";
         return {
           title: name,
-          subtitle: other?.user?.email || "1-on-1 Direct Chat",
+          subtitle: other?.user?.email || `Status: ${peerStatus}`,
           isPrivate: false,
           type: "direct" as const,
           conv,
+          peerStatus,
         };
       } else {
         return {
@@ -1156,7 +1180,7 @@ export default function ConnectWorkspace() {
         };
       }
     }
-  }, [activeTarget, channels, conversations, currentUserId]);
+  }, [activeTarget, channels, conversations, currentUserId, userPresenceMap]);
 
   const activeChannelForModal = useMemo(() => {
     if (activeTarget?.type === "channel") {
@@ -1164,6 +1188,16 @@ export default function ConnectWorkspace() {
     }
     return null;
   }, [activeTarget, channels]);
+
+  const activeGroupForModal = useMemo(() => {
+    if (activeTarget?.type === "conversation") {
+      const conv =
+        conversations.find((c) => c.id === activeTarget.id) ||
+        (activeTarget.item as Conversation);
+      if (conv?.type === "GROUP") return conv;
+    }
+    return null;
+  }, [activeTarget, conversations]);
 
   const canManageCurrent = useMemo(() => {
     if (activeTarget?.type === "channel") {
@@ -1196,11 +1230,17 @@ export default function ConnectWorkspace() {
             selectChannel(ch);
             setIsChannelMembersOpen(true);
           }}
-          onOpenSearchModal={() => setIsSearchOpen(true)}
-          onOpenSavedModal={() => setIsSavedOpen(true)}
           currentUserId={currentUserId}
           socketStatus={socketStatus}
           unreadMap={unreadMap}
+          userPresenceMap={userPresenceMap}
+          currentUserPresence={currentUserPresence}
+          onChangePresence={handleChangePresence}
+          channelsLoading={channelsLoading}
+          channelsError={channelsError}
+          conversationsLoading={conversationsLoading}
+          conversationsError={conversationsError}
+          onRetryLoad={loadInitialData}
           className={`w-full md:w-[320px] lg:w-[360px] shrink-0 ${
             showMobileChat ? "hidden md:flex" : "flex"
           }`}
@@ -1238,7 +1278,7 @@ export default function ConnectWorkspace() {
                             ? "bg-warning-light text-warning"
                             : "bg-surface-hover text-primary"
                           : activeHeaderDetails.type === "group"
-                          ? "bg-surface-hover text-text"
+                          ? "bg-surface-hover text-purple-600"
                           : "bg-surface-hover text-success"
                       }`}
                     >
@@ -1280,137 +1320,135 @@ export default function ConnectWorkspace() {
 
                 {/* Header Actions */}
                 <div className="flex items-center gap-2">
-                  {/* ZII AI Summary & Structured Actions Button */}
-                  <button
-                    id="header-zii-summary-btn"
-                    onClick={() => setIsZiiModalOpen(true)}
-                    className="px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 border border-primary/30 rounded-xl transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
-                    title="ZII Conversation Summary & Actions"
-                  >
-                    <Sparkles size={14} className="text-primary" />
-                    <span>ZII Summary</span>
-                  </button>
+                  {/* Manage Group Button */}
+                  {activeHeaderDetails.type === "group" && (
+                    <button
+                      id="manage-group-members-btn"
+                      onClick={() => setIsGroupMembersOpen(true)}
+                      className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5"
+                    >
+                      <Users size={14} />
+                      <span>Group Members</span>
+                    </button>
+                  )}
 
-                  {/* Pinned Messages Button */}
-                  <button
-                    id="view-pinned-messages-btn"
-                    onClick={() => setIsPinnedOpen(true)}
-                    className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
-                    title="View Pinned Messages"
-                  >
-                    <Pin size={14} className="text-warning" />
-                    <span>Pinned</span>
-                  </button>
-
-                  {/* Search Button */}
-                  <button
-                    id="header-search-btn"
-                    onClick={() => setIsSearchOpen(true)}
-                    className="p-1.5 text-text-muted hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all cursor-pointer"
-                    title="Search Messages"
-                  >
-                    <Search size={16} />
-                  </button>
-
+                  {/* Manage Channel Members Button */}
                   {activeHeaderDetails.type === "channel" && (
                     <button
                       id="manage-channel-members-btn"
                       onClick={() => setIsChannelMembersOpen(true)}
-                      className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5 cursor-pointer"
+                      className="px-3 py-1.5 text-xs font-semibold text-text-secondary hover:text-primary hover:bg-surface-hover border border-border rounded-xl transition-all flex items-center gap-1.5"
                     >
                       <Users size={14} />
-                      <span>Manage Members</span>
+                      <span>Members</span>
                     </button>
                   )}
+
+                  {/* Channel / Chat Details Drawer Button (Task 8) */}
+                  <button
+                    id="channel-details-drawer-btn"
+                    onClick={() => setIsChannelDetailsOpen((prev) => !prev)}
+                    className={`p-2 rounded-xl border transition-all ${
+                      isChannelDetailsOpen
+                        ? "bg-primary/10 border-primary text-primary"
+                        : "border-border text-text-muted hover:text-text hover:bg-surface-hover"
+                    }`}
+                    title="Channel Details & Resources"
+                  >
+                    <Info size={16} />
+                  </button>
                 </div>
               </div>
 
-              {/* Main Chat and Drawer Container */}
-              <div className="flex-1 flex overflow-hidden">
-                <div className="flex-1 flex flex-col overflow-hidden">
-                  {/* Message List Stream */}
-                  <MessageList
-                    channelId={activeTarget?.type === "channel" ? activeTarget.id : null}
-                    conversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
-                    messages={messages}
-                    loading={messagesLoading}
-                    error={messagesError}
-                    currentUserId={currentUserId}
-                    canManage={canManageCurrent}
-                    highlightedMessageId={highlightedMessageId}
-                    emptyTitle={`Welcome to ${activeHeaderDetails.title}`}
-                    emptySubtitle={
-                      activeHeaderDetails.type === "channel"
-                        ? "This is the very start of the channel. Send a message below to connect with your team!"
-                        : "This is the start of your direct conversation."
-                    }
-                    onRetryFetch={() => { if (activeTarget) loadMessagesForTarget(activeTarget); }}
-                    onReply={handleStartReply}
-                    onEdit={handleStartEdit}
-                    onDelete={handleDeleteMessage}
-                    onRetrySend={handleRetrySend}
-                    onReact={handleReact}
-                    onPin={handlePin}
-                    onSave={handleSave}
-                    onOpenThread={(msg) => setActiveThreadMessage(msg)}
-                    onOpenLinkModal={(msg) => setSelectedMessageForLinks(msg)}
-                  />
+              {/* Message List Stream */}
+              <MessageList
+                channelId={activeTarget?.type === "channel" ? activeTarget.id : null}
+                conversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
+                messages={messages}
+                loading={messagesLoading}
+                error={messagesError}
+                currentUserId={currentUserId}
+                canManage={canManageCurrent}
+                unreadCount={activeTarget ? unreadMap[activeTarget.id] || 0 : 0}
+                emptyTitle={`Welcome to ${activeHeaderDetails.title}`}
+                emptySubtitle={
+                  activeHeaderDetails.type === "channel"
+                    ? "This is the very start of the channel. Send a message below to connect with your team!"
+                    : "This is the start of your direct conversation."
+                }
+                onRetryFetch={() => {
+                  if (activeTarget) loadMessagesForTarget(activeTarget);
+                }}
+                onReply={handleStartReply}
+                onOpenThread={handleOpenThread}
+                onEdit={handleStartEdit}
+                onDelete={handleDeleteMessage}
+                onRetrySend={handleRetrySend}
+                onReact={handleReact}
+                onMention={handleMentionAuthor}
+                onPin={handlePin}
+                onSave={handleSave}
+                onLinkEntity={handleLinkEntity}
+                onUnlinkEntity={handleUnlinkEntity}
+              />
 
-                  {/* Real-time Typing Indicator */}
-                  {Object.keys(typingUsers).length > 0 && (
-                    <div
-                      id="connect-typing-indicator"
-                      className="px-6 py-1 bg-surface text-text-muted text-[11px] flex items-center gap-1.5 italic animate-pulse border-t border-border/50 shrink-0"
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping" />
-                      <span>
-                        {Object.values(typingUsers).map((u) => u.userName).join(", ")}{" "}
-                        {Object.keys(typingUsers).length === 1 ? "is typing..." : "are typing..."}
-                      </span>
+              {/* Live Typing Indicator (Task 7) */}
+              <TypingIndicator
+                typingUsers={typingUsers}
+                currentUserId={currentUserId}
+              />
+
+              {/* Channel Archived Notice */}
+              {activeTarget?.type === "channel" && activeChannelForModal?.archivedAt && (
+                <div className="mx-6 my-2 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center justify-between text-amber-900 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Archive size={16} className="text-amber-600 shrink-0" />
+                    <div>
+                      <p className="text-xs font-bold">This channel is archived</p>
+                      <p className="text-[11px] text-amber-700">Message posting is disabled. Channel history remains readable.</p>
                     </div>
-                  )}
-
-                  {/* Message Composer */}
-                  <MessageComposer
-                    placeholder={`Message ${activeHeaderDetails.title}...`}
-                    disabled={messagesLoading}
-                    sending={sending}
-                    editingMessage={editingMessage}
-                    replyingToMessage={replyingToMessage}
-                    teamMembers={teamMembers}
-                    onTyping={() => {
-                      emitTypingStart({
-                        channelId: activeTarget?.type === "channel" ? activeTarget.id : undefined,
-                        conversationId: activeTarget?.type === "conversation" ? activeTarget.id : undefined,
-                        userName: currentUserId ? (teamMembers.find(t => t.id === currentUserId)?.name || "Teammate") : "Teammate",
-                      });
-                    }}
-                    onStopTyping={() => {
-                      emitTypingStop({
-                        channelId: activeTarget?.type === "channel" ? activeTarget.id : undefined,
-                        conversationId: activeTarget?.type === "conversation" ? activeTarget.id : undefined,
-                        userName: currentUserId ? (teamMembers.find(t => t.id === currentUserId)?.name || "Teammate") : "Teammate",
-                      });
-                    }}
-                    onSendMessage={handleSendMessage}
-                    onSaveEdit={handleSaveEdit}
-                    onCancelEdit={() => setEditingMessage(null)}
-                    onCancelReply={() => setReplyingToMessage(null)}
-                  />
+                  </div>
+                  <button
+                    onClick={handleRestoreActiveChannel}
+                    className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all shrink-0"
+                  >
+                    <RotateCcw size={12} />
+                    <span>Restore Channel</span>
+                  </button>
                 </div>
+              )}
 
-                {/* Thread Drawer Panel */}
-                {activeThreadMessage && (
-                  <ThreadDrawer
-                    isOpen={Boolean(activeThreadMessage)}
-                    onClose={() => setActiveThreadMessage(null)}
-                    parentMessage={activeThreadMessage}
-                    currentUserId={currentUserId}
-                    teamMembers={teamMembers}
-                    onReplySent={handleThreadReplySent}
-                  />
-                )}
-              </div>
+              {/* Message Composer */}
+              <MessageComposer
+                placeholder={`Message ${activeHeaderDetails.title}...`}
+                disabled={messagesLoading}
+                sending={sending}
+                editingMessage={editingMessage}
+                replyingToMessage={replyingToMessage}
+                teamMembers={mentionMembers}
+                isArchived={Boolean(activeChannelForModal?.archivedAt)}
+                isReadOnly={Boolean(activeChannelForModal?.isReadOnly)}
+                canManage={canManageCurrent}
+                audience={activeChannelForModal?.audience || "INTERNAL"}
+                onSendMessage={handleSendMessage}
+                onSaveEdit={handleSaveEdit}
+                onCancelEdit={() => setEditingMessage(null)}
+                onCancelReply={() => setReplyingToMessage(null)}
+                onTypingStart={() => {
+                  if (activeTarget?.type === "channel") {
+                    emitTypingStart({ channel: activeTarget.id });
+                  } else if (activeTarget?.type === "conversation") {
+                    emitTypingStart({ conversationId: activeTarget.id });
+                  }
+                }}
+                onTypingStop={() => {
+                  if (activeTarget?.type === "channel") {
+                    emitTypingStop({ channel: activeTarget.id });
+                  } else if (activeTarget?.type === "conversation") {
+                    emitTypingStop({ conversationId: activeTarget.id });
+                  }
+                }}
+              />
             </>
           ) : (
             /* Empty State when no conversation or channel is selected */
@@ -1428,6 +1466,58 @@ export default function ConnectWorkspace() {
             </div>
           )}
         </div>
+
+        {/* Thread Panel (Task 3: Build thread panel and reply navigation) */}
+        {activeThreadMessage && (
+          <ThreadPanel
+            parentMessage={activeThreadMessage}
+            onClose={() => setActiveThreadMessage(null)}
+            currentUserId={currentUserId}
+            teamMembers={mentionMembers}
+            onEmitThreadReply={emitThreadReply}
+            onEmitReactionAdd={emitReactionAdd}
+            onEmitReactionRemove={emitReactionRemove}
+            onEmitMentionNew={emitMentionNew}
+          />
+        )}
+
+        {/* Channel Details & Business-Links Drawer (Task 8) */}
+        {isChannelDetailsOpen && activeTarget && (
+          <ChannelDetailsDrawer
+            isOpen={true}
+            onClose={() => setIsChannelDetailsOpen(false)}
+            activeTarget={activeTarget}
+            currentUserId={currentUserId}
+            pinSaveVersion={pinSaveVersion}
+            messages={messages}
+            onChannelUpdated={handleChannelUpdated}
+            onOpenManageMembers={() => {
+              if (activeTarget?.type === "channel") {
+                setIsChannelMembersOpen(true);
+              }
+            }}
+            onJumpToMessage={(msgId) => {
+              const el = document.getElementById(`message-item-${msgId}`);
+              if (el) {
+                el.scrollIntoView({ behavior: "smooth", block: "center" });
+                el.classList.add("ring-2", "ring-blue-500", "ring-offset-2");
+                setTimeout(() => el.classList.remove("ring-2", "ring-blue-500", "ring-offset-2"), 2500);
+              }
+            }}
+            onMessageUnpinned={(msgId) => {
+              setMessages((prev) =>
+                prev.map((m) => (m.id === msgId ? { ...m, isPinned: false } : m))
+              );
+              setPinSaveVersion((v) => v + 1);
+            }}
+            onMessageUnsaved={(msgId) => {
+              setMessages((prev) =>
+                prev.map((m) => (m.id === msgId ? { ...m, isSaved: false } : m))
+              );
+              setPinSaveVersion((v) => v + 1);
+            }}
+          />
+        )}
       </div>
 
       {/* Modals */}
@@ -1450,6 +1540,21 @@ export default function ConnectWorkspace() {
         />
       )}
 
+      {activeGroupForModal && (
+        <GroupMembersModal
+          isOpen={isGroupMembersOpen}
+          onClose={() => setIsGroupMembersOpen(false)}
+          conversation={activeGroupForModal}
+          currentUserId={currentUserId}
+          teamMembers={teamMembers}
+          onConversationUpdated={(updated) => {
+            setConversations((prev) =>
+              prev.map((c) => (c.id === updated.id ? updated : c))
+            );
+          }}
+        />
+      )}
+
       <CreateDirectMessageModal
         isOpen={isCreateDirectOpen}
         onClose={() => setIsCreateDirectOpen(false)}
@@ -1466,67 +1571,13 @@ export default function ConnectWorkspace() {
         onConversationCreated={handleConversationCreated}
       />
 
-      {/* Day 2 Modals */}
-      {isSearchOpen && (
-        <CommunicationSearchModal
-          isOpen={isSearchOpen}
-          onClose={() => setIsSearchOpen(false)}
-          currentChannelId={activeTarget?.type === "channel" ? activeTarget.id : null}
-          currentChannelName={activeHeaderDetails?.type === "channel" ? (activeHeaderDetails.channel?.name || null) : null}
-          currentConversationId={activeTarget?.type === "conversation" ? activeTarget.id : null}
-          onSelectResult={handleSelectSearchResult}
-        />
-      )}
-
-      {isSavedOpen && (
-        <SavedMessagesModal
-          isOpen={isSavedOpen}
-          onClose={() => setIsSavedOpen(false)}
-          onJumpToSavedMessage={handleJumpToSavedMessage}
-          onUnsaved={(msgId) => {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === msgId ? { ...m, isSaved: false } : m))
-            );
-          }}
-        />
-      )}
-
-      {isPinnedOpen && activeTarget && (
-        <PinnedMessagesModal
-          isOpen={isPinnedOpen}
-          onClose={() => setIsPinnedOpen(false)}
-          targetType={activeTarget.type}
-          targetId={activeTarget.id}
-          targetTitle={activeHeaderDetails?.title || "Current Chat"}
-          canUnpin={activeTarget.type === "channel" ? canManageCurrent : true}
-          onJumpToMessage={handleJumpToPinnedMessage}
-          onUnpinned={(msgId) => {
-            setMessages((prev) =>
-              prev.map((m) => (m.id === msgId ? { ...m, isPinned: false } : m))
-            );
-          }}
-        />
-      )}
-
-      {selectedMessageForLinks && (
-        <BusinessLinkModal
-          isOpen={Boolean(selectedMessageForLinks)}
-          onClose={() => setSelectedMessageForLinks(null)}
-          message={selectedMessageForLinks}
-          onLinksUpdated={handleLinksUpdated}
-        />
-      )}
-
-      {/* Day 3 ZII AI Conversation Intelligence Modal */}
-      {isZiiModalOpen && activeTarget && (
-        <ZiiConversationModal
-          isOpen={isZiiModalOpen}
-          onClose={() => setIsZiiModalOpen(false)}
-          sessionId={activeTarget.id}
-          sessionTitle={activeHeaderDetails?.title || "Conversation"}
-          isChannel={activeTarget.type === "channel"}
-        />
-      )}
+      {/* Business Entity Link Modal (Task 8) */}
+      <BusinessLinkModal
+        isOpen={Boolean(linkingMessage)}
+        onClose={() => setLinkingMessage(null)}
+        message={linkingMessage}
+        onLinkCreated={handleEntityLinkCreated}
+      />
     </div>
   );
 }

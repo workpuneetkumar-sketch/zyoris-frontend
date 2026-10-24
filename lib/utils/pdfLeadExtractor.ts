@@ -47,6 +47,22 @@ const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const phoneRegex = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,5}\)?[-.\s]?\d{3,5}[-.\s]?\d{3,5}/;
 
 /**
+ * Robust extractor for telephone/mobile numbers across standard Indian and international formats.
+ */
+export function extractPhoneNumber(str: string): string | null {
+  if (!str) return null;
+  const matches = str.match(/(?:\+?\d{1,4}[-.\s]?)?(?:\(?0?\d{2,5}\)?[-.\s]?)?\d{3,5}[-.\s]?\d{3,5}(?:[-.\s]?\d{3,5})?/g);
+  if (!matches) return null;
+  for (const m of matches) {
+    const digits = m.replace(/\D/g, "");
+    if (digits.length >= 8 && digits.length <= 13) {
+      return m.trim();
+    }
+  }
+  return null;
+}
+
+/**
  * Suggests the best matching standard lead attribute for any detected column name.
  */
 export function autoMapField(detectedHeader: string): TargetLeadFieldKey {
@@ -590,12 +606,101 @@ function matchLeadRows(
     });
   }
 
-  const standardHeaders = ["name", "email", "phone", "company", "jobTitle", "city", "industry"];
+  if (records.length > 0) {
+    const standardHeaders = ["name", "email", "phone", "company", "jobTitle", "city", "industry"];
+    return {
+      headers: standardHeaders,
+      rows: records,
+      totalLeadsFound: records.length,
+      strategy: "Email Anchors",
+      rawTextPreview: rawLines.slice(0, 10).join("\n"),
+    };
+  }
+
+  // ── Strategy E: Phone Anchors & Business Directory Listings (Documents without emails) ──
+  const phoneRecords: Record<string, string>[] = [];
+  const seenPhones = new Set<string>();
+  const dirBoilerplate = /^(directions|website|open now|open closes.*|open 24.*|closes.*|no reviews.*|\d\.\d|\(\d+\).*)$/i;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].trim();
+    const phone = extractPhoneNumber(line);
+    if (!phone) continue;
+
+    const cleanDigits = phone.replace(/\D/g, "");
+    if (cleanDigits.length < 8 || seenPhones.has(cleanDigits)) continue;
+    seenPhones.add(cleanDigits);
+
+    let name = "";
+    let company = "";
+    let address = "";
+    let industry = "";
+
+    const lineWithoutPhone = line.replace(phone, "").replace(/open.*|closes.*/i, "").trim();
+    if (lineWithoutPhone.length >= 4 && !dirBoilerplate.test(lineWithoutPhone) && !lineWithoutPhone.startsWith('"')) {
+      if (lineWithoutPhone.includes(",")) {
+        const parts = lineWithoutPhone.split(",");
+        name = parts[0].trim();
+        address = parts.slice(1).join(",").trim();
+      } else {
+        name = lineWithoutPhone;
+      }
+    }
+
+    for (let j = i - 1; j >= Math.max(0, i - 8); j--) {
+      const prev = rawLines[j].trim();
+      if (!prev || dirBoilerplate.test(prev) || prev.startsWith('"')) continue;
+      if (extractPhoneNumber(prev)) break;
+
+      const isAddr = /(plot|sector|road|rd|building|floor|nagar|area|phase|dist|pin|\b\d{6}\b)/i.test(prev);
+      const isInd = /(manufacturer|office|consultant|hospital|agency|school|supplier|industry|workshop|company|store|works|engineer)/i.test(prev);
+
+      if (isAddr && !address) {
+        address = prev;
+        continue;
+      }
+      if (isInd && !industry) {
+        industry = prev.replace(/^\(\d+\)\s*/, "").replace(/^[^a-zA-Z]+/, "").trim();
+        continue;
+      }
+      if (!name && prev.length >= 3 && !/^\d+$/.test(prev)) {
+        name = prev;
+      } else if (!company && prev.length >= 3 && !/^\d+$/.test(prev)) {
+        company = prev;
+      }
+    }
+
+    if (name || company || address) {
+      const finalName = name || company || "Business Contact";
+      const detectedCity = /faridabad/i.test(address + " " + line) ? "Faridabad" : "";
+      phoneRecords.push({
+        name: finalName,
+        company: company || finalName,
+        phone,
+        email: "",
+        city: detectedCity,
+        industry: industry || "",
+        address: address || "",
+      });
+    }
+  }
+
+  if (phoneRecords.length > 0) {
+    const dirHeaders = ["name", "company", "phone", "email", "city", "industry", "address"];
+    return {
+      headers: dirHeaders,
+      rows: phoneRecords,
+      totalLeadsFound: phoneRecords.length,
+      strategy: "Phone Directory Anchors",
+      rawTextPreview: rawLines.slice(0, 10).join("\n"),
+    };
+  }
+
   return {
-    headers: records.length > 0 ? standardHeaders : [],
-    rows: records,
-    totalLeadsFound: records.length,
-    strategy: "Email Anchors",
+    headers: [],
+    rows: [],
+    totalLeadsFound: 0,
+    strategy: "None",
     rawTextPreview: rawLines.slice(0, 10).join("\n"),
   };
 }
@@ -819,15 +924,21 @@ export async function extractLeadsFromPdf(
 
   // ── Tier 2 (Fallback): pdfjs-dist Engine ──
   try {
-    const importedModule = await import("pdfjs-dist/legacy/build/pdf.js" as any);
+    const importedModule = await import("pdfjs-dist" as any);
     const pdfjsLib = importedModule?.default?.getDocument ? importedModule.default : importedModule;
     if (pdfjsLib && pdfjsLib.getDocument) {
+      if (typeof window !== "undefined" && pdfjsLib.GlobalWorkerOptions) {
+        if (!pdfjsLib.GlobalWorkerOptions.workerSrc || pdfjsLib.GlobalWorkerOptions.workerSrc.startsWith("./")) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || "3.11.174"}/pdf.worker.min.js`;
+        }
+      }
       const copy = cleanUint8.slice(0);
       const loadingTask = pdfjsLib.getDocument({
         data: copy,
         useSystemFonts: true,
         disableFontFace: true,
         isEvalSupported: false,
+        stopAtErrors: false,
       });
 
       const pdfDoc = await loadingTask.promise;

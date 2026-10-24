@@ -141,6 +141,7 @@ export function ZiiBot() {
       {!fullscreen && (
         <motion.button
           type="button"
+          data-tour="ziibot-button"
           className={`zii-fab${pathname === "/whatsapp" || pathname?.startsWith("/whatsapp") ? " zii-fab--whatsapp" : ""}`}
           onClick={panelOpen || closing ? closePanel : openPanel}
           aria-label={panelOpen || closing ? "Close chat" : "Open ZY BOT"}
