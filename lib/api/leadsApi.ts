@@ -11,6 +11,7 @@ import {
     PER_PAGE,
     computeLeadScore,
 } from "@/types/leads";
+import { resolveSingleLeadData } from "@/lib/utils/cleanLeadData";
 
 const SOFT_DELETED_LEADS_STORAGE_KEY = "zyoris-soft-deleted-leads";
 
@@ -301,7 +302,7 @@ async function _fetchLeadsPage(
     const startIndex = (page - 1) * limit;
     const sliced = responseData ? leads : leads.slice(startIndex, startIndex + limit);
 
-    const scoredLeads: Lead[] = sliced.map((lead: Lead) => ({
+    const scoredLeads: Lead[] = sliced.map((lead: Lead) => resolveSingleLeadData({
         ...lead,
         score: typeof lead.score === "number" && lead.score > 0 ? lead.score : computeLeadScore(lead),
     }));
@@ -532,7 +533,7 @@ export async function fetchLeadById(leadId: string): Promise<any> {
         };
         
         console.log('[fetchLeadById] Enriched lead:', JSON.stringify(enrichedLead, null, 2));
-        return enrichedLead;
+        return resolveSingleLeadData(enrichedLead);
         
     } catch (error: any) {
         console.error('[fetchLeadById] Error:', error.response?.data || error.message);

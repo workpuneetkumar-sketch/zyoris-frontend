@@ -45,6 +45,7 @@ import { CommunicationIntelligenceWidget } from "@/components/ai/CommunicationIn
 import { LeadAISummaryCard } from "@/components/leads/LeadAISummaryCard";
 import { LeadIntelligencePanel } from "@/components/leads/LeadIntelligencePanel";
 import { LeadApiActionsToolbar } from "@/components/leads/LeadApiActionsToolbar";
+import { resolveSingleLeadData } from "@/lib/utils/cleanLeadData";
 
 
 // Helper to format date safely
@@ -147,7 +148,8 @@ export default function LeadDetailPage() {
         setLoading(true);
         setError(null);
         try {
-            const data = await fetchLeadById(leadId);
+            const rawData = await fetchLeadById(leadId);
+            const data = resolveSingleLeadData(rawData);
             let leadScore = data.score;
             
             // Try to fetch the real score from the API
@@ -159,7 +161,7 @@ export default function LeadDetailPage() {
             }
             
             // Ensure all fields exist with fallbacks
-            const enrichedLead: Lead = {
+            const enrichedLead: Lead = resolveSingleLeadData({
                 ...data,
                 id: data.id || leadId,
                 name: data.name || "Unnamed Lead",
@@ -179,7 +181,7 @@ export default function LeadDetailPage() {
                 estimatedValue: data.estimatedValue || 0,
                 createdAt: data.createdAt || new Date().toISOString(),
                 deleted: data.deleted || false,
-            };
+            });
             setLead(enrichedLead);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to load lead.");
