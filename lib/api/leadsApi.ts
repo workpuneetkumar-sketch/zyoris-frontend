@@ -14,7 +14,7 @@ import {
 
 const SOFT_DELETED_LEADS_STORAGE_KEY = "zyoris-soft-deleted-leads";
 
-function getSoftDeletedLeadIds(): string[] {
+export function getSoftDeletedLeadIds(): string[] {
     if (typeof window === "undefined") return [];
 
     try {
@@ -39,14 +39,14 @@ function persistSoftDeletedLeadIds(ids: string[]) {
     }
 }
 
-function markLeadAsSoftDeleted(id: Lead["id"]) {
+export function markLeadAsSoftDeleted(id: Lead["id"]) {
     const existing = getSoftDeletedLeadIds();
     if (!existing.includes(id)) {
         persistSoftDeletedLeadIds([...existing, id]);
     }
 }
 
-function isLeadSoftDeleted(lead: Lead): boolean {
+export function isLeadSoftDeleted(lead: Lead): boolean {
     return Boolean(lead.deleted) || getSoftDeletedLeadIds().includes(lead.id);
 }
 
@@ -226,34 +226,34 @@ async function _fetchLeadsPage(
     };
 
     let responseData: any = null;
+    let apiSuccess = false;
 
     // Attempt 1: GET /leads/get-leads
     try {
         const res = await api.get("/leads/get-leads", { params });
         responseData = res.data;
+        apiSuccess = true;
     } catch (e1: any) {
-        console.warn("[fetchLeads] /leads/get-leads server 500 error:", e1?.message);
+        console.warn("[fetchLeads] /leads/get-leads server error:", e1?.message);
     }
 
-    // Attempt 2: GET /leads (if get-leads returns no items or errors out)
-    if (!responseData || extractLeadsArray(responseData).length === 0) {
+    // Attempt 2: GET /leads (if get-leads failed or returned no response)
+    if (!apiSuccess) {
         try {
             const res = await api.get("/leads", { params });
-            if (extractLeadsArray(res.data).length > 0) {
-                responseData = res.data;
-            }
+            responseData = res.data;
+            apiSuccess = true;
         } catch (e2: any) {
             console.warn("[fetchLeads] /leads failed:", e2?.message);
         }
     }
 
-    // Attempt 3: GET /leads/filter (if needed)
-    if (!responseData || extractLeadsArray(responseData).length === 0) {
+    // Attempt 3: GET /leads/filter (if previous attempts failed)
+    if (!apiSuccess) {
         try {
             const res = await api.get("/leads/filter", { params });
-            if (extractLeadsArray(res.data).length > 0) {
-                responseData = res.data;
-            }
+            responseData = res.data;
+            apiSuccess = true;
         } catch (e3: any) {
             console.warn("[fetchLeads] /leads/filter failed:", e3?.message);
         }
@@ -261,9 +261,9 @@ async function _fetchLeadsPage(
 
     let leads: Lead[] = extractLeadsArray(responseData);
 
-    // Attempt 4: Extract live DB leads from active relational endpoints when primary search API 500s
-    if (leads.length === 0) {
-        console.warn("[fetchLeads] Primary search APIs returned empty or 500. Harvesting live DB leads...");
+    // Attempt 4: ONLY extract relational leads when primary search APIs completely failed
+    if (!apiSuccess && leads.length === 0) {
+        console.warn("[fetchLeads] Primary search APIs returned error. Harvesting live DB leads...");
         leads = await harvestRealDatabaseLeads();
     }
 
@@ -285,7 +285,18 @@ async function _fetchLeadsPage(
         );
     }
 
-    const total: number = responseData ? extractLeadsTotal(responseData, leads.length) : leads.length;
+    const softDeletedIds = getSoftDeletedLeadIds();
+    let total: number = responseData ? extractLeadsTotal(responseData, leads.length) : leads.length;
+
+    // Subtract locally soft-deleted leads from the reported total
+    if (softDeletedIds.length > 0 && total > 0) {
+        total = Math.max(0, total - softDeletedIds.length);
+    }
+
+    // If on page 1 with no leads, total must be 0
+    if (page === 1 && leads.length === 0) {
+        total = 0;
+    }
 
     const startIndex = (page - 1) * limit;
     const sliced = responseData ? leads : leads.slice(startIndex, startIndex + limit);

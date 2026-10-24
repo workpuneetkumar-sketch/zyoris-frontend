@@ -10,7 +10,7 @@ import { DuplicateMergeUI } from "@/components/leads/DuplicateMergeUI";
 import { AdvancedFiltersDrawer } from "@/components/leads/AdvancedFiltersDrawer";
 import { BulkActionsToolbar } from "@/components/leads/BulkActionsToolbar";
 import { AdvancedLeadsFilters, DEFAULT_ADVANCED_FILTERS } from "@/types/savedViews";
-import { fetchLeads } from "@/lib/api/leadsApi";
+import { fetchLeads, getSoftDeletedLeadIds } from "@/lib/api/leadsApi";
 import { Upload, Download, Plus, Users, TrendingUp, PhoneCall, CheckCircle2, Target, UserPlus, Search as SearchIcon, Building2, ArrowRightLeft, UsersRound, Zap } from "lucide-react";
 import Link from "next/link";
 import { ConvertLeadModal } from "@/components/customers/ConvertLeadModal";
@@ -226,7 +226,16 @@ export default function LeadsPage() {
           [];
 
         const derived = deriveStatsFromStatusStats(statusStats);
-        setLeadsStats((prev) => ({ ...derived, avgScore: prev.avgScore }));
+        const softDeletedCount = typeof window !== "undefined" ? getSoftDeletedLeadIds().length : 0;
+        const adjustedTotal = Math.max(0, derived.total - softDeletedCount);
+        const adjustedNew = Math.max(0, derived.newLeads - softDeletedCount);
+
+        setLeadsStats((prev) => ({
+          ...derived,
+          total: adjustedTotal,
+          newLeads: adjustedNew,
+          avgScore: adjustedTotal === 0 ? null : prev.avgScore,
+        }));
       })
       .catch(() => {
         // Endpoint unavailable — values stay at 0 until lead list loads (fallback below)
@@ -253,6 +262,25 @@ export default function LeadsPage() {
     setLeadsStats((prev) => {
       const next = { ...prev };
 
+      const isDefaultFilters =
+        filters.status === "All Status" &&
+        filters.source === "All Sources" &&
+        filters.owner === "All Owners" &&
+        !filters.search &&
+        !filters.dateFrom &&
+        !filters.dateTo;
+
+      // If there are no leads under default filters (or total is 0), reset stats to 0
+      if ((total === 0 || leads.length === 0) && isDefaultFilters) {
+        return {
+          total: 0,
+          newLeads: 0,
+          contacted: 0,
+          converted: 0,
+          avgScore: null,
+        };
+      }
+
       // Total: use stats API total when available; fall back to the paginated total
       if (next.total === 0 && total > 0) {
         next.total = total;
@@ -265,11 +293,13 @@ export default function LeadsPage() {
           const avg = scoredLeads.reduce((sum, l) => sum + (l.score as number), 0) / scoredLeads.length;
           next.avgScore = Math.round(avg);
         }
+      } else {
+        next.avgScore = null;
       }
 
       return next;
     });
-  }, [statsLoading, total, leads]);
+  }, [statsLoading, total, leads, filters]);
 
   // ── Assignment hooks (lazy — only load when tab active) ───────────────────
   const rulesHook = useAssignmentRules();
@@ -361,7 +391,13 @@ export default function LeadsPage() {
   const handleBulkSuccess = useCallback((type: BulkOperationType) => {
     if (usingAdvanced) void loadWithAdvancedFilters(advFilters);
     else void retry();
-  }, [usingAdvanced, loadWithAdvancedFilters, advFilters, retry]);
+    refreshStats();
+  }, [usingAdvanced, loadWithAdvancedFilters, advFilters, retry, refreshStats]);
+
+  const handleRefreshAll = useCallback(async () => {
+    await retry();
+    refreshStats();
+  }, [retry, refreshStats]);
 
   const {
     selectedIds, selectedCount, isSelected, toggleSelect, selectAll,
@@ -584,7 +620,7 @@ export default function LeadsPage() {
                     convertingId={null}
                     onPageChange={handlePageChange}
                     onPerPageChange={handlePerPageChange}
-                    onRefreshLeads={retry}
+                    onRefreshLeads={handleRefreshAll}
                     onFiltersChange={handleFiltersChange}
                     onNewLead={handleNewLead}
                     onExport={handleExport}

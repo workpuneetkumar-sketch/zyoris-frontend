@@ -262,6 +262,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           window.location.pathname.startsWith("/register"));
 
       const cachedUser: User | null = parsed?.user ?? null;
+      if (cachedUser) {
+        const isAdmin =
+          (cachedUser.role || "").toUpperCase() === "ADMIN" ||
+          (cachedUser.email || "").toLowerCase().startsWith("admin");
+        if (isAdmin && (!cachedUser.name || cachedUser.name.trim().toLowerCase() === "user")) {
+          cachedUser.name = "Admin";
+        }
+      }
+
       setToken(effectiveToken);
       setTokenCookie(effectiveToken);
       setAuthToken(effectiveToken);
@@ -276,7 +285,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       try {
         // Validate token + load authoritative fresh profile from backend.
-        const userData = await getMeApi();
+        const rawUserData = await getMeApi();
+        const isUserDataAdmin =
+          (rawUserData.role || "").toUpperCase() === "ADMIN" ||
+          (rawUserData.email || cachedUser?.email || "").toLowerCase().startsWith("admin");
+
+        const userData: User = {
+          ...rawUserData,
+          email: rawUserData.email || cachedUser?.email || (isUserDataAdmin ? "admin@zyoris.local" : ""),
+          name:
+            rawUserData.name &&
+            rawUserData.name.trim().length > 0 &&
+            rawUserData.name.trim().toLowerCase() !== "user"
+              ? rawUserData.name.trim()
+              : cachedUser?.name && cachedUser.name.toLowerCase() !== "user"
+                ? cachedUser.name
+                : isUserDataAdmin
+                  ? "Admin"
+                  : (rawUserData.email || cachedUser?.email || "").split("@")[0] || "User",
+          role: rawUserData.role || (isUserDataAdmin ? "ADMIN" : "USER"),
+        };
 
         try {
           const [rbacMe, frontendPerms] = await Promise.all([
@@ -344,10 +372,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenCookie(effectiveToken);
     setAuthToken(effectiveToken);
 
+    const normalizedEmail = email.trim();
+    const isLoginAdmin =
+      (res.user?.role || "").toUpperCase() === "ADMIN" ||
+      normalizedEmail.toLowerCase().startsWith("admin");
+
+    const safeUser: User = {
+      ...res.user,
+      email: res.user?.email || normalizedEmail,
+      name:
+        res.user?.name &&
+        res.user.name.trim().length > 0 &&
+        res.user.name.trim().toLowerCase() !== "user"
+          ? res.user.name.trim()
+          : isLoginAdmin
+            ? "Admin"
+            : normalizedEmail.split("@")[0] || "User",
+      role: res.user?.role || (isLoginAdmin ? "ADMIN" : "USER"),
+    };
+
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        user: res.user,
+        user: safeUser,
         token: effectiveToken,
         refreshToken: res.refreshToken,
       })
@@ -363,13 +410,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setVisibleDashboards(frontendPerms.dashboards || []);
       setVisibleModules(frontendPerms.modules || []);
       if (rbacMe.role?.name) {
-        res.user.role = rbacMe.role.name;
+        safeUser.role = rbacMe.role.name;
       }
     } catch {
       // Permission load failed — non-fatal, session is still valid.
     }
 
-    setUser(res.user);
+    setUser(safeUser);
     setIsAuthenticated(true);
     setSessionStatus("authenticated");
     setPermissionsLoaded(true);
@@ -405,10 +452,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTokenCookie(effectiveToken);
     setAuthToken(effectiveToken);
 
+    const normalizedEmail = data.email.trim();
+    const isLoginAdmin =
+      (res.user?.role || data.role || "").toUpperCase() === "ADMIN" ||
+      normalizedEmail.toLowerCase().startsWith("admin");
+
+    const safeUser: User = {
+      ...res.user,
+      email: res.user?.email || normalizedEmail,
+      name:
+        res.user?.name &&
+        res.user.name.trim().length > 0 &&
+        res.user.name.trim().toLowerCase() !== "user"
+          ? res.user.name.trim()
+          : data.name?.trim() || (isLoginAdmin ? "Admin" : normalizedEmail.split("@")[0] || "User"),
+      role: res.user?.role || data.role || (isLoginAdmin ? "ADMIN" : "USER"),
+    };
+
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        user: res.user,
+        user: safeUser,
         token: effectiveToken,
         refreshToken: res.refreshToken,
       })
@@ -424,13 +488,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setVisibleDashboards(frontendPerms.dashboards || []);
       setVisibleModules(frontendPerms.modules || []);
       if (rbacMe.role?.name) {
-        res.user.role = rbacMe.role.name;
+        safeUser.role = rbacMe.role.name;
       }
     } catch {
       // Permission load failed — non-fatal, session is still valid.
     }
 
-    setUser(res.user);
+    setUser(safeUser);
     setIsAuthenticated(true);
     setSessionStatus("authenticated");
     setPermissionsLoaded(true);

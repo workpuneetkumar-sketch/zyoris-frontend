@@ -495,8 +495,9 @@ export function LeadsTable({
     onPromoteToCustomer,
 }: LeadsTableProps) {
     const router = useRouter();
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
     const safeLeads = leads ?? [];
+    const effectiveTotal = safeLeads.length === 0 ? 0 : total;
+    const totalPages = Math.max(1, Math.ceil(effectiveTotal / perPage));
 
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
     const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -774,9 +775,9 @@ export function LeadsTable({
                     <p className="text-sm text-gray-500 shrink-0">
                         {loading
                             ? "Loading..."
-                            : total === 0
+                            : effectiveTotal === 0 || safeLeads.length === 0
                                 ? "No leads found"
-                                : `Showing ${(page - 1) * perPage + 1} to ${Math.min(page * perPage, total)} of ${total} leads`}
+                                : `Showing ${(page - 1) * perPage + 1} to ${Math.min((page - 1) * perPage + safeLeads.length, effectiveTotal)} of ${effectiveTotal} leads`}
                     </p>
 
                     {/* Page buttons + per-page */}
@@ -784,7 +785,7 @@ export function LeadsTable({
                         {/* Prev */}
                         <button
                             onClick={() => onPageChange(Math.max(1, page - 1))}
-                            disabled={page === 1 || loading}
+                            disabled={page <= 1 || loading || effectiveTotal === 0}
                             className="flex items-center gap-1 h-9 px-3 rounded-lg border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
                             <ChevronLeft size={15} />
@@ -792,7 +793,7 @@ export function LeadsTable({
                         </button>
 
                         {/* Page buttons */}
-                        {(() => {
+                        {effectiveTotal > 0 && safeLeads.length > 0 && (() => {
                             const delta = 1;
                             const range: number[] = [];
                             const rangeWithDots: (number | "...")[] = [];
@@ -840,7 +841,7 @@ export function LeadsTable({
                         {/* Next */}
                         <button
                             onClick={() => onPageChange(Math.min(totalPages, page + 1))}
-                            disabled={page === totalPages || loading}
+                            disabled={page >= totalPages || loading || effectiveTotal === 0}
                             className="flex items-center gap-1 h-9 px-3 rounded-lg border border-gray-200 text-sm text-gray-600 font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
                         >
                             Next

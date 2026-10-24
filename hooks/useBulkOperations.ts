@@ -8,7 +8,7 @@ import {
   bulkUpdateLeads,
   bulkDeleteLeads,
 } from "@/lib/api/bulkOperationsApi";
-import { executeAssignmentRule } from "@/lib/api/leadsApi";
+import { executeAssignmentRule, markLeadAsSoftDeleted } from "@/lib/api/leadsApi";
 import {
   BulkOperationType,
   BulkOperationState,
@@ -147,6 +147,8 @@ export function useBulkOperations(onSuccess?: (type: BulkOperationType) => void)
         { ids },
         (pct) => setBulkState((prev) => ({ ...prev, progress: pct }))
       );
+      // Ensure all deleted IDs are excluded locally from active leads
+      ids.forEach((id) => markLeadAsSoftDeleted(id));
       setUndoStack((prev) => [...prev, { type: "delete", ids }]);
       setBulkState((prev) => ({
         ...prev,

@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-toastify";
 import { Lead, LeadsFilters, DEFAULT_FILTERS, PER_PAGE } from "@/types/leads";
-import { fetchLeads, deleteLead, convertLeadToDeal } from "@/lib/api/leadsApi";
+import { fetchLeads, deleteLead, convertLeadToDeal, isLeadSoftDeleted } from "@/lib/api/leadsApi";
 
 function quoteCsv(value: unknown) {
     const text = value == null ? "" : String(value);
@@ -80,9 +80,10 @@ export function useLeads() {
         try {
             const data = await fetchLeads(page, filters, pageSize);
             // Filter out any deleted leads just in case
-            const activeLeads = data.leads.filter((lead: Lead) => !lead.deleted);
+            const activeLeads = data.leads.filter((lead: Lead) => !lead.deleted && !isLeadSoftDeleted(lead));
+            const effectiveTotal = (page === 1 && activeLeads.length === 0) ? 0 : Math.max(0, data.total);
             setLeads(activeLeads);
-            setTotal(data.total);
+            setTotal(effectiveTotal);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to fetch leads.");
         } finally {
@@ -157,8 +158,15 @@ export function useLeads() {
             if (result.success) {
                 toast.success(result.message || "Lead deleted successfully");
                 // Remove the lead from the list immediately, even if the backend delete route is unavailable.
-                setLeads(prev => prev.filter(l => l.id !== lead.id));
-                setTotal(prev => Math.max(0, prev - 1));
+                setLeads(prev => {
+                    const remaining = prev.filter(l => l.id !== lead.id);
+                    if (remaining.length === 0 && page === 1) {
+                        setTotal(0);
+                    } else {
+                        setTotal(t => Math.max(0, t - 1));
+                    }
+                    return remaining;
+                });
                 await loadLeads();
             } else {
                 toast.error(result.message || "Failed to delete lead");

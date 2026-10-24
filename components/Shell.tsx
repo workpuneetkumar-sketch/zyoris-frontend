@@ -611,10 +611,24 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [drawerOpen]);
 
-  const displayName =
-    user?.name && user.name.trim().length > 0
-      ? user.name
-      : user?.email?.split("@")[0] || "User";
+  const displayName = (() => {
+    if (user?.name && user.name.trim().length > 0 && user.name.trim().toLowerCase() !== "user") {
+      return user.name.trim();
+    }
+    const roleUpper = (user?.role || "").toUpperCase().trim();
+    const emailLower = (user?.email || "").toLowerCase().trim();
+    if (roleUpper === "ADMIN" || emailLower.startsWith("admin")) {
+      return "Admin";
+    }
+    if (emailLower.includes("@")) {
+      const prefix = emailLower.split("@")[0];
+      return prefix.charAt(0).toUpperCase() + prefix.slice(1);
+    }
+    if (roleUpper) {
+      return roleUpper.charAt(0).toUpperCase() + roleUpper.slice(1).toLowerCase();
+    }
+    return "Admin";
+  })();
 
   // Use dynamic RBAC sidebar when available; fall back to static role-based filtering.
   // Communication group is ALWAYS injected — for every role, regardless of API response.
@@ -1227,7 +1241,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   .split(" ")
                   .map((p: string) => p[0]?.toUpperCase() || "")
                   .join("")
-                  .slice(0, 2)}
+                  .slice(0, 2) || ((user?.role || "").toUpperCase() === "ADMIN" ? "A" : "U")}
               </div>
             )}
             <div className="flex-1 min-w-0 text-left">
@@ -1237,7 +1251,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 {displayName}
               </p>
               <p className="text-[11.5px] text-text-muted truncate">
-                {user?.email || ""}
+                {user?.email || ((user?.role || "").toUpperCase() === "ADMIN" ? "admin@zyoris.local" : user?.role || "")}
               </p>
             </div>
           </button>
