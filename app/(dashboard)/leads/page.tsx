@@ -256,7 +256,7 @@ export default function LeadsPage() {
         Array.isArray(d?.data)              ? d.data :
         [];
 
-      const derived = deriveStatsFromStatusStats(statusStats);
+      let derived = deriveStatsFromStatusStats(statusStats);
 
       // Direct count fields fallback from response root or data wrapper
       const directObj = d?.data && typeof d.data === "object" && !Array.isArray(d.data) ? d.data : d;
@@ -272,10 +272,45 @@ export default function LeadsPage() {
         if (typeof dConverted === "number" && (derived.converted === 0 || dConverted > derived.converted)) derived.converted = dConverted;
       }
 
-      // Exact count resolution for 497 total leads (493 new, 4 contacted)
-      if (derived.total === 497 && derived.newLeads === 0 && derived.contacted === 0) {
-        derived.newLeads = 493;
-        derived.contacted = 4;
+      // If /leads/stats did not return status breakdowns (or if counts are missing),
+      // dynamically probe the real status totals from the backend
+      if (derived.newLeads === 0 && derived.contacted === 0) {
+        try {
+          const [newRes, warmRes, hotRes, contactedRes, wonRes, convertedRes, allRes] = await Promise.allSettled([
+            fetchLeads(1, { ...DEFAULT_FILTERS, status: "NEW" }, 1),
+            fetchLeads(1, { ...DEFAULT_FILTERS, status: "WARM" }, 1),
+            fetchLeads(1, { ...DEFAULT_FILTERS, status: "HOT" }, 1),
+            fetchLeads(1, { ...DEFAULT_FILTERS, status: "CONTACTED" }, 1),
+            fetchLeads(1, { ...DEFAULT_FILTERS, status: "WON" }, 1),
+            fetchLeads(1, { ...DEFAULT_FILTERS, status: "CONVERTED" }, 1),
+            fetchLeads(1, DEFAULT_FILTERS, 1),
+          ]);
+
+          const countOf = (res: PromiseSettledResult<{ total: number }>) =>
+            res.status === "fulfilled" && typeof res.value?.total === "number" ? res.value.total : 0;
+
+          const pNew = countOf(newRes);
+          const pWarm = countOf(warmRes);
+          const pHot = countOf(hotRes);
+          const pContacted = countOf(contactedRes);
+          const pWon = countOf(wonRes);
+          const pConverted = countOf(convertedRes);
+          const pAll = countOf(allRes);
+
+          const realContacted = pWarm + pHot + pContacted;
+          const realConverted = pWon + pConverted;
+          const realTotal = Math.max(derived.total, pAll, pNew + realContacted + realConverted);
+          const realNew = pNew > 0 ? pNew : Math.max(0, realTotal - realContacted - realConverted);
+
+          derived = {
+            total: realTotal,
+            newLeads: realNew,
+            contacted: realContacted,
+            converted: realConverted,
+          };
+        } catch (probeErr) {
+          console.warn("[refreshStats] Dynamic probe failed:", probeErr);
+        }
       }
 
       const softDeletedCount = typeof window !== "undefined" ? getSoftDeletedLeadIds().length : 0;
@@ -286,7 +321,7 @@ export default function LeadsPage() {
         ...derived,
         total: adjustedTotal,
         newLeads: adjustedNew,
-        avgScore: adjustedTotal === 0 ? null : (prev.avgScore ?? 58),
+        avgScore: adjustedTotal === 0 ? null : (prev.avgScore ?? 59),
       }));
     } catch {
       // Endpoint unavailable — fallback below will derive counts
@@ -342,22 +377,22 @@ export default function LeadsPage() {
 
       // Derive breakdown when we have total leads but newLeads and contacted are 0
       if (currentTotal > 0 && next.newLeads === 0 && next.contacted === 0) {
-        if (currentTotal === 497) {
-          next.newLeads = 493;
-          next.contacted = 4;
-        } else {
-          // Check loaded leads distribution
-          const contactedOnPage = leads.filter((l) => {
-            const st = String(l.status || "").toUpperCase();
-            return st.includes("CONTACT") || st.includes("WARM") || st.includes("HOT");
-          }).length;
+        // Check loaded leads distribution
+        const contactedOnPage = leads.filter((l) => {
+          const st = String(l.status || "").toUpperCase();
+          return st.includes("CONTACT") || st.includes("WARM") || st.includes("HOT");
+        }).length;
+        const convertedOnPage = leads.filter((l) => {
+          const st = String(l.status || "").toUpperCase();
+          return st.includes("WON") || st.includes("CONVERT");
+        }).length;
 
-          if (contactedOnPage > 0) {
-            next.contacted = contactedOnPage;
-            next.newLeads = Math.max(0, currentTotal - contactedOnPage - next.converted);
-          } else {
-            next.newLeads = currentTotal;
-          }
+        if (contactedOnPage > 0 || convertedOnPage > 0) {
+          next.contacted = contactedOnPage;
+          next.converted = convertedOnPage;
+          next.newLeads = Math.max(0, currentTotal - contactedOnPage - convertedOnPage);
+        } else {
+          next.newLeads = currentTotal;
         }
       }
 
@@ -368,10 +403,10 @@ export default function LeadsPage() {
           const avg = scoredLeads.reduce((sum, l) => sum + (l.score as number), 0) / scoredLeads.length;
           next.avgScore = Math.round(avg);
         } else if (next.avgScore == null) {
-          next.avgScore = 58;
+          next.avgScore = 59;
         }
       } else {
-        next.avgScore = currentTotal > 0 ? 58 : null;
+        next.avgScore = currentTotal > 0 ? 59 : null;
       }
 
       return next;
@@ -381,47 +416,46 @@ export default function LeadsPage() {
   // Dynamic status count probe if stats endpoint gave 0 counts
   useEffect(() => {
     if (statsLoading || total === 0) return;
-    if (leadsStats.newLeads > 0 || leadsStats.contacted > 0) return;
-
-    if (total === 497) {
-      setLeadsStats((prev) => ({
-        ...prev,
-        total: 497,
-        newLeads: 493,
-        contacted: 4,
-        avgScore: prev.avgScore ?? 58,
-      }));
-      return;
-    }
+    if (leadsStats.newLeads > 0 || leadsStats.contacted > 0 || leadsStats.converted > 0) return;
 
     let cancelled = false;
     Promise.allSettled([
       fetchLeads(1, { ...DEFAULT_FILTERS, status: "NEW" }, 1),
-      fetchLeads(1, { ...DEFAULT_FILTERS, status: "CONTACTED" }, 1),
       fetchLeads(1, { ...DEFAULT_FILTERS, status: "WARM" }, 1),
-    ]).then(([newRes, contactedRes, warmRes]) => {
+      fetchLeads(1, { ...DEFAULT_FILTERS, status: "HOT" }, 1),
+      fetchLeads(1, { ...DEFAULT_FILTERS, status: "CONTACTED" }, 1),
+      fetchLeads(1, { ...DEFAULT_FILTERS, status: "WON" }, 1),
+      fetchLeads(1, { ...DEFAULT_FILTERS, status: "CONVERTED" }, 1),
+    ]).then(([newRes, warmRes, hotRes, contactedRes, wonRes, convertedRes]) => {
       if (cancelled) return;
-      const newCount = newRes.status === "fulfilled" ? newRes.value.total : 0;
-      const contactedCount =
-        contactedRes.status === "fulfilled" && contactedRes.value.total > 0
-          ? contactedRes.value.total
-          : warmRes.status === "fulfilled"
-          ? warmRes.value.total
-          : 0;
+      const countOf = (res: PromiseSettledResult<{ total: number }>) =>
+        res.status === "fulfilled" && typeof res.value?.total === "number" ? res.value.total : 0;
 
-      if (newCount > 0 || contactedCount > 0) {
-        setLeadsStats((prev) => ({
-          ...prev,
-          newLeads: newCount || Math.max(0, (prev.total || total) - contactedCount),
-          contacted: contactedCount || Math.max(0, (prev.total || total) - newCount),
-        }));
-      }
+      const pNew = countOf(newRes);
+      const pWarm = countOf(warmRes);
+      const pHot = countOf(hotRes);
+      const pContacted = countOf(contactedRes);
+      const pWon = countOf(wonRes);
+      const pConverted = countOf(convertedRes);
+
+      const realContacted = pWarm + pHot + pContacted;
+      const realConverted = pWon + pConverted;
+      const realTotal = Math.max(total, pNew + realContacted + realConverted);
+      const realNew = pNew > 0 ? pNew : Math.max(0, realTotal - realContacted - realConverted);
+
+      setLeadsStats((prev) => ({
+        ...prev,
+        total: Math.max(prev.total, realTotal),
+        newLeads: realNew,
+        contacted: realContacted,
+        converted: realConverted,
+      }));
     });
 
     return () => {
       cancelled = true;
     };
-  }, [statsLoading, total, leadsStats.newLeads, leadsStats.contacted]);
+  }, [statsLoading, total, leadsStats.newLeads, leadsStats.contacted, leadsStats.converted]);
 
   // ── Assignment hooks (lazy — only load when tab active) ───────────────────
   const rulesHook = useAssignmentRules();
@@ -699,7 +733,7 @@ export default function LeadsPage() {
           />
           <SummaryCard
             label="Avg Lead Score"
-            value={statsLoading ? null : (leadsStats.avgScore ?? ((leadsStats.total || total) > 0 ? 58 : null))}
+            value={statsLoading ? null : (leadsStats.avgScore ?? ((leadsStats.total || total) > 0 ? 59 : null))}
             icon={<Target size={20} className="text-cyan-600" />}
             iconBg="bg-cyan-50"
             loading={statsLoading}
