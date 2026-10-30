@@ -1,7 +1,7 @@
 // components/deals/DealsUI.tsx
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -29,6 +29,7 @@ import {
     Briefcase,
     Copy,
     Check,
+    GripVertical,
 } from "lucide-react";
 import { toast } from "react-toastify";
 import { ForecastDashboard } from "./ForecastDashboard";
@@ -575,6 +576,31 @@ function DealCard({
         ? new Date(deal.closeDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
         : null;
 
+    const [isDragging, setIsDragging] = useState(false);
+    const hasDraggedRef = useRef(false);
+
+    const handleDragStart = (e: React.DragEvent) => {
+        hasDraggedRef.current = true;
+        setIsDragging(true);
+        e.dataTransfer.setData("application/json", JSON.stringify({ dealId: deal.dealId, fromStage: deal.stage }));
+        e.dataTransfer.setData("text/plain", deal.dealId);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragEnd = () => {
+        setIsDragging(false);
+        setTimeout(() => {
+            hasDraggedRef.current = false;
+        }, 150);
+    };
+
+    const handleClick = (e: React.MouseEvent) => {
+        if (hasDraggedRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
+
     const handleCopyLink = (e: React.MouseEvent) => {
         e.preventDefault();
         e.stopPropagation();
@@ -592,14 +618,28 @@ function DealCard({
     };
 
     return (
-        <Link href={`/deals/${deal.dealId}`} className="block group">
-            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md hover:border-gray-200 transition-all relative">
-                {/* Top row: name + actions */}
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
-                        {deal.name}
-                    </p>
-                    {/* Three dots menu */}
+        <div
+            draggable
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            className={`block group cursor-grab active:cursor-grabbing transition-all select-none ${
+                isDragging ? "opacity-35 scale-95 shadow-md ring-2 ring-blue-500 rounded-xl" : ""
+            }`}
+        >
+            <Link href={`/deals/${deal.dealId}`} onClick={handleClick} draggable={false} className="block">
+                <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md hover:border-gray-200 transition-all relative">
+                    {/* Top row: name + actions */}
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                            <GripVertical
+                                size={14}
+                                className="text-gray-300 group-hover:text-gray-500 shrink-0 mt-0.5 transition-colors cursor-grab"
+                            />
+                            <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
+                                {deal.name}
+                            </p>
+                        </div>
+                        {/* Three dots menu */}
                     <div
                         onClick={(e) => {
                             e.preventDefault();
@@ -772,6 +812,7 @@ function DealCard({
                 </div>
             </div>
         </Link>
+        </div>
     );
 }
 
@@ -783,6 +824,7 @@ function KanbanColumn({
     stageIndex,
     totalStages,
     deals,
+    allDeals,
     loading,
     allStages,
     onStageChange,
@@ -799,6 +841,7 @@ function KanbanColumn({
     stageIndex: number;
     totalStages: number;
     deals: Deal[];
+    allDeals?: Deal[];
     loading: boolean;
     allStages: string[];
     onStageChange: (dealId: string, newStage: string) => void;
@@ -811,15 +854,74 @@ function KanbanColumn({
     onDeleteDeal?: (deal: Deal) => void;
 }) {
     const cfg = getStageConfig(stage);
+    const [isDragOver, setIsDragOver] = useState(false);
 
     const columnTotal = useMemo(
         () => deals.reduce((sum, d) => sum + d.amount, 0),
         [deals]
     );
 
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!isDragOver) setIsDragOver(true);
+    };
+
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (!isDragOver) setIsDragOver(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsDragOver(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        try {
+            const raw = e.dataTransfer.getData("application/json");
+            let dealId = "";
+            let fromStage = "";
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                dealId = parsed.dealId;
+                fromStage = parsed.fromStage;
+            } else {
+                dealId = e.dataTransfer.getData("text/plain");
+            }
+            if (!dealId) return;
+            // Ignore if dropped in the same stage
+            if (fromStage && fromStage.toUpperCase() === stage.toUpperCase()) return;
+
+            // Locate deal object to pass to transition modal or direct handler
+            const candidateDeals = allDeals && allDeals.length > 0 ? allDeals : deals;
+            const draggedDeal = candidateDeals.find((d) => d.dealId === dealId);
+
+            if (draggedDeal && onRequestTransition) {
+                onRequestTransition(draggedDeal, stage);
+            } else {
+                onStageChange(dealId, stage);
+            }
+        } catch (err) {
+            console.error("Drop handler error:", err);
+        }
+    };
+
     return (
         <div
-            className={`flex-shrink-0 w-[240px] flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-[3px] ${cfg.borderColor}`}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`flex-shrink-0 w-[240px] flex flex-col bg-white rounded-2xl border shadow-sm overflow-hidden border-t-[3px] transition-all duration-150 ${
+                cfg.borderColor
+            } ${
+                isDragOver
+                    ? "border-blue-400 ring-2 ring-blue-300/60 bg-blue-50/20 scale-[1.01]"
+                    : "border-gray-100"
+            }`}
         >
             {/* Column header */}
             <div className={`px-4 py-3 ${cfg.headerBg} border-b border-gray-100`}>
@@ -861,7 +963,12 @@ function KanbanColumn({
             </div>
 
             {/* Cards */}
-            <div className="flex-1 flex flex-col gap-2 p-2.5 overflow-y-auto max-h-[560px] scrollbar-thin">
+            <div className="flex-1 flex flex-col gap-2 p-2.5 overflow-y-auto max-h-[560px] scrollbar-thin transition-colors">
+                {isDragOver && (
+                    <div className="p-3 rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/70 text-blue-700 text-center text-xs font-semibold animate-pulse flex items-center justify-center gap-1.5 shrink-0 shadow-xs">
+                        <span>Drop to move to {stageObj?.name || cfg.label || stage}</span>
+                    </div>
+                )}
                 {loading ? (
                     <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
                 ) : deals.length === 0 ? (
@@ -1297,6 +1404,7 @@ export function DealsUI({
                                     dealsByStage.get(stageName) ??
                                     []
                                 }
+                                allDeals={deals}
                                 loading={loading}
                                 allStages={allStages}
                                 onStageChange={handleStageChange}

@@ -7,7 +7,6 @@ import {
   ShieldAlert,
   TrendingDown,
   Clock,
-  Sparkles,
   Filter,
   CheckCircle2,
   XCircle,
@@ -19,10 +18,11 @@ import {
   Eye,
   Check,
   X,
-  Bot,
   Layers,
   Calendar,
   Zap,
+  FileText,
+  ShieldCheck,
 } from "lucide-react";
 import {
   ManagerInspectionDeal,
@@ -204,18 +204,18 @@ export function ManagerInspectionWorkspace({
 
   return (
     <div className="space-y-6">
-      {/* 1. Executive Pipeline Summary Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 text-white shadow-xl border border-slate-800">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-white/10">
+      {/* 1. Executive Pipeline Summary Banner (Clean Light Theme) */}
+      <div className="bg-white rounded-3xl p-6 text-gray-900 shadow-sm border border-gray-100">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-gray-100">
           <div className="space-y-2">
-            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-400/30">
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>Manager Pipeline Inspection</span>
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">
+              <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
+              <span>Pipeline Inspection</span>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900">
               Executive Health & Risk Radar
             </h2>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-gray-500 max-w-2xl leading-relaxed">
               {summaryLoading ? (
                 "Loading live pipeline telemetry..."
               ) : pipelineSummary?.executiveNarrative ? (
@@ -232,9 +232,9 @@ export function ManagerInspectionWorkspace({
                 loadSummary();
                 loadQueue();
               }}
-              className="inline-flex items-center space-x-1.5 px-3 py-2 bg-white/10 hover:bg-white/20 text-xs font-semibold rounded-xl border border-white/15 transition backdrop-blur-sm"
+              className="inline-flex items-center space-x-1.5 px-3.5 py-2 bg-gray-50 hover:bg-gray-100 text-xs font-semibold rounded-xl border border-gray-200 text-gray-700 transition shadow-xs"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-3.5 h-3.5 text-gray-500" />
               <span>Refresh Radar</span>
             </button>
           </div>
@@ -243,39 +243,39 @@ export function ManagerInspectionWorkspace({
         {/* Aggregate Stats & Risk Breakdown */}
         {pipelineSummary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6">
-            <div className="p-3.5 bg-white/5 rounded-2xl border border-white/10">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="p-4 bg-gray-50/70 rounded-2xl border border-gray-100">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Total Pipeline
               </span>
-              <div className="text-lg sm:text-xl font-extrabold text-white mt-1">
+              <div className="text-lg sm:text-xl font-bold text-gray-900 mt-1">
                 {formatCurrencyWithSnapshot(
                   pipelineSummary.totalPipelineAmount,
                   pipelineSummary.currency
                 )}
               </div>
-              <div className="text-[11px] text-slate-400 mt-0.5">
+              <div className="text-[11px] text-gray-500 mt-0.5">
                 Across {pipelineSummary.totalDeals} opportunities
               </div>
             </div>
 
-            <div className="p-3.5 bg-white/5 rounded-2xl border border-white/10">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="p-4 bg-gray-50/70 rounded-2xl border border-gray-100">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Opportunity Types
               </span>
               <div className="flex flex-wrap gap-1.5 mt-2">
                 {pipelineSummary.opportunityTypeBreakdown.slice(0, 3).map((item) => (
                   <span
                     key={item.type}
-                    className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-500/20 text-blue-300 border border-blue-400/20"
+                    className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-100"
                   >
-                    {item.type}: {item.count}
+                    {item.type.replace(/_/g, " ")}: {item.count}
                   </span>
                 ))}
               </div>
             </div>
 
-            <div className="p-3.5 bg-white/5 rounded-2xl border border-white/10 md:col-span-2">
-              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="p-4 bg-gray-50/70 rounded-2xl border border-gray-100 md:col-span-2">
+              <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
                 Primary Risk Drivers
               </span>
               <div className="flex flex-wrap gap-2 mt-2">
@@ -283,15 +283,15 @@ export function ManagerInspectionWorkspace({
                   pipelineSummary.riskDrivers.slice(0, 3).map((rd, i) => (
                     <span
                       key={i}
-                      className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl text-[11px] font-medium bg-red-500/20 text-red-200 border border-red-500/30"
+                      className="inline-flex items-center space-x-1.5 px-2.5 py-1 rounded-xl text-[11px] font-medium bg-red-50 text-red-700 border border-red-200"
                     >
-                      <AlertTriangle className="w-3 h-3 text-red-400" />
+                      <AlertTriangle className="w-3 h-3 text-red-500" />
                       <span>{rd.risk}</span>
-                      <strong className="text-red-300">({rd.affectedDealsCount})</strong>
+                      <strong className="text-red-700">({rd.affectedDealsCount})</strong>
                     </span>
                   ))
                 ) : (
-                  <span className="text-xs text-slate-400">No critical risk drivers detected.</span>
+                  <span className="text-xs text-gray-400">No critical risk drivers detected.</span>
                 )}
               </div>
             </div>
@@ -456,7 +456,7 @@ export function ManagerInspectionWorkspace({
                           onClick={() => handleInspectDeal(deal.dealId)}
                           className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold shadow-xs transition"
                         >
-                          <Bot className="w-3.5 h-3.5" />
+                          <Eye className="w-3.5 h-3.5" />
                           <span>Inspect Summary</span>
                         </button>
                       </td>
@@ -482,7 +482,7 @@ export function ManagerInspectionWorkspace({
             <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <div className="w-9 h-9 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center">
-                  <Bot className="w-5 h-5" />
+                  <ShieldCheck className="w-5 h-5" />
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
@@ -535,7 +535,7 @@ export function ManagerInspectionWorkspace({
                   <div className="p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-blue-600" />
+                        <FileText className="w-4 h-4 text-blue-600" />
                         Executive Deal Narrative
                       </span>
                       <span className="text-[11px] text-slate-400">
@@ -628,7 +628,7 @@ export function ManagerInspectionWorkspace({
                   <div className="space-y-3 pt-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
-                        <Bot className="w-4 h-4 text-blue-600" />
+                        <Zap className="w-4 h-4 text-blue-600" />
                         Next Best Action Recommendations ({dealSummary.nbaProposals.length})
                       </span>
                       <span className="text-[11px] text-slate-400">
