@@ -39,6 +39,41 @@ interface BackendDeal {
 
 function mapDeal(raw: BackendDeal): Deal {
   const mappedStage = raw.stage ? raw.stage.toUpperCase() : "NEW";
+
+  // Derive real conversion probability:
+  // 1. Explicit probability / winProbability / conversionProbability from API
+  // 2. Lifecycle milestone fallback: WON=1.0 (100%), LOST/DEAD=0.0 (0%), HOT=0.8 (80%), WARM=0.5 (50%), NEW=0.2 (20%)
+  let conversionProbability = 0.5;
+  const rawProb =
+    raw.conversionProbability ??
+    (raw as any).probability ??
+    (raw as any).winProbability ??
+    (raw as any).win_probability;
+
+  if (typeof rawProb === "number" && !isNaN(rawProb)) {
+    conversionProbability = rawProb > 1 ? rawProb / 100 : rawProb;
+  } else {
+    switch (mappedStage) {
+      case "WON":
+        conversionProbability = 1.0;
+        break;
+      case "LOST":
+      case "DEAD":
+        conversionProbability = 0.0;
+        break;
+      case "HOT":
+        conversionProbability = 0.8;
+        break;
+      case "WARM":
+        conversionProbability = 0.5;
+        break;
+      case "NEW":
+      default:
+        conversionProbability = 0.2;
+        break;
+    }
+  }
+
   return {
     ...raw,
     dealId: raw.id,
@@ -47,9 +82,7 @@ function mapDeal(raw: BackendDeal): Deal {
     stage: mappedStage,
     amount: raw.amount ?? 0,
     currency: (raw.currency as string) || "USD",
-    conversionProbability: typeof raw.conversionProbability === "number"
-      ? raw.conversionProbability
-      : 0.5,
+    conversionProbability,
     owner: raw.owner ?? undefined,
     companyName: raw.companyName ?? undefined,
     closeDate: raw.closeDate ?? null,
@@ -96,11 +129,76 @@ function normaliseList(raw: unknown): BackendDeal[] {
 
 // ── GET all deals ─────────────────────────────────────────────────────────
 // Swagger: GET /api/deals/get-deals
+// Query params: page, limit, stage ("NEW"|"WARM"|"HOT"|"DEAD"|"WON"|"LOST"), owner
 
-export async function fetchDeals(): Promise<Deal[]> {
-    const res = await api.get("/api/deals/get-deals?limit=1000");
-    // Backend returns { data: deals[], pagination: {...} }
-    return (res.data.data || []).map(mapDeal);
+export interface FetchDealsParams {
+    page?: number;
+    limit?: number;
+    stage?: string;
+    owner?: string;
+    search?: string;
+}
+
+export interface FetchDealsResponse {
+    deals: Deal[];
+    total: number;
+    pagination?: {
+        page?: number;
+        limit?: number;
+        total?: number;
+        totalPages?: number;
+    };
+}
+
+export async function fetchDeals(params?: FetchDealsParams): Promise<Deal[]> {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+    else query.append("limit", "1000");
+
+    if (params?.stage && params.stage !== "All Stages") {
+        query.append("stage", params.stage.toUpperCase());
+    }
+    if (params?.owner && params.owner !== "All Owners") {
+        query.append("owner", params.owner);
+    }
+
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    const res = await api.get(`/api/deals/get-deals${qs}`);
+    const rawList = normaliseList(res.data);
+    return rawList.map(mapDeal);
+}
+
+export async function fetchDealsWithPagination(params?: FetchDealsParams): Promise<FetchDealsResponse> {
+    const query = new URLSearchParams();
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+    else query.append("limit", "25");
+
+    if (params?.stage && params.stage !== "All Stages") {
+        query.append("stage", params.stage.toUpperCase());
+    }
+    if (params?.owner && params.owner !== "All Owners") {
+        query.append("owner", params.owner);
+    }
+
+    const qs = query.toString() ? `?${query.toString()}` : "";
+    const res = await api.get(`/api/deals/get-deals${qs}`);
+    const rawList = normaliseList(res.data);
+    const deals = rawList.map(mapDeal);
+    const pagination = res.data?.pagination || res.data?.meta;
+    const total = typeof pagination?.total === "number" ? pagination.total : deals.length;
+    return { deals, total, pagination };
+}
+
+// ── DELETE single deal ────────────────────────────────────────────────────
+// Swagger: DELETE /api/deals/bulk-delete with { ids: [dealId] }
+
+export async function deleteDeal(dealId: string): Promise<{ success: boolean; count?: number }> {
+    const res = await api.delete("/api/deals/bulk-delete", {
+        data: { ids: [dealId] },
+    });
+    return res.data;
 }
 
 // ── GET single deal ───────────────────────────────────────────────────────

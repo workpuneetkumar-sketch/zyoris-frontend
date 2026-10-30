@@ -104,25 +104,45 @@ export function useDeals(customStages?: string[]) {
     }, [deals, filters]);
 
     // ── Derived KPIs ───────────────────────────────────────────────────────
-    const totalPipeline = useMemo(
-        () => filteredDeals.reduce((sum, d) => sum + d.amount, 0),
+    // Active pipeline excludes terminal closed stages (WON, LOST, DEAD) when viewing all stages.
+    // When a specific stage filter is applied (e.g. Stage="WON"), it calculates the filtered stage total.
+    const isStageFiltered = filters.stage && filters.stage !== "All Stages";
+
+    const activeDeals = useMemo(
+        () => filteredDeals.filter((d) => {
+            const st = String(d.stage || "").toUpperCase();
+            return st !== "WON" && st !== "LOST" && st !== "DEAD";
+        }),
         [filteredDeals]
     );
 
-    const avgDealSize = useMemo(
-        () => filteredDeals.length === 0 ? 0 : Math.round(totalPipeline / filteredDeals.length),
-        [filteredDeals, totalPipeline]
+    const totalPipeline = useMemo(() => {
+        if (isStageFiltered) {
+            return filteredDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
+        }
+        return activeDeals.reduce((sum, d) => sum + (d.amount || 0), 0);
+    }, [filteredDeals, activeDeals, isStageFiltered]);
+
+    const totalAllDealsValue = useMemo(
+        () => filteredDeals.reduce((sum, d) => sum + (d.amount || 0), 0),
+        [filteredDeals]
     );
 
+    const avgDealSize = useMemo(() => {
+        const divisor = isStageFiltered ? filteredDeals.length : activeDeals.length;
+        if (divisor === 0) return 0;
+        return Math.round(totalPipeline / divisor);
+    }, [totalPipeline, isStageFiltered, filteredDeals.length, activeDeals.length]);
+
     const winRate = useMemo(() => {
-        const closed = filteredDeals.filter((d) => ["WON", "LOST"].includes(d.stage.toUpperCase()));
+        const closed = filteredDeals.filter((d) => ["WON", "LOST", "DEAD"].includes(d.stage.toUpperCase()));
         const won    = filteredDeals.filter((d) => d.stage.toUpperCase() === "WON");
         return closed.length === 0 ? 0 : Math.round((won.length / closed.length) * 100);
     }, [filteredDeals]);
 
     const conversionRate = useMemo(() => {
         if (filteredDeals.length === 0) return 0;
-        const avg = filteredDeals.reduce((sum, d) => sum + d.conversionProbability, 0) / filteredDeals.length;
+        const avg = filteredDeals.reduce((sum, d) => sum + (d.conversionProbability ?? 0.5), 0) / filteredDeals.length;
         return Math.round(avg * 100 * 10) / 10;
     }, [filteredDeals]);
 
@@ -219,6 +239,7 @@ export function useDeals(customStages?: string[]) {
         defaultStage,
         // KPIs
         totalPipeline,
+        totalAllDealsValue,
         avgDealSize,
         winRate,
         conversionRate,
