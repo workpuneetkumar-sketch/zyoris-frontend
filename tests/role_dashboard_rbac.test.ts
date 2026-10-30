@@ -147,5 +147,11 @@ describe("Role Dashboards RBAC & Route Protection", () => {
       assert.equal(isPathAllowed("/admin/roles", dummySidebar, [], adminRole), true);
       assert.equal(isPathAllowed("/admin/rbac", dummySidebar, [], adminRole), true);
     });
+
+    it("requires the exact ADMIN role for Admin Tools", () => {
+      assert.equal(isPathAllowed("/admin", dummySidebar, [], "SUPER_ADMIN"), false);
+      assert.equal(isPathAllowed("/admin", dummySidebar, [], "admin@example.com"), false);
+      assert.equal(isPathAllowed("/admin", dummySidebar, [], undefined), false);
+    });
   });
 });
