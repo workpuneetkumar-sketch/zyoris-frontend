@@ -64,6 +64,7 @@ export interface User {
  * 'unauthenticated'— session restore completed with no valid session found.
  */
 export type SessionStatus = "checking" | "authenticated" | "unauthenticated";
+export type RoleVerificationStatus = "checking" | "verified" | "unverified";
 
 // ── Return-to (next) path helpers ─────────────────────────────────────────────
 // validateReturnTo is defined in lib/utils/validateReturnTo.ts and re-exported
@@ -92,6 +93,7 @@ interface AuthContextValue {
     logout: () => Promise<void>;
     /** Single unambiguous session loading signal. Prefer over isInitializing in new code. */
     sessionStatus: SessionStatus;
+    roleVerificationStatus: RoleVerificationStatus;
     isInitializing: boolean;
     permissionsLoaded: boolean;
     isLoading: boolean; // Backward-compatibility alias for isInitializing
@@ -153,6 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [permissionsLoaded, setPermissionsLoaded] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>("checking");
+  const [roleVerificationStatus, setRoleVerificationStatus] =
+    useState<RoleVerificationStatus>("checking");
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
@@ -172,6 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setVisibleModules([]);
     setIsAuthenticated(false);
     setSessionStatus("unauthenticated");
+    setRoleVerificationStatus("unverified");
     setPermissionsLoaded(false);
   }, []);
 
@@ -252,8 +257,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPermissionsLoaded(true);
         setIsInitializing(false);
         setSessionStatus("unauthenticated");
+        setRoleVerificationStatus("unverified");
         return;
       }
+
+      setRoleVerificationStatus("checking");
 
       // Optimistic restore: unblock UI immediately if we have a cached user,
       // unless we are on a public auth page (stale token would cause a redirect
@@ -261,13 +269,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const isPublicAuthPage =
         typeof window !== "undefined" &&
         (window.location.pathname.startsWith("/login") ||
+          window.location.pathname.startsWith("/admin/login") ||
           window.location.pathname.startsWith("/register"));
 
       const cachedUser: User | null = parsed?.user ?? null;
       if (cachedUser) {
-        const isAdmin =
-          (cachedUser.role || "").toUpperCase() === "ADMIN" ||
-          (cachedUser.email || "").toLowerCase().startsWith("admin");
+        const isAdmin = (cachedUser.role || "").toUpperCase() === "ADMIN";
         if (isAdmin && (!cachedUser.name || cachedUser.name.trim().toLowerCase() === "user")) {
           cachedUser.name = "Admin";
         }
@@ -288,13 +295,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       try {
         // Validate token + load authoritative fresh profile from backend.
         const rawUserData = await getMeApi();
-        const isUserDataAdmin =
-          (rawUserData.role || "").toUpperCase() === "ADMIN" ||
-          (rawUserData.email || cachedUser?.email || "").toLowerCase().startsWith("admin");
+        let roleVerified = Boolean(rawUserData.role);
+        const isUserDataAdmin = (rawUserData.role || "").toUpperCase() === "ADMIN";
 
         const userData: User = {
           ...rawUserData,
-          email: rawUserData.email || cachedUser?.email || (isUserDataAdmin ? "admin@zyoris.local" : ""),
+          email: rawUserData.email || cachedUser?.email || "",
           name:
             rawUserData.name &&
             rawUserData.name.trim().length > 0 &&
@@ -305,7 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 : isUserDataAdmin
                   ? "Admin"
                   : (rawUserData.email || cachedUser?.email || "").split("@")[0] || "User",
-          role: rawUserData.role || (isUserDataAdmin ? "ADMIN" : "USER"),
+          role: rawUserData.role || "USER",
         };
 
         try {
@@ -319,6 +325,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setVisibleModules(frontendPerms.modules || []);
           if (rbacMe.role?.name) {
             userData.role = rbacMe.role.name;
+            roleVerified = true;
           }
         } catch {
           // Permission load failed — auth session is still valid; the user
@@ -326,6 +333,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // Do not log the error object — it may contain response data.
         }
 
+        setRoleVerificationStatus(roleVerified ? "verified" : "unverified");
         setUser(userData);
         setIsAuthenticated(true);
         setSessionStatus("authenticated");
@@ -346,6 +354,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } finally {
+        setRoleVerificationStatus((prev) =>
+          prev === "checking" ? "unverified" : prev
+        );
         setPermissionsLoaded(true);
         setIsInitializing(false);
         setSessionStatus((prev) => (prev === "checking" ? "unauthenticated" : prev));
@@ -372,14 +383,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const effectiveToken = sanitizeBearerToken(res.token) || "";
+    setRoleVerificationStatus("checking");
     setToken(effectiveToken);
     setTokenCookie(effectiveToken);
     setAuthToken(effectiveToken);
 
     const normalizedEmail = email.trim();
-    const isLoginAdmin =
-      (res.user?.role || "").toUpperCase() === "ADMIN" ||
-      normalizedEmail.toLowerCase().startsWith("admin");
+    let roleVerified = Boolean(res.user?.role);
+    const isLoginAdmin = (res.user?.role || "").toUpperCase() === "ADMIN";
 
     const safeUser: User = {
       ...res.user,
@@ -392,7 +403,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           : isLoginAdmin
             ? "Admin"
             : normalizedEmail.split("@")[0] || "User",
-      role: res.user?.role || (isLoginAdmin ? "ADMIN" : "USER"),
+      role: res.user?.role || "USER",
     };
 
     localStorage.setItem(
@@ -415,11 +426,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setVisibleModules(frontendPerms.modules || []);
       if (rbacMe.role?.name) {
         safeUser.role = rbacMe.role.name;
+        roleVerified = true;
       }
     } catch {
       // Permission load failed — non-fatal, session is still valid.
     }
 
+    setRoleVerificationStatus(roleVerified ? "verified" : "unverified");
     setUser(safeUser);
     setIsAuthenticated(true);
     setSessionStatus("authenticated");
@@ -429,7 +442,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // distinguish a session-expiry redirect from a fresh unauthenticated visit.
     try { sessionStorage.setItem("zyoris-had-session", "1"); } catch {}
 
-    return res;
+    return { ...res, user: safeUser };
   }, []);
 
   // ── REGISTER ───────────────────────────────────────────────────────────────
@@ -452,14 +465,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const effectiveToken = sanitizeBearerToken(res.token) || "";
+    setRoleVerificationStatus("checking");
     setToken(effectiveToken);
     setTokenCookie(effectiveToken);
     setAuthToken(effectiveToken);
 
     const normalizedEmail = data.email.trim();
-    const isLoginAdmin =
-      (res.user?.role || data.role || "").toUpperCase() === "ADMIN" ||
-      normalizedEmail.toLowerCase().startsWith("admin");
+    let roleVerified = Boolean(res.user?.role);
+    const isLoginAdmin = (res.user?.role || "").toUpperCase() === "ADMIN";
 
     const safeUser: User = {
       ...res.user,
@@ -470,7 +483,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         res.user.name.trim().toLowerCase() !== "user"
           ? res.user.name.trim()
           : data.name?.trim() || (isLoginAdmin ? "Admin" : normalizedEmail.split("@")[0] || "User"),
-      role: res.user?.role || data.role || (isLoginAdmin ? "ADMIN" : "USER"),
+      role: res.user?.role || "USER",
     };
 
     localStorage.setItem(
@@ -493,11 +506,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setVisibleModules(frontendPerms.modules || []);
       if (rbacMe.role?.name) {
         safeUser.role = rbacMe.role.name;
+        roleVerified = true;
       }
     } catch {
       // Permission load failed — non-fatal, session is still valid.
     }
 
+    setRoleVerificationStatus(roleVerified ? "verified" : "unverified");
     setUser(safeUser);
     setIsAuthenticated(true);
     setSessionStatus("authenticated");
@@ -588,6 +603,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         sessionStatus,
+        roleVerificationStatus,
         isInitializing,
         permissionsLoaded,
         isLoading: isInitializing,

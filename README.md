@@ -92,7 +92,9 @@ Additionally, a dedicated demo user exists:
 
 ### Frontend dashboards
 
-- **Login** (`/login`): connects to backend `/auth/login`, stores JWT client-side (for demo) and initializes role.
+- **Employee Login** (`/login`): connects to backend `/auth/login` and initializes the existing employee session.
+- **Administrator Sign In** (`/admin/login`): uses the same authentication flow and requires the authenticated role to be `ADMIN` before opening `/admin`.
+- Admin route checks are frontend navigation guards only; backend APIs must independently enforce authorization.
 - **Overview** (`/dashboard`): executive summary (revenue run-rate, margin, demand trend, recommendation panel).
 - **CEO** (`/dashboard/ceo`): revenue forecast table (90-day horizon).
 - **CFO** (`/dashboard/cfo`): margin trends, expenses summary, channel ROI.
@@ -105,4 +107,3 @@ Additionally, a dedicated demo user exists:
 - HMAC webhook validation for CRM webhook (`WEBHOOK_SECRET`).
 - Audit logging middleware records user actions and response metadata.
 - Environment variables are loaded from `.env` and should be secured in production.
-

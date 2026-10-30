@@ -9,7 +9,7 @@ import { attachAudioUnlock } from "@/lib/notificationSound";
 import { AccessDenied } from "@/components/ui/AccessDenied";
 
 // Public paths that never need a session check — skip the ?next= param for them
-const PUBLIC_AUTH_PATHS = ["/login", "/register"];
+const PUBLIC_AUTH_PATHS = ["/login", "/admin/login", "/register"];
 
 function isPublicPath(path: string) {
   return PUBLIC_AUTH_PATHS.some(
@@ -22,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     user,
     isAuthenticated,
     sessionStatus,        // Phase 1/3: use this, not isInitializing
+    roleVerificationStatus,
     permissionsLoaded,
     sidebarItems,
     visibleDashboards,
@@ -40,7 +41,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (sessionStatus === "checking") return;
     if (sessionStatus === "authenticated") return;
 
-    // Unauthenticated: build the login URL.
+    // Unauthenticated: send admin routes to their dedicated login page.
     // • Preserve the intended destination as ?next= so login can return the
     //   user here after a successful sign-in.
     // • Append ?reason=session_expired when this tab previously had a session
@@ -50,6 +51,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       sessionStorage.getItem("zyoris-had-session") === "1";
 
     const currentPath = pathname ?? (typeof window !== "undefined" ? window.location.pathname : "");
+    if (currentPath === "/admin" || currentPath.startsWith("/admin/")) {
+      router.replace("/admin/login");
+      return;
+    }
 
     // Build safe next param: validate the current path through the same guard
     // used on the login side so we never store an unsafe value in the URL.
@@ -88,7 +93,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     .replace(/\/+$/, "") || "/";
 
   const isAdminPath = path === "/admin" || path.startsWith("/admin/");
-  const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+  if (isAdminPath && roleVerificationStatus === "checking") {
+    return (
+      <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
+        <div
+          className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
+          role="status"
+          aria-label="Verifying administrator access"
+        />
+      </div>
+    );
+  }
+
+  const isAdmin =
+    roleVerificationStatus === "verified" &&
+    user?.role?.trim().toUpperCase() === "ADMIN";
 
   let isAllowed = true;
   if (isAdminPath) {
