@@ -34,6 +34,8 @@ interface EmployeeLoginScreenProps {
   authError?: string | null;
   /** When true the session-expired banner is shown above the form. */
   sessionExpired?: boolean;
+  /** Clear the context auth error when the user edits a field. */
+  onClearError?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -44,6 +46,7 @@ export default function EmployeeLoginScreen({
   isLoading = false,
   authError,
   sessionExpired = false,
+  onClearError,
 }: EmployeeLoginScreenProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -153,6 +156,7 @@ export default function EmployeeLoginScreen({
             onChange={(e) => {
               setEmail(e.target.value);
               if (emailError) setEmailError(validateEmail(e.target.value));
+              onClearError?.();
             }}
             onBlur={handleEmailBlur}
             error={emailError}
@@ -169,6 +173,7 @@ export default function EmployeeLoginScreen({
               onChange={(e) => {
                 setPassword(e.target.value);
                 if (passwordError) setPasswordError(validatePassword(e.target.value));
+                onClearError?.();
               }}
               onBlur={handlePasswordBlur}
               error={passwordError}

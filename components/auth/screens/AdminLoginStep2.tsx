@@ -25,6 +25,8 @@ interface AdminLoginStep2Props {
   isLoading?: boolean;
   /** Auth error from context (set after a failed login attempt). */
   authError?: string | null;
+  /** Clear the context auth error when the user edits a field. */
+  onClearError?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -36,6 +38,7 @@ export default function AdminLoginStep2({
   setPassword,
   isLoading = false,
   authError,
+  onClearError,
 }: AdminLoginStep2Props) {
   const [passwordError, setPasswordError] = useState("");
   const submittingRef = useRef(false);
@@ -103,6 +106,7 @@ export default function AdminLoginStep2({
             onChange={(e) => {
               setPassword(e.target.value);
               if (passwordError) setPasswordError(validatePassword(e.target.value));
+              onClearError?.();
             }}
             onBlur={() => setPasswordError(validatePassword(password))}
             error={passwordError}

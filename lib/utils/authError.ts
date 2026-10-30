@@ -62,7 +62,8 @@ export type AuthErrorKind =
   // ── Day 3 ──────────────────────────────────────────────────────────────────
   | "account_disabled"     // admin disabled this account
   | "account_inactive"     // account not yet activated
-  | "email_not_verified";  // login blocked — email must be verified first
+  | "email_not_verified"  // login blocked — email must be verified first
+  | "forbidden";          // role/login-type mismatch (wrong login flow for this account)
 
 export interface NormalisedAuthError {
   /** Stable machine-readable kind — safe to switch on in UI logic. */
@@ -217,6 +218,29 @@ export function normaliseAuthError(error: unknown): NormalisedAuthError {
     };
   }
 
+  // ── Role / login-type mismatch (admin↔employee enforcement) ────────────────
+  if (errorCode === "FORBIDDEN") {
+    const forbiddenMsg = String(data?.message ?? "").toLowerCase();
+    // Admin account reached via the Employee sign-in flow.
+    if (forbiddenMsg.includes("continue as admin")) {
+      return {
+        kind: "forbidden",
+        message: "Administrator accounts must sign in through 'Continue as Admin'.",
+      };
+    }
+    // Non-admin account reached via the Admin login flow.
+    if (forbiddenMsg.includes("administrator access") || forbiddenMsg.includes("does not have")) {
+      return {
+        kind: "forbidden",
+        message: "This account does not have administrator access. Please use the Employee sign-in instead.",
+      };
+    }
+    return {
+      kind: "forbidden",
+      message: "You do not have permission to perform this action.",
+    };
+  }
+
   // ── Status-code fallbacks ────────────────────────────────────────────────────
   const rawMessage = String(
     data?.message ?? data?.msg ?? ""
@@ -287,6 +311,13 @@ export function normaliseAuthError(error: unknown): NormalisedAuthError {
     return {
       kind: "validation",
       message: "Please check your details and try again.",
+    };
+  }
+
+  if (status === 403) {
+    return {
+      kind: "forbidden",
+      message: "You do not have permission to perform this action.",
     };
   }
 

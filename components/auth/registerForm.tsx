@@ -261,8 +261,8 @@ export default function RegisterForm() {
 
             setSuccess(true);
 
-            // Store email in sessionStorage as backup — /verify-email reads
-            // both ?email= query param and sessionStorage["zyoris-pending-email"].
+            // Store email in sessionStorage as a backup — /verify-email reads
+            // both the ?email= query param and sessionStorage["zyoris-pending-email"].
             try { sessionStorage.setItem("zyoris-pending-email", email.trim()); } catch {}
 
             // Redirect to OTP verification instead of login.

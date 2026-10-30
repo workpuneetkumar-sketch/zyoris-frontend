@@ -17,21 +17,36 @@ function getLoginErrorMessage(error: unknown): string {
     typeof error === "object" &&
     error !== null &&
     "response" in error &&
-    typeof error.response === "object" &&
-    error.response !== null &&
-    "status" in error.response
+    typeof (error as any).response === "object" &&
+    (error as any).response !== null
   ) {
-    const status = error.response.status;
+    const status = (error as any).response.status as number;
+    const code = String((error as any).response.data?.error ?? "").toUpperCase();
+    const msg = String((error as any).response.data?.message ?? "").toLowerCase();
+
     if (status === 401 || status === 404) {
       return "Invalid email or password. Please try again.";
     }
+
+    // Role/login-type mismatch — admin account reached via the wrong flow,
+    // or non-admin account attempting admin sign-in.
+    if (status === 403 || code === "FORBIDDEN") {
+      if (msg.includes("continue as admin") || msg.includes("must sign in through")) {
+        return "Administrator accounts must sign in through this page.";
+      }
+      if (msg.includes("does not have administrator") || msg.includes("administrator access")) {
+        return "This account does not have administrator access. Please use Employee Sign In.";
+      }
+      return "You do not have permission to sign in here.";
+    }
   }
 
+  // No response at all — network / CORS / server down
   if (
     typeof error === "object" &&
     error !== null &&
     "response" in error &&
-    !error.response
+    !(error as any).response
   ) {
     return "Sign-in is unavailable. Check your connection and try again.";
   }
@@ -86,7 +101,7 @@ export default function AdminLoginPage() {
     submittingRef.current = true;
     setIsLoading(true);
     try {
-      const response = await login(email.trim(), password);
+      const response = await login(email.trim(), password, "admin");
       if (response.user.role?.trim().toUpperCase() !== "ADMIN") {
         setFormError(
           "This account does not have administrator access. Use Employee Sign In or contact your administrator."
