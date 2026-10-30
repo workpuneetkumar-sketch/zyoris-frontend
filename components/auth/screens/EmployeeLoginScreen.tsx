@@ -27,7 +27,7 @@ function validatePassword(value: string): string {
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface EmployeeLoginScreenProps {
-  onBack: () => void;
+  onBack?: () => void;
   onLogin: (email: string, password: string) => Promise<void>;
   isLoading?: boolean;
   /** Auth error from context (set after a failed login attempt). */
@@ -88,7 +88,7 @@ export default function EmployeeLoginScreen({
       <div className="flex-1 flex flex-col p-5 sm:p-8 md:p-12">
         {/* ── Header row ── */}
         <div className="flex items-center justify-between mb-6">
-          <BackButton onClick={onBack} />
+          {onBack ? <BackButton onClick={onBack} /> : <span />}
           {/* Mobile-only logo mark */}
           <div className="md:hidden flex items-center gap-2">
             <img src="/logo.jpeg" alt="Zyoris Logo" className="w-6 h-6 object-contain rounded" />
