@@ -1,6 +1,6 @@
 "use client";
 
-import { loginApi, registerApi, AuthResponse, logoutApi, getMeApi } from "@/lib/api/authApi";
+import { loginApi, registerApi, AuthResponse, logoutApi, getMeApi, LoginType } from "@/lib/api/authApi";
 import { getRbacMe } from "@/lib/api/rbacApi";
 import { getFrontendPermissions, SidebarItem, DashboardItem } from "@/lib/api/frontendApi";
 import { setAuthToken, sanitizeBearerToken, getCookie } from "@/lib/api/api";
@@ -79,7 +79,9 @@ interface AuthContextValue {
     visibleDashboards: DashboardItem[];
     visibleModules: string[];
     hasPermission: (permission: string) => boolean;
-    login: (email: string, password: string) => Promise<AuthResponse>;
+    login: (email: string, password: string, loginType?: LoginType) => Promise<AuthResponse>;
+    /** Clear the last auth error (e.g. when the user edits a field or switches screens). */
+    clearError: () => void;
     register: (data: {
         name: string;
         email: string;
@@ -355,13 +357,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── LOGIN ──────────────────────────────────────────────────────────────────
-  const login = useCallback(async (email: string, password: string) => {
+  const clearError = useCallback(() => setError(null), []);
+
+  const login = useCallback(async (email: string, password: string, loginType?: LoginType) => {
     setError(null);
     setPermissionsLoaded(false);
 
     let res: AuthResponse;
     try {
-      res = await loginApi(email, password);
+      res = await loginApi(email, password, loginType);
     } catch (err: unknown) {
       setError(getAuthErrorMessage(err));
       throw err;
@@ -589,6 +593,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading: isInitializing,
         isAuthenticated,
         error,
+        clearError,
       }}
     >
       {children}

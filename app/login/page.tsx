@@ -37,7 +37,7 @@ function LoginPageInner() {
 
   // Destructure everything needed at the top level — hooks must not be called
   // inside event handlers or async functions.
-  const { login, logout, sessionStatus, error: authError } = useAuth();
+  const { login, logout, sessionStatus, error: authError, clearError } = useAuth();
 
   // ── Already authenticated: send to the intended destination immediately ───
   React.useEffect(() => {
@@ -49,6 +49,7 @@ function LoginPageInner() {
   // ── Navigate to a new screen, clearing stale loading state ───────────────
   const goTo = (next: AuthScreen) => {
     setIsLoading(false);
+    clearError();
     setScreen(next);
   };
 
@@ -61,7 +62,7 @@ function LoginPageInner() {
   const handleEmployeeLogin = async (email: string, password: string): Promise<void> => {
     setIsLoading(true);
     try {
-      const res = await login(email, password);
+      const res = await login(email, password, "employee");
 
       // First-run CEO/CFO with no org → complete registration.
       const role = res.user.role;
@@ -96,7 +97,7 @@ function LoginPageInner() {
   const handleAdminStep2Next = async (): Promise<void> => {
     setIsLoading(true);
     try {
-      const res = await login(adminEmail, adminPassword);
+      const res = await login(adminEmail, adminPassword, "admin");
 
       // Backend is authoritative on role — the frontend admin login screen is
       // purely a UX distinction.  If a non-admin successfully authenticates
@@ -161,6 +162,7 @@ function LoginPageInner() {
             isLoading={isLoading}
             authError={authError}
             sessionExpired={sessionExpired}
+            onClearError={clearError}
           />
         );
 
@@ -183,6 +185,7 @@ function LoginPageInner() {
             setPassword={setAdminPassword}
             isLoading={isLoading}
             authError={authError}
+            onClearError={clearError}
           />
         );
 
