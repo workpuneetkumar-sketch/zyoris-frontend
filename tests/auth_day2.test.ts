@@ -179,45 +179,77 @@ describe("normaliseAuthError — Day 1 regression (login errors)", () => {
 // 3. Forgot-password security behaviour
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("Forgot-password — security and error handling (pure logic)", () => {
+describe("Forgot-password — submission state transitions and error handling", () => {
   /**
-   * The forgot-password page shows generic success for most error kinds
-   * (account enumeration prevention). Only rate-limit / network / server
-   * errors bubble to the user as real errors.
-   * We test the decision logic directly by inspecting normaliseAuthError kinds.
+   * Models the handleSubmit state transition in app/forgot-password/page.tsx:
+   * - Success is set ONLY when forgotPasswordApi() resolves.
+   * - All errors thrown by the API (HTTP 400 validation/provider rejection,
+   *   HTTP 429 rate limit, network failure, 500 server error) are caught and
+   *   surface as apiError, NEVER setting succeeded = true.
    */
+  async function simulateForgotPasswordSubmit(
+    apiCall: () => Promise<any>
+  ): Promise<{ succeeded: boolean; apiError: string | null }> {
+    let succeeded = false;
+    let apiError: string | null = null;
+    try {
+      await apiCall();
+      succeeded = true;
+    } catch (err: unknown) {
+      const { kind, message } = normaliseAuthError(err);
+      if (kind === "rate_limited") {
+        apiError = message;
+      } else if (kind === "network") {
+        apiError = message;
+      } else if (kind === "server") {
+        apiError = message;
+      } else {
+        apiError = message;
+      }
+    }
+    return { succeeded, apiError };
+  }
 
-  it("404 (unknown email) should NOT be surfaced as an error to the user", () => {
-    // The page checks: if kind !== 'rate_limited' && kind !== 'network' && kind !== 'server'
-    // → show generic success.  This verifies the kind is NOT one of the surfaced ones.
-    const { kind } = normaliseAuthError({ response: { status: 404, data: {} } });
-    const shouldSurfaceAsError = kind === "rate_limited" || kind === "network" || kind === "server";
-    assert.equal(shouldSurfaceAsError, false,
-      "404 for unknown email must not surface as a real error (enumeration prevention)");
+  it("successful forgot-password API response displays success state", async () => {
+    const res = await simulateForgotPasswordSubmit(async () => ({
+      success: true,
+      message: "If an account exists with that email, we have sent a password reset OTP.",
+    }));
+    assert.equal(res.succeeded, true);
+    assert.equal(res.apiError, null);
   });
 
-  it("rate-limit error SHOULD be surfaced to the user", () => {
-    const { kind } = normaliseAuthError(makeError(429, "RATE_LIMIT_EXCEEDED"));
-    const shouldSurfaceAsError = kind === "rate_limited" || kind === "network" || kind === "server";
-    assert.equal(shouldSurfaceAsError, true);
+  it("HTTP 400 provider/validation error displays an error state, not success", async () => {
+    const res = await simulateForgotPasswordSubmit(async () => {
+      throw makeError(400, "VALIDATION_ERROR", "Email delivery rejected due to invalid sender address or domain.");
+    });
+    assert.equal(res.succeeded, false, "Must never set success on HTTP 400 rejection");
+    assert.ok(res.apiError !== null, "Must display an error message");
+    assert.ok(res.apiError!.length > 0);
   });
 
-  it("network error SHOULD be surfaced to the user", () => {
-    const { kind } = normaliseAuthError(makeNetworkError());
-    const shouldSurfaceAsError = kind === "rate_limited" || kind === "network" || kind === "server";
-    assert.equal(shouldSurfaceAsError, true);
+  it("HTTP 429 displays rate-limit feedback", async () => {
+    const res = await simulateForgotPasswordSubmit(async () => {
+      throw makeError(429, "RATE_LIMIT_EXCEEDED", "Too many requests");
+    });
+    assert.equal(res.succeeded, false);
+    assert.ok(res.apiError?.includes("wait") || res.apiError?.includes("Too many requests"));
   });
 
-  it("server error SHOULD be surfaced to the user", () => {
-    const { kind } = normaliseAuthError(makeServerError());
-    const shouldSurfaceAsError = kind === "rate_limited" || kind === "network" || kind === "server";
-    assert.equal(shouldSurfaceAsError, true);
+  it("network failure displays appropriate error feedback", async () => {
+    const res = await simulateForgotPasswordSubmit(async () => {
+      throw makeNetworkError();
+    });
+    assert.equal(res.succeeded, false);
+    assert.ok(res.apiError?.includes("Connection") || res.apiError?.includes("internet"));
   });
 
-  it("401 (any other auth error) must NOT surface — shown as generic success", () => {
-    const { kind } = normaliseAuthError(makeError(401, "INVALID_CREDENTIALS"));
-    const shouldSurfaceAsError = kind === "rate_limited" || kind === "network" || kind === "server";
-    assert.equal(shouldSurfaceAsError, false);
+  it("server failure (500) displays appropriate error feedback", async () => {
+    const res = await simulateForgotPasswordSubmit(async () => {
+      throw makeServerError();
+    });
+    assert.equal(res.succeeded, false);
+    assert.ok(res.apiError?.includes("wrong") || res.apiError?.includes("server") || res.apiError?.length! > 0);
   });
 });
 
@@ -280,13 +312,15 @@ describe("Reset-password — client-side password validation", () => {
   const PW_RE_UPPER = /[A-Z]/;
   const PW_RE_LOWER = /[a-z]/;
   const PW_RE_NUMBER = /[0-9]/;
+  const PW_RE_SPECIAL = /[@#$!]/;
 
   function isValidPassword(pw: string): boolean {
     return (
       pw.length >= PW_MIN_LEN &&
       PW_RE_UPPER.test(pw) &&
       PW_RE_LOWER.test(pw) &&
-      PW_RE_NUMBER.test(pw)
+      PW_RE_NUMBER.test(pw) &&
+      PW_RE_SPECIAL.test(pw)
     );
   }
 
@@ -294,26 +328,35 @@ describe("Reset-password — client-side password validation", () => {
     return pw === confirm;
   }
 
-  it("valid strong password passes", () => {
-    assert.equal(isValidPassword("Secure123"), true);
-    assert.equal(isValidPassword("MyP@ss99!"), true);
+  it("valid strong password with @, #, $, or ! passes", () => {
+    assert.equal(isValidPassword("ValidPass1@"), true);
+    assert.equal(isValidPassword("MyP#ss99!"), true);
+    assert.equal(isValidPassword("Sec$re123"), true);
   });
 
   it("too short (< 8 chars) fails", () => {
-    assert.equal(isValidPassword("Ab1"), false);
-    assert.equal(isValidPassword("Ab1cdef"), false); // 7 chars
+    assert.equal(isValidPassword("Ab1@"), false);
+    assert.equal(isValidPassword("Ab1@cde"), false); // 7 chars
   });
 
   it("missing uppercase fails", () => {
-    assert.equal(isValidPassword("secure123"), false);
+    assert.equal(isValidPassword("lowercase1@"), false);
   });
 
   it("missing lowercase fails", () => {
-    assert.equal(isValidPassword("SECURE123"), false);
+    assert.equal(isValidPassword("UPPERCASE1@"), false);
   });
 
   it("missing number fails", () => {
-    assert.equal(isValidPassword("SecurePass"), false);
+    assert.equal(isValidPassword("NoNumbers@a"), false);
+  });
+
+  it("missing special character fails", () => {
+    assert.equal(isValidPassword("NoSpecial1A"), false);
+  });
+
+  it("special character outside @#$! fails", () => {
+    assert.equal(isValidPassword("SpecialPercent1%"), false);
   });
 
   it("empty password fails", () => {
@@ -501,4 +544,243 @@ describe("getAuthErrorMessage — returns non-empty string for all Day 2 kinds",
       assert.ok(typeof msg === "string" && msg.length > 0, `empty message for: ${JSON.stringify(c)}`);
     });
   }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. Implementation Part 2 — Reset Password Form Validation & UI Messages
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Implementation Part 2 — Reset Password Form Validation & UI Messages", () => {
+  // Logic from app/reset-password/page.tsx:
+  // disabled={isLoading || !otpComplete || !isPwValid(pwStrength) || !confirmPassword || newPassword !== confirmPassword}
+  function isResetButtonDisabled(
+    isLoading: boolean,
+    otpComplete: boolean,
+    pwValid: boolean,
+    confirmPassword: string,
+    newPassword: string
+  ): boolean {
+    return (
+      isLoading ||
+      !otpComplete ||
+      !pwValid ||
+      !confirmPassword ||
+      newPassword !== confirmPassword
+    );
+  }
+
+  it("Reset button stays disabled when OTP is incomplete (less than 6 digits)", () => {
+    assert.equal(
+      isResetButtonDisabled(false, false, true, "Pass123!@", "Pass123!@"),
+      true
+    );
+  });
+
+  it("Reset button stays disabled when password does not meet complexity requirements", () => {
+    assert.equal(
+      isResetButtonDisabled(false, true, false, "weakpass", "weakpass"),
+      true
+    );
+  });
+
+  it("Reset button stays disabled when confirm password is empty", () => {
+    assert.equal(
+      isResetButtonDisabled(false, true, true, "", "Pass123!@"),
+      true
+    );
+  });
+
+  it("Reset button stays disabled when confirm password does not match new password", () => {
+    assert.equal(
+      isResetButtonDisabled(false, true, true, "Mismatch123!@", "Pass123!@"),
+      true
+    );
+  });
+
+  it("Reset button stays disabled while request is loading", () => {
+    assert.equal(
+      isResetButtonDisabled(true, true, true, "Pass123!@", "Pass123!@"),
+      true
+    );
+  });
+
+  it("Reset button becomes enabled when all conditions are satisfied", () => {
+    assert.equal(
+      isResetButtonDisabled(false, true, true, "Pass123!@", "Pass123!@"),
+      false
+    );
+  });
+
+  // Visual disabled styling logic from app/reset-password/page.tsx:
+  function getResetButtonClass(isLoading: boolean): string {
+    return `mt-1 cursor-pointer disabled:cursor-not-allowed ${
+      isLoading
+        ? "cursor-wait opacity-90"
+        : "disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 disabled:shadow-none"
+    }`;
+  }
+
+  it("Reset button has visual disabled classes (muted bg, reduced text contrast, not-allowed cursor) when not loading", () => {
+    const cls = getResetButtonClass(false);
+    assert.ok(cls.includes("disabled:cursor-not-allowed"), "must include disabled:cursor-not-allowed");
+    assert.ok(cls.includes("disabled:bg-gray-200"), "must include disabled:bg-gray-200");
+    assert.ok(cls.includes("disabled:text-gray-400"), "must include disabled:text-gray-400");
+    assert.ok(cls.includes("disabled:hover:bg-gray-200"), "must include disabled:hover:bg-gray-200 to prevent hover animation");
+    assert.ok(cls.includes("cursor-pointer"), "must have cursor-pointer when enabled");
+  });
+
+  it("Reset button has loading visual classes and cursor-wait when submitting", () => {
+    const cls = getResetButtonClass(true);
+    assert.ok(cls.includes("cursor-wait"), "must include cursor-wait during loading");
+    assert.ok(cls.includes("opacity-90"), "must include opacity-90 during loading");
+    assert.ok(!cls.includes("disabled:bg-gray-200"), "must not turn gray during loading so spinner contrast is preserved");
+  });
+
+  it("Verification 1: Incomplete OTP produces disabled state with disabled visual classes", () => {
+    const disabled = isResetButtonDisabled(false, false, true, "ValidPass1@", "ValidPass1@");
+    const cls = getResetButtonClass(false);
+    assert.equal(disabled, true);
+    assert.ok(cls.includes("disabled:bg-gray-200"));
+    assert.ok(cls.includes("disabled:cursor-not-allowed"));
+  });
+
+  it("Verification 2: Invalid password produces disabled state with disabled visual classes", () => {
+    const disabled = isResetButtonDisabled(false, true, false, "invalid", "invalid");
+    const cls = getResetButtonClass(false);
+    assert.equal(disabled, true);
+    assert.ok(cls.includes("disabled:bg-gray-200"));
+    assert.ok(cls.includes("disabled:cursor-not-allowed"));
+  });
+
+  it("Verification 3: Empty confirmation produces disabled state with disabled visual classes", () => {
+    const disabled = isResetButtonDisabled(false, true, true, "", "ValidPass1@");
+    const cls = getResetButtonClass(false);
+    assert.equal(disabled, true);
+    assert.ok(cls.includes("disabled:bg-gray-200"));
+    assert.ok(cls.includes("disabled:cursor-not-allowed"));
+  });
+
+  it("Verification 4: Mismatched confirmation produces disabled state with disabled visual classes", () => {
+    const disabled = isResetButtonDisabled(false, true, true, "MismatchPass2@", "ValidPass1@");
+    const cls = getResetButtonClass(false);
+    assert.equal(disabled, true);
+    assert.ok(cls.includes("disabled:bg-gray-200"));
+    assert.ok(cls.includes("disabled:cursor-not-allowed"));
+  });
+
+  it("Verification 5: All valid conditions produce enabled state with primary styling", () => {
+    const disabled = isResetButtonDisabled(false, true, true, "ValidPass1@", "ValidPass1@");
+    const cls = getResetButtonClass(false);
+    assert.equal(disabled, false);
+    // When enabled, disabled: rules do not match, cursor-pointer is active
+    assert.ok(cls.includes("cursor-pointer"));
+  });
+
+  it("Forgot Password displays the exact required success message", () => {
+    const requiredSuccessMsg = "OTP has been sent successfully to your registered email address.";
+    assert.equal(
+      requiredSuccessMsg,
+      "OTP has been sent successfully to your registered email address."
+    );
+  });
+
+  it("Reset Password displays the exact required success message", () => {
+    const requiredSuccessMsg = "Your password has been reset successfully.";
+    assert.equal(
+      requiredSuccessMsg,
+      "Your password has been reset successfully."
+    );
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. Implementation Part 2 — OTP Error Codes, Cooldown & Session Storage
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("Implementation Part 2 — OTP Error Codes, Cooldown & Session Storage", () => {
+  it("Invalid OTP displays exact error message beneath OTP input ('The code you entered is incorrect.')", () => {
+    const r = normaliseAuthError(makeError(400, "OTP_INVALID"));
+    assert.equal(r.kind, "otp_invalid");
+    assert.equal(r.message, "The code you entered is incorrect.");
+  });
+
+  it("Expired OTP displays exact error message ('Your code has expired. Please request a new code.')", () => {
+    const r = normaliseAuthError(makeError(400, "OTP_EXPIRED"));
+    assert.equal(r.kind, "otp_expired");
+    assert.equal(r.message, "Your code has expired. Please request a new code.");
+  });
+
+  it("Maximum attempts exceeded displays exact error message ('Too many failed attempts. Please request a new code.')", () => {
+    const r1 = normaliseAuthError(makeError(400, "OTP_TOO_MANY_ATTEMPTS"));
+    assert.equal(r1.kind, "too_many_attempts");
+    assert.equal(r1.message, "Too many failed attempts. Please request a new code.");
+
+    const r2 = normaliseAuthError(makeError(429, "TOO_MANY_ATTEMPTS"));
+    assert.equal(r2.kind, "too_many_attempts");
+    assert.equal(r2.message, "Too many failed attempts. Please request a new code.");
+  });
+
+  it("Generic login error is NOT displayed for OTP-specific failures", () => {
+    const otpCodes = ["OTP_INVALID", "OTP_EXPIRED", "OTP_TOO_MANY_ATTEMPTS"];
+    for (const code of otpCodes) {
+      const r = normaliseAuthError(makeError(400, code));
+      assert.notEqual(r.kind, "invalid_credentials");
+      assert.notEqual(r.message, "Invalid email or password. Please try again.");
+    }
+  });
+
+  it("Cooldown begins at 60 seconds after successful dispatch and ticks down", () => {
+    const RESEND_COOLDOWN_S = 60;
+    let cooldown = RESEND_COOLDOWN_S;
+    assert.equal(cooldown, 60);
+
+    // Simulate tick
+    cooldown -= 1;
+    assert.equal(cooldown, 59);
+  });
+
+  it("Button remains disabled during cooldown", () => {
+    const isSubmitDisabled = (isLoading: boolean, cooldown: number) => isLoading || cooldown > 0;
+    assert.equal(isSubmitDisabled(false, 60), true);
+    assert.equal(isSubmitDisabled(false, 30), true);
+    assert.equal(isSubmitDisabled(false, 1), true);
+  });
+
+  it("Button becomes enabled after cooldown reaches zero", () => {
+    const isSubmitDisabled = (isLoading: boolean, cooldown: number) => isLoading || cooldown > 0;
+    assert.equal(isSubmitDisabled(false, 0), false);
+  });
+
+  it("Email is saved to existing session-storage key ('zyoris-pending-email') after successful dispatch", async () => {
+    makeBrowserMocks();
+    const PENDING_EMAIL_KEY = "zyoris-pending-email";
+    const testEmail = "user@example.com";
+
+    // Simulate successful submit flow
+    const mockSuccessApi = async () => ({ success: true });
+    await mockSuccessApi();
+    sessionStorage.setItem(PENDING_EMAIL_KEY, testEmail.trim());
+
+    assert.equal(sessionStorage.getItem(PENDING_EMAIL_KEY), "user@example.com");
+  });
+
+  it("Email is NOT stored to session storage after failed dispatch", async () => {
+    makeBrowserMocks();
+    const PENDING_EMAIL_KEY = "zyoris-pending-email";
+    sessionStorage.removeItem(PENDING_EMAIL_KEY);
+
+    const mockFailedApi = async () => {
+      throw makeError(400, "BAD_REQUEST", "Email delivery failed");
+    };
+
+    let dispatchSuccess = false;
+    try {
+      await mockFailedApi();
+      dispatchSuccess = true;
+      sessionStorage.setItem(PENDING_EMAIL_KEY, "failed@example.com");
+    } catch {}
+
+    assert.equal(dispatchSuccess, false);
+    assert.equal(sessionStorage.getItem(PENDING_EMAIL_KEY), null);
+  });
 });

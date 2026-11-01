@@ -22,12 +22,14 @@ const PW_MIN_LEN = 8;
 const PW_RE_UPPER = /[A-Z]/;
 const PW_RE_LOWER = /[a-z]/;
 const PW_RE_NUMBER = /[0-9]/;
+const PW_RE_SPECIAL = /[@#$!]/;
 
 interface PwStrength {
   minLen: boolean;
   hasUpper: boolean;
   hasLower: boolean;
   hasNumber: boolean;
+  hasSpecial: boolean;
 }
 
 function checkPwStrength(pw: string): PwStrength {
@@ -36,11 +38,12 @@ function checkPwStrength(pw: string): PwStrength {
     hasUpper: PW_RE_UPPER.test(pw),
     hasLower: PW_RE_LOWER.test(pw),
     hasNumber: PW_RE_NUMBER.test(pw),
+    hasSpecial: PW_RE_SPECIAL.test(pw),
   };
 }
 
 function isPwValid(s: PwStrength) {
-  return s.minLen && s.hasUpper && s.hasLower && s.hasNumber;
+  return s.minLen && s.hasUpper && s.hasLower && s.hasNumber && s.hasSpecial;
 }
 
 function validatePassword(pw: string): string {
@@ -214,6 +217,7 @@ function ResetPasswordInner() {
         setOtpError(message);
       } else if (kind === "too_many_attempts" || kind === "rate_limited") {
         setApiError(message);
+        setOtpError(message);
         setCanRetry(false);
       } else if (kind === "password_too_weak") {
         setPwError(message);
@@ -238,8 +242,7 @@ function ResetPasswordInner() {
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-3">Password reset!</h2>
         <p className="text-gray-500 text-sm leading-relaxed mb-8">
-          Your password has been updated successfully. You can now sign in with
-          your new password.
+          Your password has been reset successfully.
         </p>
         <PrimaryButton
           type="button"
@@ -437,6 +440,7 @@ function ResetPasswordInner() {
               <Req met={pwStrength.hasUpper} label="Uppercase letter" />
               <Req met={pwStrength.hasLower} label="Lowercase letter" />
               <Req met={pwStrength.hasNumber} label="Number" />
+              <Req met={pwStrength.hasSpecial} label="Special character (@, #, $, !)" />
             </ul>
           )}
         </div>
@@ -497,10 +501,20 @@ function ResetPasswordInner() {
         {/* ── Submit ──────────────────────────────────────────────────────────── */}
         <PrimaryButton
           type="submit"
-          disabled={isLoading}
+          disabled={
+            isLoading ||
+            !otpComplete ||
+            !isPwValid(pwStrength) ||
+            !confirmPassword ||
+            newPassword !== confirmPassword
+          }
           aria-busy={isLoading}
           aria-label={isLoading ? "Resetting password, please wait" : "Reset password"}
-          className="mt-1"
+          className={`mt-1 cursor-pointer disabled:cursor-not-allowed ${
+            isLoading
+              ? "cursor-wait opacity-90"
+              : "disabled:bg-gray-200 disabled:text-gray-400 disabled:hover:bg-gray-200 disabled:shadow-none"
+          }`}
         >
           {isLoading ? (
             <>

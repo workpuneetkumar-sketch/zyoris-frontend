@@ -96,25 +96,36 @@ export function normaliseAuthError(error: unknown): NormalisedAuthError {
   if (errorCode === "OTP_INVALID") {
     return {
       kind: "otp_invalid",
-      message: "The code you entered is incorrect. Please check and try again.",
+      message: "The code you entered is incorrect.",
     };
   }
 
   if (errorCode === "OTP_EXPIRED") {
     return {
       kind: "otp_expired",
-      message: "This code has expired. Please request a new one.",
+      message: "Your code has expired. Please request a new code.",
     };
   }
 
   if (
     errorCode === "TOO_MANY_ATTEMPTS" ||
-    errorCode === "MAX_ATTEMPTS_EXCEEDED"
+    errorCode === "MAX_ATTEMPTS_EXCEEDED" ||
+    errorCode === "OTP_TOO_MANY_ATTEMPTS"
   ) {
     return {
       kind: "too_many_attempts",
       message:
-        "Too many failed attempts. Please wait a few minutes before trying again.",
+        "Too many failed attempts. Please request a new code.",
+    };
+  }
+
+  if (
+    errorCode === "PASSWORD_REUSED" ||
+    (typeof data?.message === "string" && data.message.includes("cannot be the same as your current password"))
+  ) {
+    return {
+      kind: "password_too_weak",
+      message: "Your new password cannot be the same as your current password. Please choose a different password.",
     };
   }
 
