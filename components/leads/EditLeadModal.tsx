@@ -4,6 +4,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, CheckCircle2, X, Save, Loader2 } from "lucide-react";
 import LeadForm, { LeadFormValues } from "./LeadForm";
+import { getLeadEstimatedValueError } from "./leadEditPayload";
 
 interface EditLeadModalProps {
     lead: LeadFormValues & { leadId: string };
@@ -98,7 +99,7 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
 
     const [form, setForm] = useState<LeadFormValues>(initialForm);
     const [loading, setLoading] = useState(false);
-    const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+    const [errors, setErrors] = useState<{ name?: string; email?: string; estimatedValue?: string }>({});
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
     const isDirty = !deepEqual(form, initialForm);
@@ -113,15 +114,18 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
     }, [isDirty, onClose]);
 
     const handleSave = useCallback(async () => {
-        const newErrors: { name?: string; email?: string } = {};
+        const newErrors: { name?: string; email?: string; estimatedValue?: string } = {};
         if (!form.name.trim()) newErrors.name = "Name is required";
         if (!form.email.trim()) newErrors.email = "Email is required";
+        const estimatedValueError = getLeadEstimatedValueError(form.estimatedValue);
+        if (estimatedValueError) newErrors.estimatedValue = estimatedValueError;
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             setShowUnsavedPopup(false);
             return;
         }
+        setErrors({});
 
         try {
             setLoading(true);

@@ -10,6 +10,7 @@ import { toast } from "react-toastify";
 import LeadForm, {
     LeadFormValues,
 } from "./LeadForm";
+import { getLeadEstimatedValueError } from "./leadEditPayload";
 
 import { createLead, executeAssignmentRule } from "@/lib/api/leadsApi";
 
@@ -33,6 +34,7 @@ export default function NewLeadPage() {
     const [errors, setErrors] = useState<{
         name?: string;
         email?: string;
+        estimatedValue?: string;
     }>({});
 
     const [loading, setLoading] = useState(false);
@@ -44,6 +46,7 @@ export default function NewLeadPage() {
         const newErrors: {
             name?: string;
             email?: string;
+            estimatedValue?: string;
         } = {};
 
         if (!form.name.trim()) {
@@ -54,10 +57,16 @@ export default function NewLeadPage() {
             newErrors.email = "Email is required";
         }
 
+        const estimatedValueError = getLeadEstimatedValueError(form.estimatedValue);
+        if (estimatedValueError) {
+            newErrors.estimatedValue = estimatedValueError;
+        }
+
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             return;
         }
+        setErrors({});
 
         try {
             setLoading(true);
