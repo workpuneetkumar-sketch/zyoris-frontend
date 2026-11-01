@@ -14,6 +14,7 @@ import FeatureFooter from "@/components/auth/ui/FeatureFooter";
 // ── Validation ────────────────────────────────────────────────────────────────
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const RESEND_COOLDOWN_S = 60;
 
 function validateEmail(v: string): string {
   if (!v.trim()) return "Email is required.";
@@ -37,7 +38,30 @@ function ForgotPasswordInner() {
   const [isLoading, setIsLoading] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [succeeded, setSucceeded] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const submittingRef = useRef(false);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startCooldown = () => {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setCooldown(RESEND_COOLDOWN_S);
+    cooldownRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          if (cooldownRef.current) clearInterval(cooldownRef.current);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,16 +70,20 @@ function ForgotPasswordInner() {
     setEmailError(err);
     if (err) return;
 
-    if (submittingRef.current || isLoading) return;
+    if (submittingRef.current || isLoading || cooldown > 0) return;
     submittingRef.current = true;
     setIsLoading(true);
     setApiError(null);
 
     try {
       await forgotPasswordApi(email.trim());
-      // Always show the same success message regardless of whether the account
-      // exists — matching backend security behaviour (no account enumeration).
+      // The backend returns the same 200 response regardless of whether the
+      // account exists — so a resolved promise always means success.
+      try {
+        sessionStorage.setItem("zyoris-pending-email", email.trim());
+      } catch {}
       setSucceeded(true);
+      startCooldown();
     } catch (err: unknown) {
       // Dev-only: log the raw HTTP status and response body so the backend
       // team can confirm whether /auth/forgot-password is reaching the email
@@ -78,10 +106,32 @@ function ForgotPasswordInner() {
       } else if (kind === "server") {
         setApiError(message);
       } else {
-        // For all other errors (incl. unknown emails) show the generic success
-        // message so the backend's enumeration-prevention is not undermined.
-        setSucceeded(true);
+        // Display the error to the user. The backend's anti-enumeration
+        // guarantee is preserved because a non-existent email resolves with
+        // HTTP 200 (caught above), never reaching this catch block.
+        setApiError(message);
       }
+    } finally {
+      setIsLoading(false);
+      submittingRef.current = false;
+    }
+  };
+
+  const handleResend = async () => {
+    if (submittingRef.current || isLoading || cooldown > 0 || !email.trim()) return;
+    submittingRef.current = true;
+    setIsLoading(true);
+    setApiError(null);
+
+    try {
+      await forgotPasswordApi(email.trim());
+      try {
+        sessionStorage.setItem("zyoris-pending-email", email.trim());
+      } catch {}
+      startCooldown();
+    } catch (err: unknown) {
+      const { message } = normaliseAuthError(err);
+      setApiError(message);
     } finally {
       setIsLoading(false);
       submittingRef.current = false;
@@ -99,21 +149,32 @@ function ForgotPasswordInner() {
         </div>
         <h2 className="text-2xl font-bold text-gray-900 mb-3">Check your email</h2>
         <p className="text-gray-500 text-sm leading-relaxed mb-2">
-          If an account exists for{" "}
+          OTP has been sent successfully to your registered email address.
+        </p>
+        <p className="text-gray-500 text-xs leading-relaxed mb-2">
+          Sent to{" "}
           <span className="font-semibold text-gray-700">
             {email.replace(/(.{2}).*(@.*)/, "$1…$2")}
           </span>
-          , we sent a 6-digit code.
         </p>
         <p className="text-gray-400 text-xs mb-8">
           The code expires in 5 minutes. Check your spam folder if you don&apos;t see it.
         </p>
 
+        {apiError && (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="flex items-start gap-2.5 mb-5 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm text-left"
+          >
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0 text-red-500" aria-hidden="true" />
+            <span>{apiError}</span>
+          </div>
+        )}
+
         <PrimaryButton
           type="button"
           onClick={() => {
-            // Pass email via sessionStorage so the reset page knows which
-            // account this code belongs to — never via URL params.
             try {
               sessionStorage.setItem("zyoris-pending-email", email.trim());
             } catch {}
@@ -123,16 +184,35 @@ function ForgotPasswordInner() {
           Enter reset code
         </PrimaryButton>
 
-        <button
-          type="button"
-          onClick={() => {
-            setSucceeded(false);
-            setEmail("");
-          }}
-          className="mt-4 text-sm text-gray-400 hover:text-gray-600 transition-colors"
-        >
-          Use a different email
-        </button>
+        <div className="mt-4 flex flex-col items-center gap-2">
+          {cooldown > 0 ? (
+            <p className="text-xs text-gray-400">
+              Resend available in{" "}
+              <span className="font-semibold text-gray-600">{cooldown}s</span>
+            </p>
+          ) : (
+            <button
+              type="button"
+              disabled={isLoading || cooldown > 0}
+              onClick={handleResend}
+              className="text-xs text-[#002B7F] font-semibold hover:underline disabled:opacity-50"
+            >
+              {isLoading ? "Sending…" : "Resend code"}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setSucceeded(false);
+              setEmail("");
+              setApiError(null);
+            }}
+            className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            Use a different email
+          </button>
+        </div>
       </div>
     );
   }
@@ -195,9 +275,15 @@ function ForgotPasswordInner() {
 
         <PrimaryButton
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || cooldown > 0}
           aria-busy={isLoading}
-          aria-label={isLoading ? "Sending reset code, please wait" : "Send reset code"}
+          aria-label={
+            isLoading
+              ? "Sending reset code, please wait"
+              : cooldown > 0
+              ? `Please wait ${cooldown}s before requesting again`
+              : "Send reset code"
+          }
         >
           {isLoading ? (
             <>
@@ -207,6 +293,8 @@ function ForgotPasswordInner() {
               />
               Sending…
             </>
+          ) : cooldown > 0 ? (
+            `Resend available in ${cooldown}s`
           ) : (
             "Send reset code"
           )}
