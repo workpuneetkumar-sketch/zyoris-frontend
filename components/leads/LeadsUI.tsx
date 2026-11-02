@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EditLeadModal from "./EditLeadModal";
+import { buildLeadEditPayload } from "./leadEditPayload";
 import ViewLeadModal from "./ViewLeadModal";
 import { updateLead, deleteLead, addLeadNote, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
 
@@ -960,19 +961,7 @@ export function LeadsTable({
                     onClose={() => { setIsEditOpen(false); setEditingLead(null); }}
                     onSave={async (updatedData) => {
                         try {
-                            const payload: Partial<Lead> = {
-                                name: updatedData.name.trim(),
-                                email: updatedData.email.trim() || undefined,
-                                phone: updatedData.phone.trim() || undefined,
-                                company: updatedData.company.trim() || undefined,
-                                city: updatedData.city.trim() || undefined,
-                                source: updatedData.source.trim() || undefined,
-                                status: updatedData.status,
-                                assignedToId: updatedData.assignedToId?.trim() || null,
-                                tags: Array.isArray(updatedData.tags)
-                                    ? updatedData.tags.map((tag: any) => typeof tag === "string" ? tag : tag.label)
-                                    : [],
-                            };
+                            const payload = buildLeadEditPayload(updatedData);
                             await updateLead(editingLead.id, payload);
 
                             // If note was entered and changed, save it via the dedicated note endpoint
