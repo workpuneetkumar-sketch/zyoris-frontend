@@ -144,34 +144,41 @@ export function useZiiBotChat() {
     }
   }, [user?.id, loadSessions]);
 
-  // Create a new session
-  const createNewSession = useCallback(async (initialTitle?: string): Promise<string> => {
-    setErrorMessage(null);
-    try {
-      const newSession = await createChatSession({
-        title: initialTitle || "New CRM Conversation",
-      });
-      setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
-      setActiveSessionId(newSession.id);
-      activeSessionRef.current = newSession.id;
-      setMessages([]);
-      return newSession.id;
-    } catch (err: any) {
-      console.warn("Falling back for new session creation:", err);
-      const fallbackId = `sess_${Date.now()}`;
-      const fallbackSession: ChatSession = {
-        id: fallbackId,
-        title: initialTitle || "New Conversation",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      setSessions((prev) => [fallbackSession, ...prev]);
-      setActiveSessionId(fallbackId);
-      activeSessionRef.current = fallbackId;
-      setMessages([]);
-      return fallbackId;
-    }
-  }, []);
+  // Create a new session (clearMessages=true for manual "+ New Chat", false when auto-created)
+  const createNewSession = useCallback(
+    async (initialTitle?: string, clearMessages = true): Promise<string> => {
+      setErrorMessage(null);
+      try {
+        const newSession = await createChatSession({
+          title: initialTitle || "New CRM Conversation",
+        });
+        setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
+        setActiveSessionId(newSession.id);
+        activeSessionRef.current = newSession.id;
+        if (clearMessages) {
+          setMessages([]);
+        }
+        return newSession.id;
+      } catch (err: any) {
+        console.warn("Falling back for new session creation:", err);
+        const fallbackId = `sess_${Date.now()}`;
+        const fallbackSession: ChatSession = {
+          id: fallbackId,
+          title: initialTitle || "New Conversation",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setSessions((prev) => [fallbackSession, ...prev]);
+        setActiveSessionId(fallbackId);
+        activeSessionRef.current = fallbackId;
+        if (clearMessages) {
+          setMessages([]);
+        }
+        return fallbackId;
+      }
+    },
+    []
+  );
 
   // Rename a session
   const renameSession = useCallback(async (sessionId: string, newTitle: string) => {
@@ -189,182 +196,182 @@ export function useZiiBotChat() {
   }, []);
 
   // Delete a session
-  const deleteSession = useCallback(async (sessionId: string) => {
-    if (!sessionId) return;
-    try {
-      await deleteChatSession(sessionId);
-      setSessions((prev) => {
-        const remaining = prev.filter((s) => s.id !== sessionId);
-        if (activeSessionRef.current === sessionId) {
-          if (remaining.length > 0) {
-            selectSession(remaining[0].id);
-          } else {
-            setActiveSessionId(null);
-            activeSessionRef.current = null;
-            setMessages([]);
-          }
-        }
-        return remaining;
-      });
-    } catch (err: any) {
-      console.error("Failed to delete session:", err);
-      throw err;
-    }
-  }, [selectSession]);
-
-  // Send a message with automatic 404 session recovery
-  const sendMessage = useCallback(async (content: string) => {
-    const trimmed = content.trim();
-    if (!trimmed || isTyping) return;
-
-    let currentSessionId = activeSessionRef.current;
-
-    // If no active session, create one first
-    if (!currentSessionId) {
-      const generatedTitle = trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed;
-      currentSessionId = await createNewSession(generatedTitle);
-    }
-
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: trimmed,
-      timestamp: Date.now(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setIsTyping(true);
-    setErrorMessage(null);
-    setLastFailedMessage(null);
-
-    if (soundOn) {
-      playSendSound();
-    }
-
-    try {
-      let res: any;
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      if (!sessionId) return;
       try {
-        res = await sendChatMessage(currentSessionId, trimmed);
-      } catch (firstErr: any) {
-        // Auto-heal on 404: session expired or not found on backend
-        if (firstErr?.status === 404 || firstErr?.response?.status === 404) {
-          console.warn("Session expired on backend; creating fresh session and retrying message...");
-          const freshSessionId = await createNewSession(
-            trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed
-          );
-          currentSessionId = freshSessionId;
-          res = await sendChatMessage(freshSessionId, trimmed);
-        } else {
-          throw firstErr;
-        }
+        await deleteChatSession(sessionId);
+        setSessions((prev) => {
+          const remaining = prev.filter((s) => s.id !== sessionId);
+          if (activeSessionRef.current === sessionId) {
+            if (remaining.length > 0) {
+              selectSession(remaining[0].id);
+            } else {
+              setActiveSessionId(null);
+              activeSessionRef.current = null;
+              setMessages([]);
+            }
+          }
+          return remaining;
+        });
+      } catch (err: any) {
+        console.error("Failed to delete session:", err);
+        throw err;
+      }
+    },
+    [selectSession]
+  );
+
+  // Send a message with automatic recovery and zero message loss
+  const sendMessage = useCallback(
+    async (content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed || isTyping) return;
+
+      let currentSessionId = activeSessionRef.current;
+
+      // If no active session, create one first without clearing messages
+      if (!currentSessionId) {
+        const generatedTitle = trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed;
+        currentSessionId = await createNewSession(generatedTitle, false);
       }
 
-      const assistantText =
-        res.reply ??
-        res.content ??
-        res.response ??
-        res.answer ??
-        res.message?.content ??
-        res.data?.reply ??
-        res.data?.content ??
-        "I'm here to assist with Zyoris CRM workflows and authorized data.";
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+        timestamp: Date.now(),
+      };
 
-      const proposal = extractProposal(res as Record<string, unknown>);
+      setMessages((prev) => [...prev, userMsg]);
+      setIsTyping(true);
+      setErrorMessage(null);
+      setLastFailedMessage(null);
 
       if (soundOn) {
-        playMessageSound();
+        playSendSound();
       }
 
-      if (soundOn && !proposal && assistantText) {
-        try {
-          voiceService.speak(assistantText);
-        } catch (e) {
-          console.warn("Voice output error:", e);
+      try {
+        const res = await sendChatMessage(currentSessionId, trimmed, (newSession) => {
+          // Callback if session was healed/recreated
+          currentSessionId = newSession.id;
+          activeSessionRef.current = newSession.id;
+          setActiveSessionId(newSession.id);
+          setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
+        });
+
+        const assistantText =
+          res.reply ??
+          res.content ??
+          res.response ??
+          res.answer ??
+          res.message?.content ??
+          res.data?.reply ??
+          res.data?.content ??
+          "I'm here to assist with Zyoris CRM workflows and authorized data.";
+
+        const proposal = extractProposal(res as Record<string, unknown>);
+
+        if (soundOn) {
+          playMessageSound();
         }
-      }
 
-      const newMessages: ChatMessage[] = [];
+        if (soundOn && !proposal && assistantText) {
+          try {
+            voiceService.speak(assistantText);
+          } catch (e) {
+            console.warn("Voice output error:", e);
+          }
+        }
 
-      if (proposal) {
-        if (assistantText && assistantText !== "I'm here to assist with Zyoris CRM workflows and authorized data.") {
+        const newMessages: ChatMessage[] = [];
+
+        if (proposal) {
+          if (assistantText && assistantText !== "I'm here to assist with Zyoris CRM workflows and authorized data.") {
+            newMessages.push({
+              id: `assistant-${Date.now()}-text`,
+              role: "assistant",
+              content: assistantText,
+              type: "text",
+              timestamp: Date.now(),
+            });
+          }
           newMessages.push({
-            id: `assistant-${Date.now()}-text`,
+            id: `assistant-${Date.now()}-proposal`,
+            role: "assistant",
+            content: "",
+            type: "proposal",
+            proposalData: proposal,
+            timestamp: Date.now() + 1,
+          });
+        } else {
+          newMessages.push({
+            id: `assistant-${Date.now()}`,
             role: "assistant",
             content: assistantText,
             type: "text",
             timestamp: Date.now(),
           });
         }
-        newMessages.push({
-          id: `assistant-${Date.now()}-proposal`,
-          role: "assistant",
-          content: "",
-          type: "proposal",
-          proposalData: proposal,
-          timestamp: Date.now() + 1,
-        });
-      } else {
-        newMessages.push({
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          content: assistantText,
-          type: "text",
-          timestamp: Date.now(),
-        });
+
+        setMessages((prev) => [...prev, ...newMessages]);
+
+        // Update session preview in the sidebar
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id === currentSessionId) {
+              const updatedTitle =
+                s.title === "New CRM Conversation" || s.title.startsWith("New Conversation")
+                  ? trimmed.length > 32
+                    ? `${trimmed.slice(0, 32)}...`
+                    : trimmed
+                  : s.title;
+
+              return {
+                ...s,
+                title: updatedTitle,
+                lastMessage: assistantText.slice(0, 45),
+                updatedAt: new Date().toISOString(),
+              };
+            }
+            return s;
+          })
+        );
+      } catch (err: any) {
+        console.error("Message send failed:", err);
+        const errMsg = err?.message || "Failed to receive response from ZII BOT. Please try again.";
+        setErrorMessage(errMsg);
+        setLastFailedMessage(trimmed);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `error-${Date.now()}`,
+            role: "assistant",
+            content: errMsg,
+            timestamp: Date.now(),
+            isError: true,
+            failedText: trimmed,
+          },
+        ]);
+      } finally {
+        setIsTyping(false);
+        abortRef.current = null;
       }
+    },
+    [isTyping, soundOn, voiceService, createNewSession]
+  );
 
-      setMessages((prev) => [...prev, ...newMessages]);
-
-      // Update session preview in the sidebar
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id === currentSessionId) {
-            const updatedTitle =
-              s.title === "New CRM Conversation" || s.title.startsWith("New Conversation")
-                ? trimmed.length > 32
-                  ? `${trimmed.slice(0, 32)}...`
-                  : trimmed
-                : s.title;
-
-            return {
-              ...s,
-              title: updatedTitle,
-              lastMessage: assistantText.slice(0, 40),
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          return s;
-        })
-      );
-    } catch (err: any) {
-      console.error("Message send failed:", err);
-      const errMsg = err?.message || "Failed to receive response from ZII BOT. Please try again.";
-      setErrorMessage(errMsg);
-      setLastFailedMessage(trimmed);
-
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `error-${Date.now()}`,
-          role: "assistant",
-          content: errMsg,
-          timestamp: Date.now(),
-          isError: true,
-          failedText: trimmed,
-        },
-      ]);
-    } finally {
-      setIsTyping(false);
-      abortRef.current = null;
-    }
-  }, [isTyping, soundOn, voiceService, createNewSession]);
-
-  const retryLastMessage = useCallback(async (customText?: string) => {
-    const textToRetry = customText || lastFailedMessage;
-    if (!textToRetry) return;
-    setMessages((prev) => prev.filter((m) => !m.isError));
-    await sendMessage(textToRetry);
-  }, [lastFailedMessage, sendMessage]);
+  const retryLastMessage = useCallback(
+    async (customText?: string) => {
+      const textToRetry = customText || lastFailedMessage;
+      if (!textToRetry) return;
+      setMessages((prev) => prev.filter((m) => !m.isError));
+      await sendMessage(textToRetry);
+    },
+    [lastFailedMessage, sendMessage]
+  );
 
   const toggleSound = useCallback(() => {
     const next = !getSoundEnabled();
@@ -375,10 +382,7 @@ export function useZiiBotChat() {
     }
   }, [voiceService]);
 
-  const updateProposalStatus = useCallback((
-    approvalId: string,
-    patch: Partial<AgentApprovalRequest>
-  ) => {
+  const updateProposalStatus = useCallback((approvalId: string, patch: Partial<AgentApprovalRequest>) => {
     setMessages((prev) =>
       prev.map((msg) =>
         msg.type === "proposal" && msg.proposalData?.id === approvalId

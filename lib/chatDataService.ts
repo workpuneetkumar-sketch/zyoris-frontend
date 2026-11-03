@@ -149,10 +149,10 @@ export async function fetchDataByIntent(intent: string, token: string): Promise<
       
       case 'overview': {
         const [leads, deals, employees, expenses] = await Promise.all([
-          api.get("/leads/stats", { headers: { 'Authorization': `Bearer ${token}` } }),
-          api.get("/api/deals/pipeline-stats", { headers: { 'Authorization': `Bearer ${token}` } }),
-          api.get("/hr/employees/get-employees", { headers: { 'Authorization': `Bearer ${token}` } }),
-          api.get("/finance/expenses/dashboard", { headers: { 'Authorization': `Bearer ${token}` } }),
+          api.get("/leads/stats", { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => null),
+          api.get("/api/deals/pipeline-stats", { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => null),
+          api.get("/hr/employees/get-employees", { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => null),
+          api.get("/finance/expenses/dashboard", { headers: { 'Authorization': `Bearer ${token}` } }).catch(() => null),
         ]);
         return { leads, deals, employees, expenses };
       }

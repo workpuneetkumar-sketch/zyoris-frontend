@@ -30,10 +30,10 @@ const crmSuggestionsByRole: Record<string, Suggestion[]> = {
     { text: 'Which sales tasks and activities are pending for my team?', category: 'tasks', icon: '⏰' },
   ],
   ADMIN: [
+    { text: 'What is our total deal revenue and pipeline value?', category: 'deals', icon: '💰' },
+    { text: 'What is our lead revenue potential and win rate?', category: 'leads', icon: '📈' },
     { text: 'What is the status of recent lead import and extraction jobs?', category: 'leads', icon: '📥' },
     { text: 'What datasets and schemas are loaded in the CRM?', category: 'insights', icon: '🗄️' },
-    { text: 'Show recent CRM activity logs and contact touchpoints', category: 'tasks', icon: '📋' },
-    { text: 'How do CRM assignment and deduplication workflows work?', category: 'insights', icon: '⚙️' },
   ],
   DEFAULT: [
     { text: 'How many active leads are currently assigned to me?', category: 'leads', icon: '👤' },
