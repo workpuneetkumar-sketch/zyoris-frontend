@@ -24,12 +24,10 @@ export function ZiiBot() {
   const pathname = usePathname();
   const [panelOpen, setPanelOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const [closing, setClosing] = useState(false);
   const darkMode = useDarkMode();
   const chat = useZiiBotChat();
 
-  // FE2-02 — Listen for page "Use with AI" trigger
-  // Dispatched by UseWithAIButton after fetching /workspace/pages/:id/ai-context
+  // Listen for page "Use with AI" trigger
   useEffect(() => {
     const handleOpenWithContext = (e: Event) => {
       const detail = (e as CustomEvent<{
@@ -38,12 +36,9 @@ export function ZiiBot() {
         contextMarkdown: string;
         seedMessage: string;
       }>).detail;
-      // Open the panel first, then seed the message so the user sees context land
-      setClosing(false);
       setPanelOpen(true);
       setFullscreen(false);
       if (detail?.seedMessage) {
-        // Small delay so the panel animation starts before the message appears
         setTimeout(() => {
           chat.sendMessage(detail.seedMessage);
         }, 150);
@@ -65,27 +60,18 @@ export function ZiiBot() {
   }, [fullscreen]);
 
   const openPanel = useCallback(() => {
-    setClosing(false);
     setPanelOpen(true);
     setFullscreen(false);
   }, []);
 
   const closePanel = useCallback(() => {
-    if (fullscreen) {
-      setFullscreen(false);
-      setPanelOpen(false);
-      setClosing(false);
-      return;
-    }
+    setFullscreen(false);
     setPanelOpen(false);
-    setClosing(true);
-    const t = setTimeout(() => setClosing(false), 320);
-    return () => clearTimeout(t);
-  }, [fullscreen]);
+  }, []);
 
   const toggleFullscreen = useCallback(() => setFullscreen((f) => !f), []);
 
-  // Hide chatbot on login and register routes for privacy
+  // Hide chatbot on login and register routes
   if (
     pathname === "/login" ||
     pathname?.startsWith("/login") ||
@@ -97,89 +83,56 @@ export function ZiiBot() {
     return null;
   }
 
-  const showPanel = panelOpen || fullscreen || closing;
-
   return (
     <>
       <AnimatePresence mode="wait">
-        {fullscreen ? (
+        {panelOpen && (
           <ZiiBotPanel
-            key="fullscreen"
-            isOpen
-            onClose={closePanel}
-            isFullscreen
-            onToggleFullscreen={toggleFullscreen}
-            messages={chat.messages}
-            isTyping={chat.isTyping}
-            onSend={chat.sendMessage}
-            soundOn={chat.soundOn}
-            onToggleSound={chat.toggleSound}
-            showGreeting={chat.showGreeting}
-            darkMode={darkMode}
-            userName={chat.userName}
-            onUpdateProposal={chat.updateProposalStatus}
-          />
-        ) : showPanel ? (
-          <ZiiBotPanel
-            key="slide"
+            key={fullscreen ? "fullscreen" : "floating"}
             isOpen={panelOpen}
             onClose={closePanel}
-            isFullscreen={false}
+            isFullscreen={fullscreen}
             onToggleFullscreen={toggleFullscreen}
-            messages={chat.messages}
-            isTyping={chat.isTyping}
-            onSend={chat.sendMessage}
-            soundOn={chat.soundOn}
-            onToggleSound={chat.toggleSound}
-            showGreeting={chat.showGreeting}
+            chat={chat}
             darkMode={darkMode}
-            userName={chat.userName}
-            onUpdateProposal={chat.updateProposalStatus}
           />
-        ) : null}
+        )}
       </AnimatePresence>
 
-      {/* ── UPDATED FAB BUTTON ── */}
+      {/* ── Mascot Floating Action Button (FAB) ── */}
       {!fullscreen && (
         <motion.button
           type="button"
           data-tour="ziibot-button"
-          className={`zii-fab${pathname === "/whatsapp" || pathname?.startsWith("/whatsapp") ? " zii-fab--whatsapp" : ""}`}
-          onClick={panelOpen || closing ? closePanel : openPanel}
-          aria-label={panelOpen || closing ? "Close chat" : "Open ZY BOT"}
+          className={`zii-fab${
+            pathname === "/whatsapp" || pathname?.startsWith("/whatsapp")
+              ? " zii-fab--whatsapp"
+              : ""
+          }`}
+          onClick={panelOpen ? closePanel : openPanel}
+          aria-label={panelOpen ? "Close ZII BOT" : "Ask ZII BOT — CRM Intelligence"}
+          title="ZII BOT — CRM Intelligence Assistant"
           initial={false}
           animate={{
             scale: 1,
             boxShadow: [
-              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
-              "0 8px 40px rgba(99, 102, 241, 0.5), 0 0 0 12px rgba(99, 102, 241, 0)",
-              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
+              "0 8px 32px rgba(14, 165, 233, 0.4), 0 0 0 0 rgba(14, 165, 233, 0.3)",
+              "0 8px 40px rgba(14, 165, 233, 0.6), 0 0 0 14px rgba(14, 165, 233, 0)",
+              "0 8px 32px rgba(14, 165, 233, 0.4), 0 0 0 0 rgba(14, 165, 233, 0.3)",
             ],
           }}
           transition={{
-            boxShadow: { repeat: Infinity, duration: 2.5, ease: "easeInOut" },
+            boxShadow: { repeat: Infinity, duration: 3, ease: "easeInOut" },
           }}
           whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
         >
-          <ZiiBotAvatar isIdle={!chat.isTyping} isTyping={chat.isTyping} size="button" />
-        </motion.button>
-      )}
-
-      {fullscreen && (
-        <motion.button
-          type="button"
-          className="zii-fab zii-fab-close-fullscreen"
-          onClick={closePanel}
-          aria-label="Close chat"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+          <ZiiBotAvatar
+            isIdle={!chat.isTyping}
+            isTyping={chat.isTyping}
+            size="button"
+            showStatus={true}
+          />
         </motion.button>
       )}
     </>

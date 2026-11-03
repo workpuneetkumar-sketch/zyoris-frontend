@@ -2,10 +2,31 @@
 
 import { useRef, useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ZiiBotAvatar, ZII_GREETING } from "./ZiiBotAvatar";
-import type { ChatMessage } from "./useZiiBotChat";
+import { ZiiBotAvatar } from "./ZiiBotAvatar";
+import { ZiiBotSidebar } from "./ZiiBotSidebar";
+import { MarkdownContent } from "./MarkdownContent";
+import type { ChatMessage, useZiiBotChat } from "./useZiiBotChat";
 import { ContextualSuggestions } from "./ContextualSuggestions";
-import { Send, Bot, Paperclip, Smile, Minimize2, Maximize2, X, Volume2, VolumeX, ThumbsUp, ThumbsDown, MoreVertical, ChevronDown } from "lucide-react";
+import {
+  Send,
+  Minimize2,
+  Maximize2,
+  X,
+  Volume2,
+  VolumeX,
+  ThumbsUp,
+  ThumbsDown,
+  ChevronDown,
+  Copy,
+  Check,
+  RotateCcw,
+  AlertCircle,
+  PanelLeftOpen,
+  PanelLeftClose,
+  Mic,
+  MicOff,
+  Sparkles,
+} from "lucide-react";
 import { getVoiceService } from "./voiceService";
 import { toast } from "react-toastify";
 import { ActionProposalCard } from "@/components/ai/ActionProposalCard";
@@ -16,80 +37,122 @@ interface ZiiBotPanelProps {
   onClose: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
-  messages: ChatMessage[];
-  isTyping: boolean;
-  onSend: (text: string) => void;
-  soundOn: boolean;
-  onToggleSound: () => void;
-  showGreeting: boolean;
+  chat: ReturnType<typeof useZiiBotChat>;
   darkMode: boolean;
-  userName?: string;
-  /** Called when an ActionProposalCard updates its status */
-  onUpdateProposal?: (approvalId: string, patch: Partial<AgentApprovalRequest>) => void;
 }
 
-// ─── Helper: Format message with HTML ─────────────────────────
+// ─── Message Bubble ─────────────────────────────────────────────
 
-function formatMessageContent(content: string): string {
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-blue-700">$1</strong>')
-    .replace(/\n/g, '<br/>')
-    .replace(/• /g, '<span class="text-blue-500 font-bold mr-1">•</span> ')
-    .replace(/\d\. /g, (match) => `<span class="font-bold text-blue-600">${match}</span>`);
-}
+function MessageBubble({
+  message,
+  onRetry,
+}: {
+  message: ChatMessage;
+  onRetry?: (text?: string) => void;
+}) {
+  const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
 
-// ─── Message bubble ─────────────────────────────────────────────
+  const handleCopy = () => {
+    if (!message.content) return;
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
-function MessageBubble({ message, isUser }: { message: ChatMessage; isUser: boolean; darkMode: boolean }) {
-  const [rating, setRating] = useState<'up' | 'down' | null>(null);
-
-  const handleRating = (type: 'up' | 'down') => {
-    if (rating) return; // Prevent multiple ratings
+  const handleRating = (type: "up" | "down") => {
+    if (rating) return;
     setRating(type);
-    if (type === 'up') {
+    if (type === "up") {
       toast.success("Thanks for your feedback!");
     } else {
-      toast.info("Thanks, we'll try to improve.");
+      toast.info("Thanks! We'll refine CRM responses.");
     }
   };
 
+  if (message.isError) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex items-start gap-2.5 my-2 max-w-[90%]"
+      >
+        <ZiiBotAvatar size="message" isIdle={false} />
+        <div className="flex-1 p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs shadow-sm">
+          <div className="flex items-center gap-1.5 font-semibold text-rose-300 mb-1">
+            <AlertCircle size={14} className="text-rose-400 flex-shrink-0" />
+            <span>CRM Assistant Error</span>
+          </div>
+          <p className="leading-relaxed mb-2.5">{message.content}</p>
+          {onRetry && message.failedText && (
+            <button
+              onClick={() => onRetry(message.failedText)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition-colors shadow-sm active:scale-95"
+            >
+              <RotateCcw size={12} />
+              <span>Retry question</span>
+            </button>
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15, scale: 0.95 }}
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`flex items-end gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
+      transition={{ duration: 0.22, ease: "easeOut" }}
+      className={`flex items-end gap-2.5 my-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
     >
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%]`}>
+      {!isUser && <ZiiBotAvatar size="message" isIdle={true} />}
+
+      <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} max-w-[85%]`}>
         <div
-          className={`px-[18px] py-[12px] text-[14px] leading-relaxed shadow-sm ${
+          className={`px-4 py-3 rounded-2xl shadow-sm leading-relaxed text-xs sm:text-sm ${
             isUser
-              ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-3xl rounded-br-sm'
-              : 'bg-[#F2F2F2] text-gray-800 rounded-3xl rounded-bl-sm'
+              ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 text-white rounded-br-none shadow-blue-500/20"
+              : "bg-slate-800/90 text-slate-100 border border-slate-700/60 rounded-bl-none shadow-black/20"
           }`}
         >
-          <div 
-            className="prose prose-sm max-w-none 
-              [&_strong]:font-bold [&_strong]:text-blue-700
-              [&_ul]:list-none [&_ul]:p-0 [&_ul]:m-0
-              [&_li]:flex [&_li]:items-start [&_li]:gap-1.5 [&_li]:my-1
-              [&_.bullet]:text-blue-500 [&_.bullet]:font-bold
-              [&_br]:block [&_br]:my-0.5
-              [&_p]:m-0
-              [&_p]:text-gray-800"
-            dangerouslySetInnerHTML={{ __html: formatMessageContent(message.content) }} 
-          />
+          {isUser ? (
+            <p className="whitespace-pre-wrap select-text">{message.content}</p>
+          ) : (
+            <MarkdownContent content={message.content} />
+          )}
         </div>
+
+        {/* Message actions for assistant */}
         {!isUser && (
-          <div className="flex items-center gap-2 mt-2 ml-2">
+          <div className="flex items-center gap-2 mt-1.5 ml-1 text-slate-400 text-[11px]">
+            <button
+              onClick={handleCopy}
+              className="p-1 hover:text-cyan-400 hover:bg-slate-800 rounded transition-colors"
+              title="Copy message"
+            >
+              {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+            </button>
+
             {rating ? (
-              <span className="text-[11px] text-gray-400 font-medium italic">Feedback recorded</span>
+              <span className="text-[10px] text-slate-400 italic">Feedback recorded</span>
             ) : (
-              <>
-                <span className="text-[11px] text-gray-500 font-medium">Was this helpful?</span>
-                <button onClick={() => handleRating('up')} className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsUp size={14} /></button>
-                <button onClick={() => handleRating('down')} className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsDown size={14} /></button>
-              </>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleRating("up")}
+                  className="p-1 hover:text-emerald-400 hover:bg-slate-800 rounded transition-colors"
+                  title="Helpful"
+                >
+                  <ThumbsUp size={12} />
+                </button>
+                <button
+                  onClick={() => handleRating("down")}
+                  className="p-1 hover:text-rose-400 hover:bg-slate-800 rounded transition-colors"
+                  title="Not helpful"
+                >
+                  <ThumbsDown size={12} />
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -98,290 +161,335 @@ function MessageBubble({ message, isUser }: { message: ChatMessage; isUser: bool
   );
 }
 
+// ─── Main Panel Component ───────────────────────────────────────
+
 export function ZiiBotPanel({
   isOpen,
   onClose,
   isFullscreen,
   onToggleFullscreen,
-  messages,
-  isTyping,
-  onSend,
-  soundOn,
-  onToggleSound,
-  showGreeting,
+  chat,
   darkMode,
-  userName,
-  onUpdateProposal,
 }: ZiiBotPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [inputValue, setInputValue] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(isFullscreen);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingText, setRecordingText] = useState("");
   const voiceService = getVoiceService();
 
+  // Keep sidebar visible in fullscreen, collapsible in compact mode
   useEffect(() => {
-    if (isOpen) inputRef.current?.focus();
+    if (isFullscreen) {
+      setSidebarOpen(true);
+    }
+  }, [isFullscreen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 150);
+    }
   }, [isOpen]);
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     }
-  }, [messages, isTyping]);
+  }, [chat.messages, chat.isTyping]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
     const text = inputValue.trim();
-    if (text) {
-      onSend(text);
+    if (text && !chat.isTyping) {
+      chat.sendMessage(text);
       setInputValue("");
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e);
+      handleSubmit();
     }
   };
 
-  const startRecording = () => {
+  const handleToggleVoice = () => {
     if (isRecording) {
-      stopRecording();
+      voiceService.stopListening();
+      setIsRecording(false);
       return;
     }
-    
+
     setIsRecording(true);
-    setRecordingText("🎤 Listening...");
-    
     const success = voiceService.startListening(
       (text) => {
-        setRecordingText(text);
         setInputValue(text);
-        if (text && !text.endsWith('...')) {
+        if (text && !text.endsWith("...")) {
           setTimeout(() => {
             if (inputRef.current?.value) {
-              handleSubmit(new Event('submit') as any);
+              handleSubmit();
+              setIsRecording(false);
             }
-          }, 500);
+          }, 600);
         }
       },
-      (error) => {
-        console.error('Voice error:', error);
+      (err) => {
+        console.error("Voice recognition error:", err);
         setIsRecording(false);
-        setRecordingText("");
-        if (error === 'not-allowed') {
-          alert('Please allow microphone access to use voice input.');
+        if (err === "not-allowed") {
+          toast.warn("Microphone access denied.");
         }
       }
     );
-    
+
     if (!success) {
       setIsRecording(false);
-      setRecordingText("");
-      alert('Voice input is not supported in this browser.');
+      toast.warn("Voice speech-to-text is not supported in this browser.");
     }
   };
 
-  const stopRecording = () => {
-    voiceService.stopListening();
-    setIsRecording(false);
-    setRecordingText("");
-  };
+  if (!isOpen) return null;
 
   return (
-    <AnimatePresence mode="wait">
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 30, scale: 0.95 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className={`fixed bottom-24 right-6 z-50 w-[440px] max-w-[calc(100vw-2rem)] h-[640px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl flex flex-col overflow-hidden bg-white ${isFullscreen ? "fullscreen-mode" : ""}`}
-        >
-          {/* ── Header: Solid Blue Gradient with Wavy Border ── */}
-          <div className="relative bg-gradient-to-br from-blue-600 to-cyan-500 pt-5 pb-8 px-5">
-            <div className="flex items-center justify-between text-white relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <ZiiBotAvatar isIdle={!isTyping} isTyping={isTyping} size="button" />
-                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-blue-100 opacity-90 font-medium mb-0.5">Chat with</p>
-                  <h3 className="font-bold text-[17px] leading-tight flex items-center gap-1.5">
-                    ZY BOT
-                  </h3>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={onToggleSound}
-                  className="p-1.5 rounded-full hover:bg-white/20 transition-all text-white"
-                  aria-label={soundOn ? "Mute sound" : "Unmute sound"}
-                >
-                  {soundOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                </button>
-                <button className="p-1.5 rounded-full hover:bg-white/20 transition-all text-white">
-                  <MoreVertical size={18} />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-1.5 rounded-full hover:bg-white/20 transition-all text-white"
-                  aria-label="Close chat"
-                >
-                  <ChevronDown size={22} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="mt-4 relative z-10">
-              <p className="text-[13px] text-white/90">We typically reply in few minutes.</p>
-            </div>
-
-            {/* Wavy bottom SVG */}
-            <div className="absolute -bottom-[1px] left-0 right-0 w-full overflow-hidden leading-none z-0">
-              <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="relative block w-full h-[25px]">
-                <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V95.8C89.71,117.43,205.85,78.29,321.39,56.44Z" fill="#ffffff"></path>
-              </svg>
-            </div>
-          </div>
-
-          {/* ── Messages: Light Gray Background ── */}
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-gray-50/80"
+    <motion.div
+      initial={{ opacity: 0, y: 30, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 30, scale: 0.96 }}
+      transition={{ duration: 0.28, ease: "easeOut" }}
+      className={`fixed z-50 flex shadow-2xl overflow-hidden bg-slate-900 border border-slate-800 text-slate-100 ${
+        isFullscreen
+          ? "inset-0 w-screen h-screen rounded-none"
+          : "bottom-24 right-6 w-[470px] max-w-[calc(100vw-2rem)] h-[660px] max-h-[calc(100vh-7rem)] rounded-3xl"
+      }`}
+    >
+      {/* ── Left Sidebar (Conversations History) ── */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: isFullscreen ? 280 : 240, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="flex-shrink-0 h-full overflow-hidden z-20"
           >
-            {/* Greeting */}
-            {showGreeting && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col h-full items-start pt-8 pb-4 px-2"
-              >
-                <div className="flex items-end gap-3 w-full">
-                  <div className={`px-[18px] py-[12px] text-[14px] leading-relaxed shadow-sm bg-[#F2F2F2] text-gray-800 rounded-3xl rounded-bl-sm`}>
-                    <div className="font-medium">
-                      Hey{userName ? ` ${userName.split(' ')[0]}` : ''} 👋 I'm ZY BOT. How can I help you today?
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            <ZiiBotSidebar
+              sessions={chat.sessions}
+              activeSessionId={chat.activeSessionId}
+              onSelectSession={chat.selectSession}
+              onNewChat={() => chat.createNewSession()}
+              onRenameSession={chat.renameSession}
+              onDeleteSession={chat.deleteSession}
+              isLoading={chat.isLoadingSessions}
+              onCloseMobile={() => setSidebarOpen(false)}
+              className="w-full h-full"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-            {/* Messages */}
-            {messages.map((msg) => (
-              msg.type === "proposal" && msg.proposalData ? (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.28, ease: "easeOut" }}
-                >
-                  <ActionProposalCard
-                    proposal={msg.proposalData}
-                    onStatusChange={(id, _status, patch) =>
-                      onUpdateProposal?.(id, patch)
-                    }
-                  />
-                </motion.div>
-              ) : (
-                <MessageBubble key={msg.id} message={msg} isUser={msg.role === "user"} darkMode={false} />
-              )
-            ))}
+      {/* ── Main Chat Area ── */}
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-900">
+        {/* Top Header */}
+        <div className="relative flex items-center justify-between px-4 py-3.5 bg-slate-950/90 border-b border-slate-800/80">
+          <div className="flex items-center gap-3 min-w-0">
+            {/* Sidebar toggle */}
+            <button
+              onClick={() => setSidebarOpen((prev) => !prev)}
+              className={`p-1.5 rounded-xl border transition-all ${
+                sidebarOpen
+                  ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400"
+                  : "bg-slate-800/80 border-slate-700/60 text-slate-400 hover:text-slate-200"
+              }`}
+              title={sidebarOpen ? "Hide chat history" : "Show chat history"}
+            >
+              {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+            </button>
 
-            {/* Typing Indicator */}
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-3"
-              >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-blue-500/30">
-                  Z
-                </div>
-                <div className="px-4 py-3 rounded-2xl bg-white shadow-sm border border-gray-100">
-                  <div className="flex gap-1.5">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            {/* Mascot Avatar */}
+            <ZiiBotAvatar size="panel" isIdle={!chat.isTyping} isTyping={chat.isTyping} showStatus />
+
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-sm tracking-wide text-white">ZII BOT</h3>
+                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 tracking-wider">
+                  CRM AI
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 truncate max-w-[200px] sm:max-w-[260px]">
+                {chat.activeSession?.title || "CRM Intelligence Assistant"}
+              </p>
+            </div>
           </div>
 
-          {/* ── Contextual Suggestions ── */}
-          {showGreeting && (
-            <div className="px-4 pb-2 bg-white">
-              <ContextualSuggestions onSelect={onSend} />
-            </div>
+          {/* Action icons */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={chat.toggleSound}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+              title={chat.soundOn ? "Mute audio" : "Enable audio"}
+            >
+              {chat.soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+
+            <button
+              onClick={onToggleFullscreen}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+              title={isFullscreen ? "Exit fullscreen" : "Expand fullscreen"}
+            >
+              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+              title="Close assistant"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Conversation Message List ── */}
+        <div
+          ref={scrollRef}
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-2 zii-chat-scroll bg-gradient-to-b from-slate-950/40 to-slate-900"
+        >
+          {/* Welcome Empty State */}
+          {chat.showGreeting && (
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col items-center justify-center text-center py-6 px-3"
+            >
+              <div className="mb-3 relative">
+                <ZiiBotAvatar size="hero" isIdle={true} />
+                <div className="absolute -inset-2 bg-cyan-500/10 rounded-full blur-xl -z-10" />
+              </div>
+
+              <h4 className="text-base font-bold text-white mb-1 flex items-center gap-1.5 justify-center">
+                <span>Welcome to ZII BOT</span>
+                <Sparkles size={16} className="text-cyan-400 animate-spin" style={{ animationDuration: "6s" }} />
+              </h4>
+
+              <p className="text-xs text-slate-300 max-w-sm mb-4 leading-relaxed">
+                Your AI assistant specialized in Zyoris CRM. Ask about your authorized{" "}
+                <span className="text-cyan-400 font-semibold">Leads</span>,{" "}
+                <span className="text-cyan-400 font-semibold">Deals</span>,{" "}
+                <span className="text-cyan-400 font-semibold">Pipelines</span>,{" "}
+                <span className="text-cyan-400 font-semibold">Tasks</span>, and{" "}
+                <span className="text-cyan-400 font-semibold">Datasets</span>.
+              </p>
+
+              <div className="w-full max-w-md">
+                <ContextualSuggestions onSelect={(prompt) => chat.sendMessage(prompt)} />
+              </div>
+            </motion.div>
           )}
 
-          {/* ── Input Area: Minimal with Blue Send Button ── */}
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col px-4 pt-2 pb-3 bg-white"
-          >
-            <div className="flex items-center border-t border-gray-100 pt-3">
-              <button 
-                type="button" 
-                onClick={() => toast.info("Bot triggers coming soon!")}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+          {/* Messages */}
+          {chat.messages.map((msg) =>
+            msg.type === "proposal" && msg.proposalData ? (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="my-3"
               >
-                <Bot size={18} />
-              </button>
-              <button 
-                type="button" 
-                onClick={() => toast.info("File attachments coming soon!")}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Paperclip size={18} />
-              </button>
-              <button 
-                type="button" 
-                onClick={() => toast.info("Emoji picker coming soon!")}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Smile size={18} />
-              </button>
-              
-              <div className="flex-1 px-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter your message..."
-                  className="w-full text-[14px] bg-transparent outline-none text-gray-800 placeholder-gray-400"
-                  disabled={isTyping}
+                <ActionProposalCard
+                  proposal={msg.proposalData}
+                  onStatusChange={(id, _status, patch) => chat.updateProposalStatus(id, patch)}
                 />
-              </div>
+              </motion.div>
+            ) : (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onRetry={(text) => chat.retryLastMessage(text)}
+              />
+            )
+          )}
 
-              <button
-                type="submit"
-                disabled={isTyping || !inputValue.trim()}
-                className={`w-[42px] h-[42px] rounded-full flex items-center justify-center transition-all flex-shrink-0 ml-2 ${
-                  isTyping || !inputValue.trim()
-                    ? "bg-gray-200 cursor-not-allowed text-gray-400"
-                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
-                }`}
-                aria-label="Send message"
-              >
-                <Send size={18} className="ml-0.5" />
-              </button>
-            </div>
-            
-            {/* ── Footer ── */}
-            <div className="flex justify-center items-center gap-1 mt-3">
-              <span className="text-[9px] font-semibold text-gray-400 tracking-wide uppercase">Powered by</span>
-              <span className="text-[11px] font-bold text-blue-500 tracking-tight">ZYORIS</span>
-            </div>
+          {/* Typing Indicator */}
+          {chat.isTyping && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2.5 my-2"
+            >
+              <ZiiBotAvatar size="message" isIdle={false} isTyping={true} />
+              <div className="px-4 py-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/60 shadow-sm flex items-center gap-2">
+                <span className="text-xs text-cyan-400 font-medium">Querying CRM intelligence</span>
+                <div className="flex gap-1 items-center">
+                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        {/* ── Input Box ── */}
+        <div className="p-3 bg-slate-950 border-t border-slate-800/80">
+          <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
+            {/* Voice record button */}
+            <button
+              type="button"
+              onClick={handleToggleVoice}
+              className={`p-2.5 rounded-xl border transition-all ${
+                isRecording
+                  ? "bg-rose-500/20 border-rose-500 text-rose-400 animate-pulse"
+                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+              }`}
+              title={isRecording ? "Stop voice listening" : "Speak CRM question"}
+            >
+              {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
+            </button>
+
+            {/* Text input */}
+            <input
+              ref={inputRef}
+              type="text"
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isRecording
+                  ? "Listening to speech..."
+                  : "Ask a CRM question (e.g. leads, deals, tasks)..."
+              }
+              disabled={chat.isTyping}
+              className="flex-1 px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-cyan-500/70 focus:ring-1 focus:ring-cyan-500/20 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-400 outline-none transition-all disabled:opacity-50"
+            />
+
+            {/* Send button */}
+            <button
+              type="submit"
+              disabled={chat.isTyping || !inputValue.trim()}
+              className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
+                chat.isTyping || !inputValue.trim()
+                  ? "bg-slate-800 text-slate-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-md shadow-blue-500/25 active:scale-95"
+              }`}
+              title="Send message"
+            >
+              <Send size={16} />
+            </button>
           </form>
-        </motion.div>
-      )}
-    </AnimatePresence>
+
+          {/* Subtext info */}
+          <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-slate-400">
+            <span>ZII BOT CRM Assistant</span>
+            <span className="flex items-center gap-1 text-slate-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+              Live CRM Context Scoped
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }
