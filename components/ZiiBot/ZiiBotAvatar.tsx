@@ -69,7 +69,7 @@ export function ZiiBotAvatar({
       >
         {!imageError ? (
           <Image
-            src="/zii-bot-avatar.png"
+            src="/zii-bot-avatar.png?v=2"
             alt="ZII BOT CRM Assistant"
             width={cfg.px * 2}
             height={cfg.px * 2}
