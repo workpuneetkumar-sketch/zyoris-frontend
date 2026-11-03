@@ -89,6 +89,8 @@ export function ZiiBot() {
   if (
     pathname === "/login" ||
     pathname?.startsWith("/login") ||
+    pathname === "/admin/login" ||
+    pathname?.startsWith("/admin/login") ||
     pathname === "/register" ||
     pathname?.startsWith("/register")
   ) {

@@ -130,6 +130,9 @@ export default function EmployeeLoginScreen({
 
         {/* ── Title ── */}
         <div className="mb-6 sm:mb-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#4970B8] mb-1 sm:mb-2">
+            ZYORIS EMPLOYEE PORTAL
+          </p>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">
             Employee Sign In
           </h2>
