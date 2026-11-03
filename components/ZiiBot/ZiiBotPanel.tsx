@@ -16,7 +16,6 @@ import {
   VolumeX,
   ThumbsUp,
   ThumbsDown,
-  ChevronDown,
   Copy,
   Check,
   RotateCcw,
@@ -30,7 +29,6 @@ import {
 import { getVoiceService } from "./voiceService";
 import { toast } from "react-toastify";
 import { ActionProposalCard } from "@/components/ai/ActionProposalCard";
-import type { AgentApprovalRequest } from "@/types/ai-proposals";
 
 interface ZiiBotPanelProps {
   isOpen: boolean;
@@ -79,16 +77,16 @@ function MessageBubble({
         className="flex items-start gap-2.5 my-2 max-w-[90%]"
       >
         <ZiiBotAvatar size="message" isIdle={false} />
-        <div className="flex-1 p-3.5 rounded-2xl bg-rose-950/40 border border-rose-500/40 text-rose-200 text-xs shadow-sm">
-          <div className="flex items-center gap-1.5 font-semibold text-rose-300 mb-1">
-            <AlertCircle size={14} className="text-rose-400 flex-shrink-0" />
-            <span>CRM Assistant Error</span>
+        <div className="flex-1 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs shadow-sm">
+          <div className="flex items-center gap-1.5 font-bold text-rose-700 mb-1">
+            <AlertCircle size={14} className="text-rose-600 flex-shrink-0" />
+            <span>CRM Assistant Notice</span>
           </div>
-          <p className="leading-relaxed mb-2.5">{message.content}</p>
+          <p className="leading-relaxed mb-2.5 text-rose-800">{message.content}</p>
           {onRetry && message.failedText && (
             <button
               onClick={() => onRetry(message.failedText)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-medium text-xs transition-colors shadow-sm active:scale-95"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors shadow-sm active:scale-95"
             >
               <RotateCcw size={12} />
               <span>Retry question</span>
@@ -104,16 +102,16 @@ function MessageBubble({
       initial={{ opacity: 0, y: 12, scale: 0.98 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.22, ease: "easeOut" }}
-      className={`flex items-end gap-2.5 my-2 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+      className={`flex items-end gap-2.5 my-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}
     >
       {!isUser && <ZiiBotAvatar size="message" isIdle={true} />}
 
       <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} max-w-[85%]`}>
         <div
-          className={`px-4 py-3 rounded-2xl shadow-sm leading-relaxed text-xs sm:text-sm ${
+          className={`px-4 py-3 rounded-2xl leading-relaxed text-xs sm:text-sm ${
             isUser
-              ? "bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 text-white rounded-br-none shadow-blue-500/20"
-              : "bg-slate-800/90 text-slate-100 border border-slate-700/60 rounded-bl-none shadow-black/20"
+              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-none shadow-md shadow-blue-500/15"
+              : "bg-white text-gray-800 border border-gray-200/90 rounded-bl-none shadow-sm"
           }`}
         >
           {isUser ? (
@@ -125,29 +123,29 @@ function MessageBubble({
 
         {/* Message actions for assistant */}
         {!isUser && (
-          <div className="flex items-center gap-2 mt-1.5 ml-1 text-slate-400 text-[11px]">
+          <div className="flex items-center gap-2 mt-1 ml-1 text-gray-400 text-[11px]">
             <button
               onClick={handleCopy}
-              className="p-1 hover:text-cyan-400 hover:bg-slate-800 rounded transition-colors"
+              className="p-1 hover:text-blue-600 hover:bg-gray-100 rounded transition-colors"
               title="Copy message"
             >
-              {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
             </button>
 
             {rating ? (
-              <span className="text-[10px] text-slate-400 italic">Feedback recorded</span>
+              <span className="text-[10px] text-gray-400 italic">Feedback recorded</span>
             ) : (
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => handleRating("up")}
-                  className="p-1 hover:text-emerald-400 hover:bg-slate-800 rounded transition-colors"
+                  className="p-1 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
                   title="Helpful"
                 >
                   <ThumbsUp size={12} />
                 </button>
                 <button
                   onClick={() => handleRating("down")}
-                  className="p-1 hover:text-rose-400 hover:bg-slate-800 rounded transition-colors"
+                  className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
                   title="Not helpful"
                 >
                   <ThumbsDown size={12} />
@@ -161,7 +159,7 @@ function MessageBubble({
   );
 }
 
-// ─── Main Panel Component ───────────────────────────────────────
+// ─── Main Panel Component (Pure White Theme) ─────────────────────
 
 export function ZiiBotPanel({
   isOpen,
@@ -169,7 +167,6 @@ export function ZiiBotPanel({
   isFullscreen,
   onToggleFullscreen,
   chat,
-  darkMode,
 }: ZiiBotPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -178,7 +175,6 @@ export function ZiiBotPanel({
   const [isRecording, setIsRecording] = useState(false);
   const voiceService = getVoiceService();
 
-  // Keep sidebar visible in fullscreen, collapsible in compact mode
   useEffect(() => {
     if (isFullscreen) {
       setSidebarOpen(true);
@@ -259,7 +255,7 @@ export function ZiiBotPanel({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 30, scale: 0.96 }}
       transition={{ duration: 0.28, ease: "easeOut" }}
-      className={`fixed z-50 flex shadow-2xl overflow-hidden bg-slate-900 border border-slate-800 text-slate-100 ${
+      className={`fixed z-50 flex shadow-2xl overflow-hidden bg-white border border-gray-200 text-gray-900 ${
         isFullscreen
           ? "inset-0 w-screen h-screen rounded-none"
           : "bottom-24 right-6 w-[470px] max-w-[calc(100vw-2rem)] h-[660px] max-h-[calc(100vh-7rem)] rounded-3xl"
@@ -291,17 +287,17 @@ export function ZiiBotPanel({
       </AnimatePresence>
 
       {/* ── Main Chat Area ── */}
-      <div className="flex-1 flex flex-col h-full min-w-0 bg-slate-900">
+      <div className="flex-1 flex flex-col h-full min-w-0 bg-white">
         {/* Top Header */}
-        <div className="relative flex items-center justify-between px-4 py-3.5 bg-slate-950/90 border-b border-slate-800/80">
+        <div className="relative flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shadow-xs">
           <div className="flex items-center gap-3 min-w-0">
             {/* Sidebar toggle */}
             <button
               onClick={() => setSidebarOpen((prev) => !prev)}
               className={`p-1.5 rounded-xl border transition-all ${
                 sidebarOpen
-                  ? "bg-cyan-500/10 border-cyan-500/40 text-cyan-400"
-                  : "bg-slate-800/80 border-slate-700/60 text-slate-400 hover:text-slate-200"
+                  ? "bg-blue-50 border-blue-200 text-blue-600"
+                  : "bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800"
               }`}
               title={sidebarOpen ? "Hide chat history" : "Show chat history"}
             >
@@ -313,12 +309,12 @@ export function ZiiBotPanel({
 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm tracking-wide text-white">ZII BOT</h3>
-                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 tracking-wider">
+                <h3 className="font-bold text-sm tracking-wide text-gray-900">ZII BOT</h3>
+                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 tracking-wider">
                   CRM AI
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400 truncate max-w-[200px] sm:max-w-[260px]">
+              <p className="text-[11px] text-gray-400 truncate max-w-[200px] sm:max-w-[260px]">
                 {chat.activeSession?.title || "CRM Intelligence Assistant"}
               </p>
             </div>
@@ -328,7 +324,7 @@ export function ZiiBotPanel({
           <div className="flex items-center gap-1">
             <button
               onClick={chat.toggleSound}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
               title={chat.soundOn ? "Mute audio" : "Enable audio"}
             >
               {chat.soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
@@ -336,7 +332,7 @@ export function ZiiBotPanel({
 
             <button
               onClick={onToggleFullscreen}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
               title={isFullscreen ? "Exit fullscreen" : "Expand fullscreen"}
             >
               {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
@@ -344,7 +340,7 @@ export function ZiiBotPanel({
 
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
               title="Close assistant"
             >
               <X size={18} />
@@ -355,7 +351,7 @@ export function ZiiBotPanel({
         {/* ── Conversation Message List ── */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-4 py-4 space-y-2 zii-chat-scroll bg-gradient-to-b from-slate-950/40 to-slate-900"
+          className="flex-1 overflow-y-auto px-4 py-4 space-y-2 zii-chat-scroll bg-[#F8FAFC]"
         >
           {/* Welcome Empty State */}
           {chat.showGreeting && (
@@ -366,21 +362,20 @@ export function ZiiBotPanel({
             >
               <div className="mb-3 relative">
                 <ZiiBotAvatar size="hero" isIdle={true} />
-                <div className="absolute -inset-2 bg-cyan-500/10 rounded-full blur-xl -z-10" />
               </div>
 
-              <h4 className="text-base font-bold text-white mb-1 flex items-center gap-1.5 justify-center">
+              <h4 className="text-base font-extrabold text-gray-900 mb-1 flex items-center gap-1.5 justify-center">
                 <span>Welcome to ZII BOT</span>
-                <Sparkles size={16} className="text-cyan-400 animate-spin" style={{ animationDuration: "6s" }} />
+                <Sparkles size={16} className="text-blue-600 animate-spin" style={{ animationDuration: "6s" }} />
               </h4>
 
-              <p className="text-xs text-slate-300 max-w-sm mb-4 leading-relaxed">
+              <p className="text-xs text-gray-600 max-w-sm mb-4 leading-relaxed">
                 Your AI assistant specialized in Zyoris CRM. Ask about your authorized{" "}
-                <span className="text-cyan-400 font-semibold">Leads</span>,{" "}
-                <span className="text-cyan-400 font-semibold">Deals</span>,{" "}
-                <span className="text-cyan-400 font-semibold">Pipelines</span>,{" "}
-                <span className="text-cyan-400 font-semibold">Tasks</span>, and{" "}
-                <span className="text-cyan-400 font-semibold">Datasets</span>.
+                <span className="text-blue-600 font-semibold">Leads</span>,{" "}
+                <span className="text-blue-600 font-semibold">Deals</span>,{" "}
+                <span className="text-blue-600 font-semibold">Pipelines</span>,{" "}
+                <span className="text-blue-600 font-semibold">Tasks</span>, and{" "}
+                <span className="text-blue-600 font-semibold">Datasets</span>.
               </p>
 
               <div className="w-full max-w-md">
@@ -420,12 +415,12 @@ export function ZiiBotPanel({
               className="flex items-center gap-2.5 my-2"
             >
               <ZiiBotAvatar size="message" isIdle={false} isTyping={true} />
-              <div className="px-4 py-2.5 rounded-2xl bg-slate-800/90 border border-slate-700/60 shadow-sm flex items-center gap-2">
-                <span className="text-xs text-cyan-400 font-medium">Querying CRM intelligence</span>
+              <div className="px-4 py-2.5 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center gap-2">
+                <span className="text-xs text-blue-600 font-medium">Querying CRM intelligence</span>
                 <div className="flex gap-1 items-center">
-                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1.5 h-1.5 bg-cyan-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
                 </div>
               </div>
             </motion.div>
@@ -433,7 +428,7 @@ export function ZiiBotPanel({
         </div>
 
         {/* ── Input Box ── */}
-        <div className="p-3 bg-slate-950 border-t border-slate-800/80">
+        <div className="p-3 bg-white border-t border-gray-100">
           <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
             {/* Voice record button */}
             <button
@@ -441,8 +436,8 @@ export function ZiiBotPanel({
               onClick={handleToggleVoice}
               className={`p-2.5 rounded-xl border transition-all ${
                 isRecording
-                  ? "bg-rose-500/20 border-rose-500 text-rose-400 animate-pulse"
-                  : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700"
+                  ? "bg-rose-50 border-rose-400 text-rose-600 animate-pulse"
+                  : "bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100"
               }`}
               title={isRecording ? "Stop voice listening" : "Speak CRM question"}
             >
@@ -462,7 +457,7 @@ export function ZiiBotPanel({
                   : "Ask a CRM question (e.g. leads, deals, tasks)..."
               }
               disabled={chat.isTyping}
-              className="flex-1 px-3.5 py-2.5 bg-slate-900 border border-slate-800 focus:border-cyan-500/70 focus:ring-1 focus:ring-cyan-500/20 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-400 outline-none transition-all disabled:opacity-50"
+              className="flex-1 px-3.5 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-xs sm:text-sm text-gray-900 placeholder-gray-400 outline-none transition-all disabled:opacity-50"
             />
 
             {/* Send button */}
@@ -471,8 +466,8 @@ export function ZiiBotPanel({
               disabled={chat.isTyping || !inputValue.trim()}
               className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
                 chat.isTyping || !inputValue.trim()
-                  ? "bg-slate-800 text-slate-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white shadow-md shadow-blue-500/25 active:scale-95"
+                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-500/20 active:scale-95"
               }`}
               title="Send message"
             >
@@ -481,10 +476,10 @@ export function ZiiBotPanel({
           </form>
 
           {/* Subtext info */}
-          <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-slate-400">
+          <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-gray-400">
             <span>ZII BOT CRM Assistant</span>
-            <span className="flex items-center gap-1 text-slate-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+            <span className="flex items-center gap-1 text-gray-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
               Live CRM Context Scoped
             </span>
           </div>

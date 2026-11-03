@@ -16,11 +16,11 @@ interface ZiiBotAvatarProps {
 }
 
 const sizeConfig = {
-  message: { px: 36, rounded: "rounded-xl", ring: "ring-1" },
-  panel: { px: 44, rounded: "rounded-2xl", ring: "ring-2" },
-  button: { px: 56, rounded: "rounded-full", ring: "ring-2" },
-  large: { px: 80, rounded: "rounded-3xl", ring: "ring-4" },
-  hero: { px: 96, rounded: "rounded-3xl", ring: "ring-4" },
+  message: { px: 36, rounded: "rounded-xl" },
+  panel: { px: 42, rounded: "rounded-2xl" },
+  button: { px: 56, rounded: "rounded-full" },
+  large: { px: 80, rounded: "rounded-3xl" },
+  hero: { px: 96, rounded: "rounded-3xl" },
 };
 
 export function ZiiBotAvatar({
@@ -39,24 +39,24 @@ export function ZiiBotAvatar({
       style={{ width: cfg.px, height: cfg.px }}
     >
       <motion.div
-        className={`relative w-full h-full ${cfg.rounded} overflow-hidden shadow-lg transition-shadow duration-300 ${
+        className={`relative w-full h-full ${cfg.rounded} overflow-hidden bg-white shadow-sm border border-slate-200/80 transition-shadow duration-300 ${
           isTyping
-            ? "shadow-blue-500/50 ring-2 ring-cyan-400"
-            : "shadow-indigo-500/30 ring-1 ring-blue-400/30"
-        } bg-gradient-to-br from-[#0c1427] via-[#0f172a] to-[#1e1b4b]`}
+            ? "shadow-blue-500/30 ring-2 ring-blue-500/50"
+            : "hover:shadow-md"
+        }`}
         animate={
           isTyping
             ? {
                 scale: [1, 1.05, 1],
                 boxShadow: [
-                  "0 0 12px rgba(56, 189, 248, 0.4)",
-                  "0 0 24px rgba(56, 189, 248, 0.7)",
-                  "0 0 12px rgba(56, 189, 248, 0.4)",
+                  "0 0 10px rgba(59, 130, 246, 0.3)",
+                  "0 0 20px rgba(59, 130, 246, 0.5)",
+                  "0 0 10px rgba(59, 130, 246, 0.3)",
                 ],
               }
             : isIdle
             ? {
-                y: [0, -3, 0],
+                y: [0, -2, 0],
                 transition: { repeat: Infinity, duration: 3, ease: "easeInOut" },
               }
             : {}
@@ -75,20 +75,20 @@ export function ZiiBotAvatar({
             height={cfg.px * 2}
             priority={size === "button" || size === "hero"}
             onError={() => setImageError(true)}
-            className="w-full h-full object-cover select-none pointer-events-none"
+            className="w-full h-full object-contain select-none pointer-events-none p-0.5 bg-white"
           />
         ) : (
-          /* High-fidelity fallback SVG if image is blocked or missing */
+          /* High-fidelity fallback if image is missing */
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-500 text-white font-extrabold">
-            <span className="text-sm tracking-wider">ZII</span>
+            <span className="text-xs tracking-wider">ZII</span>
           </div>
         )}
 
-        {/* Subtle neon glow overlay on typing */}
+        {/* Soft pulse overlay while typing */}
         {isTyping && (
           <motion.div
-            className="absolute inset-0 bg-cyan-400/10 pointer-events-none"
-            animate={{ opacity: [0.1, 0.35, 0.1] }}
+            className="absolute inset-0 bg-blue-500/10 pointer-events-none"
+            animate={{ opacity: [0.1, 0.3, 0.1] }}
             transition={{ repeat: Infinity, duration: 1.2 }}
           />
         )}
@@ -97,7 +97,7 @@ export function ZiiBotAvatar({
       {/* Online indicator badge */}
       {showStatus && (
         <span
-          className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-slate-900 shadow-sm"
+          className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-white shadow-sm"
           title="ZII BOT is Online"
         >
           <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />

@@ -39,70 +39,64 @@ export interface SendMessageResponse {
   proposal?: AgentApprovalRequest;
   agentApprovalRequest?: AgentApprovalRequest;
   sessionTitle?: string;
+  sessionId?: string;
   success?: boolean;
   [key: string]: any;
 }
 
-// Prefix configuration: defaults to /api/chat as specified in handoff report
-const PRIMARY_PREFIX = "/api/chat";
-const FALLBACK_PREFIX = "/chat";
-
 /**
- * Execute request with automatic fallback between /api/chat and /chat
+ * Helper to try candidate endpoints sequentially until one succeeds.
+ * Highly resilient against singular/plural and prefix differences.
  */
-async function requestWithFallback<T>(
-  method: "get" | "post" | "patch" | "delete",
-  subPath: string,
-  data?: any
+async function tryCandidates<T>(
+  candidates: Array<{ method: "get" | "post" | "patch" | "delete"; url: string; data?: any }>
 ): Promise<T> {
-  const primaryUrl = `${PRIMARY_PREFIX}${subPath}`;
-  try {
-    if (method === "get") {
-      const res = await api.get(primaryUrl);
-      return res.data;
-    } else if (method === "post") {
-      const res = await api.post(primaryUrl, data);
-      return res.data;
-    } else if (method === "patch") {
-      const res = await api.patch(primaryUrl, data);
-      return res.data;
-    } else {
-      const res = await api.delete(primaryUrl);
-      return res.data;
-    }
-  } catch (err: any) {
-    // If 404 on /api/chat, attempt fallback to /chat
-    if (err.response?.status === 404) {
-      const fallbackUrl = `${FALLBACK_PREFIX}${subPath}`;
-      try {
-        if (method === "get") {
-          const res = await api.get(fallbackUrl);
-          return res.data;
-        } else if (method === "post") {
-          const res = await api.post(fallbackUrl, data);
-          return res.data;
-        } else if (method === "patch") {
-          const res = await api.patch(fallbackUrl, data);
-          return res.data;
-        } else {
-          const res = await api.delete(fallbackUrl);
-          return res.data;
-        }
-      } catch (fallbackErr) {
-        throw fallbackErr;
+  let lastError: any = null;
+
+  for (const c of candidates) {
+    try {
+      if (c.method === "get") {
+        const res = await api.get(c.url);
+        return res.data;
+      } else if (c.method === "post") {
+        const res = await api.post(c.url, c.data);
+        return res.data;
+      } else if (c.method === "patch") {
+        const res = await api.patch(c.url, c.data);
+        return res.data;
+      } else {
+        const res = await api.delete(c.url);
+        return res.data;
+      }
+    } catch (err: any) {
+      lastError = err;
+      // If 404 or 405 (method not allowed / route not found), try next candidate
+      if (err.response?.status === 404 || err.response?.status === 405) {
+        continue;
+      }
+      // For auth or server 500/503 errors, fail immediately or allow fallback if more candidates
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        throw err;
       }
     }
-    throw err;
   }
+
+  throw lastError;
 }
 
 /**
  * 1. Retrieve all chatbot sessions for the authenticated user
- * GET /api/chat/sessions
+ * GET /api/chat/sessions or GET /chat/sessions
  */
 export async function listChatSessions(): Promise<ChatSession[]> {
   try {
-    const raw = await requestWithFallback<any>("get", "/sessions");
+    const raw = await tryCandidates<any>([
+      { method: "get", url: "/api/chat/sessions" },
+      { method: "get", url: "/chat/sessions" },
+      { method: "get", url: "/api/chat/session" },
+      { method: "get", url: "/chat/session" },
+    ]);
+
     const list = Array.isArray(raw)
       ? raw
       : Array.isArray(raw?.sessions)
@@ -121,40 +115,45 @@ export async function listChatSessions(): Promise<ChatSession[]> {
       metadata: item.metadata || {},
     }));
   } catch (err: any) {
-    console.error("Failed to list chat sessions:", err);
-    throw err;
+    console.warn("Failed to list chat sessions:", err);
+    return [];
   }
 }
 
 /**
  * 2. Create a new chatbot session
- * POST /api/chat/sessions
+ * POST /api/chat/sessions, /chat/sessions, /api/chat/session, /chat/session
  */
 export async function createChatSession(payload?: { title?: string }): Promise<ChatSession> {
-  try {
-    const raw = await requestWithFallback<any>("post", "/sessions", {
-      title: payload?.title || "New CRM Conversation",
-    });
+  const title = payload?.title || "New CRM Conversation";
+  const body = { title };
 
-    const item = raw?.session || raw?.data || raw;
+  try {
+    const raw = await tryCandidates<any>([
+      { method: "post", url: "/api/chat/sessions", data: body },
+      { method: "post", url: "/chat/sessions", data: body },
+      { method: "post", url: "/api/chat/session", data: body },
+      { method: "post", url: "/chat/session", data: body },
+    ]);
+
+    const item = raw?.session || raw?.data?.session || raw?.data || raw;
     const now = new Date().toISOString();
 
     return {
-      id: String(item.id || item._id || item.sessionId || `session-${Date.now()}`),
-      title: item.title || payload?.title || "New CRM Conversation",
-      createdAt: item.createdAt || item.created_at || now,
-      updatedAt: item.updatedAt || item.updated_at || now,
-      metadata: item.metadata || {},
+      id: String(item?.id || item?._id || item?.sessionId || `sess_${Date.now()}`),
+      title: item?.title || title,
+      createdAt: item?.createdAt || item?.created_at || now,
+      updatedAt: item?.updatedAt || item?.updated_at || now,
+      metadata: item?.metadata || {},
     };
   } catch (err: any) {
-    console.error("Failed to create chat session:", err);
+    console.error("Failed to create chat session on backend:", err);
     throw err;
   }
 }
 
 /**
  * 3. Retrieve a specific session and its conversation history
- * GET /api/chat/sessions/:id
  */
 export async function getChatSession(id: string): Promise<ChatSessionDetailResponse> {
   if (!id) {
@@ -162,7 +161,13 @@ export async function getChatSession(id: string): Promise<ChatSessionDetailRespo
   }
 
   try {
-    const raw = await requestWithFallback<any>("get", `/sessions/${encodeURIComponent(id)}`);
+    const raw = await tryCandidates<any>([
+      { method: "get", url: `/api/chat/sessions/${encodeURIComponent(id)}` },
+      { method: "get", url: `/chat/sessions/${encodeURIComponent(id)}` },
+      { method: "get", url: `/api/chat/session/${encodeURIComponent(id)}` },
+      { method: "get", url: `/chat/session/${encodeURIComponent(id)}` },
+    ]);
+
     const sessionObj = raw?.session || raw?.data?.session || raw?.data || raw;
     const rawMessages =
       raw?.messages ||
@@ -171,11 +176,11 @@ export async function getChatSession(id: string): Promise<ChatSessionDetailRespo
       (Array.isArray(raw) ? raw : []);
 
     const session: ChatSession = {
-      id: String(sessionObj.id || sessionObj._id || sessionObj.sessionId || id),
-      title: sessionObj.title || "CRM Conversation",
-      createdAt: sessionObj.createdAt || sessionObj.created_at || new Date().toISOString(),
-      updatedAt: sessionObj.updatedAt || sessionObj.updated_at || new Date().toISOString(),
-      metadata: sessionObj.metadata || {},
+      id: String(sessionObj?.id || sessionObj?._id || sessionObj?.sessionId || id),
+      title: sessionObj?.title || "CRM Conversation",
+      createdAt: sessionObj?.createdAt || sessionObj?.created_at || new Date().toISOString(),
+      updatedAt: sessionObj?.updatedAt || sessionObj?.updated_at || new Date().toISOString(),
+      metadata: sessionObj?.metadata || {},
     };
 
     const messages: ChatMessageDto[] = (Array.isArray(rawMessages) ? rawMessages : []).map(
@@ -192,86 +197,85 @@ export async function getChatSession(id: string): Promise<ChatSessionDetailRespo
 
     return { session, messages };
   } catch (err: any) {
-    console.error(`Failed to retrieve chat session ${id}:`, err);
+    console.warn(`Failed to retrieve chat session ${id}:`, err);
     throw err;
   }
 }
 
 /**
  * 4. Update session information (e.g. rename title)
- * PATCH /api/chat/sessions/:id
  */
 export async function updateChatSession(
   id: string,
   payload: { title: string }
 ): Promise<ChatSession> {
   if (!id) throw new Error("Session ID is required to update session");
-  if (!payload?.title?.trim()) throw new Error("Title cannot be empty");
+  const trimmed = payload?.title?.trim();
+  if (!trimmed) throw new Error("Title cannot be empty");
 
-  try {
-    const raw = await requestWithFallback<any>(
-      "patch",
-      `/sessions/${encodeURIComponent(id)}`,
-      { title: payload.title.trim() }
-    );
+  const body = { title: trimmed };
 
-    const item = raw?.session || raw?.data || raw;
-    return {
-      id: String(item.id || item._id || id),
-      title: item.title || payload.title.trim(),
-      createdAt: item.createdAt || new Date().toISOString(),
-      updatedAt: item.updatedAt || new Date().toISOString(),
-      metadata: item.metadata || {},
-    };
-  } catch (err: any) {
-    console.error(`Failed to update session ${id}:`, err);
-    throw err;
-  }
+  const raw = await tryCandidates<any>([
+    { method: "patch", url: `/api/chat/sessions/${encodeURIComponent(id)}`, data: body },
+    { method: "patch", url: `/chat/sessions/${encodeURIComponent(id)}`, data: body },
+    { method: "patch", url: `/api/chat/session/${encodeURIComponent(id)}`, data: body },
+    { method: "patch", url: `/chat/session/${encodeURIComponent(id)}`, data: body },
+  ]);
+
+  const item = raw?.session || raw?.data || raw;
+  return {
+    id: String(item?.id || item?._id || id),
+    title: item?.title || trimmed,
+    createdAt: item?.createdAt || new Date().toISOString(),
+    updatedAt: item?.updatedAt || new Date().toISOString(),
+    metadata: item?.metadata || {},
+  };
 }
 
 /**
  * 5. Send a user message and receive AI response with live CRM context
- * POST /api/chat/sessions/:id/messages
+ * Supports /api/chat/sessions/:id/messages AND /chat/message with auto-recovery!
  */
 export async function sendChatMessage(
   sessionId: string,
   message: string
 ): Promise<SendMessageResponse> {
-  if (!sessionId) throw new Error("Session ID is required to send message");
   const trimmed = message?.trim();
   if (!trimmed) throw new Error("Message content cannot be empty");
 
+  const payload = {
+    sessionId,
+    message: trimmed,
+    content: trimmed,
+  };
+
   try {
-    const payload = {
-      message: trimmed,
-      content: trimmed, // for broader backend compatibility
-    };
+    const raw = await tryCandidates<any>([
+      // Primary routes: sub-resource messages
+      { method: "post", url: `/api/chat/sessions/${encodeURIComponent(sessionId)}/messages`, data: payload },
+      { method: "post", url: `/chat/sessions/${encodeURIComponent(sessionId)}/messages`, data: payload },
+      // Direct message routes: { sessionId, message }
+      { method: "post", url: "/api/chat/message", data: payload },
+      { method: "post", url: "/chat/message", data: payload },
+      { method: "post", url: "/api/chat/messages", data: payload },
+      { method: "post", url: "/chat/messages", data: payload },
+    ]);
 
-    const raw = await requestWithFallback<any>(
-      "post",
-      `/sessions/${encodeURIComponent(sessionId)}/messages`,
-      payload
-    );
-
-    return raw?.data || raw;
+    const res = raw?.data || raw;
+    return res;
   } catch (err: any) {
     console.error(`Failed to send message to session ${sessionId}:`, err);
-    // Provide clean, actionable error messages
+
     if (err.response?.status === 503) {
       throw new Error(
         err.response?.data?.message ||
-          "ZII BOT AI Provider is temporarily unavailable. Please try again shortly."
-      );
-    }
-    if (err.response?.status === 404) {
-      throw new Error(
-        "Chat session not found or expired. Please create a new chat session."
+          "ZII BOT AI Provider is temporarily unavailable. Please verify API key configuration."
       );
     }
     if (err.response?.status === 401 || err.response?.status === 403) {
       throw new Error(
         err.response?.data?.message ||
-          "You are not authorized to access this CRM chat session."
+          "Session expired or unauthorized. Please re-login to access CRM intelligence."
       );
     }
 
@@ -281,21 +285,22 @@ export async function sendChatMessage(
       err.message ||
       "An unexpected error occurred while communicating with ZII BOT.";
 
-    throw new Error(messageText);
+    const error = new Error(messageText);
+    (error as any).status = err.response?.status;
+    throw error;
   }
 }
 
 /**
  * 6. Delete a chatbot session
- * DELETE /api/chat/sessions/:id
  */
 export async function deleteChatSession(id: string): Promise<void> {
   if (!id) throw new Error("Session ID is required to delete session");
 
-  try {
-    await requestWithFallback<any>("delete", `/sessions/${encodeURIComponent(id)}`);
-  } catch (err: any) {
-    console.error(`Failed to delete session ${id}:`, err);
-    throw err;
-  }
+  await tryCandidates<any>([
+    { method: "delete", url: `/api/chat/sessions/${encodeURIComponent(id)}` },
+    { method: "delete", url: `/chat/sessions/${encodeURIComponent(id)}` },
+    { method: "delete", url: `/api/chat/session/${encodeURIComponent(id)}` },
+    { method: "delete", url: `/chat/session/${encodeURIComponent(id)}` },
+  ]);
 }

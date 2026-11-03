@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { Sparkles, Users, TrendingUp, CheckSquare, Database } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 
 interface Suggestion {
   text: string;
@@ -53,8 +53,8 @@ export function ContextualSuggestions({ onSelect }: { onSelect: (text: string) =
 
   return (
     <div className="w-full py-2">
-      <div className="flex items-center gap-1.5 mb-2.5 px-1 text-xs font-semibold text-slate-500 dark:text-slate-400">
-        <Sparkles size={13} className="text-cyan-500 animate-pulse" />
+      <div className="flex items-center gap-1.5 mb-2.5 px-1 text-xs font-semibold text-gray-500">
+        <Sparkles size={13} className="text-blue-600 animate-pulse" />
         <span>Suggested CRM questions:</span>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -63,12 +63,12 @@ export function ContextualSuggestions({ onSelect }: { onSelect: (text: string) =
             key={idx}
             type="button"
             onClick={() => onSelect(sug.text)}
-            className="flex items-start gap-2 text-left p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-850/80 hover:bg-blue-50/70 dark:hover:bg-slate-800 hover:border-blue-400/50 dark:hover:border-cyan-500/40 text-slate-700 dark:text-slate-300 transition-all text-xs group shadow-sm hover:shadow"
+            className="flex items-start gap-2 text-left p-2.5 rounded-xl border border-gray-200 bg-white hover:bg-blue-50/70 hover:border-blue-300 text-gray-700 transition-all text-xs group shadow-xs hover:shadow-sm"
           >
             <span className="text-sm select-none flex-shrink-0 group-hover:scale-110 transition-transform">
               {sug.icon}
             </span>
-            <span className="leading-snug line-clamp-2 text-[11px] font-medium text-slate-700 dark:text-slate-200 group-hover:text-blue-600 dark:group-hover:text-cyan-400">
+            <span className="leading-snug line-clamp-2 text-[11px] font-medium text-gray-700 group-hover:text-blue-700">
               {sug.text}
             </span>
           </button>

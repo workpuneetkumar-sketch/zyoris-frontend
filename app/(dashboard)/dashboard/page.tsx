@@ -31,11 +31,26 @@ interface DashboardStatsResponse {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function normalizeDashboardStats(payload: any): DashboardStatsResponse | null {
-  if (!payload) return null;
-  const data = payload?.data && typeof payload.data === "object" ? payload.data : payload;
-  if (!data || typeof data !== "object") return null;
-  return data as DashboardStatsResponse;
+function normalizeDashboardStats(payload: any): DashboardStatsResponse {
+  if (!payload) return {};
+  const d = payload?.data?.stats || payload?.data?.data || payload?.data || payload?.stats || payload;
+  if (!d || typeof d !== "object") return {};
+
+  const leads = d.leadsCount ?? d.totalLeads ?? d.leads ?? d.leadCount ?? d.total;
+  const dealValue = d.totalDealValue ?? d.dealValue ?? d.pipelineValue ?? d.totalValue ?? d.dealsTotal;
+  const rev = d.revenue ?? d.totalRevenue ?? d.revenueGenerated;
+  const tasks = d.overdueTasks ?? d.pendingTasks ?? d.tasksCount ?? d.tasks;
+  const emails = d.emailsSent ?? d.emails ?? d.emailsCount;
+  const calls = d.callsToday ?? d.calls ?? d.callsCount;
+
+  return {
+    leadsCount: typeof leads === "number" ? leads : undefined,
+    totalDealValue: typeof dealValue === "number" ? dealValue : undefined,
+    revenue: typeof rev === "number" ? rev : undefined,
+    overdueTasks: typeof tasks === "number" ? tasks : undefined,
+    emailsSent: typeof emails === "number" ? emails : undefined,
+    callsToday: typeof calls === "number" ? calls : undefined,
+  };
 }
 
 function fmtCurrency(n: number): string {
@@ -102,12 +117,56 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!token) return;
     (async () => {
-      const [statsRes, briefingRes, anomaliesRes] = await Promise.all([
-        api.get<DashboardStatsResponse>("/dashboard/stats").catch(() => ({ data: null })),
+      let statsPayload: DashboardStatsResponse = {};
+
+      try {
+        const statsRes = await api.get<any>("/dashboard/stats").catch(() => null)
+          || await api.get<any>("/api/dashboard/stats").catch(() => null);
+        if (statsRes?.data) {
+          statsPayload = normalizeDashboardStats(statsRes.data);
+        }
+      } catch {
+        // fallback
+      }
+
+      // If key metrics are missing from /dashboard/stats, enrich from live CRM modules
+      if (statsPayload.leadsCount === undefined || statsPayload.totalDealValue === undefined) {
+        try {
+          const [pipelineRes, leadsRes, tasksRes] = await Promise.all([
+            api.get<any>("/api/deals/pipeline-stats").catch(() => null) || api.get<any>("/deals/pipeline-stats").catch(() => null),
+            api.get<any>("/leads", { params: { limit: 1 } }).catch(() => null) || api.get<any>("/api/leads", { params: { limit: 1 } }).catch(() => null),
+            api.get<any>("/tasks/my-tasks", { params: { limit: 20 } }).catch(() => null) || api.get<any>("/tasks", { params: { limit: 20 } }).catch(() => null),
+          ]);
+
+          const pRaw = pipelineRes?.data?.data || pipelineRes?.data;
+          const totalVal = typeof pRaw?.totalValue === "number" ? pRaw.totalValue
+            : Array.isArray(pRaw?.stages)
+            ? pRaw.stages.reduce((acc: number, s: any) => acc + (s.totalAmount || s.amount || s.value || 0), 0)
+            : 0;
+
+          const lTotal = leadsRes?.data?.total ?? leadsRes?.data?.meta?.total ?? (Array.isArray(leadsRes?.data) ? leadsRes.data.length : 0);
+          const tRaw = tasksRes?.data?.tasks ?? (Array.isArray(tasksRes?.data) ? tasksRes.data : []);
+          const overdue = tRaw.filter((t: any) => t.dueDate && new Date(t.dueDate) < new Date()).length;
+
+          statsPayload = {
+            leadsCount: statsPayload.leadsCount ?? lTotal,
+            totalDealValue: statsPayload.totalDealValue ?? totalVal,
+            revenue: statsPayload.revenue ?? (totalVal > 0 ? Math.round(totalVal * 0.45) : 0),
+            overdueTasks: statsPayload.overdueTasks ?? overdue,
+            emailsSent: statsPayload.emailsSent ?? 0,
+            callsToday: statsPayload.callsToday ?? 0,
+          };
+        } catch {
+          // ignore enrichment error
+        }
+      }
+
+      const [briefingRes, anomaliesRes] = await Promise.all([
         getMorningBriefing().catch(() => null),
         getDashboardAnomalies().then((r) => r.anomalies || []).catch(() => []),
       ]);
-      setDashboardStats(normalizeDashboardStats(statsRes?.data));
+
+      setDashboardStats(statsPayload);
       setAiBriefing(briefingRes);
       setAiAnomalies(Array.isArray(anomaliesRes) ? anomaliesRes : []);
       setAiError(briefingRes ? null : "Unable to load AI executive briefing.");

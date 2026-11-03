@@ -83,7 +83,6 @@ export function useZiiBotChat() {
 
   const voiceService = getVoiceService();
 
-  // Load sound setting on mount
   useEffect(() => {
     setSoundOn(getSoundEnabled());
   }, []);
@@ -111,8 +110,7 @@ export function useZiiBotChat() {
       });
       setMessages(converted);
     } catch (err: any) {
-      console.error("Failed to load session history:", err);
-      // Fallback empty messages if session has no prior history
+      console.warn("Could not load prior history for session:", sessionId);
       setMessages([]);
     } finally {
       setIsLoadingHistory(false);
@@ -126,18 +124,16 @@ export function useZiiBotChat() {
     try {
       const list = await listChatSessions();
       setSessions(list);
-      // If we don't have an active session yet, select the most recent one
       if (list.length > 0 && !activeSessionRef.current) {
         selectSession(list[0].id);
       }
     } catch (err) {
-      console.error("Failed to load ZII BOT chat sessions:", err);
+      console.warn("Failed to load ZII BOT chat sessions:", err);
     } finally {
       setIsLoadingSessions(false);
     }
   }, [user, selectSession]);
 
-  // Load sessions when user changes
   useEffect(() => {
     if (user?.id) {
       loadSessions();
@@ -161,9 +157,8 @@ export function useZiiBotChat() {
       setMessages([]);
       return newSession.id;
     } catch (err: any) {
-      console.error("Failed to create new chat session:", err);
-      // Fallback to local session ID if network fails
-      const fallbackId = `zii-local-${Date.now()}`;
+      console.warn("Falling back for new session creation:", err);
+      const fallbackId = `sess_${Date.now()}`;
       const fallbackSession: ChatSession = {
         id: fallbackId,
         title: initialTitle || "New Conversation",
@@ -217,16 +212,16 @@ export function useZiiBotChat() {
     }
   }, [selectSession]);
 
-  // Send a message
+  // Send a message with automatic 404 session recovery
   const sendMessage = useCallback(async (content: string) => {
     const trimmed = content.trim();
     if (!trimmed || isTyping) return;
 
     let currentSessionId = activeSessionRef.current;
 
-    // If no active session, automatically create one with a preview of the prompt
+    // If no active session, create one first
     if (!currentSessionId) {
-      const generatedTitle = trimmed.length > 30 ? `${trimmed.slice(0, 30)}...` : trimmed;
+      const generatedTitle = trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed;
       currentSessionId = await createNewSession(generatedTitle);
     }
 
@@ -247,22 +242,39 @@ export function useZiiBotChat() {
     }
 
     try {
-      const res = await sendChatMessage(currentSessionId, trimmed);
+      let res: any;
+      try {
+        res = await sendChatMessage(currentSessionId, trimmed);
+      } catch (firstErr: any) {
+        // Auto-heal on 404: session expired or not found on backend
+        if (firstErr?.status === 404 || firstErr?.response?.status === 404) {
+          console.warn("Session expired on backend; creating fresh session and retrying message...");
+          const freshSessionId = await createNewSession(
+            trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed
+          );
+          currentSessionId = freshSessionId;
+          res = await sendChatMessage(freshSessionId, trimmed);
+        } else {
+          throw firstErr;
+        }
+      }
 
       const assistantText =
         res.reply ??
         res.content ??
+        res.response ??
+        res.answer ??
         res.message?.content ??
+        res.data?.reply ??
+        res.data?.content ??
         "I'm here to assist with Zyoris CRM workflows and authorized data.";
 
-      // Check for embedded proposal
       const proposal = extractProposal(res as Record<string, unknown>);
 
       if (soundOn) {
         playMessageSound();
       }
 
-      // Voice output if speech enabled and text available
       if (soundOn && !proposal && assistantText) {
         try {
           voiceService.speak(assistantText);
@@ -330,7 +342,6 @@ export function useZiiBotChat() {
       setErrorMessage(errMsg);
       setLastFailedMessage(trimmed);
 
-      // Render error message bubble with retry action
       setMessages((prev) => [
         ...prev,
         {
@@ -348,11 +359,9 @@ export function useZiiBotChat() {
     }
   }, [isTyping, soundOn, voiceService, createNewSession]);
 
-  // Retry sending last failed message
   const retryLastMessage = useCallback(async (customText?: string) => {
     const textToRetry = customText || lastFailedMessage;
     if (!textToRetry) return;
-    // Remove the last error message from the conversation before retrying
     setMessages((prev) => prev.filter((m) => !m.isError));
     await sendMessage(textToRetry);
   }, [lastFailedMessage, sendMessage]);

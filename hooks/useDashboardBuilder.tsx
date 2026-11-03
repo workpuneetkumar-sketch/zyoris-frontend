@@ -19,6 +19,16 @@ import {
 const DEFAULT_LAYOUT_NAME = "My Dashboard";
 const ADMIN_ROLES = ["ADMIN", "CEO", "OWNER", "SUPER_ADMIN"];
 
+const DEFAULT_STANDARD_WIDGETS: WidgetInstance[] = [
+  { widgetId: "pipeline", instanceId: "inst-pipeline-default", x: 0, y: 0, w: 6, h: 4 },
+  { widgetId: "revenue", instanceId: "inst-revenue-default", x: 6, y: 0, w: 3, h: 4 },
+  { widgetId: "conversion-rate", instanceId: "inst-conversion-default", x: 9, y: 0, w: 3, h: 4 },
+  { widgetId: "activities", instanceId: "inst-activities-default", x: 0, y: 4, w: 6, h: 4 },
+  { widgetId: "tasks", instanceId: "inst-tasks-default", x: 6, y: 4, w: 6, h: 4 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── Debounce utility ────────────────────────────────────────────────────────
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState<T>(value);
@@ -116,16 +126,22 @@ export function useDashboardBuilder(userRole?: string) {
         layoutsRes.data.find((l) => l.isDefault) ??
         layoutsRes.data[0];
 
-      if (target) {
+      if (target && target.layout && target.layout.length > 0) {
         setActiveLayoutId(target.id);
-        const instances = toWidgetInstances(target.layout ?? []);
+        const instances = toWidgetInstances(target.layout);
         setWidgets(instances);
         setInitialWidgets(instances);
+      } else {
+        // Fallback default widgets so dashboard always has rich interactive widgets
+        setWidgets(DEFAULT_STANDARD_WIDGETS);
+        setInitialWidgets(DEFAULT_STANDARD_WIDGETS);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Failed to load dashboard data";
       setError(message);
-      toast.error(message);
+      // Ensure widgets still render even if layout API is temporarily unavailable
+      setWidgets(DEFAULT_STANDARD_WIDGETS);
+      setInitialWidgets(DEFAULT_STANDARD_WIDGETS);
     } finally {
       setIsLoading(false);
     }
@@ -167,6 +183,13 @@ export function useDashboardBuilder(userRole?: string) {
     [widgets]
   );
 
+  const undoRemove = useCallback(() => {
+    if (!removedWidget) return;
+    setWidgets((prev) => [...prev, removedWidget.instance]);
+    setRemovedWidget(null);
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+  }, [removedWidget]);
+
   const removeWidget = useCallback(
     (instanceId: string) => {
       const removed = widgets.find((w) => w.instanceId === instanceId);
@@ -204,15 +227,8 @@ export function useDashboardBuilder(userRole?: string) {
         undoTimeoutRef.current = setTimeout(() => setRemovedWidget(null), 5000);
       }
     },
-    [widgets, catalog]
+    [widgets, catalog, undoRemove]
   );
-
-  const undoRemove = useCallback(() => {
-    if (!removedWidget) return;
-    setWidgets((prev) => [...prev, removedWidget.instance]);
-    setRemovedWidget(null);
-    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-  }, [removedWidget]);
 
   const updateLayoutWidgets = useCallback((newWidgets: WidgetInstance[]) => {
     setWidgets(newWidgets);

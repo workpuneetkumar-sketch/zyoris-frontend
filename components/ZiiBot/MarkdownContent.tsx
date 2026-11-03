@@ -8,14 +8,13 @@ interface MarkdownContentProps {
 }
 
 /**
- * Lightweight, safe parser for CRM assistant responses.
+ * Lightweight, safe parser for CRM assistant responses in crisp light theme.
  * Supports bold, italic, code blocks, bullet/numbered lists, tables, and headers.
  */
 export function MarkdownContent({ content, className = "" }: MarkdownContentProps) {
   const elements = useMemo(() => {
     if (!content) return null;
 
-    // Split content by paragraphs/blocks
     const lines = content.split("\n");
     const parsed: React.ReactNode[] = [];
     let listBuffer: { type: "ul" | "ol"; items: string[] } | null = null;
@@ -25,7 +24,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
       if (!listBuffer) return;
       if (listBuffer.type === "ul") {
         parsed.push(
-          <ul key={`ul-${parsed.length}`} className="my-2 space-y-1 pl-4 list-disc marker:text-cyan-500">
+          <ul key={`ul-${parsed.length}`} className="my-2 space-y-1.5 pl-4 list-disc marker:text-blue-600 text-gray-800">
             {listBuffer.items.map((item, idx) => (
               <li key={idx} className="leading-relaxed">
                 {renderInline(item)}
@@ -35,7 +34,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         );
       } else {
         parsed.push(
-          <ol key={`ol-${parsed.length}`} className="my-2 space-y-1 pl-4 list-decimal marker:text-blue-500 font-medium">
+          <ol key={`ol-${parsed.length}`} className="my-2 space-y-1.5 pl-4 list-decimal marker:text-blue-600 text-gray-800 font-medium">
             {listBuffer.items.map((item, idx) => (
               <li key={idx} className="leading-relaxed">
                 {renderInline(item)}
@@ -60,26 +59,25 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
 
       if (rows.length >= 2) {
         const headers = rows[0];
-        // Skip separator row (e.g. |---|---|)
         const dataRows = rows.slice(1).filter((r) => !r.every((c) => c.replace(/[-:]/g, "").length === 0));
 
         parsed.push(
-          <div key={`table-${parsed.length}`} className="my-2.5 overflow-x-auto rounded-lg border border-slate-700/60">
+          <div key={`table-${parsed.length}`} className="my-3 overflow-x-auto rounded-xl border border-gray-200 shadow-sm bg-white">
             <table className="min-w-full text-xs text-left border-collapse">
-              <thead className="bg-slate-800/80 text-slate-200 uppercase font-semibold">
+              <thead className="bg-slate-50 text-gray-700 uppercase font-bold">
                 <tr>
                   {headers.map((h, i) => (
-                    <th key={i} className="px-3 py-2 border-b border-slate-700">
+                    <th key={i} className="px-3 py-2 border-b border-gray-200">
                       {renderInline(h)}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800 bg-slate-900/60">
+              <tbody className="divide-y divide-gray-100 bg-white">
                 {dataRows.map((row, rIdx) => (
-                  <tr key={rIdx} className="hover:bg-slate-800/40 transition-colors">
+                  <tr key={rIdx} className="hover:bg-blue-50/40 transition-colors">
                     {row.map((cell, cIdx) => (
-                      <td key={cIdx} className="px-3 py-2 text-slate-300">
+                      <td key={cIdx} className="px-3 py-2 text-gray-700">
                         {renderInline(cell)}
                       </td>
                     ))}
@@ -141,7 +139,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
       // Headings
       if (trimmed.startsWith("### ")) {
         parsed.push(
-          <h4 key={`h3-${i}`} className="text-sm font-bold text-cyan-400 mt-3 mb-1">
+          <h4 key={`h3-${i}`} className="text-sm font-bold text-blue-700 mt-3 mb-1">
             {renderInline(trimmed.slice(4))}
           </h4>
         );
@@ -149,7 +147,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
       }
       if (trimmed.startsWith("## ")) {
         parsed.push(
-          <h3 key={`h2-${i}`} className="text-base font-bold text-white mt-3.5 mb-1.5 pb-1 border-b border-slate-700/60">
+          <h3 key={`h2-${i}`} className="text-base font-bold text-gray-900 mt-3.5 mb-1.5 pb-1 border-b border-gray-100">
             {renderInline(trimmed.slice(3))}
           </h3>
         );
@@ -157,7 +155,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
       }
       if (trimmed.startsWith("# ")) {
         parsed.push(
-          <h2 key={`h1-${i}`} className="text-lg font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-700">
+          <h2 key={`h1-${i}`} className="text-lg font-bold text-gray-900 mt-4 mb-2 pb-1 border-b border-gray-200">
             {renderInline(trimmed.slice(2))}
           </h2>
         );
@@ -166,7 +164,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
 
       // Regular paragraph line
       parsed.push(
-        <p key={`p-${i}`} className="my-1 leading-relaxed text-inherit">
+        <p key={`p-${i}`} className="my-1 leading-relaxed text-gray-800">
           {renderInline(trimmed)}
         </p>
       );
@@ -182,19 +180,17 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
 }
 
 /**
- * Parses bold, inline code, and status badges within a string line
+ * Parses bold, inline code, status badges, and links
  */
 function renderInline(text: string): React.ReactNode {
   if (!text) return null;
 
-  // Split tokens by bold (`**...**`), inline code (`` `...` ``), and links `[text](url)`
   const parts: React.ReactNode[] = [];
   const regex = /(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\))/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
-    // Text before match
     if (match.index > lastIndex) {
       parts.push(text.substring(lastIndex, match.index));
     }
@@ -203,21 +199,20 @@ function renderInline(text: string): React.ReactNode {
     if (token.startsWith("**") && token.endsWith("**")) {
       const boldText = token.slice(2, -2);
       parts.push(
-        <strong key={`b-${match.index}`} className="font-bold text-cyan-400 dark:text-cyan-300">
+        <strong key={`b-${match.index}`} className="font-bold text-blue-700">
           {boldText}
         </strong>
       );
     } else if (token.startsWith("`") && token.endsWith("`")) {
       const codeText = token.slice(1, -1);
-      // Status tag badge style
       const isStatus = /^(NEW|QUALIFIED|WON|LOST|IN_PROGRESS|COMPLETED|PENDING|FAILED)$/i.test(codeText);
       parts.push(
         <span
           key={`c-${match.index}`}
           className={`font-mono text-xs px-1.5 py-0.5 rounded ${
             isStatus
-              ? "bg-cyan-950 text-cyan-300 border border-cyan-800 font-bold"
-              : "bg-slate-800 text-amber-300 font-mono"
+              ? "bg-blue-50 text-blue-700 border border-blue-200 font-bold"
+              : "bg-slate-100 text-slate-800 border border-slate-200 font-mono"
           }`}
         >
           {codeText}
@@ -232,7 +227,7 @@ function renderInline(text: string): React.ReactNode {
             href={linkMatch[2]}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-cyan-400 underline hover:text-cyan-300 font-medium"
+            className="text-blue-600 underline hover:text-blue-800 font-semibold"
           >
             {linkMatch[1]}
           </a>
