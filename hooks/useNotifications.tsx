@@ -89,7 +89,7 @@ function getEventNotification(value: unknown): Notification | null {
 }
 
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, sessionStatus } = useAuth();
   const userId = user?.id;
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [archivedNotifications, setArchivedNotifications] = useState<Notification[]>([]);
@@ -127,7 +127,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setArchivedError(null);
     setArchivedUnavailable(false);
     try {
-      const result = await getNotifications({ limit: 20, includeArchived: true });
+      const result = await getNotifications({ limit: 50, includeArchived: true });
       setArchivedNotifications(result.notifications);
       setArchivedNextCursor(result.nextCursor);
       setArchivedHasMore(result.hasMore);
@@ -142,7 +142,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!isAuthenticated || !userId || archivedUnavailable || !archivedHasMore || archivedLoadingMore || !archivedNextCursor) return;
     setArchivedLoadingMore(true);
     try {
-      const result = await getNotifications({ cursor: archivedNextCursor, limit: 20, includeArchived: true });
+      const result = await getNotifications({ cursor: archivedNextCursor, limit: 50, includeArchived: true });
       setArchivedNotifications((current) => {
         const existing = new Set(current.map((notification) => notification.id));
         return [...current, ...result.notifications.filter((notification) => !existing.has(notification.id))];
@@ -167,6 +167,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [isAuthenticated, userId]);
 
   const loadFirstPage = useCallback(async (force = false) => {
+    // If auth session is still checking, keep loading true without resetting state
+    if (sessionStatus === "checking") {
+      setLoading(true);
+      return;
+    }
+
     if (!isAuthenticated || !userId) {
       firstPageRequestVersion.current += 1;
       firstPageRequestUserId.current = undefined;
@@ -181,6 +187,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setLoading(false);
       return;
     }
+
     if (firstPageRequestUserId.current !== userId) {
       firstPageRequestUserId.current = userId;
       firstPageRequestVersion.current += 1;
@@ -189,14 +196,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       lastFirstPageLoadAt.current = 0;
       notificationCount.current = 0;
     }
+
     const now = Date.now();
-    if (firstPageInFlight.current || (!force && firstPageLoaded.current && now - lastFirstPageLoadAt.current < 3000)) return;
+    if (firstPageInFlight.current || (!force && firstPageLoaded.current && now - lastFirstPageLoadAt.current < 2000)) {
+      return;
+    }
+
     const requestVersion = firstPageRequestVersion.current;
     firstPageInFlight.current = true;
     if (!firstPageLoaded.current && notificationCount.current === 0) setLoading(true);
     if (notificationCount.current === 0) setError(null);
+
     try {
-      const result = await getNotifications({ limit: 20 });
+      const result = await getNotifications({ limit: 50 });
       if (requestVersion !== firstPageRequestVersion.current) return;
       setNotifications((current) => {
         const merged = mergeNotifications(result.notifications, current);
@@ -214,18 +226,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         setError(cause instanceof Error ? cause.message : "Failed to load notifications");
       }
     } finally {
-      if (requestVersion === firstPageRequestVersion.current) {
-        firstPageInFlight.current = false;
-        setLoading(false);
-      }
+      firstPageInFlight.current = false;
+      setLoading(false);
     }
-  }, [isAuthenticated, userId, refreshUnreadCounts]);
+  }, [sessionStatus, isAuthenticated, userId, refreshUnreadCounts]);
 
   const fetchNextPage = useCallback(async () => {
     if (!isAuthenticated || !userId || !hasMore || loadingMore || !nextCursor) return;
     setLoadingMore(true);
     try {
-      const result = await getNotifications({ cursor: nextCursor, limit: 20 });
+      const result = await getNotifications({ cursor: nextCursor, limit: 50 });
       setNotifications((current) => {
         const existingIds = new Set(current.map((notification) => normalizeNotificationId(notification.id)));
         const additions = result.notifications.filter(
@@ -261,12 +271,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!url) return;
 
     setRealtimeStatus("connecting");
-    const socket = io(url, { auth: (callback) => callback({ token: getEffectiveAuthToken() }), reconnection: true, transports: ["websocket", "polling"] });
+    const socket = io(url, {
+      auth: (callback) => callback({ token: getEffectiveAuthToken() }),
+      reconnection: true,
+      transports: ["websocket", "polling"],
+      timeout: 8000,
+    });
     const isMine = (notification: Notification) => notification.userId === userId;
 
     socket.on("connect", () => {
       setRealtimeStatus("connected");
-      void loadFirstPage();
+      void loadFirstPage(true);
       void refreshUnreadCounts();
     });
     socket.on("disconnect", () => setRealtimeStatus("offline"));
@@ -278,11 +293,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const normId = normalizeNotificationId(notification.id);
       if (!normId || knownIds.current.has(normId)) return;
 
-      // Synchronously record ID before inserting to guard against concurrent socket bursts
       knownIds.current.add(normId);
 
       setNotifications((current) => {
-        // Also check current React state before inserting
         if (current.some((item) => normalizeNotificationId(item.id) === normId)) {
           return current;
         }
@@ -313,15 +326,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
     });
 
+    // Background auto-polling fallback: ensures notifications refresh periodically even if WebSockets are blocked
+    const pollInterval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void loadFirstPage(true);
+        void refreshUnreadCounts();
+      }
+    }, 25000);
+
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        void loadFirstPage();
+        void loadFirstPage(true);
         void refreshUnreadCounts();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(pollInterval);
       socket.disconnect();
       setRealtimeStatus("offline");
     };
@@ -352,7 +374,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const markAllRead = useCallback(async (category?: NotificationCategory | string) => {
     const normalizedCategory = category?.toLowerCase();
     const backendCategories = tabToBackend(normalizedCategory || "all");
-    const affected = notifications.filter((notification) => !notification.read && (!normalizedCategory || normalizedCategory === "all" || normalizedCategory === "unread" || backendCategories.length > 0 && backendToTab(notification.category) === normalizedCategory));
+    const affected = notifications.filter((notification) => !notification.read && (!normalizedCategory || normalizedCategory === "all" || normalizedCategory === "unread" || (backendCategories.length > 0 && backendToTab(notification.category) === normalizedCategory)));
     if (affected.length === 0) return;
     const affectedIds = new Set(affected.map((n) => normalizeNotificationId(n.id)));
     setNotifications((current) => current.map((notification) => affectedIds.has(normalizeNotificationId(notification.id)) ? { ...notification, read: true } : notification));

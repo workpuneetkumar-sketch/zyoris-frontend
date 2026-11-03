@@ -408,7 +408,7 @@ export function NotificationBell() {
       return matchesSearch && matchesFilter;
     });
 
-    return result.slice(0, 10);
+    return result.slice(0, 50);
   }, [notifications, searchQuery, filter]);
 
   // Group notifications by date
@@ -639,8 +639,11 @@ export function NotificationBell() {
                 <>
                   {realtimeStatus !== "connected" && (
                     <div className="px-4 py-2 text-xs text-text-muted bg-background-secondary border-b border-border flex items-center justify-between">
-                      <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
-                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        {realtimeStatus === "connecting" ? "Syncing notifications..." : "Live updates standby — auto-sync active"}
+                      </span>
+                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Sync now</button>
                     </div>
                   )}
                   {/* Search and Category Tabs */}
@@ -701,15 +704,27 @@ export function NotificationBell() {
                     ) : error ? (
                       <div className="p-6 text-center"><p className="text-sm text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-sm text-primary font-semibold hover:underline">Retry</button></div>
                     ) : groupedNotifications.length === 0 ? (
-                      <EmptyState
-                        icon={Bell}
-                        title="All caught up!"
-                        description={
-                          searchQuery || filter !== "all"
-                            ? "No notifications match your filters."
-                            : "You don't have any notifications yet."
-                        }
-                      />
+                      unreadCount > 0 && !searchQuery && filter === "all" ? (
+                        <div className="p-6 text-center space-y-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
+                            <Bell size={20} />
+                          </div>
+                          <p className="text-sm font-semibold text-text">Loading {unreadCount} notification{unreadCount > 1 ? "s" : ""}...</p>
+                          <div className="p-2 space-y-2">
+                            <Skeleton variant="notification" count={2} />
+                          </div>
+                        </div>
+                      ) : (
+                        <EmptyState
+                          icon={Bell}
+                          title="All caught up!"
+                          description={
+                            searchQuery || filter !== "all"
+                              ? "No notifications match your filters."
+                              : "You don't have any notifications yet."
+                          }
+                        />
+                      )
                     ) : (
                       <div className="divide-y divide-border">
                         {groupedNotifications.map((group) => (
@@ -828,8 +843,11 @@ export function NotificationBell() {
                 <>
                   {realtimeStatus !== "connected" && (
                     <div className="px-4 py-2 text-xs text-text-muted bg-background-secondary border-b border-border flex items-center justify-between">
-                      <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
-                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        {realtimeStatus === "connecting" ? "Syncing notifications..." : "Live updates standby — auto-sync active"}
+                      </span>
+                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Sync now</button>
                     </div>
                   )}
                   {/* Search and Category Tabs */}
@@ -889,15 +907,27 @@ export function NotificationBell() {
                     ) : error ? (
                       <div className="p-6 text-center"><p className="text-sm text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-sm text-primary font-semibold hover:underline">Retry</button></div>
                     ) : groupedNotifications.length === 0 ? (
-                      <EmptyState
-                        icon={Bell}
-                        title="All caught up!"
-                        description={
-                          searchQuery || filter !== "all"
-                            ? "No notifications match your filters."
-                            : "You don't have any notifications yet."
-                        }
-                      />
+                      unreadCount > 0 && !searchQuery && filter === "all" ? (
+                        <div className="p-6 text-center space-y-3">
+                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
+                            <Bell size={20} />
+                          </div>
+                          <p className="text-sm font-semibold text-text">Loading {unreadCount} notification{unreadCount > 1 ? "s" : ""}...</p>
+                          <div className="p-2 space-y-2">
+                            <Skeleton variant="notification" count={2} />
+                          </div>
+                        </div>
+                      ) : (
+                        <EmptyState
+                          icon={Bell}
+                          title="All caught up!"
+                          description={
+                            searchQuery || filter !== "all"
+                              ? "No notifications match your filters."
+                              : "You don't have any notifications yet."
+                          }
+                        />
+                      )
                     ) : (
                       <div className="divide-y divide-border">
                         {groupedNotifications.map((group) => (

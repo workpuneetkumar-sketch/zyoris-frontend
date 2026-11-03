@@ -58,17 +58,22 @@ export const fetchNotifications = async (params?: {
   category?: string | string[];
   includeArchived?: boolean;
   cursor?: string;
+  offset?: number;
   limit?: number;
 }): Promise<FetchNotificationsResponse> => {
   const query: Record<string, unknown> = {
-    limit: params?.limit ?? 20,
+    limit: params?.limit ?? 50,
   };
   if (params?.read !== undefined) query.read = params.read;
-  if (params?.unreadOnly === true) query.unreadOnly = true;
+  if (params?.unreadOnly === true) {
+    query.unreadOnly = true;
+    query.read = false;
+  }
   if (params?.priority) query.priority = params.priority;
   if (params?.category) query.category = params.category;
   if (params?.includeArchived !== undefined) query.includeArchived = params.includeArchived;
   if (params?.cursor) query.cursor = params.cursor;
+  if (params?.offset !== undefined) query.offset = params.offset;
   const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
   return response.data;
 };
