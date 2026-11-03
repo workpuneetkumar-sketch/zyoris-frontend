@@ -55,19 +55,14 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
           </filter>
         </defs>
         {/* Head / body blob - rounded mascot shape */}
-        <motion.ellipse
-          cx={32}
-          cy={36}
-          rx={26}
-          ry={24}
-          fill="url(#zii-head-grad)"
-          filter="url(#zii-glow)"
+        <motion.g
+          style={{ transformOrigin: "32px 36px" }}
           animate={
             isTyping
-              ? { rx: [26, 28, 26], ry: [24, 22, 24] }
+              ? { scaleX: [1, 1.07, 1], scaleY: [1, 0.92, 1] }
               : isIdle
-              ? { rx: [26, 27, 26], ry: [24, 25, 24] }
-              : { rx: 26, ry: 24 }
+              ? { scaleX: [1, 1.04, 1], scaleY: [1, 1.04, 1] }
+              : { scaleX: 1, scaleY: 1 }
           }
           transition={
             isTyping
@@ -76,25 +71,30 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
               ? { repeat: Infinity, duration: 2.2, ease: "easeInOut" }
               : { duration: 0.2 }
           }
-        />
+        >
+          <ellipse
+            cx="32"
+            cy="36"
+            rx="26"
+            ry="24"
+            fill="url(#zii-head-grad)"
+            filter="url(#zii-glow)"
+          />
+        </motion.g>
         {/* Left cheek */}
         <ellipse cx="22" cy="38" rx="6" ry="5" fill="url(#zii-cheek)" opacity="0.9" />
         {/* Right cheek */}
         <ellipse cx="42" cy="38" rx="6" ry="5" fill="url(#zii-cheek)" opacity="0.9" />
-        {/* Eyes */}
-        <motion.g>
-          <motion.ellipse
-            cx={26}
-            cy={32}
-            rx={4}
-            ry={5}
-            fill="#1e1b4b"
+        {/* Eyes with smooth blinking */}
+        <g>
+          <motion.g
+            style={{ transformOrigin: "26px 32px" }}
             animate={
               isTyping
-                ? { ry: [5, 2, 5] }
+                ? { scaleY: [1, 0.4, 1] }
                 : isIdle
-                ? { ry: [5, 0.8, 5] }
-                : { ry: 5 }
+                ? { scaleY: [1, 0.16, 1] }
+                : { scaleY: 1 }
             }
             transition={
               isTyping
@@ -103,19 +103,23 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
                 ? { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 }
                 : { duration: 0.1 }
             }
-          />
-          <motion.ellipse
-            cx={38}
-            cy={32}
-            rx={4}
-            ry={5}
-            fill="#1e1b4b"
+          >
+            <ellipse
+              cx="26"
+              cy="32"
+              rx="4"
+              ry="5"
+              fill="#1e1b4b"
+            />
+          </motion.g>
+          <motion.g
+            style={{ transformOrigin: "38px 32px" }}
             animate={
               isTyping
-                ? { ry: [5, 2, 5] }
+                ? { scaleY: [1, 0.4, 1] }
                 : isIdle
-                ? { ry: [5, 0.8, 5] }
-                : { ry: 5 }
+                ? { scaleY: [1, 0.16, 1] }
+                : { scaleY: 1 }
             }
             transition={
               isTyping
@@ -124,21 +128,38 @@ export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button",
                 ? { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 }
                 : { duration: 0.1 }
             }
-          />
-        </motion.g>
+          >
+            <ellipse
+              cx="38"
+              cy="32"
+              rx="4"
+              ry="5"
+              fill="#1e1b4b"
+            />
+          </motion.g>
+        </g>
         {/* Mouth - subtle smile / talk */}
-        <motion.path
-          d={isTyping ? "M 24 42 Q 32 46 40 42" : "M 24 42 Q 32 44 40 42"}
-          stroke="#1e1b4b"
-          strokeWidth="2"
-          strokeLinecap="round"
-          fill="none"
+        <motion.g
+          style={{ transformOrigin: "32px 42px" }}
           animate={
             isTyping
-              ? { d: ["M 24 42 Q 32 46 40 42", "M 24 43 Q 32 41 40 43", "M 24 42 Q 32 46 40 42"], transition: { repeat: Infinity, duration: 0.4 } }
-              : { d: "M 24 42 Q 32 44 40 42" }
+              ? { scaleY: [1, 1.4, 1], scaleX: [1, 0.85, 1], y: [0, 1, 0] }
+              : { scaleY: 1, scaleX: 1, y: 0 }
           }
-        />
+          transition={
+            isTyping
+              ? { repeat: Infinity, duration: 0.35 }
+              : { duration: 0.2 }
+          }
+        >
+          <path
+            d="M 24 42 Q 32 44 40 42"
+            stroke="#1e1b4b"
+            strokeWidth="2"
+            strokeLinecap="round"
+            fill="none"
+          />
+        </motion.g>
         {/* Small highlight on head for 3D feel */}
         <ellipse cx="28" cy="26" rx="6" ry="4" fill="white" opacity="0.35" />
       </svg>
