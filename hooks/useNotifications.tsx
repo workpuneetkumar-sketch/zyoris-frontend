@@ -99,7 +99,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [archivedHasMore, setArchivedHasMore] = useState(false);
   const [archivedNextCursor, setArchivedNextCursor] = useState<string | null>(null);
   const [archivedUnavailable, setArchivedUnavailable] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -113,6 +113,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const firstPageLoaded = useRef(false);
   const lastFirstPageLoadAt = useRef(0);
   const notificationCount = useRef(0);
+  const firstPageRequestVersion = useRef(0);
+  const firstPageRequestUserId = useRef<string | undefined>(undefined);
 
   const loadArchived = useCallback(async () => {
     if (!isAuthenticated || !userId) {
@@ -166,6 +168,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   const loadFirstPage = useCallback(async (force = false) => {
     if (!isAuthenticated || !userId) {
+      firstPageRequestVersion.current += 1;
+      firstPageRequestUserId.current = undefined;
+      firstPageInFlight.current = false;
       setNotifications([]);
       knownIds.current.clear();
       setHasMore(false);
@@ -173,15 +178,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setError(null);
       firstPageLoaded.current = false;
       notificationCount.current = 0;
+      setLoading(false);
       return;
+    }
+    if (firstPageRequestUserId.current !== userId) {
+      firstPageRequestUserId.current = userId;
+      firstPageRequestVersion.current += 1;
+      firstPageInFlight.current = false;
+      firstPageLoaded.current = false;
+      lastFirstPageLoadAt.current = 0;
+      notificationCount.current = 0;
     }
     const now = Date.now();
     if (firstPageInFlight.current || (!force && firstPageLoaded.current && now - lastFirstPageLoadAt.current < 3000)) return;
+    const requestVersion = firstPageRequestVersion.current;
     firstPageInFlight.current = true;
     if (!firstPageLoaded.current && notificationCount.current === 0) setLoading(true);
     if (notificationCount.current === 0) setError(null);
     try {
       const result = await getNotifications({ limit: 20 });
+      if (requestVersion !== firstPageRequestVersion.current) return;
       setNotifications((current) => {
         const merged = mergeNotifications(result.notifications, current);
         notificationCount.current = merged.length;
@@ -194,12 +210,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       lastFirstPageLoadAt.current = Date.now();
       await refreshUnreadCounts();
     } catch (cause: unknown) {
-      if (notificationCount.current === 0) {
+      if (requestVersion === firstPageRequestVersion.current && notificationCount.current === 0) {
         setError(cause instanceof Error ? cause.message : "Failed to load notifications");
       }
     } finally {
-      firstPageInFlight.current = false;
-      setLoading(false);
+      if (requestVersion === firstPageRequestVersion.current) {
+        firstPageInFlight.current = false;
+        setLoading(false);
+      }
     }
   }, [isAuthenticated, userId, refreshUnreadCounts]);
 
