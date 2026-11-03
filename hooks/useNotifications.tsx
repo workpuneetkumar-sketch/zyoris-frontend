@@ -88,10 +88,110 @@ function getEventNotification(value: unknown): Notification | null {
   return isNotificationDto(value) ? dtoToNotification(value) : null;
 }
 
+const NOTIFICATION_CACHE_PREFIX = "zyoris_notifications_cache_";
+
+interface PersistedNotificationState {
+  notifications: Notification[];
+  counts: Counts;
+  savedAt: number;
+}
+
+function getInitialNotificationCache(): { notifications: Notification[]; counts: Counts } {
+  if (typeof window === "undefined") return { notifications: [], counts: EMPTY_COUNTS };
+  try {
+    let userId: string | undefined;
+    const authRaw = localStorage.getItem("zyoris-auth");
+    if (authRaw) {
+      try {
+        const parsed = JSON.parse(authRaw);
+        userId = parsed?.user?.id || parsed?.userId || parsed?.id;
+      } catch {}
+    }
+
+    if (userId) {
+      const userRaw = localStorage.getItem(`${NOTIFICATION_CACHE_PREFIX}${userId}`);
+      if (userRaw) {
+        const parsed: PersistedNotificationState = JSON.parse(userRaw);
+        if (Array.isArray(parsed?.notifications) && parsed.notifications.length > 0) {
+          return {
+            notifications: parsed.notifications,
+            counts: parsed.counts || EMPTY_COUNTS,
+          };
+        }
+      }
+    }
+
+    // Fallback: check any recent cache key
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(NOTIFICATION_CACHE_PREFIX)) {
+        const raw = localStorage.getItem(key);
+        if (raw) {
+          const parsed: PersistedNotificationState = JSON.parse(raw);
+          if (Array.isArray(parsed?.notifications) && parsed.notifications.length > 0) {
+            return {
+              notifications: parsed.notifications,
+              counts: parsed.counts || EMPTY_COUNTS,
+            };
+          }
+        }
+      }
+    }
+  } catch {}
+  return { notifications: [], counts: EMPTY_COUNTS };
+}
+
+function getCachedNotificationState(userId?: string): {
+  notifications: Notification[];
+  counts: Counts;
+} | null {
+  if (typeof window === "undefined" || !userId) return null;
+  try {
+    const raw = localStorage.getItem(`${NOTIFICATION_CACHE_PREFIX}${userId}`);
+    if (raw) {
+      const parsed: PersistedNotificationState = JSON.parse(raw);
+      if (Array.isArray(parsed?.notifications) && parsed.notifications.length > 0) {
+        return {
+          notifications: parsed.notifications,
+          counts: parsed.counts || EMPTY_COUNTS,
+        };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+function persistNotificationState(
+  userId: string | undefined,
+  notifications: Notification[],
+  counts: Counts
+) {
+  if (typeof window === "undefined") return;
+  try {
+    const key = `${NOTIFICATION_CACHE_PREFIX}${userId || "current"}`;
+    if (notifications.length > 0 || counts.all > 0) {
+      const data: PersistedNotificationState = {
+        notifications: notifications.slice(0, 50),
+        counts,
+        savedAt: Date.now(),
+      };
+      localStorage.setItem(key, JSON.stringify(data));
+      if (userId && key !== `${NOTIFICATION_CACHE_PREFIX}current`) {
+        localStorage.setItem(`${NOTIFICATION_CACHE_PREFIX}current`, JSON.stringify(data));
+      }
+    }
+  } catch {}
+}
+
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated, sessionStatus } = useAuth();
   const userId = user?.id;
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+
+  // Initialize directly from persisted cache to retain state across hard refreshes
+  const [initialCached] = useState(() => getInitialNotificationCache());
+  const [notifications, setNotifications] = useState<Notification[]>(() => initialCached.notifications);
+  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<Counts>(() => initialCached.counts);
+
   const [archivedNotifications, setArchivedNotifications] = useState<Notification[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [archivedLoadingMore, setArchivedLoadingMore] = useState(false);
@@ -99,22 +199,26 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [archivedHasMore, setArchivedHasMore] = useState(false);
   const [archivedNextCursor, setArchivedNextCursor] = useState<string | null>(null);
   const [archivedUnavailable, setArchivedUnavailable] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => initialCached.notifications.length === 0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<Counts>(EMPTY_COUNTS);
   const [realtimeStatus, setRealtimeStatus] = useState<NotificationConnectionStatus>("offline");
   const listeners = useRef(new Set<NotificationListener>());
-  const knownIds = useRef(new Set<string>());
+  const knownIds = useRef(new Set<string>(initialCached.notifications.map((n) => normalizeNotificationId(n.id))));
   const countRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstPageInFlight = useRef(false);
   const firstPageLoaded = useRef(false);
   const lastFirstPageLoadAt = useRef(0);
-  const notificationCount = useRef(0);
-  const firstPageRequestVersion = useRef(0);
+  const notificationCount = useRef(initialCached.notifications.length);
   const firstPageRequestUserId = useRef<string | undefined>(undefined);
+
+  // Retain state in storage whenever notifications or unread counts change
+  useEffect(() => {
+    notificationCount.current = notifications.length;
+    persistNotificationState(userId, notifications, categoryUnreadCounts);
+  }, [notifications, categoryUnreadCounts, userId]);
 
   const loadArchived = useCallback(async () => {
     if (!isAuthenticated || !userId) {
@@ -156,80 +260,113 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [archivedHasMore, archivedLoadingMore, archivedNextCursor, archivedUnavailable, isAuthenticated, userId]);
 
-  const refreshUnreadCounts = useCallback(async () => {
-    if (!isAuthenticated || !userId) return;
-    try {
-      const result = await fetchUnreadCounts();
-      setCategoryUnreadCounts(countsFromServer(result.total, result.byCategory));
-    } catch {
-      setRealtimeStatus((status) => status === "connected" ? status : "offline");
-    }
-  }, [isAuthenticated, userId]);
-
   const loadFirstPage = useCallback(async (force = false) => {
     // If auth session is still checking, keep loading true without resetting state
     if (sessionStatus === "checking") {
-      setLoading(true);
+      if (notificationCount.current === 0) setLoading(true);
       return;
     }
 
     if (!isAuthenticated || !userId) {
-      firstPageRequestVersion.current += 1;
       firstPageRequestUserId.current = undefined;
       firstPageInFlight.current = false;
-      setNotifications([]);
-      knownIds.current.clear();
-      setHasMore(false);
-      setNextCursor(null);
-      setError(null);
-      firstPageLoaded.current = false;
-      notificationCount.current = 0;
-      setLoading(false);
+      if (sessionStatus === "unauthenticated") {
+        setNotifications([]);
+        knownIds.current.clear();
+        setHasMore(false);
+        setNextCursor(null);
+        setError(null);
+        firstPageLoaded.current = false;
+        notificationCount.current = 0;
+        setLoading(false);
+      }
       return;
     }
 
-    if (firstPageRequestUserId.current !== userId) {
-      firstPageRequestUserId.current = userId;
-      firstPageRequestVersion.current += 1;
+    if (firstPageRequestUserId.current && firstPageRequestUserId.current !== userId) {
       firstPageInFlight.current = false;
       firstPageLoaded.current = false;
       lastFirstPageLoadAt.current = 0;
-      notificationCount.current = 0;
+      const userCached = getCachedNotificationState(userId);
+      const initial = userCached?.notifications ?? [];
+      setNotifications(initial);
+      knownIds.current = new Set(initial.map((n) => normalizeNotificationId(n.id)));
+      notificationCount.current = initial.length;
+      if (userCached?.counts) setCategoryUnreadCounts(userCached.counts);
     }
+    firstPageRequestUserId.current = userId;
 
     const now = Date.now();
     if (firstPageInFlight.current || (!force && firstPageLoaded.current && now - lastFirstPageLoadAt.current < 2000)) {
       return;
     }
 
-    const requestVersion = firstPageRequestVersion.current;
     firstPageInFlight.current = true;
     if (!firstPageLoaded.current && notificationCount.current === 0) setLoading(true);
     if (notificationCount.current === 0) setError(null);
 
     try {
-      const result = await getNotifications({ limit: 50 });
-      if (requestVersion !== firstPageRequestVersion.current) return;
-      setNotifications((current) => {
-        const merged = mergeNotifications(result.notifications, current);
-        notificationCount.current = merged.length;
-        knownIds.current = new Set(merged.map((notification) => normalizeNotificationId(notification.id)));
-        return merged;
-      });
-      setNextCursor(result.nextCursor);
-      setHasMore(result.hasMore);
-      firstPageLoaded.current = true;
-      lastFirstPageLoadAt.current = Date.now();
-      await refreshUnreadCounts();
+      let result = await getNotifications({ limit: 50 });
+
+      // Fallback: If backend general query returned 0 notifications but says unreadCount > 0,
+      // fetch with unreadOnly: true so unread notifications are returned.
+      if (result.notifications.length === 0 && result.unreadCount > 0) {
+        try {
+          const unreadResult = await getNotifications({ limit: 50, unreadOnly: true });
+          if (unreadResult.notifications.length > 0) {
+            result = unreadResult;
+          }
+        } catch {}
+      }
+
+      if (firstPageRequestUserId.current === userId) {
+        setNotifications((current) => {
+          // If server returned 0 items but we already have retained state and unreadCount > 0,
+          // retain current notifications instead of blanking them out
+          if (result.notifications.length === 0 && current.length > 0 && result.unreadCount > 0) {
+            return current;
+          }
+          const merged = mergeNotifications(result.notifications, current);
+          notificationCount.current = merged.length;
+          knownIds.current = new Set(merged.map((notification) => normalizeNotificationId(notification.id)));
+          return merged;
+        });
+        setNextCursor(result.nextCursor);
+        setHasMore(result.hasMore);
+        firstPageLoaded.current = true;
+        lastFirstPageLoadAt.current = Date.now();
+
+        // Refresh authoritative unread counts
+        try {
+          const countsResult = await fetchUnreadCounts();
+          setCategoryUnreadCounts(countsFromServer(countsResult.total, countsResult.byCategory));
+        } catch {}
+      }
     } catch (cause: unknown) {
-      if (requestVersion === firstPageRequestVersion.current && notificationCount.current === 0) {
+      if (firstPageRequestUserId.current === userId && notificationCount.current === 0) {
         setError(cause instanceof Error ? cause.message : "Failed to load notifications");
       }
     } finally {
       firstPageInFlight.current = false;
       setLoading(false);
     }
-  }, [sessionStatus, isAuthenticated, userId, refreshUnreadCounts]);
+  }, [sessionStatus, isAuthenticated, userId]);
+
+  const refreshUnreadCounts = useCallback(async () => {
+    if (!isAuthenticated || !userId) return;
+    try {
+      const result = await fetchUnreadCounts();
+      const updatedCounts = countsFromServer(result.total, result.byCategory);
+      setCategoryUnreadCounts(updatedCounts);
+
+      // If counts indicate unread notifications but local notifications list is empty, trigger fetch
+      if (updatedCounts.all > 0 && notificationCount.current === 0 && !firstPageInFlight.current) {
+        void loadFirstPage(true);
+      }
+    } catch {
+      setRealtimeStatus((status) => status === "connected" ? status : "offline");
+    }
+  }, [isAuthenticated, userId, loadFirstPage]);
 
   const fetchNextPage = useCallback(async () => {
     if (!isAuthenticated || !userId || !hasMore || loadingMore || !nextCursor) return;

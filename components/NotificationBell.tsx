@@ -382,6 +382,13 @@ export function NotificationBell() {
   const mobilePanelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
+  // Auto-sync when bell panel is opened if unread count > 0 but notifications are missing
+  useEffect(() => {
+    if (isOpen && notifications.length === 0 && unreadCount > 0 && !loading) {
+      void refresh();
+    }
+  }, [isOpen, notifications.length, unreadCount, loading, refresh]);
+
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
     const result = notifications.filter((n) => {
@@ -713,6 +720,13 @@ export function NotificationBell() {
                           <div className="p-2 space-y-2">
                             <Skeleton variant="notification" count={2} />
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => void refresh()}
+                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-all shadow-sm"
+                          >
+                            Sync {unreadCount} notifications
+                          </button>
                         </div>
                       ) : (
                         <EmptyState
@@ -916,6 +930,13 @@ export function NotificationBell() {
                           <div className="p-2 space-y-2">
                             <Skeleton variant="notification" count={2} />
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => void refresh()}
+                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-all shadow-sm"
+                          >
+                            Sync {unreadCount} notifications
+                          </button>
                         </div>
                       ) : (
                         <EmptyState
