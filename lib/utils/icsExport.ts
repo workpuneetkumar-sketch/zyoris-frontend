@@ -1,7 +1,7 @@
 // lib/utils/icsExport.ts
 // RFC 5545 iCalendar (.ics) generator for exporting calendar events
 
-import { UnifiedCalendarEvent } from "@/types/calendar";
+import type { UnifiedCalendarEvent } from "../../types/calendar.ts";
 
 function formatIcsDateTime(dateStr: string, timeStr?: string): string {
   try {

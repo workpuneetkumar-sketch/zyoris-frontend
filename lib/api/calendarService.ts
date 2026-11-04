@@ -1,105 +1,175 @@
-import { getMeetings, createMeeting, updateMeeting, Meeting } from "@/lib/api/meetingsApi";
-import { fetchTasks, Task } from "@/lib/api/tasksApi";
+import {
+  getMeetings,
+  createMeeting,
+  updateMeeting,
+  deleteMeeting,
+  createMeetingReminder,
+  Meeting,
+} from "@/lib/api/meetingsApi";
+import { fetchTasks, updateTask, Task } from "@/lib/api/tasksApi";
 import { fetchCalls, Call } from "@/lib/api/callsApi";
-import { UnifiedCalendarEvent, CalendarDepartment, CalendarCategory, SaveEventResult } from "@/types/calendar";
+import {
+  UnifiedCalendarEvent,
+  CalendarDepartment,
+  CalendarCategory,
+  SaveEventResult,
+  LocalEventMetadata,
+  CalendarParticipant,
+  ParticipantRsvp,
+} from "@/types/calendar";
+import {
+  formatDateKey,
+  parseDateSafe,
+  isSameDay,
+  hasExplicitTime,
+  extractTime,
+  parseTimeMinutes,
+  minutesToTimeStr,
+  addMinutesToTimeStr,
+  formatTimeDisplay,
+  calculateDuration,
+  parseReminderMinutes,
+  addMonthsClamped,
+  navigateCalendarDate,
+  getWeekStartDate,
+  getWeekDays,
+  computeOverlapLayout,
+  expandRecurringEvents,
+  mergeEventWithMetadata,
+} from "@/lib/utils/calendarUtils";
 
-const STORAGE_KEY_MEETINGS = "zyoris_calendar_meetings_cache";
-const STORAGE_KEY_CUSTOM = "zyoris_calendar_custom_events";
-const STORAGE_KEY_CALLS = "zyoris_calendar_calls_cache";
-const STORAGE_KEY_TASKS = "zyoris_calendar_tasks_cache";
+export {
+  formatDateKey,
+  parseDateSafe,
+  isSameDay,
+  hasExplicitTime,
+  extractTime,
+  parseTimeMinutes,
+  minutesToTimeStr,
+  addMinutesToTimeStr,
+  formatTimeDisplay,
+  calculateDuration,
+  parseReminderMinutes,
+  addMonthsClamped,
+  navigateCalendarDate,
+  getWeekStartDate,
+  getWeekDays,
+  computeOverlapLayout,
+  expandRecurringEvents,
+  mergeEventWithMetadata,
+};
 
-/** Helper to format Date into YYYY-MM-DD */
-export function formatDateKey(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
+export const STORAGE_KEY_MEETINGS = "zyoris_calendar_meetings_cache";
+export const STORAGE_KEY_CUSTOM = "zyoris_calendar_custom_events";
+export const STORAGE_KEY_CALLS = "zyoris_calendar_calls_cache";
+export const STORAGE_KEY_TASKS = "zyoris_calendar_tasks_cache";
+export const STORAGE_KEY_METADATA = "zyoris_calendar_event_metadata_v1";
+export const STORAGE_KEY_TOMBSTONES = "zyoris_calendar_deleted_tombstones_v1";
+
+const METADATA_SCHEMA_VERSION = 1;
+
+/** Timeout wrapper that rejects on timeout so Promise.allSettled detects network failures */
+function withTimeoutReject<T>(promise: Promise<T>, ms = 6000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Calendar API request timed out after ${ms}ms`));
+    }, ms);
+    promise
+      .then((val) => {
+        clearTimeout(timer);
+        resolve(val);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
 }
 
-/** Helper to parse ISO or time string into HH:mm */
-export function extractTime(timeStr?: string): string {
-  if (!timeStr) return "09:00";
-  if (timeStr.includes("T")) {
-    const d = new Date(timeStr);
-    if (!isNaN(d.getTime())) {
-      return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    }
-  }
-  if (/^\d{1,2}:\d{2}/.test(timeStr)) {
-    const [h, m] = timeStr.split(":");
-    return `${h.padStart(2, "0")}:${m.substring(0, 2)}`;
-  }
-  return timeStr;
-}
+// ── Tombstone Management (prevents deleted items from reappearing via cache) ──
 
-/** Helper to format time for display (e.g., 09:30 AM) */
-export function formatTimeDisplay(timeStr?: string): string {
-  if (!timeStr) return "";
-  if (timeStr.includes("T")) {
-    const d = new Date(timeStr);
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    }
-  }
-  if (/^\d{1,2}:\d{2}/.test(timeStr)) {
-    const [hStr, mStr] = timeStr.split(":");
-    const h = parseInt(hStr, 10);
-    const m = mStr.substring(0, 2);
-    const ampm = h >= 12 ? "PM" : "AM";
-    const displayH = h % 12 === 0 ? 12 : h % 12;
-    return `${displayH}:${m} ${ampm}`;
-  }
-  return timeStr;
-}
-
-/** Calculate duration in minutes between two HH:mm or ISO times */
-export function calculateDuration(startTime: string, endTime: string): string {
+export function getDeletedTombstones(): Set<string> {
+  if (typeof window === "undefined" || !window.localStorage) return new Set();
   try {
-    let startMin = 0;
-    let endMin = 60;
-
-    const parseMinutes = (t: string) => {
-      if (t.includes("T")) {
-        const d = new Date(t);
-        return d.getHours() * 60 + d.getMinutes();
-      }
-      const parts = t.split(":");
-      return parseInt(parts[0], 10) * 60 + parseInt(parts[1] || "0", 10);
-    };
-
-    startMin = parseMinutes(startTime);
-    endMin = parseMinutes(endTime);
-
-    const diff = Math.max(15, endMin - startMin);
-    const hours = Math.floor(diff / 60);
-    const mins = diff % 60;
-
-    if (hours > 0 && mins > 0) return `${hours}h ${mins}m`;
-    if (hours > 0) return `${hours}h`;
-    return `${mins}m`;
+    const raw = localStorage.getItem(STORAGE_KEY_TOMBSTONES);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? new Set(parsed.map(String)) : new Set();
   } catch {
-    return "1h";
+    return new Set();
   }
 }
 
-/** Check if two dates represent the same calendar day */
-export function isSameDay(d1: Date, d2: Date): boolean {
-  return (
-    d1.getFullYear() === d2.getFullYear() &&
-    d1.getMonth() === d2.getMonth() &&
-    d1.getDate() === d2.getDate()
-  );
+export function addDeletedTombstone(id: string): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const current = getDeletedTombstones();
+    current.add(id);
+    localStorage.setItem(STORAGE_KEY_TOMBSTONES, JSON.stringify(Array.from(current)));
+  } catch {
+    // Ignore storage errors
+  }
 }
 
-/** Fast timeout wrapper for network requests */
-function withTimeout<T>(promise: Promise<T>, ms: number = 6000, fallback: T): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms)),
-  ]);
+// ── Versioned Local Metadata Layer ───────────────────────────────────────────
+
+export function getEventMetadataMap(): Record<string, LocalEventMetadata> {
+  if (typeof window === "undefined" || !window.localStorage) return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_METADATA);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    return parsed as Record<string, LocalEventMetadata>;
+  } catch {
+    return {};
+  }
 }
 
-/** Seed demo calendar items representing real company schedules */
+export function saveEventMetadata(
+  id: string,
+  meta: Partial<Omit<LocalEventMetadata, "id" | "version" | "updatedAt">>
+): LocalEventMetadata {
+  const map = getEventMetadataMap();
+  const existing = map[id];
+  const record: LocalEventMetadata = {
+    ...existing,
+    ...meta,
+    version: METADATA_SCHEMA_VERSION,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  map[id] = record;
+
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      localStorage.setItem(STORAGE_KEY_METADATA, JSON.stringify(map));
+    } catch (e) {
+      console.warn("Failed to persist calendar event metadata:", e);
+    }
+  }
+  return record;
+}
+
+export function removeEventMetadata(id: string): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
+  try {
+    const map = getEventMetadataMap();
+    if (id in map) {
+      delete map[id];
+      localStorage.setItem(STORAGE_KEY_METADATA, JSON.stringify(map));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// ── Custom Local Events Storage ──────────────────────────────────────────────
+
+/**
+ * Isolated demo seed events generator (only used if explicitly invoked in demo/test mode,
+ * never automatically injected into live user storage).
+ */
 export function getSeedEvents(): UnifiedCalendarEvent[] {
   const now = new Date();
   const year = now.getFullYear();
@@ -121,123 +191,50 @@ export function getSeedEvents(): UnifiedCalendarEvent[] {
       endTime: "12:30",
       category: "meeting",
       department: "development",
+      customColor: "development",
       room: "Conference Room 1",
       provider: "google_meet",
       meetingLink: "https://meet.google.com/zyo-des-rev",
       participants: [
         { name: "John Doe", email: "john@zyoris.com", rsvp: "attending" },
         { name: "Silvia Vance", email: "silvia@zyoris.com", rsvp: "attending" },
-        { name: "Moulika Sanyal", email: "moulika@zyoris.com", rsvp: "attending" },
       ],
       reminder: "15m",
       privacy: "internal",
-      status: "SCHEDULED",
-      sourceType: "custom",
-    },
-    {
-      id: "seed-2",
-      title: "One to One with Silvia",
-      description: "Bi-weekly sprint progress check and architectural feedback",
-      date: makeDate(0),
-      startTime: "13:45",
-      endTime: "15:00",
-      category: "interview",
-      department: "personal",
-      room: "Interview Room",
-      provider: "zoom",
-      meetingLink: "https://zoom.us/j/9876543210",
-      participants: [
-        { name: "Silvia Vance", email: "silvia@zyoris.com", rsvp: "attending" },
-        { name: "Admin", email: "admin@zyoris.com", rsvp: "attending" },
-      ],
-      reminder: "10m",
-      privacy: "private",
-      status: "SCHEDULED",
-      sourceType: "custom",
-    },
-    {
-      id: "seed-3",
-      title: "Sprint Planning & Standup",
-      description: "All-hands technical sprint planning for Q4 roadmap",
-      date: makeDate(1),
-      startTime: "10:00",
-      endTime: "11:00",
-      category: "meeting",
-      department: "development",
-      room: "Board Room",
-      provider: "teams",
-      meetingLink: "https://teams.microsoft.com/l/meetup-join/zyoris-sprint",
-      participants: [
-        { name: "Dev Team", email: "dev-team@zyoris.com", rsvp: "attending" },
-        { name: "Product Manager", email: "pm@zyoris.com", rsvp: "attending" },
-      ],
-      reminder: "15m",
-      privacy: "internal",
-      status: "SCHEDULED",
-      sourceType: "custom",
-    },
-    {
-      id: "seed-4",
-      title: "Client Demonstration - Enterprise CRM",
-      description: "Live demonstration of Zyoris AI Agents and Communication Hub",
-      date: makeDate(2),
-      startTime: "15:00",
-      endTime: "16:00",
-      category: "meeting",
-      department: "sales",
-      room: "Conference Room 2",
-      provider: "google_meet",
-      meetingLink: "https://meet.google.com/zyo-demo-sale",
-      participants: [
-        { name: "Enterprise Prospect", email: "lead@client.com", rsvp: "attending" },
-        { name: "Sales Lead", email: "sales@zyoris.com", rsvp: "attending" },
-      ],
-      reminder: "30m",
-      privacy: "internal",
-      status: "SCHEDULED",
-      sourceType: "custom",
-    },
-    {
-      id: "seed-5",
-      title: "Team Out of Office - Training Session",
-      description: "Quarterly security and compliance certification workshop",
-      date: makeDate(4),
-      startTime: "09:00",
-      endTime: "17:00",
-      category: "out_of_office",
-      department: "hr",
-      location: "Main Auditorium / Virtual",
-      participants: [
-        { name: "All Employees", email: "team@zyoris.com", rsvp: "attending" },
-      ],
-      reminder: "1d",
-      privacy: "public",
       status: "SCHEDULED",
       sourceType: "custom",
     },
   ];
 }
 
-/** Read custom local events stored by the user */
+/** Read custom local events stored by the user (filters out legacy auto-injected seed-* items and tombstones) */
 export function getStoredCustomEvents(): UnifiedCalendarEvent[] {
-  if (typeof window === "undefined") return [];
+  if (typeof window === "undefined" || !window.localStorage) return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY_CUSTOM);
-    if (!raw) {
-      const seeds = getSeedEvents();
-      localStorage.setItem(STORAGE_KEY_CUSTOM, JSON.stringify(seeds));
-      return seeds;
-    }
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) return [];
+    const tombstones = getDeletedTombstones();
+    const cleaned = parsed.filter(
+      (evt: any) =>
+        evt &&
+        typeof evt.id === "string" &&
+        !evt.id.startsWith("seed-") &&
+        !tombstones.has(evt.id)
+    );
+    if (cleaned.length !== parsed.length) {
+      localStorage.setItem(STORAGE_KEY_CUSTOM, JSON.stringify(cleaned));
+    }
+    return cleaned;
   } catch {
     return [];
   }
 }
 
 /** Save custom events to localStorage */
-export function persistCustomEvents(events: UnifiedCalendarEvent[]) {
-  if (typeof window === "undefined") return;
+export function persistCustomEvents(events: UnifiedCalendarEvent[]): void {
+  if (typeof window === "undefined" || !window.localStorage) return;
   try {
     localStorage.setItem(STORAGE_KEY_CUSTOM, JSON.stringify(events));
   } catch (e) {
@@ -245,97 +242,188 @@ export function persistCustomEvents(events: UnifiedCalendarEvent[]) {
   }
 }
 
-/** Convert a backend Meeting into UnifiedCalendarEvent */
-export function convertMeetingToEvent(m: Meeting): UnifiedCalendarEvent {
-  const dateStr = m.date
-    ? m.date.includes("T")
-      ? m.date.split("T")[0]
-      : m.date
-    : m.startTime
-    ? m.startTime.split("T")[0]
-    : formatDateKey(new Date());
+// ── Entity Converters ────────────────────────────────────────────────────────
 
-  const attendeesList = Array.isArray(m.attendees)
-    ? m.attendees.map((a: any) =>
-        typeof a === "string"
-          ? { name: a, email: a.includes("@") ? a : undefined, rsvp: "attending" as const }
-          : { name: a.name || a.email || "Guest", email: a.email, rsvp: "attending" as const }
-      )
+/** Parse an attendee entry that may be a string ("Name <email>" or "email") or object */
+export function parseAttendeeEntry(raw: unknown): CalendarParticipant {
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    const angleMatch = trimmed.match(/^(.+?)\s*<([^<>]+@[^<>]+)>$/);
+    if (angleMatch) {
+      return {
+        name: angleMatch[1].trim(),
+        email: angleMatch[2].trim(),
+        rsvp: "attending",
+      };
+    }
+    if (trimmed.includes("@")) {
+      return {
+        name: trimmed.split("@")[0],
+        email: trimmed,
+        rsvp: "attending",
+      };
+    }
+    return { name: trimmed || "Guest", rsvp: "attending" };
+  }
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, any>;
+    return {
+      id: obj.id ? String(obj.id) : undefined,
+      name: obj.name || (obj.email ? String(obj.email).split("@")[0] : "Guest"),
+      email: obj.email ? String(obj.email) : undefined,
+      avatarUrl: obj.avatarUrl ? String(obj.avatarUrl) : undefined,
+      rsvp: (obj.rsvp || obj.status?.toLowerCase() || "attending") as ParticipantRsvp,
+    };
+  }
+  return { name: "Guest", rsvp: "attending" };
+}
+
+/** Convert a backend Meeting into UnifiedCalendarEvent and merge stored local metadata */
+export function convertMeetingToEvent(
+  m: Meeting,
+  metadataMap?: Record<string, LocalEventMetadata>
+): UnifiedCalendarEvent {
+  const dateSource = m.date || m.startTime;
+  const parsedDate = parseDateSafe(dateSource);
+  const dateStr = dateSource ? formatDateKey(parsedDate) : formatDateKey(new Date());
+
+  const startStr = extractTime(m.startTime, "09:00");
+  const endStr = m.endTime
+    ? extractTime(m.endTime, addMinutesToTimeStr(startStr, 60))
+    : addMinutesToTimeStr(startStr, 60);
+
+  const attendeesList: CalendarParticipant[] = Array.isArray(m.attendees)
+    ? m.attendees.map(parseAttendeeEntry)
     : [];
 
-  return {
-    id: m.id || `meeting-${Date.now()}`,
+  const baseEvent: UnifiedCalendarEvent = {
+    id: m.id,
     title: m.title || "Untitled Meeting",
     description: m.description,
     date: dateStr,
-    startTime: extractTime(m.startTime),
-    endTime: extractTime(m.endTime || m.startTime),
+    startTime: startStr,
+    endTime: endStr,
+    allDay: false,
     category: ((m as any).category as CalendarCategory) || "meeting",
     department: ((m as any).department as CalendarDepartment) || "development",
-    room: (m as any).room || m.location,
-    location: m.location,
+    room: (m as any).room || undefined,
+    location: m.location || undefined,
     meetingLink: m.joinUrl || m.link || m.meetingLink,
-    provider: m.provider || "google_meet",
+    provider: (m.provider ? String(m.provider).toLowerCase() : "google_meet") as any,
     participants: attendeesList,
     reminder: m.reminder || "15m",
     recurrence: ((m as any).recurrence as any) || "none",
     privacy: ((m as any).privacy as any) || "internal",
     status: (m.status as any) || "SCHEDULED",
     sourceType: "meeting",
+    syncStatus: "synced",
     rawSource: m,
     createdAt: m.createdAt,
     updatedAt: m.updatedAt,
   };
+
+  const map = metadataMap ?? getEventMetadataMap();
+  const meta = map[m.id];
+  return mergeEventWithMetadata(baseEvent, meta);
 }
 
-/** Convert a backend Task into UnifiedCalendarEvent */
-export function convertTaskToEvent(t: Task): UnifiedCalendarEvent {
-  const dateStr = t.dueDate
-    ? t.dueDate.includes("T")
-      ? t.dueDate.split("T")[0]
-      : t.dueDate
-    : formatDateKey(new Date(t.createdAt || Date.now()));
+/**
+ * Convert a backend Task into UnifiedCalendarEvent.
+ * - Uses actual timestamp if `t.dueDate` includes an explicit time of day.
+ * - Represents date-only tasks as `allDay: true` items so no arbitrary 09:00-10:00 time is invented.
+ */
+export function convertTaskToEvent(
+  t: Task,
+  metadataMap?: Record<string, LocalEventMetadata>
+): UnifiedCalendarEvent {
+  const dateSource = t.dueDate || t.createdAt;
+  const parsedDate = parseDateSafe(dateSource);
+  const dateStr = formatDateKey(parsedDate);
 
-  return {
-    id: `task-${t.id}`,
-    title: `Task: ${t.title}`,
+  const explicitTimed = hasExplicitTime(t.dueDate);
+  const startTime = explicitTimed && t.dueDate ? extractTime(t.dueDate, "09:00") : "";
+  const endTime = startTime ? addMinutesToTimeStr(startTime, 60) : "";
+
+  const validDepartments: CalendarDepartment[] = [
+    "personal",
+    "company",
+    "hr",
+    "development",
+    "marketing",
+    "sales",
+    "management",
+  ];
+  const deptRaw = (t.department || "").toLowerCase().trim() as CalendarDepartment;
+  const resolvedDept: CalendarDepartment = validDepartments.includes(deptRaw)
+    ? deptRaw
+    : "personal";
+
+  const eventId = `task-${t.id}`;
+  const baseEvent: UnifiedCalendarEvent = {
+    id: eventId,
+    title: t.title.startsWith("Task:") ? t.title : `Task: ${t.title}`,
     description: t.description || undefined,
     date: dateStr,
-    startTime: "09:00",
-    endTime: "10:00",
+    startTime,
+    endTime,
+    allDay: !explicitTimed,
     category: "task",
-    department: (t.department as CalendarDepartment) || "personal",
+    department: resolvedDept,
+    customColor: "meetings",
     location: undefined,
-    participants: t.assignedTo ? [{ name: t.assignedTo.name, email: t.assignedTo.email }] : [],
+    participants: t.assignedTo
+      ? [{ id: t.assignedTo.id, name: t.assignedTo.name, email: t.assignedTo.email, rsvp: "attending" }]
+      : [],
     status: t.status === "DONE" ? "COMPLETED" : "SCHEDULED",
     sourceType: "task",
+    syncStatus: "synced",
     rawSource: t,
   };
+
+  const map = metadataMap ?? getEventMetadataMap();
+  return mergeEventWithMetadata(baseEvent, map[eventId]);
 }
 
-/** Convert a backend Call into UnifiedCalendarEvent */
-export function convertCallToEvent(c: Call): UnifiedCalendarEvent {
-  const dateStr = c.date
-    ? c.date.includes("T")
-      ? c.date.split("T")[0]
-      : c.date
-    : formatDateKey(new Date());
+/**
+ * Convert a backend Call into UnifiedCalendarEvent.
+ * - Extracts the actual timestamp from `c.date` when present, and computes `endTime` from `c.duration`.
+ */
+export function convertCallToEvent(
+  c: Call,
+  metadataMap?: Record<string, LocalEventMetadata>
+): UnifiedCalendarEvent {
+  const parsedDate = parseDateSafe(c.date);
+  const dateStr = c.date ? formatDateKey(parsedDate) : formatDateKey(new Date());
 
-  return {
-    id: `call-${c.id || Math.random()}`,
+  const explicitTimed = hasExplicitTime(c.date);
+  const durationMins = Math.max(15, Number(c.duration) || 30);
+  const startTime = explicitTimed && c.date ? extractTime(c.date, "10:00") : "10:00";
+  const endTime = addMinutesToTimeStr(startTime, durationMins);
+
+  const eventId = `call-${c.id || `${dateStr}-${c.contactName || "log"}`}`;
+  const baseEvent: UnifiedCalendarEvent = {
+    id: eventId,
     title: `Call: ${c.contactName || "Client Contact"}`,
     description: c.notes || `Outcome: ${c.outcome} • Duration: ${c.duration} mins`,
     date: dateStr,
-    startTime: "14:00",
-    endTime: "14:30",
+    startTime,
+    endTime,
+    allDay: false,
     category: "call",
     department: "sales",
-    participants: c.contactName ? [{ name: c.contactName }] : [],
+    customColor: "important",
+    participants: c.contactName ? [{ name: c.contactName, rsvp: "attending" }] : [],
     status: "COMPLETED",
     sourceType: "call",
+    syncStatus: "synced",
     rawSource: c,
   };
+
+  const map = metadataMap ?? getEventMetadataMap();
+  return mergeEventWithMetadata(baseEvent, map[eventId]);
 }
+
+// ── Data Loading & Sync State ────────────────────────────────────────────────
 
 export interface LoadCalendarResult {
   events: UnifiedCalendarEvent[];
@@ -343,17 +431,24 @@ export interface LoadCalendarResult {
   rawTasks: Task[];
   rawCalls: Call[];
   isCached: boolean;
+  isOffline: boolean;
   error?: string | null;
 }
 
-/** Load all calendar data with offline fallback and safe timeouts */
+/**
+ * Load all calendar data concurrently, distinguishing between:
+ * - Live API success (including genuine empty results)
+ * - Cached / offline fallback when requests reject or time out
+ */
 export async function loadCalendarData(): Promise<LoadCalendarResult> {
+  const tombstones = getDeletedTombstones();
+  const metadataMap = getEventMetadataMap();
+
   let cachedMeetings: Meeting[] = [];
   let cachedTasks: Task[] = [];
   let cachedCalls: Call[] = [];
 
-  // Read client-side storage first
-  if (typeof window !== "undefined") {
+  if (typeof window !== "undefined" && window.localStorage) {
     try {
       const rawM = localStorage.getItem(STORAGE_KEY_MEETINGS);
       if (rawM) cachedMeetings = JSON.parse(rawM);
@@ -361,56 +456,70 @@ export async function loadCalendarData(): Promise<LoadCalendarResult> {
       if (rawT) cachedTasks = JSON.parse(rawT);
       const rawC = localStorage.getItem(STORAGE_KEY_CALLS);
       if (rawC) cachedCalls = JSON.parse(rawC);
-    } catch {}
+    } catch {
+      // Ignore malformed cache
+    }
   }
 
   const customEvents = getStoredCustomEvents();
 
-  // Fetch concurrently with timeouts so backend latency never freezes UI
   const [meetingsSettled, tasksSettled, callsSettled] = await Promise.allSettled([
-    withTimeout(getMeetings(), 5000, []),
-    withTimeout(fetchTasks({ limit: 100 }), 5000, { tasks: [], total: 0 }),
-    withTimeout(fetchCalls(1), 5000, { calls: [], total: 0 }),
+    withTimeoutReject(getMeetings(), 6000),
+    withTimeoutReject(fetchTasks({ limit: 100 }), 6000),
+    withTimeoutReject(fetchCalls(1), 6000),
   ]);
 
-  const liveMeetings: Meeting[] =
-    meetingsSettled.status === "fulfilled" && Array.isArray(meetingsSettled.value)
+  const meetingsFailed = meetingsSettled.status === "rejected";
+  const tasksFailed = tasksSettled.status === "rejected";
+  const callsFailed = callsSettled.status === "rejected";
+
+  const allFailed = meetingsFailed && tasksFailed && callsFailed;
+  const anyFailed = meetingsFailed || tasksFailed || callsFailed;
+
+  const liveMeetings: Meeting[] = (
+    !meetingsFailed && Array.isArray(meetingsSettled.value)
       ? meetingsSettled.value
-      : cachedMeetings;
+      : cachedMeetings
+  ).filter((m) => m && m.id && !tombstones.has(String(m.id)));
 
-  const liveTasks: Task[] =
-    tasksSettled.status === "fulfilled" && Array.isArray(tasksSettled.value?.tasks)
+  const liveTasks: Task[] = (
+    !tasksFailed && Array.isArray(tasksSettled.value?.tasks)
       ? tasksSettled.value.tasks
-      : cachedTasks;
+      : cachedTasks
+  ).filter((t) => t && t.id && !tombstones.has(`task-${t.id}`));
 
-  const liveCalls: Call[] =
-    callsSettled.status === "fulfilled" && Array.isArray(callsSettled.value?.calls)
+  const liveCalls: Call[] = (
+    !callsFailed && Array.isArray(callsSettled.value?.calls)
       ? callsSettled.value.calls
-      : cachedCalls;
+      : cachedCalls
+  ).filter((c) => c && !tombstones.has(`call-${c.id}`));
 
-  // Cache latest fetched responses
-  if (typeof window !== "undefined") {
+  // Update caches only when the respective live endpoint succeeded
+  if (typeof window !== "undefined" && window.localStorage) {
     try {
-      if (liveMeetings.length > 0) {
+      if (!meetingsFailed) {
         localStorage.setItem(STORAGE_KEY_MEETINGS, JSON.stringify(liveMeetings));
       }
-      if (liveTasks.length > 0) {
+      if (!tasksFailed) {
         localStorage.setItem(STORAGE_KEY_TASKS, JSON.stringify(liveTasks));
       }
-      if (liveCalls.length > 0) {
+      if (!callsFailed) {
         localStorage.setItem(STORAGE_KEY_CALLS, JSON.stringify(liveCalls));
       }
-    } catch {}
+    } catch {
+      // Ignore quota errors
+    }
   }
 
-  // Combine unified events
-  const meetingEvents = liveMeetings.map(convertMeetingToEvent);
-  const taskEvents = liveTasks.map(convertTaskToEvent);
-  const callEvents = liveCalls.map(convertCallToEvent);
+  const meetingEvents = liveMeetings.map((m) => convertMeetingToEvent(m, metadataMap));
+  const taskEvents = liveTasks.map((t) => convertTaskToEvent(t, metadataMap));
+  const callEvents = liveCalls.map((c) => convertCallToEvent(c, metadataMap));
 
-  // Deduplicate custom events against meeting events by ID
+  // Deduplicate custom events against synced meeting events by ID
   const meetingIds = new Set(meetingEvents.map((m) => m.id));
-  const filteredCustom = customEvents.filter((c) => !meetingIds.has(c.id));
+  const filteredCustom = customEvents
+    .filter((c) => !meetingIds.has(c.id) && !tombstones.has(c.id))
+    .map((c) => mergeEventWithMetadata(c, metadataMap[c.id]));
 
   const allEvents = [...meetingEvents, ...filteredCustom, ...taskEvents, ...callEvents];
 
@@ -419,28 +528,124 @@ export async function loadCalendarData(): Promise<LoadCalendarResult> {
     rawMeetings: liveMeetings,
     rawTasks: liveTasks,
     rawCalls: liveCalls,
-    isCached: meetingsSettled.status === "rejected" || tasksSettled.status === "rejected",
+    isCached: anyFailed,
+    isOffline: allFailed,
+    error: allFailed
+      ? "Unable to reach calendar server. Showing locally saved schedule."
+      : null,
   };
 }
 
-/** Create or update calendar event with backend sync + client persistence */
+// ── Create / Update Calendar Event ───────────────────────────────────────────
+
 export async function saveCalendarEvent(
   eventData: Partial<UnifiedCalendarEvent>,
   editingId?: string | null
 ): Promise<SaveEventResult> {
+  // Normalize recurring instance ID back to its master event ID when editing
+  const resolvedEditingId = editingId?.includes("__occ__")
+    ? editingId.split("__occ__")[0]
+    : editingId;
+
   const dateStr = eventData.date || formatDateKey(new Date());
-  const startTime = eventData.startTime || "09:00";
-  const endTime = eventData.endTime || "10:00";
+  const isAllDay = Boolean(eventData.allDay);
+  const startTime = isAllDay ? "00:00" : eventData.startTime || "09:00";
+  const endTime = isAllDay ? "23:59" : eventData.endTime || addMinutesToTimeStr(startTime, 60);
 
-  const isoStart = dateStr && startTime ? new Date(`${dateStr}T${startTime}:00`).toISOString() : new Date().toISOString();
-  const isoEnd = dateStr && endTime ? new Date(`${dateStr}T${endTime}:00`).toISOString() : new Date().toISOString();
+  // Route task edits through the Tasks API instead of converting tasks into meetings
+  if (
+    (resolvedEditingId && resolvedEditingId.startsWith("task-")) ||
+    eventData.sourceType === "task"
+  ) {
+    const rawTaskId = (resolvedEditingId || "").replace(/^task-/, "");
+    const cleanTitle = (eventData.title || "Untitled Task").replace(/^Task:\s*/i, "");
+    let isTaskSynced = false;
 
-  const attendeeNames = (eventData.participants || []).map((p) => p.name || p.email || "Attendee");
+    if (rawTaskId) {
+      try {
+        const dueIso = isAllDay
+          ? new Date(`${dateStr}T00:00:00.000Z`).toISOString()
+          : new Date(`${dateStr}T${startTime}:00`).toISOString();
+        await updateTask(rawTaskId, {
+          title: cleanTitle,
+          description: eventData.description ?? null,
+          dueDate: dueIso,
+        });
+        isTaskSynced = true;
+      } catch (err) {
+        console.warn("Task update failed, persisting metadata locally:", err);
+      }
+    }
+
+    const taskIdKey = resolvedEditingId || `task-${Date.now()}`;
+    saveEventMetadata(taskIdKey, {
+      category: eventData.category || "task",
+      department: eventData.department || "personal",
+      customColor: eventData.customColor,
+      room: eventData.room,
+      location: eventData.location,
+      description: eventData.description,
+      recurrence: eventData.recurrence || "none",
+      reminder: eventData.reminder || "15m",
+      privacy: eventData.privacy || "internal",
+      allDay: isAllDay,
+      participants: eventData.participants || [],
+    });
+
+    const updatedTaskEvent: UnifiedCalendarEvent = {
+      id: taskIdKey,
+      title: `Task: ${cleanTitle}`,
+      description: eventData.description,
+      date: dateStr,
+      startTime: isAllDay ? "" : startTime,
+      endTime: isAllDay ? "" : endTime,
+      allDay: isAllDay,
+      category: eventData.category || "task",
+      department: eventData.department || "personal",
+      customColor: eventData.customColor || "meetings",
+      location: eventData.location,
+      room: eventData.room,
+      participants: eventData.participants || [],
+      reminder: eventData.reminder || "15m",
+      recurrence: eventData.recurrence || "none",
+      privacy: eventData.privacy || "internal",
+      status: eventData.status || "SCHEDULED",
+      sourceType: "task",
+      syncStatus: isTaskSynced ? "synced" : "local_only",
+    };
+
+    return {
+      event: updatedTaskEvent,
+      isSynced: isTaskSynced,
+      syncStatus: isTaskSynced ? "synced" : "local_only",
+      message: isTaskSynced
+        ? "Task updated and synced with server"
+        : "Task metadata saved locally",
+    };
+  }
+
+  // Standard Meeting / Custom Event creation & update
+  const isoStart = new Date(`${dateStr}T${startTime}:00`).toISOString();
+  const isoEnd = new Date(`${dateStr}T${endTime}:00`).toISOString();
+
+  // Preserve both name and email when sending attendee strings to backend
+  const attendeeStrings = (eventData.participants || []).map((p) => {
+    if (p.name && p.email && p.name !== p.email) {
+      return `${p.name} <${p.email}>`;
+    }
+    return p.email || p.name || "Attendee";
+  });
 
   let backendMeeting: Meeting | null = null;
   let isSynced = false;
+  let reminderSynced = false;
 
-  // Attempt backend save if it's a meeting
+  const validProviders = ["google_meet", "zoom", "teams"];
+  const normalizedProvider =
+    eventData.provider && validProviders.includes(eventData.provider.toLowerCase())
+      ? (eventData.provider.toLowerCase() as "google_meet" | "zoom" | "teams")
+      : undefined;
+
   try {
     const payload = {
       title: eventData.title || "New Event",
@@ -448,77 +653,239 @@ export async function saveCalendarEvent(
       startTime: isoStart,
       endTime: isoEnd,
       description: eventData.description,
-      location: eventData.room || eventData.location,
+      location: eventData.location || eventData.room,
       link: eventData.meetingLink,
       meetingLink: eventData.meetingLink,
-      reminder: eventData.reminder || "15m",
       status: (eventData.status as any) || "SCHEDULED",
-      provider: (eventData.provider as any) || "google_meet",
-      attendees: attendeeNames,
+      provider: normalizedProvider,
+      attendees: attendeeStrings,
     };
 
-    if (editingId && !editingId.startsWith("seed-") && !editingId.startsWith("custom-")) {
-      backendMeeting = await updateMeeting(editingId, payload);
+    if (
+      resolvedEditingId &&
+      !resolvedEditingId.startsWith("seed-") &&
+      !resolvedEditingId.startsWith("custom-") &&
+      !resolvedEditingId.startsWith("call-")
+    ) {
+      backendMeeting = await updateMeeting(resolvedEditingId, payload);
     } else {
       backendMeeting = await createMeeting(payload);
     }
-    if (backendMeeting) {
+
+    if (backendMeeting && backendMeeting.id) {
       isSynced = true;
+      // Sync reminder via confirmed POST /api/meetings/{id}/reminders endpoint
+      const reminderMins = parseReminderMinutes(eventData.reminder);
+      if (reminderMins !== null) {
+        try {
+          await createMeetingReminder(backendMeeting.id, reminderMins, "PUSH");
+          reminderSynced = true;
+        } catch (remErr) {
+          console.warn("Meeting created, but reminder sync failed:", remErr);
+          reminderSynced = false;
+        }
+      }
     }
   } catch (err) {
-    console.warn("Backend save failed, falling back to local persistence:", err);
+    console.warn("Backend meeting save failed, falling back to local persistence:", err);
     isSynced = false;
   }
 
-  const resolvedId = backendMeeting?.id || editingId || `custom-${Date.now()}`;
+  const resolvedId = backendMeeting?.id || resolvedEditingId || `custom-${Date.now()}`;
+
+  // Always persist non-backend UI properties in versioned local metadata keyed by resolvedId
+  saveEventMetadata(resolvedId, {
+    category: eventData.category || "meeting",
+    department: eventData.department || "development",
+    customColor: eventData.customColor,
+    room: eventData.room,
+    location: eventData.location || eventData.room,
+    description: eventData.description,
+    recurrence: eventData.recurrence || "none",
+    reminder: eventData.reminder || "15m",
+    privacy: eventData.privacy || "internal",
+    allDay: isAllDay,
+    participants: eventData.participants || [],
+  });
+
+  // If editing replaced a custom-* ID with a real backend ID, clean up the old custom ID
+  if (resolvedEditingId && resolvedEditingId !== resolvedId) {
+    removeEventMetadata(resolvedEditingId);
+  }
 
   const unified: UnifiedCalendarEvent = {
     id: resolvedId,
     title: eventData.title || "Untitled Event",
     description: eventData.description,
     date: dateStr,
-    startTime: startTime,
-    endTime: endTime,
+    startTime: isAllDay ? "" : startTime,
+    endTime: isAllDay ? "" : endTime,
+    allDay: isAllDay,
     category: eventData.category || "meeting",
     department: eventData.department || "development",
-    location: eventData.location,
+    customColor: eventData.customColor,
+    location: eventData.location || eventData.room,
     room: eventData.room,
-    meetingLink: eventData.meetingLink,
+    meetingLink:
+      backendMeeting?.joinUrl ||
+      backendMeeting?.meetingLink ||
+      backendMeeting?.link ||
+      eventData.meetingLink,
     provider: eventData.provider || "google_meet",
     participants: eventData.participants || [],
     reminder: eventData.reminder || "15m",
+    reminderSynced,
     recurrence: eventData.recurrence || "none",
     privacy: eventData.privacy || "internal",
     status: eventData.status || "SCHEDULED",
-    sourceType: "custom",
+    sourceType: isSynced ? "meeting" : "custom",
     syncStatus: isSynced ? "synced" : "pending_sync",
-    createdAt: new Date().toISOString(),
+    createdAt: backendMeeting?.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 
-  // Update localStorage custom events
-  const current = getStoredCustomEvents();
-  const existingIdx = current.findIndex((e) => e.id === resolvedId);
-  if (existingIdx >= 0) {
-    current[existingIdx] = unified;
-  } else {
-    current.unshift(unified);
+  // Update localStorage caches so reloads immediately reflect the saved event
+  const currentCustom = getStoredCustomEvents().filter(
+    (e) => e.id !== resolvedId && e.id !== resolvedEditingId
+  );
+  if (!isSynced) {
+    currentCustom.unshift(unified);
   }
-  persistCustomEvents(current);
+  persistCustomEvents(currentCustom);
+
+  if (isSynced && typeof window !== "undefined" && window.localStorage) {
+    try {
+      const rawM = localStorage.getItem(STORAGE_KEY_MEETINGS);
+      const cachedM: Meeting[] = rawM ? JSON.parse(rawM) : [];
+      const idx = cachedM.findIndex((m) => m.id === resolvedId);
+      const meetingRecord: Meeting = {
+        ...(backendMeeting || {}),
+        id: resolvedId,
+        title: unified.title,
+        description: unified.description,
+        date: dateStr,
+        startTime: isoStart,
+        endTime: isoEnd,
+        location: unified.location,
+        meetingLink: unified.meetingLink,
+        provider: unified.provider,
+        attendees: (unified.participants || []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          email: p.email,
+        })),
+      };
+      if (idx >= 0) {
+        cachedM[idx] = meetingRecord;
+      } else {
+        cachedM.unshift(meetingRecord);
+      }
+      localStorage.setItem(STORAGE_KEY_MEETINGS, JSON.stringify(cachedM));
+    } catch {
+      // Ignore cache update errors
+    }
+  }
 
   return {
     event: unified,
     isSynced,
     syncStatus: unified.syncStatus as "synced" | "pending_sync",
+    reminderSynced,
     message: isSynced
-      ? (editingId ? "Event updated and synced with server" : "Event created and synced with server")
+      ? resolvedEditingId
+        ? "Event updated and synced with server"
+        : "Event created and synced with server"
       : "Saved locally – waiting for server connection",
   };
 }
 
-/** Delete calendar event */
-export async function deleteCalendarEvent(id: string): Promise<boolean> {
-  const current = getStoredCustomEvents();
-  const filtered = current.filter((e) => e.id !== id);
-  persistCustomEvents(filtered);
-  return true;
+/**
+ * Delete a calendar event from backend (when applicable), custom event storage,
+ * cached meeting storage, and local metadata, recording a tombstone so stale caches
+ * never resurrect deleted items.
+ */
+export async function deleteCalendarEvent(
+  id: string
+): Promise<{ deleted: boolean; isSynced: boolean }> {
+  const masterId = id.includes("__occ__") ? id.split("__occ__")[0] : id;
+
+  // Record tombstone immediately so reload never resurrects the event
+  addDeletedTombstone(masterId);
+  if (id !== masterId) {
+    addDeletedTombstone(id);
+  }
+
+  // Remove from custom events
+  const currentCustom = getStoredCustomEvents();
+  const filteredCustom = currentCustom.filter((e) => e.id !== masterId && e.id !== id);
+  persistCustomEvents(filteredCustom);
+
+  // Remove from cached meetings
+  if (typeof window !== "undefined" && window.localStorage) {
+    try {
+      const rawM = localStorage.getItem(STORAGE_KEY_MEETINGS);
+      if (rawM) {
+        const parsedM: Meeting[] = JSON.parse(rawM);
+        if (Array.isArray(parsedM)) {
+          const nextM = parsedM.filter((m) => m && m.id !== masterId && m.id !== id);
+          localStorage.setItem(STORAGE_KEY_MEETINGS, JSON.stringify(nextM));
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  // Remove associated local metadata
+  removeEventMetadata(masterId);
+
+  // Attempt backend DELETE if it's a server-backed meeting ID
+  const isLocalOnlyId =
+    masterId.startsWith("custom-") ||
+    masterId.startsWith("seed-") ||
+    masterId.startsWith("task-") ||
+    masterId.startsWith("call-");
+
+  if (!isLocalOnlyId) {
+    try {
+      await deleteMeeting(masterId);
+      return { deleted: true, isSynced: true };
+    } catch (err) {
+      console.warn("Backend meeting delete failed, tombstone saved locally:", err);
+      return { deleted: true, isSynced: false };
+    }
+  }
+
+  return { deleted: true, isSynced: true };
+}
+
+/**
+ * Update a participant's RSVP status in local metadata.
+ */
+export function updateEventParticipantRsvp(
+  event: UnifiedCalendarEvent,
+  participantIndex: number,
+  nextRsvp: ParticipantRsvp
+): UnifiedCalendarEvent {
+  const masterId = event.masterEventId || event.id;
+  const updatedParticipants = (event.participants || []).map((p, idx) =>
+    idx === participantIndex ? { ...p, rsvp: nextRsvp } : p
+  );
+
+  saveEventMetadata(masterId, {
+    participants: updatedParticipants,
+  });
+
+  // Also update custom events cache if present
+  const custom = getStoredCustomEvents();
+  const cIdx = custom.findIndex((e) => e.id === masterId);
+  if (cIdx >= 0) {
+    custom[cIdx] = { ...custom[cIdx], participants: updatedParticipants };
+    persistCustomEvents(custom);
+  }
+
+  return {
+    ...event,
+    participants: updatedParticipants,
+  };
 }

@@ -1,8 +1,16 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { UnifiedCalendarEvent } from "@/types/calendar";
-import { formatTimeDisplay, calculateDuration, isSameDay } from "@/lib/api/calendarService";
+import {
+  formatTimeDisplay,
+  calculateDuration,
+  isSameDay,
+  getWeekDays,
+  computeOverlapLayout,
+  formatDateKey,
+  parseTimeMinutes,
+} from "@/lib/api/calendarService";
 import { getCategoryToken } from "./calendarTheme";
 import { Clock, MapPin, CloudOff } from "lucide-react";
 
@@ -26,9 +34,11 @@ export default function WeekView({
   onCreateEventSlot,
 }: WeekViewProps) {
   const [showFullDay, setShowFullDay] = useState(false);
-  const [currentTimeMinutes, setCurrentTimeMinutes] = useState(0);
+  const [currentTimeMinutes, setCurrentTimeMinutes] = useState(() => {
+    const now = new Date();
+    return now.getHours() * 60 + now.getMinutes();
+  });
 
-  // Keep track of current time for live indicator
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -39,277 +49,307 @@ export default function WeekView({
     return () => clearInterval(interval);
   }, []);
 
-  // Compute days of the current week
-  const getDaysOfWeek = (): Date[] => {
-    const start = new Date(currentDate);
-    const day = start.getDay(); // 0 is Sunday
-    // Workweek starts on Monday (offset 1), full week on Sunday (offset 0)
-    const diff = start.getDate() - day + (isWorkweek ? 1 : 0);
-    const weekStart = new Date(start.setDate(diff));
+  // Immutable week days calculation (fixes Sunday workweek bug and Date mutation bug)
+  const weekDays = useMemo(
+    () => getWeekDays(currentDate, isWorkweek),
+    [currentDate, isWorkweek]
+  );
 
-    const numDays = isWorkweek ? 5 : 7;
-    const days: Date[] = [];
-    for (let i = 0; i < numDays; i++) {
-      const d = new Date(weekStart);
-      d.setDate(weekStart.getDate() + i);
-      days.push(d);
-    }
-    return days;
-  };
+  const weekDateKeys = useMemo(
+    () => new Set(weekDays.map((d) => formatDateKey(d))),
+    [weekDays]
+  );
 
-  const weekDays = getDaysOfWeek();
+  // Check if any timed event in this week falls outside 8 AM - 8 PM
+  const hasOffHoursEvents = useMemo(() => {
+    return events.some((e) => {
+      if (!e.date || !weekDateKeys.has(e.date) || e.allDay || !e.startTime) return false;
+      const s = parseTimeMinutes(e.startTime);
+      const end = e.endTime ? parseTimeMinutes(e.endTime) : s + 60;
+      return s < 8 * 60 || end > 20 * 60;
+    });
+  }, [events, weekDateKeys]);
 
-  // Hourly grid range: business hours 8 AM - 8 PM vs full 24 hours
-  const startHour = showFullDay ? 0 : 8;
-  const endHour = showFullDay ? 24 : 20;
-  const rowHeight = 60; // px per hour slot
-
-  const parseMinutes = (timeStr?: string): number => {
-    if (!timeStr) return 0;
-    if (timeStr.includes("T")) {
-      const d = new Date(timeStr);
-      if (!isNaN(d.getTime())) {
-        return d.getHours() * 60 + d.getMinutes();
-      }
-    }
-    const [h, m] = timeStr.split(":");
-    return parseInt(h, 10) * 60 + parseInt(m || "0", 10);
-  };
+  const effectiveFullDay = showFullDay || hasOffHoursEvents;
+  const startHour = effectiveFullDay ? 0 : 8;
+  const endHour = effectiveFullDay ? 24 : 20;
+  const rowHeight = 64; // 8px multiple (64px per hour)
 
   const hoursArray = Array.from({ length: endHour - startHour }, (_, i) => startHour + i);
+  const gridColsClass = isWorkweek
+    ? "grid-cols-[60px_repeat(5,minmax(120px,1fr))]"
+    : "grid-cols-[60px_repeat(7,minmax(115px,1fr))]";
 
   return (
-    <div className="flex flex-col bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden flex-1">
-      {/* View Header with 24h Toggle */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200/60 bg-slate-50/70 text-xs">
-        <span className="font-semibold text-slate-500 uppercase tracking-wider text-[11px]">
-          {isWorkweek ? "Workweek Schedule (Mon – Fri)" : "Weekly Timeline (7 Days)"}
+    <div className="flex flex-col bg-white flex-1 min-h-0 overflow-hidden">
+      {/* Subtle Timeline Mode Bar */}
+      <div className="flex items-center justify-between px-4 py-1.5 border-b border-[#F1F3F5] bg-[#FAFBFB] text-[11px]">
+        <span className="font-medium text-[#637381]">
+          {isWorkweek ? "Workweek (Mon – Fri)" : "Weekly Schedule"}
+          {hasOffHoursEvents && !showFullDay && " • Auto-expanded for early/late events"}
         </span>
         <button
           type="button"
           onClick={() => setShowFullDay(!showFullDay)}
-          className="text-[#355D91] hover:text-[#23436D] font-semibold text-[11px] hover:underline transition-colors"
+          className="text-[#212B36] hover:text-[#FF5630] font-semibold transition-colors"
         >
-          {showFullDay ? "Show Business Hours (8 AM – 8 PM)" : "Show All 24 Hours"}
+          {effectiveFullDay ? "Business Hours (8 AM – 8 PM)" : "All 24 Hours"}
         </button>
       </div>
 
-      {/* Weekday Column Headers */}
-      <div className="grid grid-cols-[56px_repeat(auto-fit,minmax(110px,1fr))] border-b border-slate-200/70 bg-white sticky top-0 z-20 shadow-2xs">
-        {/* Time spacer */}
-        <div className="border-r border-slate-200/60 p-2 text-center text-[10px] font-semibold text-slate-400">
-          Time
-        </div>
-
-        {/* Days */}
-        {weekDays.map((date, idx) => {
-          const isToday = isSameDay(date, new Date());
-          const isSelected = selectedDate && isSameDay(date, selectedDate);
-
-          return (
-            <div
-              key={idx}
-              onClick={() => onSelectDate(date)}
-              className={`p-2.5 text-center border-r border-slate-200/60 cursor-pointer transition-colors relative ${
-                isSelected ? "bg-[#F0F6FF]" : "hover:bg-slate-50/70"
-              }`}
-            >
-              <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                {date.toLocaleDateString("en-US", { weekday: "short" })}
-              </p>
-              <div className="flex items-center justify-center gap-1.5 mt-0.5">
-                <span
-                  className={`text-sm md:text-base font-bold px-2 py-0.5 rounded-full transition-all ${
-                    isToday
-                      ? "bg-[#1E293B] text-white shadow-2xs"
-                      : isSelected
-                      ? "bg-[#E7F0FF] text-[#355D91] border border-[#C5DAFD]/60"
-                      : "text-slate-800"
-                  }`}
-                >
-                  {date.getDate()}
-                </span>
-                {isToday && (
-                  <span className="hidden sm:inline-block text-[10px] font-semibold text-[#355D91] uppercase tracking-wider bg-[#E7F0FF] px-1.5 py-0.5 rounded-full border border-[#C5DAFD]/50">
-                    Today
-                  </span>
-                )}
-              </div>
+      {/* Horizontally Scrollable Container for Mobile/Tablet */}
+      <div className="flex-1 flex flex-col overflow-x-auto overflow-y-hidden min-h-0">
+        <div className={isWorkweek ? "min-w-[660px] flex-1 flex flex-col min-h-0" : "min-w-[860px] flex-1 flex flex-col min-h-0"}>
+          {/* Weekday Column Headers */}
+          <div className={`grid ${gridColsClass} border-b border-[#E2E8F0] bg-white sticky top-0 z-20`}>
+            <div className="border-r border-[#F1F3F5] p-2 flex items-center justify-center text-[10px] font-medium text-[#919EAB]">
+              GMT+5:30
             </div>
-          );
-        })}
-      </div>
 
-      {/* Hourly Grid with Events */}
-      <div className="relative overflow-y-auto max-h-[680px] flex-1">
-        <div
-          className="grid grid-cols-[56px_repeat(auto-fit,minmax(110px,1fr))] relative"
-          style={{ height: `${hoursArray.length * rowHeight}px` }}
-        >
-          {/* Time Labels Column */}
-          <div className="border-r border-slate-200/60 bg-slate-50/30 select-none">
-            {hoursArray.map((hour) => {
-              const ampm = hour >= 12 ? "PM" : "AM";
-              const displayHour = hour % 12 === 0 ? 12 : hour % 12;
+            {weekDays.map((date, idx) => {
+              const isToday = isSameDay(date, new Date());
+              const isSelected = selectedDate && isSameDay(date, selectedDate);
+
               return (
                 <div
-                  key={hour}
-                  className="border-b border-slate-100 pr-2 text-right text-[11px] font-medium text-slate-400 -translate-y-2.5"
-                  style={{ height: `${rowHeight}px` }}
+                  key={idx}
+                  onClick={() => onSelectDate(date)}
+                  className={`py-2.5 px-2 text-center border-r border-[#F1F3F5] cursor-pointer transition-colors ${
+                    isSelected ? "bg-[#F4F6F8]/70" : "hover:bg-[#F4F6F8]/40"
+                  }`}
                 >
-                  {displayHour} {ampm}
+                  <p
+                    className={`text-[11px] font-medium uppercase tracking-wide ${
+                      isToday ? "text-[#FF5630] font-semibold" : "text-[#637381]"
+                    }`}
+                  >
+                    {date.toLocaleDateString("en-US", { weekday: "short" })}
+                  </p>
+                  <div className="mt-1 flex items-center justify-center">
+                    <span
+                      className={`w-7 h-7 text-sm flex items-center justify-center rounded-full transition-colors ${
+                        isToday
+                          ? "bg-[#FF5630] text-white font-bold shadow-sm"
+                          : isSelected
+                          ? "bg-[#212B36] text-white font-semibold"
+                          : "text-[#212B36] font-semibold"
+                      }`}
+                    >
+                      {date.getDate()}
+                    </span>
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          {/* Day Columns */}
-          {weekDays.map((dayDate, dayIdx) => {
-            const isToday = isSameDay(dayDate, new Date());
-            const dayEvents = events.filter((e) => {
-              if (!e.date) return false;
-              const [ey, em, ed] = e.date.split("-").map(Number);
-              return (
-                dayDate.getFullYear() === ey &&
-                dayDate.getMonth() === em - 1 &&
-                dayDate.getDate() === ed
+          {/* All-Day Events Row */}
+          <div className={`grid ${gridColsClass} border-b border-[#E2E8F0] bg-[#FAFBFB]/60 shrink-0`}>
+            <div className="border-r border-[#F1F3F5] px-2 py-1.5 flex items-center justify-end text-[10px] font-medium text-[#919EAB]">
+              All-day
+            </div>
+            {weekDays.map((dayDate, dayIdx) => {
+              const dayKey = formatDateKey(dayDate);
+              const allDayEvents = events.filter(
+                (e) => e.date === dayKey && (e.allDay || !e.startTime)
               );
-            });
 
-            return (
-              <div
-                key={dayIdx}
-                className={`border-r border-slate-200/60 relative ${
-                  isToday ? "bg-[#F0F6FF]/30" : ""
-                }`}
-              >
-                {/* Horizontal hour guidelines */}
-                {hoursArray.map((hour) => (
-                  <div
-                    key={hour}
-                    onClick={() => onCreateEventSlot(dayDate, hour)}
-                    className="border-b border-slate-100 hover:bg-[#E7F0FF]/25 transition-colors cursor-pointer"
-                    style={{ height: `${rowHeight}px` }}
-                    title={`Click to schedule at ${hour % 12 === 0 ? 12 : hour % 12}:00`}
-                  />
-                ))}
+              return (
+                <div
+                  key={dayIdx}
+                  onClick={() => onSelectDate(dayDate)}
+                  className="border-r border-[#F1F3F5] p-1 min-h-[32px] space-y-1"
+                >
+                  {allDayEvents.map((evt) => {
+                    const token = getCategoryToken(evt.category, evt.customColor);
+                    return (
+                      <div
+                        key={evt.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectEvent(evt);
+                        }}
+                        style={{
+                          backgroundColor: token.bg,
+                          borderLeftColor: token.dot,
+                          color: token.text,
+                        }}
+                        className="border-l-[3px] px-1.5 py-0.5 rounded-r text-[10px] font-semibold truncate cursor-pointer hover:brightness-95 transition-all"
+                        title={`${evt.title} (All day)`}
+                      >
+                        {evt.title}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
 
-                {/* Current Time Red Line Indicator (if today) */}
-                {isToday &&
-                  currentTimeMinutes >= startHour * 60 &&
-                  currentTimeMinutes <= endHour * 60 && (
-                    <div
-                      className="absolute left-0 right-0 z-10 flex items-center pointer-events-none"
-                      style={{
-                        top: `${((currentTimeMinutes - startHour * 60) / 60) * rowHeight}px`,
-                      }}
-                    >
-                      <div className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm -ml-1" />
-                      <div className="flex-1 h-[2px] bg-rose-500 shadow-2xs" />
-                      <span className="text-[9px] font-bold bg-rose-500 text-white px-1 py-0.2 rounded mr-1">
-                        {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </div>
-                  )}
-
-                {/* Positioned Event Cards */}
-                {dayEvents.map((evt) => {
-                  const startMin = parseMinutes(evt.startTime);
-                  const endMin = Math.max(startMin + 30, parseMinutes(evt.endTime));
-
-                  // Skip events outside the visible time range
-                  if (endMin <= startHour * 60 || startMin >= endHour * 60) {
-                    return null;
-                  }
-
-                  const topMin = Math.max(0, startMin - startHour * 60);
-                  const durationMin = Math.min(
-                    endHour * 60 - Math.max(startHour * 60, startMin),
-                    endMin - Math.max(startHour * 60, startMin)
-                  );
-
-                  const topPx = (topMin / 60) * rowHeight;
-                  const heightPx = Math.max(34, (durationMin / 60) * rowHeight - 4);
-
-                  const token = getCategoryToken(evt.category);
-                  const durLabel = calculateDuration(evt.startTime, evt.endTime);
-                  const isPendingSync = evt.syncStatus === "pending_sync";
-
+          {/* Hourly Grid with Positioned & Overlap-Aware Events */}
+          <div className="relative overflow-y-auto flex-1 max-h-[660px]">
+            <div
+              className={`grid ${gridColsClass} relative`}
+              style={{ height: `${hoursArray.length * rowHeight}px` }}
+            >
+              {/* Time Labels Column */}
+              <div className="border-r border-[#F1F3F5] bg-white select-none">
+                {hoursArray.map((hour) => {
+                  const ampm = hour >= 12 ? "PM" : "AM";
+                  const displayHour = hour % 12 === 0 ? 12 : hour % 12;
                   return (
                     <div
-                      key={evt.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectEvent(evt);
-                      }}
-                      className="absolute left-1 right-1 rounded-xl p-2 shadow-2xs cursor-pointer overflow-hidden transition-all hover:shadow-md hover:z-20 border border-l-3"
-                      style={{
-                        top: `${topPx}px`,
-                        height: `${heightPx}px`,
-                        backgroundColor: token.bg,
-                        borderColor: token.border,
-                        borderLeftColor: token.dot,
-                        color: token.text,
-                      }}
-                      title={`${evt.title} (${formatTimeDisplay(evt.startTime)} – ${formatTimeDisplay(evt.endTime)})${isPendingSync ? " [Offline pending sync]" : ""}`}
+                      key={hour}
+                      className="border-b border-[#F1F3F5] pr-2 pt-1 text-right text-[11px] font-medium text-[#919EAB]"
+                      style={{ height: `${rowHeight}px` }}
                     >
-                      <div className="flex items-start justify-between gap-1">
-                        <h4 className="text-xs font-bold leading-snug truncate" style={{ color: token.text }}>
-                          {evt.title}
-                        </h4>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {isPendingSync && (
-                            <span title="Awaiting server sync">
-                              <CloudOff size={10} className="text-amber-600/90" />
-                            </span>
-                          )}
-                          <span className="text-[10px] font-semibold opacity-75">
-                            {durLabel}
-                          </span>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] opacity-80 font-medium truncate">
-                        <Clock size={11} style={{ color: token.dot }} />
-                        <span>
-                          {formatTimeDisplay(evt.startTime)} – {formatTimeDisplay(evt.endTime)}
-                        </span>
-                      </div>
-
-                      {heightPx > 50 && (evt.room || evt.location) && (
-                        <div className="flex items-center gap-1 mt-1 text-[10px] opacity-75 truncate">
-                          <MapPin size={10} style={{ color: token.dot }} />
-                          <span className="truncate">{evt.room || evt.location}</span>
-                        </div>
-                      )}
-
-                      {heightPx > 60 && evt.participants && evt.participants.length > 0 && (
-                        <div className="flex items-center gap-1 mt-1.5">
-                          <div className="flex -space-x-1.5 overflow-hidden">
-                            {evt.participants.slice(0, 3).map((p, pIdx) => (
-                              <div
-                                key={pIdx}
-                                className="w-4 h-4 rounded-full border border-white flex items-center justify-center text-[9px] font-bold shadow-2xs"
-                                style={{ backgroundColor: token.badgeBg, color: token.text }}
-                                title={p.name}
-                              >
-                                {p.name.charAt(0).toUpperCase()}
-                              </div>
-                            ))}
-                          </div>
-                          {evt.participants.length > 3 && (
-                            <span className="text-[9px] opacity-70 font-medium">
-                              +{evt.participants.length - 3}
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {displayHour} {ampm}
                     </div>
                   );
                 })}
               </div>
-            );
-          })}
+
+              {/* Day Columns */}
+              {weekDays.map((dayDate, dayIdx) => {
+                const isToday = isSameDay(dayDate, new Date());
+                const dayKey = formatDateKey(dayDate);
+                const dayTimedEvents = events.filter(
+                  (e) => e.date === dayKey && !e.allDay && Boolean(e.startTime)
+                );
+
+                // Compute proportional non-overlapping column layout
+                const positionedEvents = computeOverlapLayout(dayTimedEvents);
+
+                return (
+                  <div
+                    key={dayIdx}
+                    className={`border-r border-[#F1F3F5] relative ${
+                      isToday ? "bg-[#F4F6F8]/35" : "bg-white"
+                    }`}
+                  >
+                    {/* Horizontal hour guidelines */}
+                    {hoursArray.map((hour) => (
+                      <div
+                        key={hour}
+                        onClick={() => onCreateEventSlot(dayDate, hour)}
+                        className="border-b border-[#F1F3F5] hover:bg-[#F4F6F8]/60 transition-colors cursor-pointer"
+                        style={{ height: `${rowHeight}px` }}
+                        title={`Schedule event at ${hour % 12 === 0 ? 12 : hour % 12}:00 ${
+                          hour >= 12 ? "PM" : "AM"
+                        }`}
+                      />
+                    ))}
+
+                    {/* Current Time Coral-Red Indicator (if today) */}
+                    {isToday &&
+                      currentTimeMinutes >= startHour * 60 &&
+                      currentTimeMinutes <= endHour * 60 && (
+                        <div
+                          className="absolute left-0 right-0 z-30 flex items-center pointer-events-none"
+                          style={{
+                            top: `${((currentTimeMinutes - startHour * 60) / 60) * rowHeight}px`,
+                          }}
+                        >
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#FF5630] shadow-sm -ml-1.5" />
+                          <div className="flex-1 h-[2px] bg-[#FF5630]" />
+                        </div>
+                      )}
+
+                    {/* Positioned Event Cards */}
+                    {positionedEvents.map(({ event: evt, startMinutes, endMinutes, leftPct, widthPct }) => {
+                      if (endMinutes <= startHour * 60 || startMinutes >= endHour * 60) {
+                        return null;
+                      }
+
+                      const visibleStart = Math.max(startHour * 60, startMinutes);
+                      const visibleEnd = Math.min(endHour * 60, endMinutes);
+                      const topMin = visibleStart - startHour * 60;
+                      const durationMin = Math.max(20, visibleEnd - visibleStart);
+
+                      const topPx = (topMin / 60) * rowHeight;
+                      const heightPx = Math.max(32, (durationMin / 60) * rowHeight - 2);
+
+                      const token = getCategoryToken(evt.category, evt.customColor);
+                      const durLabel = calculateDuration(evt.startTime, evt.endTime, evt.allDay);
+                      const isPendingSync = evt.syncStatus === "pending_sync";
+
+                      return (
+                        <div
+                          key={evt.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelectEvent(evt);
+                          }}
+                          className="absolute rounded-lg p-1.5 shadow-sm cursor-pointer overflow-hidden transition-all hover:shadow-md hover:z-20 border-l-[3px]"
+                          style={{
+                            top: `${topPx}px`,
+                            height: `${heightPx}px`,
+                            left: `calc(${leftPct}% + 2px)`,
+                            width: `calc(${widthPct}% - 4px)`,
+                            backgroundColor: token.bg,
+                            borderColor: token.border,
+                            borderLeftColor: token.dot,
+                            color: token.text,
+                          }}
+                          title={`${evt.title} (${formatTimeDisplay(evt.startTime)} – ${formatTimeDisplay(
+                            evt.endTime
+                          )})${isPendingSync ? " [Pending sync]" : ""}`}
+                        >
+                          <div className="flex items-start justify-between gap-1">
+                            <h4
+                              className="text-[11px] font-semibold leading-tight truncate"
+                              style={{ color: token.text }}
+                            >
+                              {evt.title}
+                            </h4>
+                            {isPendingSync && (
+                              <span title="Awaiting server sync" className="shrink-0">
+                                <CloudOff size={10} className="text-amber-600/90" />
+                              </span>
+                            )}
+                          </div>
+
+                          {heightPx >= 42 && (
+                            <div className="flex items-center gap-1 mt-0.5 text-[10px] opacity-85 font-medium truncate">
+                              <Clock size={10} style={{ color: token.dot }} className="shrink-0" />
+                              <span className="truncate">
+                                {formatTimeDisplay(evt.startTime)} – {formatTimeDisplay(evt.endTime)}
+                              </span>
+                            </div>
+                          )}
+
+                          {heightPx >= 60 && (evt.room || evt.location) && (
+                            <div className="flex items-center gap-1 mt-0.5 text-[10px] opacity-80 truncate">
+                              <MapPin size={10} style={{ color: token.dot }} className="shrink-0" />
+                              <span className="truncate">{evt.room || evt.location}</span>
+                            </div>
+                          )}
+
+                          {heightPx >= 76 && evt.participants && evt.participants.length > 0 && (
+                            <div className="flex items-center justify-between gap-1 mt-1.5">
+                              <div className="flex -space-x-1 overflow-hidden">
+                                {evt.participants.slice(0, 3).map((p, pIdx) => (
+                                  <div
+                                    key={pIdx}
+                                    className="w-4 h-4 rounded-full border border-white flex items-center justify-center text-[8px] font-bold"
+                                    style={{ backgroundColor: token.badgeBg, color: token.text }}
+                                    title={p.name}
+                                  >
+                                    {p.name.charAt(0).toUpperCase()}
+                                  </div>
+                                ))}
+                              </div>
+                              <span className="text-[9px] font-medium opacity-75">{durLabel}</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
     </div>
