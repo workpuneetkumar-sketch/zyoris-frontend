@@ -189,15 +189,33 @@ export function formatDataForResponse(intent: string, data: any): string {
 
   switch (intent) {
     case 'leads': {
-      const leads = data?.data?.data || data?.data || [];
+      const rawLeads = data?.data?.data || data?.data?.leads || data?.data || data?.leads || [];
+      const leads = Array.isArray(rawLeads) ? rawLeads : [];
       if (!leads.length) return "No leads found.";
-      return `📋 **Leads**\n\n${leads.slice(0, 5).map((l: any) => `• ${l.name || l.company || 'Unnamed'}${l.status ? ` (${l.status})` : ''}`).join('\n')}\n\nShowing ${Math.min(leads.length, 5)} of ${leads.length} leads.`;
+      const count = leads.length;
+      const items = leads.slice(0, 10).map((l: any, i: number) => {
+        const name = l.name || `${l.firstName || ''} ${l.lastName || ''}`.trim() || l.company || `Lead #${i + 1}`;
+        const status = l.status ? ` [${l.status.toUpperCase()}]` : '';
+        const company = l.company && l.company !== name ? ` • ${l.company}` : '';
+        const email = l.email ? ` • ${l.email}` : '';
+        return `${i + 1}. **${name}**${status}${company}${email}`;
+      }).join('\n');
+      return `📋 **Active CRM Leads (${count} in database)**\n\n${items}\n\n💡 *Showing top ${Math.min(count, 10)} leads. Ask: "Show details for ${leads[0]?.name || 'a lead'}".*`;
     }
     
     case 'deals': {
-      const deals = data?.data?.data || data?.data || [];
+      const rawDeals = data?.data?.data || data?.data?.deals || data?.data || data?.deals || [];
+      const deals = Array.isArray(rawDeals) ? rawDeals : [];
       if (!deals.length) return "No deals found.";
-      return `📈 **Deals**\n\n${deals.slice(0, 5).map((d: any) => `• ${d.name || 'Unnamed'} - $${d.amount?.toLocaleString() || '0'}${d.stage ? ` (${d.stage})` : ''}`).join('\n')}\n\nShowing ${Math.min(deals.length, 5)} of ${deals.length} deals.`;
+      const totalAmount = deals.reduce((sum: number, d: any) => sum + (Number(d.amount) || Number(d.value) || 0), 0);
+      const items = deals.slice(0, 10).map((d: any, i: number) => {
+        const name = d.name || d.title || `Deal #${i + 1}`;
+        const amount = Number(d.amount) || Number(d.value) || 0;
+        const stage = d.stage || d.status || 'Active';
+        const prob = d.winProbability || d.probability ? ` • ${d.winProbability || d.probability}% win prob` : '';
+        return `${i + 1}. **${name}** — $${amount.toLocaleString()} (${stage})${prob}`;
+      }).join('\n');
+      return `📈 **Pipeline Deals (${deals.length} active • Total: $${totalAmount.toLocaleString()})**\n\n${items}\n\n💡 *Ask: "What is our deal win probability?" or "Forecast revenue".*`;
     }
     
     case 'employees': {

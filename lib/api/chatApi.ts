@@ -374,11 +374,35 @@ export async function sendChatMessage(
       }
     }
 
-    // ─── Direct Groq AI Engine Integration ───────────────────────────
-    // If backend AI provider is misconfigured (e.g. invalid key) or returns 404/500/503,
-    // seamlessly generate an accurate, grounded AI response using Groq.
+    const token = getEffectiveAuthToken() || "";
+    const intent = detectIntent(trimmed);
+
+    // ─── 1. CRM Live Data Intent Resolution ──────────────────────────
+    // When the user asks for specific CRM entities (leads, deals, tasks, revenue, etc.),
+    // query the live database via backend REST endpoints and return real CRM records.
+    if (intent && intent !== "general") {
+      try {
+        const intentData = await fetchDataByIntent(intent, token);
+        if (intentData) {
+          const formattedReply = formatDataForResponse(intent, intentData);
+          if (formattedReply && !formattedReply.includes("No data available")) {
+            return {
+              reply: formattedReply,
+              content: formattedReply,
+              success: true,
+              sessionId: activeId,
+            };
+          }
+        }
+      } catch (crmErr) {
+        console.warn("Direct CRM data fetch by intent failed:", crmErr);
+      }
+    }
+
+    // ─── 2. Direct Groq AI Engine Integration ────────────────────────
+    // For conversational, analytical, profile, temporal, and general queries,
+    // invoke the high-intelligence Groq engine with real-time CRM grounding.
     try {
-      const token = getEffectiveAuthToken() || "";
       const userProfile = getAuthenticatedUserProfile();
       const crmContext = await gatherLiveCRMContext(token);
 
@@ -400,7 +424,7 @@ export async function sendChatMessage(
       console.warn("Direct Groq AI generation failed:", groqErr);
     }
 
-    // ─── Deterministic Offline Fallback ──────────────────────────────
+    // ─── 3. Deterministic Grounded Fallback ───────────────────────────
     try {
       const userProfile = getAuthenticatedUserProfile();
       const offlineReply = generateDeterministicFallback(trimmed, userProfile);
@@ -413,29 +437,6 @@ export async function sendChatMessage(
         };
       }
     } catch {}
-
-    // ─── CRM Intelligence Live Fallback ──────────────────────────────
-    try {
-      const token = getEffectiveAuthToken() || "";
-      const intent = detectIntent(trimmed);
-
-      if (intent && intent !== "general") {
-        const intentData = await fetchDataByIntent(intent, token);
-        if (intentData) {
-          const formattedReply = formatDataForResponse(intent, intentData);
-          if (formattedReply) {
-            return {
-              reply: formattedReply,
-              content: formattedReply,
-              success: true,
-              sessionId: activeId,
-            };
-          }
-        }
-      }
-    } catch (fallbackErr) {
-      console.warn("CRM Live Fallback error:", fallbackErr);
-    }
 
     // Standard friendly error message if everything failed
     if (err.response?.status === 503) {

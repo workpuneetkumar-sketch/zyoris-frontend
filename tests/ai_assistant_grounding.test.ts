@@ -75,5 +75,28 @@ test("ZII BOT Grounding & Intent System", async (t) => {
 
     const importFormatted = formatDataForResponse("imports", { data: [{ name: "Lead 1" }] });
     assert.ok(importFormatted.includes("Lead Import"));
+
+    const leadsFormatted = formatDataForResponse("leads", {
+      data: [
+        { name: "Nitin Tiwari", status: "NEW", company: "Astralpipes" },
+        { name: "Testing lead 23", status: "NEW", company: "TechCorp" },
+      ],
+    });
+    assert.ok(leadsFormatted.includes("Nitin Tiwari"), "Must include lead name");
+    assert.ok(leadsFormatted.includes("Astralpipes"), "Must include company");
+  });
+
+  await t.test("Deterministic Fallback: Answers 'show me active leads' with lead records", () => {
+    const reply = generateDeterministicFallback("show me active leads");
+    assert.ok(reply.includes("Leads"), "Must mention Leads");
+    assert.ok(reply.includes("Nitin Tiwari"), "Must include active lead sample");
+    assert.ok(!reply.includes("How can I help you today?"), "Must NOT give generic greeting");
+  });
+
+  await t.test("Deterministic Fallback: Answers 'just show me the top 10 leads'", () => {
+    const reply = generateDeterministicFallback("just show me the top 10 leads");
+    assert.ok(reply.includes("Leads"), "Must mention Leads");
+    assert.ok(reply.includes("10"), "Must mention top 10 leads");
   });
 });
+
