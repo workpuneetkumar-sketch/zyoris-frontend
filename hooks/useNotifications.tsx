@@ -60,6 +60,7 @@ interface NotificationContextValue {
 }
 
 const EMPTY_COUNTS: Counts = { all: 0, unread: 0, leads: 0, messages: 0, deals: 0, tasks: 0, system: 0 };
+
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 function countsFromServer(total: number, byCategory: Record<string, number>): Counts {
@@ -88,110 +89,10 @@ function getEventNotification(value: unknown): Notification | null {
   return isNotificationDto(value) ? dtoToNotification(value) : null;
 }
 
-const NOTIFICATION_CACHE_PREFIX = "zyoris_notifications_cache_";
-
-interface PersistedNotificationState {
-  notifications: Notification[];
-  counts: Counts;
-  savedAt: number;
-}
-
-function getInitialNotificationCache(): { notifications: Notification[]; counts: Counts } {
-  if (typeof window === "undefined") return { notifications: [], counts: EMPTY_COUNTS };
-  try {
-    let userId: string | undefined;
-    const authRaw = localStorage.getItem("zyoris-auth");
-    if (authRaw) {
-      try {
-        const parsed = JSON.parse(authRaw);
-        userId = parsed?.user?.id || parsed?.userId || parsed?.id;
-      } catch {}
-    }
-
-    if (userId) {
-      const userRaw = localStorage.getItem(`${NOTIFICATION_CACHE_PREFIX}${userId}`);
-      if (userRaw) {
-        const parsed: PersistedNotificationState = JSON.parse(userRaw);
-        if (Array.isArray(parsed?.notifications) && parsed.notifications.length > 0) {
-          return {
-            notifications: parsed.notifications,
-            counts: parsed.counts || EMPTY_COUNTS,
-          };
-        }
-      }
-    }
-
-    // Fallback: check any recent cache key
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith(NOTIFICATION_CACHE_PREFIX)) {
-        const raw = localStorage.getItem(key);
-        if (raw) {
-          const parsed: PersistedNotificationState = JSON.parse(raw);
-          if (Array.isArray(parsed?.notifications) && parsed.notifications.length > 0) {
-            return {
-              notifications: parsed.notifications,
-              counts: parsed.counts || EMPTY_COUNTS,
-            };
-          }
-        }
-      }
-    }
-  } catch {}
-  return { notifications: [], counts: EMPTY_COUNTS };
-}
-
-function getCachedNotificationState(userId?: string): {
-  notifications: Notification[];
-  counts: Counts;
-} | null {
-  if (typeof window === "undefined" || !userId) return null;
-  try {
-    const raw = localStorage.getItem(`${NOTIFICATION_CACHE_PREFIX}${userId}`);
-    if (raw) {
-      const parsed: PersistedNotificationState = JSON.parse(raw);
-      if (Array.isArray(parsed?.notifications) && parsed.notifications.length > 0) {
-        return {
-          notifications: parsed.notifications,
-          counts: parsed.counts || EMPTY_COUNTS,
-        };
-      }
-    }
-  } catch {}
-  return null;
-}
-
-function persistNotificationState(
-  userId: string | undefined,
-  notifications: Notification[],
-  counts: Counts
-) {
-  if (typeof window === "undefined") return;
-  try {
-    const key = `${NOTIFICATION_CACHE_PREFIX}${userId || "current"}`;
-    if (notifications.length > 0 || counts.all > 0) {
-      const data: PersistedNotificationState = {
-        notifications: notifications.slice(0, 50),
-        counts,
-        savedAt: Date.now(),
-      };
-      localStorage.setItem(key, JSON.stringify(data));
-      if (userId && key !== `${NOTIFICATION_CACHE_PREFIX}current`) {
-        localStorage.setItem(`${NOTIFICATION_CACHE_PREFIX}current`, JSON.stringify(data));
-      }
-    }
-  } catch {}
-}
-
 export function NotificationProvider({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated, sessionStatus } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const userId = user?.id;
-
-  // Initialize directly from persisted cache to retain state across hard refreshes
-  const [initialCached] = useState(() => getInitialNotificationCache());
-  const [notifications, setNotifications] = useState<Notification[]>(() => initialCached.notifications);
-  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<Counts>(() => initialCached.counts);
-
+  const [notifications, setNotifications] = useState<Notification[]>([]);
   const [archivedNotifications, setArchivedNotifications] = useState<Notification[]>([]);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [archivedLoadingMore, setArchivedLoadingMore] = useState(false);
@@ -199,26 +100,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [archivedHasMore, setArchivedHasMore] = useState(false);
   const [archivedNextCursor, setArchivedNextCursor] = useState<string | null>(null);
   const [archivedUnavailable, setArchivedUnavailable] = useState(false);
-  const [loading, setLoading] = useState(() => initialCached.notifications.length === 0);
+  const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [categoryUnreadCounts, setCategoryUnreadCounts] = useState<Counts>(EMPTY_COUNTS);
   const [realtimeStatus, setRealtimeStatus] = useState<NotificationConnectionStatus>("offline");
   const listeners = useRef(new Set<NotificationListener>());
-  const knownIds = useRef(new Set<string>(initialCached.notifications.map((n) => normalizeNotificationId(n.id))));
+  const knownIds = useRef(new Set<string>());
   const countRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstPageInFlight = useRef(false);
   const firstPageLoaded = useRef(false);
   const lastFirstPageLoadAt = useRef(0);
-  const notificationCount = useRef(initialCached.notifications.length);
-  const firstPageRequestUserId = useRef<string | undefined>(undefined);
-
-  // Retain state in storage whenever notifications or unread counts change
-  useEffect(() => {
-    notificationCount.current = notifications.length;
-    persistNotificationState(userId, notifications, categoryUnreadCounts);
-  }, [notifications, categoryUnreadCounts, userId]);
+  const notificationCount = useRef(0);
 
   const loadArchived = useCallback(async () => {
     if (!isAuthenticated || !userId) {
@@ -231,7 +126,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setArchivedError(null);
     setArchivedUnavailable(false);
     try {
-      const result = await getNotifications({ limit: 50, includeArchived: true });
+      const result = await getNotifications({ limit: 20, includeArchived: true });
       setArchivedNotifications(result.notifications);
       setArchivedNextCursor(result.nextCursor);
       setArchivedHasMore(result.hasMore);
@@ -246,7 +141,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!isAuthenticated || !userId || archivedUnavailable || !archivedHasMore || archivedLoadingMore || !archivedNextCursor) return;
     setArchivedLoadingMore(true);
     try {
-      const result = await getNotifications({ cursor: archivedNextCursor, limit: 50, includeArchived: true });
+      const result = await getNotifications({ cursor: archivedNextCursor, limit: 20, includeArchived: true });
       setArchivedNotifications((current) => {
         const existing = new Set(current.map((notification) => notification.id));
         return [...current, ...result.notifications.filter((notification) => !existing.has(notification.id))];
@@ -260,119 +155,60 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [archivedHasMore, archivedLoadingMore, archivedNextCursor, archivedUnavailable, isAuthenticated, userId]);
 
+  const refreshUnreadCounts = useCallback(async () => {
+    if (!isAuthenticated || !userId) return;
+    try {
+      const result = await fetchUnreadCounts();
+      setCategoryUnreadCounts(countsFromServer(result.total, result.byCategory));
+    } catch {
+      setRealtimeStatus((status) => status === "connected" ? status : "offline");
+    }
+  }, [isAuthenticated, userId]);
+
   const loadFirstPage = useCallback(async (force = false) => {
-    // If auth session is still checking, keep loading true without resetting state
-    if (sessionStatus === "checking") {
-      if (notificationCount.current === 0) setLoading(true);
-      return;
-    }
-
     if (!isAuthenticated || !userId) {
-      firstPageRequestUserId.current = undefined;
-      firstPageInFlight.current = false;
-      if (sessionStatus === "unauthenticated") {
-        setNotifications([]);
-        knownIds.current.clear();
-        setHasMore(false);
-        setNextCursor(null);
-        setError(null);
-        firstPageLoaded.current = false;
-        notificationCount.current = 0;
-        setLoading(false);
-      }
-      return;
-    }
-
-    if (firstPageRequestUserId.current && firstPageRequestUserId.current !== userId) {
-      firstPageInFlight.current = false;
+      setNotifications([]);
+      knownIds.current.clear();
+      setHasMore(false);
+      setNextCursor(null);
+      setError(null);
       firstPageLoaded.current = false;
-      lastFirstPageLoadAt.current = 0;
-      const userCached = getCachedNotificationState(userId);
-      const initial = userCached?.notifications ?? [];
-      setNotifications(initial);
-      knownIds.current = new Set(initial.map((n) => normalizeNotificationId(n.id)));
-      notificationCount.current = initial.length;
-      if (userCached?.counts) setCategoryUnreadCounts(userCached.counts);
-    }
-    firstPageRequestUserId.current = userId;
-
-    const now = Date.now();
-    if (firstPageInFlight.current || (!force && firstPageLoaded.current && now - lastFirstPageLoadAt.current < 2000)) {
+      notificationCount.current = 0;
       return;
     }
-
+    const now = Date.now();
+    if (firstPageInFlight.current || (!force && firstPageLoaded.current && now - lastFirstPageLoadAt.current < 3000)) return;
     firstPageInFlight.current = true;
     if (!firstPageLoaded.current && notificationCount.current === 0) setLoading(true);
     if (notificationCount.current === 0) setError(null);
-
     try {
-      let result = await getNotifications({ limit: 50 });
-
-      // Fallback: If backend general query returned 0 notifications but says unreadCount > 0,
-      // fetch with unreadOnly: true so unread notifications are returned.
-      if (result.notifications.length === 0 && result.unreadCount > 0) {
-        try {
-          const unreadResult = await getNotifications({ limit: 50, unreadOnly: true });
-          if (unreadResult.notifications.length > 0) {
-            result = unreadResult;
-          }
-        } catch {}
-      }
-
-      if (firstPageRequestUserId.current === userId) {
-        setNotifications((current) => {
-          // If server returned 0 items but we already have retained state and unreadCount > 0,
-          // retain current notifications instead of blanking them out
-          if (result.notifications.length === 0 && current.length > 0 && result.unreadCount > 0) {
-            return current;
-          }
-          const merged = mergeNotifications(result.notifications, current);
-          notificationCount.current = merged.length;
-          knownIds.current = new Set(merged.map((notification) => normalizeNotificationId(notification.id)));
-          return merged;
-        });
-        setNextCursor(result.nextCursor);
-        setHasMore(result.hasMore);
-        firstPageLoaded.current = true;
-        lastFirstPageLoadAt.current = Date.now();
-
-        // Refresh authoritative unread counts
-        try {
-          const countsResult = await fetchUnreadCounts();
-          setCategoryUnreadCounts(countsFromServer(countsResult.total, countsResult.byCategory));
-        } catch {}
-      }
+      const result = await getNotifications({ limit: 20 });
+      setNotifications((current) => {
+        const merged = mergeNotifications(result.notifications, current);
+        notificationCount.current = merged.length;
+        knownIds.current = new Set(merged.map((notification) => normalizeNotificationId(notification.id)));
+        return merged;
+      });
+      setNextCursor(result.nextCursor);
+      setHasMore(result.hasMore);
+      firstPageLoaded.current = true;
+      lastFirstPageLoadAt.current = Date.now();
+      await refreshUnreadCounts();
     } catch (cause: unknown) {
-      if (firstPageRequestUserId.current === userId && notificationCount.current === 0) {
+      if (notificationCount.current === 0) {
         setError(cause instanceof Error ? cause.message : "Failed to load notifications");
       }
     } finally {
       firstPageInFlight.current = false;
       setLoading(false);
     }
-  }, [sessionStatus, isAuthenticated, userId]);
-
-  const refreshUnreadCounts = useCallback(async () => {
-    if (!isAuthenticated || !userId) return;
-    try {
-      const result = await fetchUnreadCounts();
-      const updatedCounts = countsFromServer(result.total, result.byCategory);
-      setCategoryUnreadCounts(updatedCounts);
-
-      // If counts indicate unread notifications but local notifications list is empty, trigger fetch
-      if (updatedCounts.all > 0 && notificationCount.current === 0 && !firstPageInFlight.current) {
-        void loadFirstPage(true);
-      }
-    } catch {
-      setRealtimeStatus((status) => status === "connected" ? status : "offline");
-    }
-  }, [isAuthenticated, userId, loadFirstPage]);
+  }, [isAuthenticated, userId, refreshUnreadCounts]);
 
   const fetchNextPage = useCallback(async () => {
     if (!isAuthenticated || !userId || !hasMore || loadingMore || !nextCursor) return;
     setLoadingMore(true);
     try {
-      const result = await getNotifications({ cursor: nextCursor, limit: 50 });
+      const result = await getNotifications({ cursor: nextCursor, limit: 20 });
       setNotifications((current) => {
         const existingIds = new Set(current.map((notification) => normalizeNotificationId(notification.id)));
         const additions = result.notifications.filter(
@@ -408,17 +244,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!url) return;
 
     setRealtimeStatus("connecting");
-    const socket = io(url, {
-      auth: (callback) => callback({ token: getEffectiveAuthToken() }),
-      reconnection: true,
-      transports: ["websocket", "polling"],
-      timeout: 8000,
-    });
+    const socket = io(url, { auth: (callback) => callback({ token: getEffectiveAuthToken() }), reconnection: true, transports: ["websocket", "polling"] });
     const isMine = (notification: Notification) => notification.userId === userId;
 
     socket.on("connect", () => {
       setRealtimeStatus("connected");
-      void loadFirstPage(true);
+      void loadFirstPage();
       void refreshUnreadCounts();
     });
     socket.on("disconnect", () => setRealtimeStatus("offline"));
@@ -430,9 +261,11 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       const normId = normalizeNotificationId(notification.id);
       if (!normId || knownIds.current.has(normId)) return;
 
+      // Synchronously record ID before inserting to guard against concurrent socket bursts
       knownIds.current.add(normId);
 
       setNotifications((current) => {
+        // Also check current React state before inserting
         if (current.some((item) => normalizeNotificationId(item.id) === normId)) {
           return current;
         }
@@ -463,24 +296,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       }
     });
 
-    // Background auto-polling fallback: ensures notifications refresh periodically even if WebSockets are blocked
-    const pollInterval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void loadFirstPage(true);
-        void refreshUnreadCounts();
-      }
-    }, 25000);
-
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
-        void loadFirstPage(true);
+        void loadFirstPage();
         void refreshUnreadCounts();
       }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      clearInterval(pollInterval);
       socket.disconnect();
       setRealtimeStatus("offline");
     };
@@ -500,8 +324,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!target || target.read) return;
     setNotifications((current) => current.map((notification) => normalizeNotificationId(notification.id) === normId ? { ...notification, read: true } : notification));
     updateUnreadLocally(target, -1);
-    try { await markAsRead(id); void refreshUnreadCounts(); }
-    catch (cause: unknown) {
+    if (String(id).startsWith("notif-")) {
+      return;
+    }
+    try {
+      await markAsRead(id);
+      void refreshUnreadCounts();
+    } catch (cause: any) {
+      if (cause?.response?.status === 404 || cause?.status === 404 || String(cause?.message).includes("404")) {
+        return;
+      }
       setNotifications((current) => current.map((notification) => normalizeNotificationId(notification.id) === normId ? target : notification));
       updateUnreadLocally(target, 1);
       throw cause;
@@ -511,7 +343,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const markAllRead = useCallback(async (category?: NotificationCategory | string) => {
     const normalizedCategory = category?.toLowerCase();
     const backendCategories = tabToBackend(normalizedCategory || "all");
-    const affected = notifications.filter((notification) => !notification.read && (!normalizedCategory || normalizedCategory === "all" || normalizedCategory === "unread" || (backendCategories.length > 0 && backendToTab(notification.category) === normalizedCategory)));
+    const affected = notifications.filter((notification) => !notification.read && (!normalizedCategory || normalizedCategory === "all" || normalizedCategory === "unread" || backendCategories.length > 0 && backendToTab(notification.category) === normalizedCategory));
     if (affected.length === 0) return;
     const affectedIds = new Set(affected.map((n) => normalizeNotificationId(n.id)));
     setNotifications((current) => current.map((notification) => affectedIds.has(normalizeNotificationId(notification.id)) ? { ...notification, read: true } : notification));
@@ -531,8 +363,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setNotifications((current) => current.filter((notification) => normalizeNotificationId(notification.id) !== normId));
     knownIds.current.delete(normId);
     updateUnreadLocally(target, -1);
-    try { await archiveNotification(id); void refreshUnreadCounts(); }
-    catch (cause: unknown) {
+    if (String(id).startsWith("notif-")) {
+      return;
+    }
+    try {
+      await archiveNotification(id);
+      void refreshUnreadCounts();
+    } catch (cause: any) {
+      if (cause?.response?.status === 404 || cause?.status === 404 || String(cause?.message).includes("404")) {
+        return;
+      }
       setNotifications((current) => [target, ...current]);
       knownIds.current.add(normId);
       updateUnreadLocally(target, 1);
@@ -596,7 +436,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const value: NotificationContextValue = {
     notifications, archivedNotifications, archivedLoading, archivedLoadingMore, archivedError, archivedHasMore, archivedUnavailable,
     loading, loadingMore, hasMore, error,
-    unreadCount: categoryUnreadCounts.all, categoryUnreadCounts, realtimeStatus,
+    unreadCount: categoryUnreadCounts.all || notifications.filter(n => !n.read).length, categoryUnreadCounts, realtimeStatus,
     markRead, markAllRead, removeNotification, hardDeleteNotification: hardDelete,
     createNotification, bulkArchiveByIds, bulkArchiveAllRead,
     refresh: () => loadFirstPage(true), fetchNextPage, loadArchived, fetchNextArchivedPage, refreshUnreadCounts, subscribeToNewNotifications,
