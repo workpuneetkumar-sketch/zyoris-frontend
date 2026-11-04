@@ -74,6 +74,63 @@ export async function getMeetings(): Promise<Meeting[]> {
 
 export async function updateMeeting(id: string, data: UpdateMeetingPayload): Promise<Meeting> {
     const res = await api.patch(`/api/meetings/update-meeting/${id}`, data);
+    return res.data?.data ?? res.data;
+}
+
+export async function deleteMeeting(id: string): Promise<boolean> {
+    try {
+        await api.delete(`/api/meetings/${id}`);
+        return true;
+    } catch (err: any) {
+        const status = err?.response?.status;
+        if (status === 404 || status === 405) {
+            await api.delete(`/api/meetings/delete-meeting/${id}`);
+            return true;
+        }
+        throw err;
+    }
+}
+
+export interface MeetingReminderPayload {
+    minutesBefore: number;
+    reminderType?: "EMAIL" | "SMS" | "PUSH";
+}
+
+export async function createMeetingReminder(
+    meetingId: string,
+    minutesBefore: number,
+    reminderType: "EMAIL" | "SMS" | "PUSH" = "PUSH"
+): Promise<any> {
+    const res = await api.post(`/api/meetings/${meetingId}/reminders`, {
+        minutesBefore,
+        reminderType,
+    });
+    return res.data;
+}
+
+export async function getMeetingReminders(meetingId: string): Promise<any[]> {
+    const res = await api.get(`/api/meetings/${meetingId}/reminders`);
+    const data = res.data?.data ?? res.data;
+    return Array.isArray(data) ? data : [];
+}
+
+export async function addMeetingAttendee(
+    meetingId: string,
+    attendee: { name: string; email?: string }
+): Promise<any> {
+    const res = await api.post(`/api/meetings/${meetingId}/attendees`, attendee);
+    return res.data;
+}
+
+export async function updateMeetingAttendeeRsvp(
+    meetingId: string,
+    attendeeId: string,
+    rsvpStatus: string
+): Promise<any> {
+    const res = await api.patch(`/api/meetings/${meetingId}/attendees/${attendeeId}`, {
+        status: rsvpStatus,
+        rsvp: rsvpStatus,
+    });
     return res.data;
 }
 

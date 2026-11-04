@@ -1,145 +1,217 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { Meeting } from "@/lib/api/meetingsApi";
 import { Task } from "@/lib/api/tasksApi";
 import { Call } from "@/lib/api/callsApi";
 import { UnifiedCalendarEvent } from "@/types/calendar";
-import { formatTimeDisplay } from "@/lib/api/calendarService";
+import { formatTimeDisplay, formatDateKey } from "@/lib/api/calendarService";
+import { getCategoryToken } from "./calendarTheme";
 import {
-  Calendar as CalendarIcon,
   Video,
   Clock,
   Plus,
   CloudOff,
+  ChevronDown,
+  Edit2,
 } from "lucide-react";
 
 interface DailySummaryPanelProps {
   selectedDate: Date;
   events: UnifiedCalendarEvent[];
-  rawMeetings: Meeting[];
-  rawCalls: Call[];
-  rawTasks: Task[];
+  rawMeetings?: Meeting[];
+  rawCalls?: Call[];
+  rawTasks?: Task[];
   onOpenCreate: (date: Date) => void;
   onSelectEvent: (event: UnifiedCalendarEvent) => void;
-  onSelectMeeting: (meeting: Meeting) => void;
+  onEditEvent?: (event: UnifiedCalendarEvent) => void;
+  onSelectMeeting?: (meeting: Meeting) => void;
   onSelectCall: (call: Call) => void;
   onSelectTask: (task: Task) => void;
+  embedded?: boolean;
 }
 
 export default function DailySummaryPanel({
   selectedDate,
   events,
-  rawMeetings,
-  rawCalls,
-  rawTasks,
   onOpenCreate,
   onSelectEvent,
-  onSelectMeeting,
+  onEditEvent,
   onSelectCall,
   onSelectTask,
+  embedded = true,
 }: DailySummaryPanelProps) {
-  // Helper to test if a string date matches selectedDate
-  const isSelectedDateMatch = (dateStr?: string) => {
-    if (!dateStr) return false;
-    let d: Date;
-    if (dateStr.includes("T")) {
-      d = new Date(dateStr);
-    } else {
-      const parts = dateStr.split("-").map(Number);
-      d = new Date(parts[0], parts[1] - 1, parts[2]);
-    }
-    return (
-      d.getFullYear() === selectedDate.getFullYear() &&
-      d.getMonth() === selectedDate.getMonth() &&
-      d.getDate() === selectedDate.getDate()
-    );
-  };
+  const [activeTab, setActiveTab] = useState<"all" | "meetings" | "calls" | "tasks">("all");
+  const [isExpanded, setIsExpanded] = useState(true);
 
-  // Filter meetings from unified events that are meetings or custom
-  const dayMeetings = events.filter(
-    (e) => (e.category === "meeting" || e.category === "interview" || e.sourceType === "meeting") && isSelectedDateMatch(e.date)
+  const selectedDateKey = formatDateKey(selectedDate);
+
+  // Strictly use `events` (which is already filtered by department, category, and search query!)
+  const dayEvents = events.filter((e) => e.date === selectedDateKey);
+
+  const dayMeetings = dayEvents.filter(
+    (e) =>
+      e.sourceType !== "call" &&
+      e.sourceType !== "task" &&
+      e.category !== "call" &&
+      e.category !== "task"
   );
 
-  // Filter calls
-  const dayCalls = rawCalls.filter((c) => isSelectedDateMatch(c.date));
+  const dayCalls = dayEvents.filter(
+    (e) => e.sourceType === "call" || e.category === "call"
+  );
 
-  // Filter tasks
-  const dayTasks = rawTasks.filter((t) => isSelectedDateMatch(t.dueDate || undefined));
+  const dayTasks = dayEvents.filter(
+    (e) => e.sourceType === "task" || e.category === "task"
+  );
+
+  const handleEdit = (evt: UnifiedCalendarEvent) => {
+    if (onEditEvent) {
+      onEditEvent(evt);
+    } else {
+      onSelectEvent(evt);
+    }
+  };
 
   return (
-    <div className="w-full xl:w-[380px] shrink-0 bg-white rounded-2xl border border-slate-200/80 shadow-2xs flex flex-col overflow-hidden">
-      {/* Soft Powder-Blue Header */}
-      <div className="p-5 bg-gradient-to-b from-[#F0F5FF] to-slate-50/70 border-b border-slate-200/70 flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold text-[#1E293B] tracking-tight">
-            {selectedDate.toLocaleDateString("en-US", { weekday: "long" })}
-          </h3>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            {selectedDate.toLocaleDateString("en-US", {
-              month: "long",
-              day: "numeric",
-              year: "numeric",
-            })}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div
+      className={
+        embedded
+          ? "border-t border-[#E2E8F0] pt-4 flex flex-col"
+          : "w-full bg-white border-t border-[#E2E8F0] p-4 flex flex-col"
+      }
+    >
+      {/* Selected Day Agenda Header */}
+      <div className="flex items-center justify-between mb-2.5">
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="flex items-center gap-1.5 text-left group"
+        >
+          <ChevronDown
+            size={14}
+            className={`text-[#637381] transition-transform ${
+              isExpanded ? "" : "-rotate-90"
+            }`}
+          />
+          <div>
+            <h3 className="text-xs font-bold text-[#212B36] tracking-tight">
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "short",
+                month: "short",
+                day: "numeric",
+              })}{" "}
+              Schedule
+            </h3>
+          </div>
+        </button>
+
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] font-semibold text-[#637381] bg-[#F4F6F8] px-2 py-0.5 rounded-full">
+            {dayEvents.length}
+          </span>
           <button
             type="button"
             onClick={() => onOpenCreate(selectedDate)}
-            className="p-2 rounded-xl bg-white hover:bg-slate-100/90 text-slate-700 border border-slate-200/90 shadow-2xs transition-colors active:scale-95"
-            title="Add event for this date"
+            className="p-1 rounded-lg text-[#637381] hover:text-[#212B36] hover:bg-[#F4F6F8] transition-colors"
+            title="Add event for selected date"
+            aria-label="Add event for selected date"
           >
-            <Plus size={16} strokeWidth={2.2} />
+            <Plus size={14} strokeWidth={2.2} />
           </button>
-          <div className="w-9 h-9 rounded-xl bg-[#E7F0FF] border border-[#C5DAFD]/60 flex items-center justify-center text-[#355D91] shadow-2xs">
-            <CalendarIcon size={18} />
-          </div>
         </div>
       </div>
 
-      {/* Sections Container */}
-      <div className="p-5 space-y-6 overflow-y-auto max-h-[640px] no-scrollbar flex-1">
-        {/* MEETINGS SECTION */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#355D91]" /> Meetings & Events
-            </h4>
-            <span className="text-[10px] font-semibold text-[#355D91] bg-[#E7F0FF] border border-[#C5DAFD]/60 px-2 py-0.5 rounded-full">
-              {dayMeetings.length}
-            </span>
+      {isExpanded && (
+        <div className="space-y-3">
+          {/* Compact Category Pill Tabs (Meetings, Calls, Tasks) */}
+          <div className="grid grid-cols-4 gap-1 bg-[#F4F6F8] p-0.5 rounded-lg text-[10px] font-semibold">
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className={`py-1 rounded-md transition-colors ${
+                activeTab === "all"
+                  ? "bg-white text-[#212B36] shadow-sm"
+                  : "text-[#637381] hover:text-[#212B36]"
+              }`}
+            >
+              All ({dayEvents.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("meetings")}
+              className={`py-1 rounded-md transition-colors ${
+                activeTab === "meetings"
+                  ? "bg-white text-[#212B36] shadow-sm"
+                  : "text-[#637381] hover:text-[#212B36]"
+              }`}
+            >
+              Meet ({dayMeetings.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("calls")}
+              className={`py-1 rounded-md transition-colors ${
+                activeTab === "calls"
+                  ? "bg-white text-[#212B36] shadow-sm"
+                  : "text-[#637381] hover:text-[#212B36]"
+              }`}
+            >
+              Calls ({dayCalls.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("tasks")}
+              className={`py-1 rounded-md transition-colors ${
+                activeTab === "tasks"
+                  ? "bg-white text-[#212B36] shadow-sm"
+                  : "text-[#637381] hover:text-[#212B36]"
+              }`}
+            >
+              Tasks ({dayTasks.length})
+            </button>
           </div>
 
-          <div className="space-y-2.5">
-            {dayMeetings.length > 0 ? (
+          {/* Filtered Items List */}
+          <div className="space-y-2 max-h-[260px] overflow-y-auto pr-0.5">
+            {/* MEETINGS & EVENTS */}
+            {(activeTab === "all" || activeTab === "meetings") &&
               dayMeetings.map((m) => {
+                const token = getCategoryToken(m.category, m.customColor);
                 const isPendingSync = m.syncStatus === "pending_sync";
+
                 return (
                   <div
                     key={m.id}
                     onClick={() => onSelectEvent(m)}
-                    className="p-3 bg-white hover:bg-slate-50/70 rounded-xl border border-slate-200/80 border-l-4 border-l-[#355D91] shadow-2xs transition-all cursor-pointer flex items-center justify-between gap-3 group"
+                    style={{
+                      backgroundColor: token.bg,
+                      borderLeftColor: token.dot,
+                      color: token.text,
+                    }}
+                    className="p-2.5 rounded-lg border-l-[3px] transition-all cursor-pointer flex items-start justify-between gap-2 group hover:brightness-95"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-bold text-slate-800 text-xs truncate group-hover:text-[#355D91] transition-colors">
-                          {m.title}
-                        </p>
+                      <div className="flex items-center gap-1">
+                        <p className="font-semibold text-xs truncate">{m.title}</p>
                         {isPendingSync && (
                           <span title="Saved locally – pending server sync">
-                            <CloudOff size={11} className="text-amber-600 shrink-0" />
+                            <CloudOff size={10} className="text-amber-600 shrink-0" />
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-1 font-medium">
-                        <Clock size={11} className="text-[#355D91]" />
+                      <p className="text-[10px] opacity-85 mt-0.5 flex items-center gap-1 font-medium">
+                        <Clock size={10} />
                         <span>
-                          {formatTimeDisplay(m.startTime)} – {formatTimeDisplay(m.endTime)}
+                          {m.allDay || !m.startTime
+                            ? "All day"
+                            : `${formatTimeDisplay(m.startTime)} – ${formatTimeDisplay(
+                                m.endTime
+                              )}`}
                         </span>
                       </p>
                       {(m.room || m.location) && (
-                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                        <p className="text-[10px] opacity-75 mt-0.5 truncate">
                           {m.room || m.location}
                         </p>
                       )}
@@ -152,33 +224,139 @@ export default function DailySummaryPanel({
                           target="_blank"
                           rel="noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="p-1.5 text-[#355D91] hover:text-[#23436D] bg-[#E7F0FF] rounded-lg border border-[#C5DAFD]/60 shadow-2xs transition-colors"
+                          className="p-1 bg-white/70 hover:bg-white rounded text-[#212B36] transition-colors"
                           title="Join video call"
                         >
-                          <Video size={13} />
+                          <Video size={12} />
                         </a>
                       )}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          onSelectEvent(m);
+                          handleEdit(m);
                         }}
-                        className="text-[10px] font-semibold text-slate-700 hover:text-slate-900 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs transition-colors"
+                        className="p-1 bg-white/70 hover:bg-white rounded text-[#212B36] text-[10px] font-semibold flex items-center gap-0.5 px-1.5 transition-colors"
+                        title="Edit event"
+                      >
+                        <Edit2 size={10} />
+                        <span>Edit</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {/* CALLS */}
+            {(activeTab === "all" || activeTab === "calls") &&
+              dayCalls.map((cEvt) => {
+                const token = getCategoryToken(cEvt.category, cEvt.customColor);
+                const rawCall = cEvt.rawSource as Call | undefined;
+
+                return (
+                  <div
+                    key={cEvt.id}
+                    onClick={() => {
+                      if (rawCall && cEvt.sourceType === "call") {
+                        onSelectCall(rawCall);
+                      } else {
+                        onSelectEvent(cEvt);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: token.bg,
+                      borderLeftColor: token.dot,
+                      color: token.text,
+                    }}
+                    className="p-2.5 rounded-lg border-l-[3px] transition-all cursor-pointer flex items-center justify-between gap-2 hover:brightness-95"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-xs truncate">{cEvt.title}</p>
+                      <p className="text-[10px] opacity-85 mt-0.5 truncate">
+                        {cEvt.startTime
+                          ? `${formatTimeDisplay(cEvt.startTime)} – ${formatTimeDisplay(
+                              cEvt.endTime
+                            )}`
+                          : cEvt.description}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (rawCall && cEvt.sourceType === "call") {
+                          onSelectCall(rawCall);
+                        } else {
+                          handleEdit(cEvt);
+                        }
+                      }}
+                      className="text-[10px] font-semibold bg-white/70 hover:bg-white text-[#212B36] px-2 py-0.5 rounded transition-colors shrink-0"
+                    >
+                      {cEvt.sourceType === "call" && rawCall ? "View" : "Edit"}
+                    </button>
+                  </div>
+                );
+              })}
+
+            {/* TASKS */}
+            {(activeTab === "all" || activeTab === "tasks") &&
+              dayTasks.map((tEvt) => {
+                const token = getCategoryToken(tEvt.category, tEvt.customColor);
+                const rawTask = tEvt.rawSource as Task | undefined;
+
+                return (
+                  <div
+                    key={tEvt.id}
+                    onClick={() => {
+                      if (rawTask && tEvt.sourceType === "task") {
+                        onSelectTask(rawTask);
+                      } else {
+                        onSelectEvent(tEvt);
+                      }
+                    }}
+                    style={{
+                      backgroundColor: token.bg,
+                      borderLeftColor: token.dot,
+                      color: token.text,
+                    }}
+                    className="p-2.5 rounded-lg border-l-[3px] transition-all cursor-pointer flex items-center justify-between gap-2 hover:brightness-95"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-xs truncate">{tEvt.title}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5 text-[10px] opacity-85">
+                        <span>{tEvt.allDay ? "Due today" : formatTimeDisplay(tEvt.startTime)}</span>
+                        {rawTask?.priority && (
+                          <span className="font-bold uppercase">• {rawTask.priority}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(tEvt);
+                        }}
+                        className="text-[10px] font-semibold bg-white/70 hover:bg-white text-[#212B36] px-1.5 py-0.5 rounded transition-colors"
                       >
                         Edit
                       </button>
                     </div>
                   </div>
                 );
-              })
-            ) : (
-              <div className="p-3 bg-slate-50/70 rounded-xl border border-dashed border-slate-200/80 flex items-center justify-between">
-                <p className="text-xs text-slate-400 italic">No meetings scheduled</p>
+              })}
+
+            {/* Empty State for Selected Day */}
+            {((activeTab === "all" && dayEvents.length === 0) ||
+              (activeTab === "meetings" && dayMeetings.length === 0) ||
+              (activeTab === "calls" && dayCalls.length === 0) ||
+              (activeTab === "tasks" && dayTasks.length === 0)) && (
+              <div className="py-4 px-3 bg-[#F4F6F8]/60 rounded-xl border border-dashed border-[#E2E8F0] flex items-center justify-between">
+                <p className="text-[11px] text-[#919EAB]">Nothing scheduled</p>
                 <button
                   type="button"
                   onClick={() => onOpenCreate(selectedDate)}
-                  className="text-[11px] font-semibold text-[#355D91] hover:underline"
+                  className="text-[11px] font-semibold text-[#FF5630] hover:underline"
                 >
                   + Add
                 </button>
@@ -186,112 +364,7 @@ export default function DailySummaryPanel({
             )}
           </div>
         </div>
-
-        {/* CALLS SECTION */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#A45F60]" /> Calls
-            </h4>
-            <span className="text-[10px] font-semibold text-[#A45F60] bg-[#FCE9E7] border border-[#F6CBC8]/60 px-2 py-0.5 rounded-full">
-              {dayCalls.length}
-            </span>
-          </div>
-
-          <div className="space-y-2.5">
-            {dayCalls.length > 0 ? (
-              dayCalls.map((c) => (
-                <div
-                  key={c.id || Math.random()}
-                  onClick={() => onSelectCall(c)}
-                  className="p-3 bg-white hover:bg-slate-50/70 rounded-xl border border-slate-200/80 border-l-4 border-l-[#A45F60] shadow-2xs transition-all cursor-pointer flex items-center justify-between gap-3 group"
-                >
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-800 text-xs truncate group-hover:text-[#A45F60] transition-colors">
-                      {c.contactName || "Call Log"}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-0.5">
-                      {c.duration} mins • <span className="font-medium">{c.outcome}</span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectCall(c);
-                    }}
-                    className="text-[10px] font-semibold text-slate-700 hover:text-slate-900 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs transition-colors shrink-0"
-                  >
-                    View
-                  </button>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-slate-400 italic p-3 bg-slate-50/70 rounded-xl border border-dashed border-slate-200/80">
-                No calls logged for this date
-              </p>
-            )}
-          </div>
-        </div>
-
-        {/* TASKS SECTION */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#397858]" /> Tasks Due
-            </h4>
-            <span className="text-[10px] font-semibold text-[#397858] bg-[#E7F5EC] border border-[#C6E7D2]/60 px-2 py-0.5 rounded-full">
-              {dayTasks.length}
-            </span>
-          </div>
-
-          <div className="space-y-2.5">
-            {dayTasks.length > 0 ? (
-              dayTasks.map((t) => (
-                <div
-                  key={t.id}
-                  onClick={() => onSelectTask(t)}
-                  className="p-3 bg-white hover:bg-slate-50/70 rounded-xl border border-slate-200/80 border-l-4 border-l-[#397858] shadow-2xs transition-all cursor-pointer flex items-center justify-between gap-3 group"
-                >
-                  <div className="min-w-0">
-                    <p className="font-bold text-slate-800 text-xs truncate group-hover:text-[#397858] transition-colors">
-                      {t.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span
-                        className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-                          t.priority === "HIGH"
-                            ? "bg-[#FFF0E5] text-[#A96D46] border border-[#FCDCC6]"
-                            : "bg-[#E7F5EC] text-[#397858] border border-[#C6E7D2]"
-                        }`}
-                      >
-                        {t.priority}
-                      </span>
-                      <span className="text-[10px] font-medium text-slate-500">
-                        {t.status}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelectTask(t);
-                    }}
-                    className="text-[10px] font-semibold text-slate-700 hover:text-slate-900 bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs transition-colors shrink-0"
-                  >
-                    View
-                  </button>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-slate-400 italic p-3 bg-slate-50/70 rounded-xl border border-dashed border-slate-200/80">
-                No tasks due on this date
-              </p>
-            )}
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

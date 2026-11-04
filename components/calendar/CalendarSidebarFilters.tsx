@@ -1,9 +1,21 @@
 "use client";
 
-import React from "react";
-import { CalendarDepartment, CalendarCategory } from "@/types/calendar";
-import { PASTEL_CATEGORY_TOKENS } from "./calendarTheme";
-import { Check, X, RotateCcw } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import {
+  CalendarDepartment,
+  CalendarCategory,
+  UnifiedCalendarEvent,
+} from "@/types/calendar";
+import {
+  PASTEL_CATEGORY_TOKENS,
+  DEPARTMENT_CALENDAR_TOKENS,
+} from "./calendarTheme";
+import MiniDatePickerPopover from "./MiniDatePickerPopover";
+import DailySummaryPanel from "./DailySummaryPanel";
+import { Meeting } from "@/lib/api/meetingsApi";
+import { Call } from "@/lib/api/callsApi";
+import { Task } from "@/lib/api/tasksApi";
+import { Check, X, RotateCcw, ChevronDown, Plus } from "lucide-react";
 
 interface CalendarSidebarFiltersProps {
   selectedDepartments: CalendarDepartment[];
@@ -12,16 +24,28 @@ interface CalendarSidebarFiltersProps {
   onChangeCategories: (cats: CalendarCategory[]) => void;
   onResetFilters: () => void;
   onClose?: () => void;
+  selectedDate?: Date;
+  onSelectDate?: (date: Date) => void;
+  events?: UnifiedCalendarEvent[];
+  rawMeetings?: Meeting[];
+  rawCalls?: Call[];
+  rawTasks?: Task[];
+  onOpenCreate?: (date: Date) => void;
+  onSelectEvent?: (event: UnifiedCalendarEvent) => void;
+  onEditEvent?: (event: UnifiedCalendarEvent) => void;
+  onSelectMeeting?: (meeting: Meeting) => void;
+  onSelectCall?: (call: Call) => void;
+  onSelectTask?: (task: Task) => void;
 }
 
-const DEPARTMENTS: { id: CalendarDepartment; label: string; color: string }[] = [
-  { id: "personal", label: "Personal Calendar", color: "bg-blue-400" },
-  { id: "company", label: "Company-Wide", color: "bg-indigo-400" },
-  { id: "development", label: "Development", color: "bg-sky-400" },
-  { id: "hr", label: "HR & Recruitment", color: "bg-teal-400" },
-  { id: "marketing", label: "Marketing", color: "bg-purple-400" },
-  { id: "sales", label: "Sales & Clients", color: "bg-amber-400" },
-  { id: "management", label: "Management", color: "bg-rose-400" },
+const ALL_DEPARTMENTS: CalendarDepartment[] = [
+  "personal",
+  "company",
+  "development",
+  "hr",
+  "marketing",
+  "sales",
+  "management",
 ];
 
 const CATEGORIES_LIST: { id: CalendarCategory; label: string }[] = [
@@ -41,123 +65,306 @@ export default function CalendarSidebarFilters({
   onChangeCategories,
   onResetFilters,
   onClose,
+  selectedDate = new Date(),
+  onSelectDate,
+  events = [],
+  rawMeetings = [],
+  rawCalls = [],
+  rawTasks = [],
+  onOpenCreate,
+  onSelectEvent,
+  onEditEvent,
+  onSelectMeeting,
+  onSelectCall,
+  onSelectTask,
 }: CalendarSidebarFiltersProps) {
+  const [calendarsExpanded, setCalendarsExpanded] = useState(true);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(true);
+
+  // Allow unchecking all departments (fixed previous single-item lock bug)
   const toggleDept = (dept: CalendarDepartment) => {
     if (selectedDepartments.includes(dept)) {
-      if (selectedDepartments.length === 1) return; // keep at least 1
       onChangeDepartments(selectedDepartments.filter((d) => d !== dept));
     } else {
       onChangeDepartments([...selectedDepartments, dept]);
     }
   };
 
+  // Allow unchecking all categories (fixed previous single-item lock bug)
   const toggleCat = (cat: CalendarCategory) => {
     if (selectedCategories.includes(cat)) {
-      if (selectedCategories.length === 1) return; // keep at least 1
       onChangeCategories(selectedCategories.filter((c) => c !== cat));
     } else {
       onChangeCategories([...selectedCategories, cat]);
     }
   };
 
+  const eventDates = useMemo(() => {
+    const set = new Set<string>();
+    events.forEach((e) => {
+      if (e.date) set.add(e.date);
+    });
+    return set;
+  }, [events]);
+
+  const deptCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.forEach((e) => {
+      const d = e.department || "company";
+      counts[d] = (counts[d] || 0) + 1;
+    });
+    return counts;
+  }, [events]);
+
+  const catCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    events.forEach((e) => {
+      const c = e.category || "meeting";
+      counts[c] = (counts[c] || 0) + 1;
+    });
+    return counts;
+  }, [events]);
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-4 md:p-5 space-y-5">
-      {/* Top Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-        <h3 className="text-xs font-bold text-[#1E293B] uppercase tracking-wider">
-          Filter Calendars
-        </h3>
-        <div className="flex items-center gap-1">
+    <aside className="w-full h-full flex flex-col bg-white select-none overflow-y-auto">
+      {/* Mobile / Tablet Drawer Header */}
+      {onClose && (
+        <div className="flex items-center justify-between px-4 py-3 border-b border-[#F1F3F5] xl:hidden">
+          <span className="text-[13px] font-bold text-[#212B36]">
+            Calendar & Filters
+          </span>
           <button
             type="button"
-            onClick={onResetFilters}
-            className="p-1 text-slate-400 hover:text-[#355D91] transition-colors"
-            title="Reset filters to default"
+            onClick={onClose}
+            className="p-1.5 text-[#637381] hover:text-[#212B36] hover:bg-[#F4F6F8] rounded-lg transition-colors"
+            aria-label="Close sidebar"
           >
-            <RotateCcw size={13} />
+            <X size={16} />
           </button>
-          {onClose && (
+        </div>
+      )}
+
+      {/* Quick Create Event Action */}
+      {onOpenCreate && (
+        <div className="px-4 pt-4 pb-1">
+          <button
+            type="button"
+            onClick={() => onOpenCreate(selectedDate)}
+            className="w-full py-2.5 px-4 rounded-xl bg-[#FF5630] hover:bg-[#FF4842] text-white font-semibold text-[13px] shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+          >
+            <Plus size={16} strokeWidth={2.5} />
+            <span>Create Event</span>
+          </button>
+        </div>
+      )}
+
+      {/* Inline Mini Calendar Date Picker */}
+      {onSelectDate && (
+        <div className="px-2 pt-1 pb-2 border-b border-[#F1F3F5]">
+          <MiniDatePickerPopover
+            selectedDate={selectedDate}
+            onSelectDate={onSelectDate}
+            onClose={() => {}}
+            inline={true}
+            events={events}
+          />
+        </div>
+      )}
+
+      {/* Calendars / Departments Section */}
+      <div className="px-4 py-3 border-b border-[#F1F3F5]">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            type="button"
+            onClick={() => setCalendarsExpanded(!calendarsExpanded)}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-[#637381] uppercase tracking-wider hover:text-[#212B36] transition-colors"
+          >
+            <ChevronDown
+              size={13}
+              className={`transition-transform ${
+                calendarsExpanded ? "" : "-rotate-90"
+              }`}
+            />
+            <span>Calendars</span>
+          </button>
+
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onClose}
-              className="p-1 text-slate-400 hover:text-slate-600 transition-colors"
-              title="Close panel"
+              onClick={() => {
+                if (selectedDepartments.length === ALL_DEPARTMENTS.length) {
+                  onChangeDepartments([]);
+                } else {
+                  onChangeDepartments([...ALL_DEPARTMENTS]);
+                }
+              }}
+              className="text-[11px] font-semibold text-[#637381] hover:text-[#212B36] transition-colors"
             >
-              <X size={15} />
+              {selectedDepartments.length === ALL_DEPARTMENTS.length
+                ? "Clear"
+                : "All"}
             </button>
-          )}
+            <button
+              type="button"
+              onClick={onResetFilters}
+              className="p-1 text-[#919EAB] hover:text-[#212B36] rounded transition-colors"
+              title="Reset all filters"
+            >
+              <RotateCcw size={12} />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Departments */}
-      <div>
-        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-          Calendars
-        </h4>
-        <div className="space-y-1">
-          {DEPARTMENTS.map((dept) => {
-            const active = selectedDepartments.includes(dept.id);
-            return (
-              <label
-                key={dept.id}
-                onClick={() => toggleDept(dept.id)}
-                className={`flex items-center justify-between p-2 rounded-xl cursor-pointer text-xs transition-colors select-none ${
-                  active ? "bg-slate-50 font-semibold text-slate-900" : "text-slate-400 hover:bg-slate-50/50"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span className={`w-2.5 h-2.5 rounded-full ${dept.color}`} />
-                  <span>{dept.label}</span>
-                </div>
-                <div
-                  className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                    active ? "bg-[#355D91] border-[#355D91] text-white" : "border-slate-300 bg-white"
+        {calendarsExpanded && (
+          <div className="space-y-0.5">
+            {ALL_DEPARTMENTS.map((deptId) => {
+              const meta = DEPARTMENT_CALENDAR_TOKENS[deptId];
+              const active = selectedDepartments.includes(deptId);
+              const count = deptCounts[deptId] || 0;
+
+              return (
+                <button
+                  key={deptId}
+                  type="button"
+                  onClick={() => toggleDept(deptId)}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] transition-colors ${
+                    active
+                      ? "text-[#212B36] font-medium hover:bg-[#F4F6F8]"
+                      : "text-[#919EAB] hover:bg-[#F4F6F8]/60"
                   }`}
                 >
-                  {active && <Check size={11} strokeWidth={2.8} />}
-                </div>
-              </label>
-            );
-          })}
-        </div>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className="w-4 h-4 rounded-[5px] flex items-center justify-center transition-all shrink-0 border"
+                      style={{
+                        backgroundColor: active ? meta.color : "transparent",
+                        borderColor: active ? meta.color : "#CBD5E1",
+                      }}
+                    >
+                      {active && (
+                        <Check size={11} strokeWidth={3} className="text-white" />
+                      )}
+                    </span>
+                    <span className="truncate">{meta.label}</span>
+                  </div>
+                  {count > 0 && (
+                    <span className="text-[10px] font-semibold text-[#919EAB] ml-2">
+                      {count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Categories with unified pastel indicators */}
-      <div className="pt-2 border-t border-slate-100">
-        <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-          Event Types
-        </h4>
-        <div className="space-y-1">
-          {CATEGORIES_LIST.map((cat) => {
-            const active = selectedCategories.includes(cat.id);
-            const token = PASTEL_CATEGORY_TOKENS[cat.id];
-            return (
-              <label
-                key={cat.id}
-                onClick={() => toggleCat(cat.id)}
-                className={`flex items-center justify-between p-2 rounded-xl cursor-pointer text-xs transition-colors select-none ${
-                  active ? "bg-slate-50 font-semibold text-slate-900" : "text-slate-400 hover:bg-slate-50/50"
-                }`}
-              >
-                <div className="flex items-center gap-2.5">
-                  <span
-                    className="w-2.5 h-2.5 rounded-full"
-                    style={{ backgroundColor: token.dot }}
-                  />
-                  <span>{cat.label}</span>
-                </div>
-                <div
-                  className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${
-                    active ? "bg-[#355D91] border-[#355D91] text-white" : "border-slate-300 bg-white"
+      {/* Event Categories Section */}
+      <div className="px-4 py-3 border-b border-[#F1F3F5]">
+        <div className="flex items-center justify-between mb-2">
+          <button
+            type="button"
+            onClick={() => setCategoriesExpanded(!categoriesExpanded)}
+            className="flex items-center gap-1.5 text-[11px] font-bold text-[#637381] uppercase tracking-wider hover:text-[#212B36] transition-colors"
+          >
+            <ChevronDown
+              size={13}
+              className={`transition-transform ${
+                categoriesExpanded ? "" : "-rotate-90"
+              }`}
+            />
+            <span>Event Categories</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              const allCats: CalendarCategory[] = [
+                ...CATEGORIES_LIST.map((c) => c.id),
+                "event",
+              ];
+              if (selectedCategories.length >= CATEGORIES_LIST.length) {
+                onChangeCategories([]);
+              } else {
+                onChangeCategories(allCats);
+              }
+            }}
+            className="text-[11px] font-semibold text-[#637381] hover:text-[#212B36] transition-colors"
+          >
+            {selectedCategories.length >= CATEGORIES_LIST.length
+              ? "Clear"
+              : "All"}
+          </button>
+        </div>
+
+        {categoriesExpanded && (
+          <div className="space-y-0.5">
+            {CATEGORIES_LIST.map((cat) => {
+              const active = selectedCategories.includes(cat.id);
+              const token = PASTEL_CATEGORY_TOKENS[cat.id];
+              const count = catCounts[cat.id] || 0;
+
+              return (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => toggleCat(cat.id)}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-[12px] transition-colors ${
+                    active
+                      ? "text-[#212B36] font-medium hover:bg-[#F4F6F8]"
+                      : "text-[#919EAB] hover:bg-[#F4F6F8]/60"
                   }`}
                 >
-                  {active && <Check size={11} strokeWidth={2.8} />}
-                </div>
-              </label>
-            );
-          })}
-        </div>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className="w-4 h-4 rounded-[5px] flex items-center justify-center transition-all shrink-0 border"
+                      style={{
+                        backgroundColor: active ? token.accent : "transparent",
+                        borderColor: active ? token.accent : "#CBD5E1",
+                      }}
+                    >
+                      {active && (
+                        <Check size={11} strokeWidth={3} className="text-white" />
+                      )}
+                    </span>
+                    <span className="truncate">{cat.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {count > 0 && (
+                      <span className="text-[10px] font-semibold text-[#919EAB]">
+                        {count}
+                      </span>
+                    )}
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: token.bg, border: `1.5px solid ${token.accent}` }}
+                    />
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
-    </div>
+
+      {/* Selected-Day Summary / Daily Agenda */}
+      {onSelectEvent && onOpenCreate && (
+        <div className="flex-1">
+          <DailySummaryPanel
+            selectedDate={selectedDate}
+            events={events}
+            rawMeetings={rawMeetings}
+            rawCalls={rawCalls}
+            rawTasks={rawTasks}
+            onOpenCreate={onOpenCreate}
+            onSelectEvent={onSelectEvent}
+            onEditEvent={onEditEvent}
+            onSelectMeeting={onSelectMeeting || (() => {})}
+            onSelectCall={onSelectCall || (() => {})}
+            onSelectTask={onSelectTask || (() => {})}
+          />
+        </div>
+      )}
+    </aside>
   );
 }
