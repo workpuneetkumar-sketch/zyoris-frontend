@@ -97,9 +97,10 @@ export default function EmployeeDetailPage() {
         
         // Filter strictly to this employee
         const filteredAttendance = (attendanceData || []).filter((r) => {
-          if (r.employeeId && r.employeeId === targetEmpId) return true;
-          if (r.employee?.id && r.employee?.id === targetEmpId) return true;
-          if (targetUserId && (r.employee?.userId === targetUserId || r.userId === targetUserId)) return true;
+          const raw = r as any;
+          if (raw.employeeId && raw.employeeId === targetEmpId) return true;
+          if (raw.employee?.id && raw.employee?.id === targetEmpId) return true;
+          if (targetUserId && (raw.employee?.userId === targetUserId || raw.userId === targetUserId)) return true;
           return false;
         });
 
@@ -114,9 +115,10 @@ export default function EmployeeDetailPage() {
 
         // Strict filter for leave requests
         const filteredLeaves = (leaveData || []).filter((l) => {
-          if (l.employeeId && l.employeeId === targetEmpId) return true;
-          if (l.employee?.id && l.employee?.id === targetEmpId) return true;
-          if (targetUserId && (l.employee?.userId === targetUserId || l.userId === targetUserId)) return true;
+          const raw = l as any;
+          if (raw.employeeId && raw.employeeId === targetEmpId) return true;
+          if (raw.employee?.id && raw.employee?.id === targetEmpId) return true;
+          if (targetUserId && (raw.employee?.userId === targetUserId || raw.userId === targetUserId)) return true;
           return false;
         });
 

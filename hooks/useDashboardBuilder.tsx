@@ -111,7 +111,7 @@ export function useDashboardBuilder(userRole?: string) {
   // ── Load catalog + layouts ────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
-    if (sessionStatus === "loading") return;
+    if (sessionStatus === "checking") return;
     if (sessionStatus === "unauthenticated" || !token) {
       try {
         const fetchedCatalog = await getWidgetCatalog();

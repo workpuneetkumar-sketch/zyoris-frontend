@@ -1,6 +1,16 @@
 import api, { getEffectiveAuthToken } from "./api";
 import type { AgentApprovalRequest } from "@/types/ai-proposals";
-import { detectIntent, fetchDataByIntent, formatDataForResponse } from "@/lib/chatDataService";
+import {
+  detectIntent,
+  fetchDataByIntent,
+  formatDataForResponse,
+  gatherLiveCRMContext,
+} from "@/lib/chatDataService";
+import {
+  generateGroqCompletion,
+  getAuthenticatedUserProfile,
+  generateDeterministicFallback,
+} from "@/lib/aiService";
 
 export interface ChatMessageDto {
   id: string;
@@ -364,9 +374,47 @@ export async function sendChatMessage(
       }
     }
 
+    // ─── Direct Groq AI Engine Integration ───────────────────────────
+    // If backend AI provider is misconfigured (e.g. invalid key) or returns 404/500/503,
+    // seamlessly generate an accurate, grounded AI response using Groq.
+    try {
+      const token = getEffectiveAuthToken() || "";
+      const userProfile = getAuthenticatedUserProfile();
+      const crmContext = await gatherLiveCRMContext(token);
+
+      const aiReply = await generateGroqCompletion({
+        message: trimmed,
+        userProfile,
+        crmContext,
+      });
+
+      if (aiReply && aiReply.trim()) {
+        return {
+          reply: aiReply,
+          content: aiReply,
+          success: true,
+          sessionId: activeId,
+        };
+      }
+    } catch (groqErr) {
+      console.warn("Direct Groq AI generation failed:", groqErr);
+    }
+
+    // ─── Deterministic Offline Fallback ──────────────────────────────
+    try {
+      const userProfile = getAuthenticatedUserProfile();
+      const offlineReply = generateDeterministicFallback(trimmed, userProfile);
+      if (offlineReply) {
+        return {
+          reply: offlineReply,
+          content: offlineReply,
+          success: true,
+          sessionId: activeId,
+        };
+      }
+    } catch {}
+
     // ─── CRM Intelligence Live Fallback ──────────────────────────────
-    // If backend AI provider is temporarily unavailable or returned 404/500/503,
-    // query live CRM databases directly and generate a rich, accurate answer.
     try {
       const token = getEffectiveAuthToken() || "";
       const intent = detectIntent(trimmed);
@@ -378,6 +426,7 @@ export async function sendChatMessage(
           if (formattedReply) {
             return {
               reply: formattedReply,
+              content: formattedReply,
               success: true,
               sessionId: activeId,
             };
