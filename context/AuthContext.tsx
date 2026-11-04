@@ -335,6 +335,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setRoleVerificationStatus(roleVerified ? "verified" : "unverified");
         setUser(userData);
+        try {
+          localStorage.setItem("user", JSON.stringify(userData));
+          if (userData?.role) localStorage.setItem("userRole", userData.role);
+        } catch (_) {}
         setIsAuthenticated(true);
         setSessionStatus("authenticated");
       } catch (err: any) {

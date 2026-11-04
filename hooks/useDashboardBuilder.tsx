@@ -4,6 +4,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-toastify";
 import { WidgetDefinition, WidgetInstance, SavedDashboardLayout } from "@/types/dashboard-builder";
 import { getWidgetCatalog, getWidgetCatalogGrouped } from "@/lib/api/dashboardWidgetService";
@@ -42,6 +43,7 @@ function useDebounce<T>(value: T, delay: number): T {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useDashboardBuilder(userRole?: string) {
+  const { sessionStatus, token } = useAuth();
   // ── Widget catalog ────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState<WidgetDefinition[]>([]);
 
@@ -109,6 +111,15 @@ export function useDashboardBuilder(userRole?: string) {
   // ── Load catalog + layouts ────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
+    if (sessionStatus === "loading") return;
+    if (sessionStatus === "unauthenticated" || !token) {
+      try {
+        const fetchedCatalog = await getWidgetCatalog();
+        setCatalog(fetchedCatalog);
+      } catch (_) {}
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -118,13 +129,12 @@ export function useDashboardBuilder(userRole?: string) {
       ]);
 
       setCatalog(fetchedCatalog);
-      setLayouts(layoutsRes.data);
+      setLayouts(layoutsRes?.data || []);
 
-      // Pick the default layout to display
       const target =
-        layoutsRes.data.find((l) => l.isOrgDefault) ??
-        layoutsRes.data.find((l) => l.isDefault) ??
-        layoutsRes.data[0];
+        layoutsRes?.data?.find((l) => l.isOrgDefault) ??
+        layoutsRes?.data?.find((l) => l.isDefault) ??
+        layoutsRes?.data?.[0];
 
       if (target && target.layout && target.layout.length > 0) {
         setActiveLayoutId(target.id);
@@ -132,20 +142,21 @@ export function useDashboardBuilder(userRole?: string) {
         setWidgets(instances);
         setInitialWidgets(instances);
       } else {
-        // Fallback default widgets so dashboard always has rich interactive widgets
         setWidgets(DEFAULT_STANDARD_WIDGETS);
         setInitialWidgets(DEFAULT_STANDARD_WIDGETS);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load dashboard data";
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || "Failed to load dashboard data";
       setError(message);
-      // Ensure widgets still render even if layout API is temporarily unavailable
+      if (err?.response?.status !== 401 && !message.toLowerCase().includes("authentication")) {
+        toast.error(message);
+      }
       setWidgets(DEFAULT_STANDARD_WIDGETS);
       setInitialWidgets(DEFAULT_STANDARD_WIDGETS);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sessionStatus, token]);
 
   useEffect(() => {
     loadData();

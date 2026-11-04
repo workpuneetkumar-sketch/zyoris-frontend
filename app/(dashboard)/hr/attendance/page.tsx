@@ -29,6 +29,7 @@ import {
 import HRCalendar from "@/components/hr/attendance/HRCalendar";
 import HRCheckInOut from "@/components/hr/attendance/HRCheckInOut";
 import HREmployeeAttendanceList from "@/components/hr/attendance/HREmployeeAttendanceList";
+import { useAuth } from "@/context/AuthContext";
 
 // ── Helpers ──────────────────────────────────────────────
 
@@ -145,6 +146,7 @@ export default function HRAttendancePage() {
   const [isCheckingIn, setIsCheckingIn] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user: authUser } = useAuth();
 
   // ── Derived State ──────────────────────────────────────
 
@@ -159,14 +161,36 @@ export default function HRAttendancePage() {
 
   const userId = user?.id || user?.userId;
 
+  const fallbackEmployee: Employee | null = useMemo(() => {
+    const uId = authUser?.id || userId;
+    const uEmail = authUser?.email || user?.email;
+    const uName = authUser?.name || user?.name || (uEmail ? uEmail.split("@")[0] : "Employee");
+    if (!uId && !uEmail) return null;
+    return {
+      id: uId || "",
+      organizationId: (authUser as any)?.organizationId || user?.organizationId || "",
+      userId: uId || "",
+      name: uName,
+      email: uEmail || "",
+      department: "General",
+      role: authUser?.role || user?.role || "EMPLOYEE",
+      joinDate: new Date().toISOString(),
+      status: "ACTIVE",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+  }, [authUser, user, userId]);
+
   const currentEmployee = useMemo(() => {
-    if (!userId || employees.length === 0) return null;
-    return (
-      employees.find(
-        (emp) => emp.userId === userId
-      ) || null
+    const uId = authUser?.id || userId;
+    const uEmail = authUser?.email || user?.email;
+    const matched = employees.find(
+      (emp) =>
+        (uId && (emp.userId === uId || emp.id === uId)) ||
+        (uEmail && emp.email?.toLowerCase() === uEmail.toLowerCase())
     );
-  }, [employees, userId]);
+    return matched || fallbackEmployee;
+  }, [employees, userId, authUser, user, fallbackEmployee]);
 
   const leaveDates = useMemo(() => {
     const dates = new Set<string>();
@@ -190,8 +214,7 @@ export default function HRAttendancePage() {
       const data = await getEmployees();
       setEmployees(data);
     } catch (err: any) {
-      console.error("Failed to load employees:", err);
-      setError(err.message || "Failed to load employees");
+      console.warn("Could not load employees list:", err);
     } finally {
       setIsLoadingEmployees(false);
     }
@@ -203,7 +226,7 @@ export default function HRAttendancePage() {
       const data = await fetchTodaySummary();
       setSummary(data);
     } catch (err: any) {
-      console.error("Failed to load summary:", err);
+      console.warn("Could not load summary:", err);
     } finally {
       setIsLoadingSummary(false);
     }
@@ -265,20 +288,50 @@ export default function HRAttendancePage() {
 
     try {
       const todayStr = formatDate(new Date());
-      const records = await fetchAttendance({
+      let records = await fetchAttendance({
         employeeId: currentEmployee.id,
         startDate: todayStr,
         endDate: todayStr,
       });
 
+      if (records.length === 0) {
+        const fallbackRecords = await fetchAttendance({
+          employeeId: currentEmployee.id,
+        });
+        const todayDateStr = new Date().toDateString();
+        records = fallbackRecords.filter((r) => {
+          const d = r.attendanceDate || r.checkIn;
+          return d ? new Date(d).toDateString() === todayDateStr : false;
+        });
+      }
+
+      if (records.length === 0) {
+        const allRecords = await fetchAttendance();
+        const todayDateStr = new Date().toDateString();
+        records = (allRecords || []).filter((r) => {
+          const matchesEmp =
+            (currentEmployee.id && (r.employeeId === currentEmployee.id || (r as any).employee?.id === currentEmployee.id)) ||
+            (currentEmployee.userId && (r.employeeId === currentEmployee.userId || (r as any).employee?.userId === currentEmployee.userId)) ||
+            (currentEmployee.email && (r as any).employee?.user?.email?.toLowerCase() === currentEmployee.email.toLowerCase()) ||
+            (currentEmployee.email && (r as any).employee?.email?.toLowerCase() === currentEmployee.email.toLowerCase());
+          const d = r.attendanceDate || r.checkIn;
+          const matchesDate = d ? new Date(d).toDateString() === todayDateStr : false;
+          return matchesEmp && matchesDate;
+        });
+      }
+
       if (records.length > 0) {
         const todayRecord = records[0];
+        let status = todayRecord.status || "Present";
+        if (todayRecord.checkIn && !todayRecord.status) {
+          status = "Present";
+        }
         setCurrentUserAttendance({
           checkedIn: !!todayRecord.checkIn,
           checkedOut: !!todayRecord.checkOut,
           checkInTime: todayRecord.checkIn || null,
           checkOutTime: todayRecord.checkOut || null,
-          status: todayRecord.status || null,
+          status: status ? (status.toUpperCase() === "PRESENT" ? "Present" : status) : null,
         });
       } else {
         setCurrentUserAttendance({
@@ -375,7 +428,42 @@ export default function HRAttendancePage() {
     try {
       setIsCheckingIn(true);
       setError(null);
-      await checkIn({ employeeId: currentEmployee.id });
+      const nowIso = new Date().toISOString();
+      const res = await checkIn({ employeeId: currentEmployee.id });
+      const record = (res as any) || {};
+      const checkInTime = record.checkIn || nowIso;
+
+      setCurrentUserAttendance({
+        checkedIn: true,
+        checkedOut: false,
+        checkInTime: checkInTime,
+        checkOutTime: null,
+        status: "Present",
+      });
+
+      setSelectedDateAttendance((prev) => {
+        const updated = [...prev];
+        const existingIdx = updated.findIndex(
+          (r) =>
+            r.employeeId === currentEmployee.id ||
+            (r as any).employee?.id === currentEmployee.id
+        );
+        const newRecord: Attendance = {
+          id: record.id || `att-${Date.now()}`,
+          employeeId: currentEmployee.id,
+          attendanceDate: nowIso,
+          checkIn: checkInTime,
+          status: "Present",
+          createdAt: nowIso,
+        };
+        if (existingIdx >= 0) {
+          updated[existingIdx] = { ...updated[existingIdx], ...newRecord };
+        } else {
+          updated.unshift(newRecord);
+        }
+        return updated;
+      });
+
       await refreshAll();
     } catch (err: any) {
       const message = err.message || "Failed to check in. Please try again.";
@@ -395,7 +483,36 @@ export default function HRAttendancePage() {
     try {
       setIsCheckingOut(true);
       setError(null);
-      await checkOut({ employeeId: currentEmployee.id });
+      const nowIso = new Date().toISOString();
+      const res = await checkOut({ employeeId: currentEmployee.id });
+      const record = (res as any) || {};
+      const checkOutTime = record.checkOut || nowIso;
+
+      setCurrentUserAttendance((prev) => ({
+        ...prev,
+        checkedIn: true,
+        checkedOut: true,
+        checkOutTime: checkOutTime,
+        status: "Present",
+      }));
+
+      setSelectedDateAttendance((prev) => {
+        const updated = [...prev];
+        const existingIdx = updated.findIndex(
+          (r) =>
+            r.employeeId === currentEmployee.id ||
+            (r as any).employee?.id === currentEmployee.id
+        );
+        if (existingIdx >= 0) {
+          updated[existingIdx] = {
+            ...updated[existingIdx],
+            checkOut: checkOutTime,
+            status: "Present",
+          };
+        }
+        return updated;
+      });
+
       await refreshAll();
     } catch (err: any) {
       const message = err.message || "Failed to check out. Please try again.";
@@ -538,7 +655,21 @@ export default function HRAttendancePage() {
           {/* ── Right Column: Admin Attendance Table ──── */}
           <div className="lg:col-span-1">
             <HREmployeeAttendanceList
-              employees={employees}
+              employees={
+                ["ADMIN", "HR", "CEO", "CFO", "OPERATIONS_HEAD"].includes(
+                  (authUser?.role || user?.role || "").toUpperCase()
+                )
+                  ? employees.length > 0
+                    ? employees
+                    : currentEmployee
+                    ? [currentEmployee]
+                    : []
+                  : currentEmployee
+                  ? [currentEmployee]
+                  : []
+              }
+              currentEmployee={currentEmployee}
+              currentUserAttendance={currentUserAttendance}
               selectedDateAttendance={selectedDateAttendance}
               isLoadingEmployees={isLoadingEmployees}
               isLoadingSelectedDate={isLoadingSelectedDate}

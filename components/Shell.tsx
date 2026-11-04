@@ -333,7 +333,7 @@ const NAV_GROUPS: NavGroup[] = [
         href: "/settings",
         label: "Settings",
         icon: Settings,
-        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD", "USER"],
+        roles: ["ADMIN", "CEO", "CFO", "SALES_HEAD", "OPERATIONS_HEAD", "USER", "EMPLOYEE", "HR"],
       },
     ],
   },
@@ -673,6 +673,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   const isAdmin = user?.role?.toUpperCase() === "ADMIN";
+  const normalizedUserRole = (user?.role ?? "").toUpperCase().trim();
+  const isEmployee = normalizedUserRole === "EMPLOYEE" || normalizedUserRole === "USER";
+  const canSeeRoleDashboards = !isEmployee && ["ADMIN", "CEO", "CFO", "SALES_HEAD", "SALES_USER", "OPERATIONS_HEAD", "OPS", "OPERATIONS"].includes(normalizedUserRole);
 
   const visibleNavGroups = (() => {
     if (sidebarItems && sidebarItems.length > 0) {
@@ -867,6 +870,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       const addItem = (groupLabel: string, href: string, label: string, icon: LucideIcon) => {
         if (groupLabel === "Admin Tools" && !isAdmin) return;
+        if (groupLabel === "Role Dashboards" && !canSeeRoleDashboards) return;
         if (!itemsByGroup[groupLabel]) itemsByGroup[groupLabel] = [];
         if (!itemsByGroup[groupLabel].some((x) => x.href === href)) {
           itemsByGroup[groupLabel].push({ href, label, icon });
@@ -881,7 +885,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         admin: ["ADMIN"],
       };
 
-      const normalizedUserRole = (user?.role ?? "").toUpperCase().trim();
+      if (canSeeRoleDashboards) {
 
       visibleDashboards
         .filter((item) => item.visible !== false && item.route)
@@ -905,13 +909,14 @@ export function AppShell({ children }: { children: ReactNode }) {
                href === "/operations" ? ["ADMIN", "OPERATIONS_HEAD", "OPS", "OPERATIONS"] :
                undefined);
 
-            if (allowedRoles && !allowedRoles.includes(normalizedUserRole)) {
+            if (!allowedRoles || !allowedRoles.includes(normalizedUserRole)) {
               return;
             }
 
             addItem("Role Dashboards", href, label, Crown);
           }
         });
+      }
 
       const hasAdminToolAccess = isAdmin;
 
@@ -929,6 +934,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           if (KEY_EXPANSION[keySlug]) {
             const groupLabel = KEY_TO_GROUP[keySlug] ?? "Platform";
+            if (groupLabel === "Role Dashboards" && !canSeeRoleDashboards) return;
+            if (groupLabel === "Admin Tools" && !isAdmin) return;
             KEY_EXPANSION[keySlug].forEach((sub) => {
               addItem(groupLabel, sub.href, sub.label, getIcon(sub.iconKey));
             });
@@ -941,6 +948,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             ROUTE_TO_GROUP[href] ??
             ROUTE_TO_GROUP[rawRoute] ??
             "Platform";
+
+          if (groupLabel === "Role Dashboards" && !canSeeRoleDashboards) return;
+          if (groupLabel === "Admin Tools" && !isAdmin) return;
 
           addItem(groupLabel, href, item.label, getIcon(keySlug, item));
         });
@@ -992,7 +1002,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
 
       // ── Build groups in display order ─────────────────────────────────
-      const groups = GROUP_ORDER
+      if (!canSeeRoleDashboards) {
+        delete itemsByGroup["Role Dashboards"];
+      }
+      if (!isAdmin) {
+        delete itemsByGroup["Admin Tools"];
+      }
+
+      const filteredGroupOrder = GROUP_ORDER.filter((label) => {
+        if (label === "Role Dashboards" && !canSeeRoleDashboards) return false;
+        if (label === "Admin Tools" && !isAdmin) return false;
+        return true;
+      });
+
+      const groups = filteredGroupOrder
         .filter((label) => itemsByGroup[label]?.length)
         .map((label) => ({ label, items: itemsByGroup[label] }));
 
@@ -1002,6 +1025,9 @@ export function AppShell({ children }: { children: ReactNode }) {
     // ── Static fallback (no API data) ─────────────────────────────────
     // Communication is always shown to every role — skip the role filter for it.
     return NAV_GROUPS.map((group) => {
+      if (group.label === "Role Dashboards" && !canSeeRoleDashboards) {
+        return { ...group, items: [] };
+      }
       if (group.label === "Admin Tools" && !isAdmin) {
         return { ...group, items: [] };
       }
@@ -1225,6 +1251,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="w-full flex items-center gap-3 rounded-xl px-1 py-1">
           {/* Left: avatar + name → goes to profile */}
           <button
+            onClick={() => router.push("/settings")}
             className="flex items-center gap-3 flex-1 min-w-0 hover:bg-surface-hover rounded-xl transition-colors"
           >
             {user.avatarUrl ? (
