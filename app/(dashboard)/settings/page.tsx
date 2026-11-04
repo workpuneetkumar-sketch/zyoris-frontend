@@ -19,8 +19,9 @@ export default function SettingsPage() {
         }
         async function load() {
             try {
-                const res = await api.get<Profile>("/auth/me");
-                setProfile(res.data);
+                const res = await api.get<any>("/auth/me");
+                const data = res.data?.data || res.data;
+                setProfile(data);
             } catch {
                 // ignore for now
             }

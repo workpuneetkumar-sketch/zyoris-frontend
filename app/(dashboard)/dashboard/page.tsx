@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api/api";
 import { getDashboardAnomalies, getMorningBriefing, AnomalyAlertItem, MorningBriefingData } from "@/lib/api/aiBriefingApi";
+import { fetchAttendance, fetchLeaves, Attendance, LeaveRequest } from "@/lib/api/hrApi";
 import {
   Users, Briefcase, DollarSign, Clock, Mail, PhoneCall,
   LucideIcon, X, Sparkles, LayoutDashboard, CalendarDays,
+  CalendarCheck, Clock4, ArrowRight, UserCheck, ShieldCheck, CheckCircle2,
 } from "lucide-react";
 import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
 import { useDashboardBuilder } from "@/hooks/useDashboardBuilder";
@@ -107,15 +110,48 @@ function BriefCard({ icon: Icon, label, text }: {
 // ── Page ───────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const { user, token } = useAuth();
+  const { user, token, sessionStatus } = useAuth();
+  const isEmployee = (user?.role || "").toUpperCase() === "EMPLOYEE";
+
   const [dashboardStats, setDashboardStats] = useState<DashboardStatsResponse | null>(null);
   const [aiBriefing, setAiBriefing] = useState<MorningBriefingData | null>(null);
   const [aiAnomalies, setAiAnomalies] = useState<AnomalyAlertItem[]>([]);
   const [aiLoading, setAiLoading] = useState(true);
   const [aiError, setAiError] = useState<string | null>(null);
 
+  const [employeeAttendance, setEmployeeAttendance] = useState<Attendance | null>(null);
+  const [employeeLeaves, setEmployeeLeaves] = useState<LeaveRequest[]>([]);
+  const [employeeLoading, setEmployeeLoading] = useState(true);
+
   useEffect(() => {
-    if (!token) return;
+    if (sessionStatus !== "authenticated" || !token) return;
+
+    if (isEmployee) {
+      (async () => {
+        try {
+          setEmployeeLoading(true);
+          const [attRes, leavesRes] = await Promise.all([
+            fetchAttendance().catch(() => []),
+            fetchLeaves().catch(() => []),
+          ]);
+          const todayStr = new Date().toDateString();
+          const todayAtt = (attRes || []).find((a) => {
+            const d = a.attendanceDate || a.checkIn;
+            return d ? new Date(d).toDateString() === todayStr : false;
+          });
+          setEmployeeAttendance(todayAtt || null);
+          setEmployeeLeaves(leavesRes || []);
+        } catch (e) {
+          console.warn("Could not load employee dashboard data", e);
+        } finally {
+          setEmployeeLoading(false);
+          setAiLoading(false);
+        }
+      })();
+      return;
+    }
+
+    // Management / Executive Dashboard
     (async () => {
       let statsPayload: DashboardStatsResponse = {};
 
@@ -172,7 +208,7 @@ export default function DashboardPage() {
       setAiError(briefingRes ? null : "Unable to load AI executive briefing.");
       setAiLoading(false);
     })();
-  }, [token, user?.role]);
+  }, [sessionStatus, token, isEmployee]);
 
   const kpiCards = useMemo(() => [
     { icon: Users,     label: "Leads Count",      value: typeof dashboardStats?.leadsCount === "number" ? dashboardStats.leadsCount.toLocaleString() : "--", accent: "blue"    as const },
@@ -193,7 +229,6 @@ export default function DashboardPage() {
   const [greeting, setGreeting] = useState(computeGreeting);
   useEffect(() => {
     setGreeting(computeGreeting());
-    // Re-evaluate every minute so the greeting updates as time passes
     const interval = setInterval(() => setGreeting(computeGreeting()), 60_000);
     return () => clearInterval(interval);
   }, []);
@@ -207,8 +242,20 @@ export default function DashboardPage() {
 
   const handleAddWidget = (def: WidgetDefinition) => { builder.addWidget(def); setLibraryOpen(false); };
 
+  const formatTime = (dateStr?: string) => {
+    if (!dateStr) return "-";
+    try {
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? "-" : d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    } catch {
+      return "-";
+    }
+  };
+
+  const pendingLeavesCount = employeeLeaves.filter((l) => l.status === "PENDING").length;
+  const approvedLeavesCount = employeeLeaves.filter((l) => l.status === "APPROVED").length;
+
   return (
-    /* -m-4 md:-m-6 cancels the Shell padding so we go full-bleed */
     <div className="bg-white -m-4 md:-m-6 min-h-full">
 
       {/* ── Header ──────────────────────────────────────────── */}
@@ -223,97 +270,257 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setShowInsights(true)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm font-semibold shadow-sm shadow-blue-200 transition-all"
-          >
-            <Sparkles size={14} />
-            <span className="hidden xs:inline">AI Insights</span>
-            <span className="xs:hidden">AI</span>
-          </button>
+          {isEmployee ? (
+            <>
+              <Link
+                href="/hr/attendance"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-xs sm:text-sm font-semibold shadow-sm shadow-blue-200 transition-all"
+              >
+                <Clock4 size={14} />
+                <span>Attendance</span>
+              </Link>
+              <Link
+                href="/hr/leaves"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-gray-50 active:scale-95 text-gray-700 text-xs sm:text-sm font-semibold border border-gray-200 shadow-sm transition-all"
+              >
+                <CalendarCheck size={14} />
+                <span>Apply Leave</span>
+              </Link>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl bg-white hover:bg-blue-50 active:scale-95 text-blue-700 text-xs sm:text-sm font-semibold border border-blue-200 shadow-sm transition-all"
+              >
+                <LayoutDashboard size={14} />
+                <span>Customise</span>
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={() => setShowInsights(true)}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm font-semibold shadow-sm shadow-blue-200 transition-all"
+              >
+                <Sparkles size={14} />
+                <span className="hidden xs:inline">AI Insights</span>
+                <span className="xs:hidden">AI</span>
+              </button>
 
-          {/* Weekly AI Briefing toggle */}
-          <button
-            onClick={() => setShowWeeklyBriefing((v) => !v)}
-            className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
-              showWeeklyBriefing
-                ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-200"
-                : "bg-white hover:bg-blue-50 text-blue-700 border-blue-200 shadow-sm"
-            }`}
-          >
-            <CalendarDays size={14} />
-            <span className="hidden sm:inline">Weekly AI Briefing</span>
-            <span className="sm:hidden">Weekly</span>
-            {/* Toggle pill */}
-            <span
-              className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                showWeeklyBriefing ? "bg-blue-400" : "bg-gray-300"
-              }`}
-            >
-              <span
-                className={`absolute h-3 w-3 rounded-full bg-white shadow transition-transform ${
-                  showWeeklyBriefing ? "translate-x-3.5" : "translate-x-0.5"
+              <button
+                onClick={() => setShowWeeklyBriefing((v) => !v)}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                  showWeeklyBriefing
+                    ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-200"
+                    : "bg-white hover:bg-blue-50 text-blue-700 border-blue-200 shadow-sm"
                 }`}
-              />
-            </span>
-          </button>
+              >
+                <CalendarDays size={14} />
+                <span className="hidden sm:inline">Weekly AI Briefing</span>
+                <span className="sm:hidden">Weekly</span>
+                <span
+                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                    showWeeklyBriefing ? "bg-blue-400" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                      showWeeklyBriefing ? "translate-x-3.5" : "translate-x-0.5"
+                    }`}
+                  />
+                </span>
+              </button>
 
-          <button
-            onClick={() => setIsEditing(true)}
-            className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-white hover:bg-blue-50 active:scale-95 text-blue-700 text-sm font-semibold border border-blue-200 shadow-sm transition-all"
-          >
-            <LayoutDashboard size={14} />
-            <span className="hidden sm:inline">Customise</span>
-            <span className="sm:hidden">Edit</span>
-          </button>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-white hover:bg-blue-50 active:scale-95 text-blue-700 text-sm font-semibold border border-blue-200 shadow-sm transition-all"
+              >
+                <LayoutDashboard size={14} />
+                <span className="hidden sm:inline">Customise</span>
+                <span className="sm:hidden">Edit</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ── AI Executive Briefing ────────────────────────────── */}
-      <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-100">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
-            <Sparkles size={15} className="text-blue-600" />
+      {/* ── Employee Portal Banner & Overview ────────────────── */}
+      {isEmployee ? (
+        <div className="px-4 sm:px-6 py-6 border-b border-gray-100">
+          <div className="mb-4">
+            <h2 className="text-base sm:text-lg font-black text-gray-900 tracking-tight">Personal Workspace</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Your daily work activity, attendance status, and quick shortcuts</p>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-bold text-gray-900">AI Executive Briefing</p>
-              <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">BETA</span>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Today's Attendance */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-blue-50/60 to-indigo-50/40 border border-blue-100 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-sm">
+                    <Clock4 size={18} />
+                  </div>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                    employeeAttendance?.checkIn
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-amber-50 text-amber-700 border-amber-200"
+                  }`}>
+                    {employeeAttendance?.checkIn ? "Present" : "Not Checked In"}
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Today&apos;s Attendance</p>
+                <p className="text-lg sm:text-xl font-extrabold text-gray-900 mt-1">
+                  {employeeAttendance?.checkIn ? formatTime(employeeAttendance.checkIn) : "Pending"}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {employeeAttendance?.checkIn
+                    ? employeeAttendance.checkOut
+                      ? `Checked out at ${formatTime(employeeAttendance.checkOut)}`
+                      : "Checked in today"
+                    : "No check-in recorded yet today"}
+                </p>
+              </div>
+              <Link
+                href="/hr/attendance"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 hover:text-blue-700 group transition-colors"
+              >
+                <span>View Attendance Log</span>
+                <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
             </div>
-            <p className="text-xs text-gray-400">Overnight summary and key system signals</p>
+
+            {/* 2. Leaves Summary */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-50/60 to-teal-50/40 border border-emerald-100 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                    <CalendarCheck size={18} />
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    Active
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">My Leaves</p>
+                <p className="text-lg sm:text-xl font-extrabold text-gray-900 mt-1">
+                  {employeeLeaves.length} {employeeLeaves.length === 1 ? "Request" : "Requests"}
+                </p>
+                <div className="flex items-center gap-2 mt-1 text-xs text-gray-600">
+                  <span className="font-semibold text-amber-700">{pendingLeavesCount} Pending</span>
+                  <span>•</span>
+                  <span className="font-semibold text-emerald-700">{approvedLeavesCount} Approved</span>
+                </div>
+              </div>
+              <Link
+                href="/hr/leaves"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 group transition-colors"
+              >
+                <span>Manage Leaves</span>
+                <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
+
+            {/* 3. My Profile & Role */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-purple-50/60 to-pink-50/40 border border-purple-100 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-sm">
+                    <UserCheck size={18} />
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-100 text-purple-800 border border-purple-200">
+                    Verified
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Profile & Access</p>
+                <p className="text-lg sm:text-xl font-extrabold text-gray-900 mt-1 truncate">
+                  {user?.role || "Employee"}
+                </p>
+                <p className="text-xs text-gray-500 mt-1 truncate">
+                  {user?.email || "Authenticated User"}
+                </p>
+              </div>
+              <Link
+                href="/settings"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-purple-600 hover:text-purple-700 group transition-colors"
+              >
+                <span>Edit Settings & Avatar</span>
+                <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
+
+            {/* 4. Organization & Documents */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-50/60 to-orange-50/40 border border-amber-100 shadow-sm flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shadow-sm">
+                    <ShieldCheck size={18} />
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-200">
+                    Portal
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-widest">Resources</p>
+                <p className="text-lg sm:text-xl font-extrabold text-gray-900 mt-1">Company Hub</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  Access company documents & policies
+                </p>
+              </div>
+              <Link
+                href="/documents"
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 hover:text-amber-800 group transition-colors"
+              >
+                <span>Browse Documents</span>
+                <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
           </div>
         </div>
+      ) : (
+        <>
+          {/* ── AI Executive Briefing (Management Only) ───────── */}
+          <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-100">
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                <Sparkles size={15} className="text-blue-600" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-bold text-gray-900">AI Executive Briefing</p>
+                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">BETA</span>
+                </div>
+                <p className="text-xs text-gray-400">Overnight summary and key system signals</p>
+              </div>
+            </div>
 
-        {aiLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            {[0,1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />)}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-            <BriefCard icon={Sparkles}   label="Greeting" text={aiBriefing?.greeting ?? "AI briefing will appear here once available."} />
-            <BriefCard icon={Briefcase}  label="Brief #1"  text={aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."} />
-            {aiBriefing?.summaryBullets?.[1] != null && (
-              <BriefCard icon={Clock}    label="Brief #2"  text={aiBriefing.summaryBullets[1]} />
+            {aiLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {[0,1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />)}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                <BriefCard icon={Sparkles}   label="Greeting" text={aiBriefing?.greeting ?? "AI briefing will appear here once available."} />
+                <BriefCard icon={Briefcase}  label="Brief #1"  text={aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."} />
+                {aiBriefing?.summaryBullets?.[1] != null && (
+                  <BriefCard icon={Clock}    label="Brief #2"  text={aiBriefing.summaryBullets[1]} />
+                )}
+                <BriefCard icon={DollarSign} label="Signal"    text={aiAnomalies?.[0]?.title ?? aiBriefing?.topPriorityAction ?? "No anomaly signal generated yet."} />
+              </div>
             )}
-            <BriefCard icon={DollarSign} label="Signal"    text={aiAnomalies?.[0]?.title ?? aiBriefing?.topPriorityAction ?? "No anomaly signal generated yet."} />
           </div>
-        )}
-      </div>
 
-      {/* ── Key Metrics ──────────────────────────────────────── */}
-      <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
-        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Key Metrics</p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {kpiCards.map((card, i) => (
-            <div key={card.label} className="animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both" style={{ animationDelay: `${i * 60}ms` }}>
-              <KpiCard {...card} />
+          {/* ── Key Metrics (Management Only) ────────────────── */}
+          <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Key Metrics</p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {kpiCards.map((card, i) => (
+                <div key={card.label} className="animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both" style={{ animationDelay: `${i * 60}ms` }}>
+                  <KpiCard {...card} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* ── Weekly AI Briefing ───────────────────────────────── */}
-      {showWeeklyBriefing && (
+      {showWeeklyBriefing && !isEmployee && (
         <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100 animate-in fade-in slide-in-from-top-2 duration-300">
           <WeeklyAIBriefing />
         </div>
@@ -340,7 +547,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── AI Insights Panel ────────────────────────────────── */}
-      {showInsights && (
+      {showInsights && !isEmployee && (
         <div className="fixed inset-0 z-[80] flex items-start justify-end" onClick={(e) => { if (e.target === e.currentTarget) setShowInsights(false); }}>
           <div className="absolute inset-0 bg-black/20 backdrop-blur-[2px] animate-in fade-in duration-200" />
           <div className="relative z-10 w-full max-w-xl h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">

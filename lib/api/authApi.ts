@@ -75,8 +75,8 @@ export const registerApi = async (
  *   permissions: string[], memberships: [...], createdAt, updatedAt }
  */
 export const getMeApi = async (): Promise<User> => {
-    const res = await api.get<User>("/auth/me");
-    return res.data;
+    const res = await api.get<any>("/auth/me");
+    return res.data?.data || res.data;
 };
 
 export interface UpdateProfilePayload {

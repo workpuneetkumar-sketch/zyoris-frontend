@@ -5,6 +5,7 @@ const nextConfig = {
   experimental: {
     workerThreads: false,
     cpus: 1,
+    serverComponentsExternalPackages: ['canvas', 'pdfjs-dist'],
   },
   eslint: {
     ignoreDuringBuilds: true,
@@ -26,19 +27,23 @@ const nextConfig = {
       ],
     };
   },
-  webpack: (config) => {
+  webpack: (config, { isServer }) => {
     config.resolve.alias = {
       ...config.resolve.alias,
       canvas: false,
     };
-    config.resolve.fallback = {
-      ...config.resolve.fallback,
-      canvas: false,
-      fs: false,
-      net: false,
-      tls: false,
-      child_process: false,
-    };
+    if (isServer) {
+      config.externals = [...(config.externals || []), "canvas"];
+    } else {
+      config.resolve.fallback = {
+        ...config.resolve.fallback,
+        canvas: false,
+        fs: false,
+        net: false,
+        tls: false,
+        child_process: false,
+      };
+    }
     return config;
   },
 };

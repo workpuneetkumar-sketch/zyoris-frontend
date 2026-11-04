@@ -41,17 +41,29 @@ export async function listLayouts(
   page = 1,
   limit = 20
 ): Promise<SavedDashboardLayoutsResponse> {
-  const res = await api.get<any>("/dashboard/layouts", {
-    params: { page, limit },
-  });
-  const layouts = resolveLayouts(res.data);
-  return {
-    data: layouts,
-    meta: res.data?.meta ?? res.data?.pagination ?? undefined,
-    total: res.data?.total ?? layouts.length,
-    page: res.data?.page ?? page,
-    totalPages: res.data?.totalPages ?? Math.ceil((res.data?.total ?? layouts.length) / limit),
-  };
+  try {
+    const res = await api.get<any>("/dashboard/layouts", {
+      params: { page, limit },
+    });
+    const layouts = resolveLayouts(res.data);
+    return {
+      data: layouts,
+      meta: res.data?.meta ?? res.data?.pagination ?? undefined,
+      total: res.data?.total ?? layouts.length,
+      page: res.data?.page ?? page,
+      totalPages: res.data?.totalPages ?? Math.ceil((res.data?.total ?? layouts.length) / limit),
+    };
+  } catch (err: any) {
+    if (err?.response?.status === 403 || err?.response?.status === 401) {
+      return {
+        data: [],
+        total: 0,
+        page: 1,
+        totalPages: 0,
+      };
+    }
+    throw err;
+  }
 }
 
 // ── Create a new layout ────────────────────────────────────────────────────
