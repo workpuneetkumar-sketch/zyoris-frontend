@@ -169,7 +169,15 @@ export async function getNotifications(params?: {
 }
 
 export async function markAsRead(id: string): Promise<void> {
-  await markNotificationAsRead(id);
+  if (String(id).startsWith("notif-")) return;
+  try {
+    await markNotificationAsRead(id);
+  } catch (err: any) {
+    if (err?.response?.status === 404 || err?.status === 404 || String(err?.message).includes("404")) {
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function markAllRead(category?: string): Promise<void> {
@@ -182,7 +190,15 @@ export async function markAllRead(category?: string): Promise<void> {
 }
 
 export async function archiveNotification(id: string): Promise<void> {
-  await archiveNotificationApi(id);
+  if (String(id).startsWith("notif-")) return;
+  try {
+    await archiveNotificationApi(id);
+  } catch (err: any) {
+    if (err?.response?.status === 404 || err?.status === 404 || String(err?.message).includes("404")) {
+      return;
+    }
+    throw err;
+  }
 }
 
 // TODO: enable once backend confirms PATCH /:id/dismiss exists.

@@ -3402,3 +3402,222 @@ body {
 }
 
 
+
+/* ── Figma Light Theme Toast & Notification System ──────────────────────── */
+
+/* Sonner Container & Toasts */
+[data-sonner-toaster] {
+  --normal-bg: #FFFFFF;
+  --normal-border: #E2E8F0;
+  --normal-text: #1E293B;
+  --border-radius: 16px;
+  font-family: inherit;
+}
+
+[data-sonner-toast] {
+  border-radius: 16px !important;
+  padding: 14px 16px !important;
+  font-family: inherit !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 14px !important;
+  box-sizing: border-box !important;
+  min-height: 56px !important;
+  max-width: 420px !important;
+  width: 100% !important;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* Light Theme Variants */
+[data-sonner-toast][data-type="success"],
+[data-sonner-toast].toast-success {
+  background-color: #EDFAF3 !important;
+  border: 1px solid #7FE2BA !important;
+  color: #1E293B !important;
+}
+
+[data-sonner-toast][data-type="info"],
+[data-sonner-toast].toast-info {
+  background-color: #EEF6FF !important;
+  border: 1px solid #99CCF9 !important;
+  color: #1E293B !important;
+}
+
+[data-sonner-toast][data-type="warning"],
+[data-sonner-toast].toast-warning {
+  background-color: #FFF9EE !important;
+  border: 1px solid #FCD38D !important;
+  color: #1E293B !important;
+}
+
+[data-sonner-toast][data-type="error"],
+[data-sonner-toast].toast-error {
+  background-color: #FDF2F1 !important;
+  border: 1px solid #F8B4AF !important;
+  color: #1E293B !important;
+}
+
+/* Status Icon Container */
+[data-sonner-toast] [data-icon] {
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  align-self: flex-start !important;
+}
+
+/* Content Area */
+[data-sonner-toast] [data-content] {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+  justify-content: center !important;
+}
+
+/* Prominent Dark Title */
+[data-sonner-toast] [data-title] {
+  color: #1E293B !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+  margin: 0 !important;
+}
+
+/* Smaller Supporting Description */
+[data-sonner-toast] [data-description] {
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  line-height: 1.45 !important;
+  margin: 0 !important;
+}
+
+/* Outlined Action Button */
+[data-sonner-toast] [data-button] {
+  background-color: #FFFFFF !important;
+  border: 1px solid #94A3B8 !important;
+  border-radius: 8px !important;
+  color: #334155 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  padding: 6px 14px !important;
+  margin-left: 8px !important;
+  flex-shrink: 0 !important;
+  height: auto !important;
+  cursor: pointer !important;
+  transition: all 150ms ease !important;
+  box-shadow: none !important;
+  align-self: center !important;
+}
+
+[data-sonner-toast] [data-button]:hover {
+  background-color: #F8FAFC !important;
+  border-color: #64748B !important;
+  color: #0F172A !important;
+}
+
+/* Minimal Close Icon */
+[data-sonner-toast] [data-close-button] {
+  position: static !important;
+  transform: none !important;
+  top: auto !important;
+  right: auto !important;
+  left: auto !important;
+  bottom: auto !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  color: #94A3B8 !important;
+  padding: 4px !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 150ms ease !important;
+  align-self: flex-start !important;
+}
+
+[data-sonner-toast] [data-close-button]:hover {
+  color: #475569 !important;
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* React-Toastify Figma Light Theme Styling Override */
+.Toastify__toast-container {
+  width: auto !important;
+  max-width: 440px !important;
+  padding: 16px !important;
+  gap: 12px !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.Toastify__toast {
+  border-radius: 16px !important;
+  padding: 14px 16px !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03) !important;
+  margin-bottom: 0 !important;
+  font-family: inherit !important;
+  min-height: 56px !important;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 12px !important;
+}
+
+.Toastify__toast--success {
+  background-color: #EDFAF3 !important;
+  border: 1px solid #7FE2BA !important;
+  color: #1E293B !important;
+}
+
+.Toastify__toast--info {
+  background-color: #EEF6FF !important;
+  border: 1px solid #99CCF9 !important;
+  color: #1E293B !important;
+}
+
+.Toastify__toast--warning {
+  background-color: #FFF9EE !important;
+  border: 1px solid #FCD38D !important;
+  color: #1E293B !important;
+}
+
+.Toastify__toast--error {
+  background-color: #FDF2F1 !important;
+  border: 1px solid #F8B4AF !important;
+  color: #1E293B !important;
+}
+
+.Toastify__toast-body {
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #1E293B !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  line-height: 1.4 !important;
+}
+
+.Toastify__close-button {
+  color: #94A3B8 !important;
+  opacity: 1 !important;
+  align-self: flex-start !important;
+  padding: 2px !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+}
+
+.Toastify__close-button:hover {
+  color: #475569 !important;
+}
+
+.Toastify__progress-bar {
+  display: none !important;
+}

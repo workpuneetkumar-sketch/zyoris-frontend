@@ -43,6 +43,7 @@ import {
   type PushPermissionStatus,
 } from "@/lib/browserPushPermission";
 import { toast } from "sonner";
+import { SuccessStatusIcon, InfoStatusIcon, WarningStatusIcon, ErrorStatusIcon, MinimalCloseIcon, type ToastType } from "./ui/Toast";
 import { getNotificationPath } from "@/utils/notificationNavigation";
 
 // Helper to format date
@@ -108,101 +109,118 @@ function NotificationItem({
   onDelete: (id: string) => void;
   onClick: () => void;
 }) {
+  const normType = (notification.type || "").toLowerCase();
+  const type: ToastType =
+    normType === "success"
+      ? "success"
+      : normType === "error" || normType === "danger"
+      ? "error"
+      : normType === "warning"
+      ? "warning"
+      : "info";
+
+  const variantStyles = {
+    success: {
+      bg: "bg-[#EDFAF3]",
+      border: "border-[#7FE2BA]",
+      icon: <SuccessStatusIcon />,
+    },
+    info: {
+      bg: "bg-[#EEF6FF]",
+      border: "border-[#99CCF9]",
+      icon: <InfoStatusIcon />,
+    },
+    warning: {
+      bg: "bg-[#FFF9EE]",
+      border: "border-[#FCD38D]",
+      icon: <WarningStatusIcon />,
+    },
+    error: {
+      bg: "bg-[#FDF2F1]",
+      border: "border-[#F8B4AF]",
+      icon: <ErrorStatusIcon />,
+    },
+  }[type];
+
+  const title =
+    notification.title?.trim() ||
+    (notification.action && notification.action.includes("WHATSAPP")
+      ? "WhatsApp Message Received"
+      : "Notification");
+
   return (
     <div
       className={classNames(
-        "group relative flex flex-col sm:flex-row items-start gap-3 p-4 transition-all duration-200 cursor-pointer",
-        notification.priority.toLowerCase() === "critical" && "border-l-4 border-error",
-        !notification.read
-          ? "bg-primary/5 dark:bg-primary/10"
-          : "hover:bg-surface-hover dark:hover:bg-surface-hover"
+        "group relative flex items-start gap-3.5 p-4 rounded-2xl border shadow-[0_4px_16px_-2px_rgba(0,0,0,0.05),_0_2px_6px_-1px_rgba(0,0,0,0.03)] transition-all font-sans text-left cursor-pointer",
+        variantStyles.bg,
+        variantStyles.border,
+        !notification.read ? "ring-1 ring-black/5" : "opacity-95"
       )}
       onClick={onClick}
     >
-      {/* Unread indicator */}
-      {!notification.read && (
-        <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary rounded-r-full" />
-      )}
-
-      {/* Entity Category Icon / Avatar */}
-      <div className="shrink-0">
-        {notification.actor ? (
-          <Avatar
-            src={notification.actor.avatarUrl ?? undefined}
-            alt={notification.actor.name}
-            fallback={notification.actor.name.charAt(0).toUpperCase()}
-            size="md"
-          />
-        ) : (
-          <div
-            className={classNames(
-              "w-10 h-10 rounded-full flex items-center justify-center",
-              getCategoryStyles(notification.category)
-            )}
-          >
-            {getCategoryIcon(notification.category)}
-          </div>
-        )}
-      </div>
+      {/* Figma Squircle Gradient Status Icon */}
+      {variantStyles.icon}
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <h4
-              className={classNames(
-                "font-semibold text-sm truncate",
-                notification.read ? "text-text-secondary" : "text-text"
-              )}
-            >
-              {notification.title}
-            </h4>
-            {!notification.read && (
-              <span className="w-2 h-2 rounded-full bg-primary shrink-0 animate-pulse" />
-            )}
-          </div>
-        </div>
-        <p
-          className={classNames(
-            "text-sm mt-1 line-clamp-2",
-            notification.read ? "text-text-muted" : "text-text-secondary"
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="flex items-center gap-2">
+          <h4 className="text-[15px] font-semibold text-[#1E293B] leading-snug truncate">
+            {title}
+          </h4>
+          {!notification.read && (
+            <span className="w-2 h-2 rounded-full bg-primary shrink-0 animate-pulse" />
           )}
-        >
-          {notification.message}
-        </p>
-        {notification.actorName && (
-          <p className="text-xs text-text-muted mt-2">From {notification.actorName}</p>
-        )}
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-xs text-text-muted">
-            {formatRelativeTime(notification.createdAt)}
-          </span>
-          {/* Actions */}
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-            {!notification.read && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onMarkRead(notification.id);
-                }}
-                className="p-1.5 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
-                title="Mark as read"
-              >
-                <Check size={14} />
-              </button>
-            )}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(notification.id);
-              }}
-              className="p-1.5 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-secondary transition-colors"
-              title="Archive"
-            >
-              <Archive size={14} />
-            </button>
-          </div>
         </div>
+        {notification.message && (
+          <p className="text-[13px] font-normal text-[#475569] leading-relaxed mt-0.5 line-clamp-2 whitespace-pre-line">
+            {notification.message}
+          </p>
+        )}
+        <span className="text-[11px] text-[#64748B] mt-1.5 font-medium">
+          {formatRelativeTime(notification.createdAt)}
+        </span>
+      </div>
+
+      {/* Action button if present */}
+      {notification.action && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          className="shrink-0 ml-2 px-3.5 py-1.5 rounded-lg border border-[#94A3B8] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-400 transition-colors cursor-pointer self-center shadow-none"
+        >
+          {notification.action.includes(".") ? "View" : notification.action}
+        </button>
+      )}
+
+      {/* Actions: Mark read and Close */}
+      <div className="flex items-center gap-1 shrink-0 ml-auto self-start">
+        {!notification.read && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarkRead(notification.id);
+            }}
+            className="p-1 rounded-md text-[#94A3B8] hover:text-[#475569] hover:bg-black/5 transition-colors"
+            title="Mark as read"
+          >
+            <Check size={14} />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(notification.id);
+          }}
+          className="p-1 rounded-md text-[#94A3B8] hover:text-[#475569] hover:bg-black/5 transition-colors"
+          title="Dismiss / Archive"
+        >
+          <MinimalCloseIcon />
+        </button>
       </div>
     </div>
   );
@@ -382,19 +400,12 @@ export function NotificationBell() {
   const mobilePanelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // Auto-sync when bell panel is opened if unread count > 0 but notifications are missing
-  useEffect(() => {
-    if (isOpen && notifications.length === 0 && unreadCount > 0 && !loading) {
-      void refresh();
-    }
-  }, [isOpen, notifications.length, unreadCount, loading, refresh]);
-
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
-    const result = notifications.filter((n) => {
+    const result = (notifications || []).filter((n) => {
       const matchesSearch =
-        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        n.message.toLowerCase().includes(searchQuery.toLowerCase());
+        (n.title || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (n.message || "").toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchesFilter = (() => {
         switch (filter) {
@@ -415,7 +426,7 @@ export function NotificationBell() {
       return matchesSearch && matchesFilter;
     });
 
-    return result.slice(0, 50);
+    return result.slice(0, 10);
   }, [notifications, searchQuery, filter]);
 
   // Group notifications by date
@@ -490,8 +501,10 @@ export function NotificationBell() {
     if (!notification.read) {
       try {
         await markRead(notification.id);
-      } catch (cause: unknown) {
-        toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+      } catch (cause: any) {
+        if (!cause?.message?.includes("404") && cause?.response?.status !== 404) {
+          toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+        }
       }
     }
     setIsOpen(false);
@@ -515,8 +528,10 @@ export function NotificationBell() {
   const handleMarkRead = async (id: string) => {
     try {
       await markRead(id);
-    } catch (cause: unknown) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+    } catch (cause: any) {
+      if (!cause?.message?.includes("404") && cause?.response?.status !== 404) {
+        toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+      }
     }
   };
 
@@ -646,11 +661,8 @@ export function NotificationBell() {
                 <>
                   {realtimeStatus !== "connected" && (
                     <div className="px-4 py-2 text-xs text-text-muted bg-background-secondary border-b border-border flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        {realtimeStatus === "connecting" ? "Syncing notifications..." : "Live updates standby — auto-sync active"}
-                      </span>
-                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Sync now</button>
+                      <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
+                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
                     </div>
                   )}
                   {/* Search and Category Tabs */}
@@ -711,36 +723,17 @@ export function NotificationBell() {
                     ) : error ? (
                       <div className="p-6 text-center"><p className="text-sm text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-sm text-primary font-semibold hover:underline">Retry</button></div>
                     ) : groupedNotifications.length === 0 ? (
-                      unreadCount > 0 && !searchQuery && filter === "all" ? (
-                        <div className="p-6 text-center space-y-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
-                            <Bell size={20} />
-                          </div>
-                          <p className="text-sm font-semibold text-text">Loading {unreadCount} notification{unreadCount > 1 ? "s" : ""}...</p>
-                          <div className="p-2 space-y-2">
-                            <Skeleton variant="notification" count={2} />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void refresh()}
-                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-all shadow-sm"
-                          >
-                            Sync {unreadCount} notifications
-                          </button>
-                        </div>
-                      ) : (
-                        <EmptyState
-                          icon={Bell}
-                          title="All caught up!"
-                          description={
-                            searchQuery || filter !== "all"
-                              ? "No notifications match your filters."
-                              : "You don't have any notifications yet."
-                          }
-                        />
-                      )
+                      <EmptyState
+                        icon={Bell}
+                        title="All caught up!"
+                        description={
+                          searchQuery || filter !== "all"
+                            ? "No notifications match your filters."
+                            : "You don't have any notifications yet."
+                        }
+                      />
                     ) : (
-                      <div className="divide-y divide-border">
+                      <div className="p-3 space-y-3">
                         {groupedNotifications.map((group) => (
                           <div key={group.label}>
                             <div className="sticky top-0 z-10 bg-surface px-4 py-2 border-b border-border">
@@ -857,11 +850,8 @@ export function NotificationBell() {
                 <>
                   {realtimeStatus !== "connected" && (
                     <div className="px-4 py-2 text-xs text-text-muted bg-background-secondary border-b border-border flex items-center justify-between">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        {realtimeStatus === "connecting" ? "Syncing notifications..." : "Live updates standby — auto-sync active"}
-                      </span>
-                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Sync now</button>
+                      <span>{realtimeStatus === "connecting" ? "Reconnecting..." : "Offline. Updates will resume when connected."}</span>
+                      <button onClick={() => void refresh()} className="text-primary font-semibold hover:underline">Retry</button>
                     </div>
                   )}
                   {/* Search and Category Tabs */}
@@ -921,36 +911,17 @@ export function NotificationBell() {
                     ) : error ? (
                       <div className="p-6 text-center"><p className="text-sm text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-sm text-primary font-semibold hover:underline">Retry</button></div>
                     ) : groupedNotifications.length === 0 ? (
-                      unreadCount > 0 && !searchQuery && filter === "all" ? (
-                        <div className="p-6 text-center space-y-3">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto animate-pulse">
-                            <Bell size={20} />
-                          </div>
-                          <p className="text-sm font-semibold text-text">Loading {unreadCount} notification{unreadCount > 1 ? "s" : ""}...</p>
-                          <div className="p-2 space-y-2">
-                            <Skeleton variant="notification" count={2} />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => void refresh()}
-                            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-primary rounded-lg hover:bg-primary/90 transition-all shadow-sm"
-                          >
-                            Sync {unreadCount} notifications
-                          </button>
-                        </div>
-                      ) : (
-                        <EmptyState
-                          icon={Bell}
-                          title="All caught up!"
-                          description={
-                            searchQuery || filter !== "all"
-                              ? "No notifications match your filters."
-                              : "You don't have any notifications yet."
-                          }
-                        />
-                      )
+                      <EmptyState
+                        icon={Bell}
+                        title="All caught up!"
+                        description={
+                          searchQuery || filter !== "all"
+                            ? "No notifications match your filters."
+                            : "You don't have any notifications yet."
+                        }
+                      />
                     ) : (
-                      <div className="divide-y divide-border">
+                      <div className="p-3 space-y-3">
                         {groupedNotifications.map((group) => (
                           <div key={group.label}>
                             <div className="sticky top-0 z-10 bg-surface px-4 py-2 border-b border-border">
