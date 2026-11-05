@@ -1,5 +1,5 @@
-// lib/chatDataService.ts
 import api from "./api/api.ts";
+import { checkModulePermission, type ModuleSecurityContext } from "./rbacChatGuard.ts";
 
 // ─── Detect Intent from User Question ──────────────────────────
 
@@ -299,66 +299,81 @@ export function formatDataForResponse(intent: string, data: any): string {
 }
 
 /**
- * Gathers a rich, live CRM context summary across key modules for LLM prompts.
+ * Gathers a rich, live CRM context summary across key modules for LLM prompts,
+ * strictly filtered by the authenticated user's role permissions.
  */
-export async function gatherLiveCRMContext(token?: string): Promise<string> {
+export async function gatherLiveCRMContext(
+  token?: string,
+  security?: ModuleSecurityContext
+): Promise<string> {
   const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
 
-  try {
-    const [leadsRes, dealsRes, tasksRes] = await Promise.allSettled([
-      api.get("/leads/get-leads?limit=5", { headers }).then((r) => r.data),
-      api.get("/api/deals/get-deals?limit=5", { headers }).then((r) => r.data),
-      api.get("/tasks/get-tasks?limit=5", { headers }).then((r) => r.data),
-    ]);
+  const canLeads = checkModulePermission("leads", security).authorized;
+  const canDeals = checkModulePermission("deals", security).authorized;
+  const canTasks = checkModulePermission("tasks", security).authorized;
 
-    const leadItems =
-      leadsRes.status === "fulfilled"
-        ? leadsRes.value?.data?.data || leadsRes.value?.data || []
-        : [];
-    const dealItems =
-      dealsRes.status === "fulfilled"
-        ? dealsRes.value?.data?.data || dealsRes.value?.data || []
-        : [];
-    const taskItems =
-      tasksRes.status === "fulfilled"
-        ? tasksRes.value?.data?.data || tasksRes.value?.data || []
-        : [];
+  try {
+    const fetchPromises: Promise<any>[] = [];
+    if (canLeads) {
+      fetchPromises.push(api.get("/leads/get-leads?limit=5", { headers }).then((r) => ({ type: "leads", data: r.data })).catch(() => ({ type: "leads", data: null })));
+    }
+    if (canDeals) {
+      fetchPromises.push(api.get("/api/deals/get-deals?limit=5", { headers }).then((r) => ({ type: "deals", data: r.data })).catch(() => ({ type: "deals", data: null })));
+    }
+    if (canTasks) {
+      fetchPromises.push(api.get("/tasks/get-tasks?limit=5", { headers }).then((r) => ({ type: "tasks", data: r.data })).catch(() => ({ type: "tasks", data: null })));
+    }
+
+    const settled = await Promise.all(fetchPromises);
+
+    const leadsObj = settled.find((s) => s.type === "leads")?.data;
+    const dealsObj = settled.find((s) => s.type === "deals")?.data;
+    const tasksObj = settled.find((s) => s.type === "tasks")?.data;
+
+    const leadItems = leadsObj?.data?.data || leadsObj?.data || [];
+    const dealItems = dealsObj?.data?.data || dealsObj?.data || [];
+    const taskItems = tasksObj?.data?.data || tasksObj?.data || [];
 
     let summary = "Live CRM Status Summary:\n";
 
-    if (leadItems.length > 0) {
-      summary += `- Recent Leads: ${leadItems
-        .slice(0, 5)
-        .map((l: any) => `${l.name || l.company || "Lead"} (${l.status || "NEW"})`)
-        .join(", ")}\n`;
-    } else {
-      summary += "- Leads: 10 leads active (Nitin Tiwari, Testing lead 23, Quality Std, Astralpipes Contact, Supreme Contact)\n";
+    if (canLeads) {
+      if (leadItems.length > 0) {
+        summary += `- Recent Leads: ${leadItems
+          .slice(0, 5)
+          .map((l: any) => `${l.name || l.company || "Lead"} (${l.status || "NEW"})`)
+          .join(", ")}\n`;
+      } else {
+        summary += "- Leads: 10 leads active (Nitin Tiwari, Testing lead 23, Quality Std, Astralpipes Contact, Supreme Contact)\n";
+      }
+      summary += "- Lead Import: Latest CSV import completed in Auto mode (50 records processed, 0 errors).\n";
     }
 
-    if (dealItems.length > 0) {
-      const totalAmount = dealItems.reduce((acc: number, d: any) => acc + (Number(d.amount) || 0), 0);
-      summary += `- Active Deals: ${dealItems.length} deals totaling $${totalAmount.toLocaleString()} (${dealItems
-        .slice(0, 3)
-        .map((d: any) => `${d.name}: $${(Number(d.amount) || 0).toLocaleString()}`)
-        .join(", ")})\n`;
-    } else {
-      summary += "- Deals: 5 active deals in pipeline totaling $145,000\n";
+    if (canDeals) {
+      if (dealItems.length > 0) {
+        const totalAmount = dealItems.reduce((acc: number, d: any) => acc + (Number(d.amount) || 0), 0);
+        summary += `- Active Deals: ${dealItems.length} deals totaling $${totalAmount.toLocaleString()} (${dealItems
+          .slice(0, 3)
+          .map((d: any) => `${d.name}: $${(Number(d.amount) || 0).toLocaleString()}`)
+          .join(", ")})\n`;
+      } else {
+        summary += "- Deals: 5 active deals in pipeline totaling $145,000\n";
+      }
+      summary += "- Intelligence Signals: Win probability is 78% for deals in late proposal stages.\n";
     }
 
-    if (taskItems.length > 0) {
-      summary += `- Tasks Pending: ${taskItems.length} tasks (${taskItems
-        .slice(0, 3)
-        .map((t: any) => t.title || t.name)
-        .join(", ")})\n`;
-    } else {
-      summary += "- Tasks: Follow up on hot leads, proposal review scheduled\n";
+    if (canTasks) {
+      if (taskItems.length > 0) {
+        summary += `- Tasks Pending: ${taskItems.length} tasks (${taskItems
+          .slice(0, 3)
+          .map((t: any) => t.title || t.name)
+          .join(", ")})\n`;
+      } else {
+        summary += "- Tasks: Follow up on hot leads, proposal review scheduled\n";
+      }
     }
-
-    summary += "- Lead Import: Latest CSV import completed in Auto mode (50 records processed, 0 errors).\n";
-    summary += "- Intelligence Signals: Win probability is 78% for deals in late proposal stages.\n";
 
     return summary;
   } catch {
-    return "CRM live databases connected: Leads, Deals, Tasks, Pipelines, and Reports active.";
+    return "CRM live databases connected: Authorized modules active.";
   }
 }

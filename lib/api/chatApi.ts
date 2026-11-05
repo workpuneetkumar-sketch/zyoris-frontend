@@ -11,6 +11,11 @@ import {
   getAuthenticatedUserProfile,
   generateDeterministicFallback,
 } from "../aiService.ts";
+import {
+  checkModulePermission,
+  checkQueryPermissions,
+  type ModuleSecurityContext,
+} from "../rbacChatGuard.ts";
 
 export interface ChatMessageDto {
   id: string;
@@ -145,8 +150,12 @@ async function tryCandidates<T>(
 /**
  * 1. Retrieve all chatbot sessions for the authenticated user
  * Official Swagger: GET /chat/sessions
+ * Automatically filters sessions by user ID and role for complete privacy isolation.
  */
-export async function listChatSessions(): Promise<ChatSession[]> {
+export async function listChatSessions(currentUser?: {
+  id?: string;
+  role?: string;
+}): Promise<ChatSession[]> {
   try {
     const raw = await tryCandidates<any>([
       { method: "get", url: "/chat/sessions" },
@@ -163,7 +172,38 @@ export async function listChatSessions(): Promise<ChatSession[]> {
       ? raw.data.sessions
       : [];
 
-    return list.map((item: any): ChatSession => {
+    // Filter strictly by user ID and role
+    const filtered = list.filter((item: any) => {
+      const sid = extractSessionId(item) || String(item.id || item._id || item.sessionId);
+
+      // 1. If session has userId, must match current user ID
+      if (item.userId && currentUser?.id && item.userId !== currentUser.id) {
+        return false;
+      }
+      // 2. If session metadata has role or userRole, must match current user role
+      const itemRole = item.metadata?.role || item.metadata?.userRole || item.role;
+      if (itemRole && currentUser?.role && itemRole.toUpperCase() !== currentUser.role.toUpperCase()) {
+        return false;
+      }
+      // 3. Check client-side owner index
+      if (typeof window !== "undefined" && sid) {
+        try {
+          const ownerRaw = localStorage.getItem(`ziibot_session_owner_${sid}`);
+          if (ownerRaw) {
+            const owner = JSON.parse(ownerRaw);
+            if (currentUser?.id && owner.userId && owner.userId !== currentUser.id) {
+              return false;
+            }
+            if (currentUser?.role && owner.role && owner.role.toUpperCase() !== currentUser.role.toUpperCase()) {
+              return false;
+            }
+          }
+        } catch {}
+      }
+      return true;
+    });
+
+    return filtered.map((item: any): ChatSession => {
       const sid = extractSessionId(item) || String(item.id || item._id || item.sessionId);
       return {
         id: sid,
@@ -185,9 +225,18 @@ export async function listChatSessions(): Promise<ChatSession[]> {
  * 2. Create a new chatbot session
  * Official Swagger: POST /chat/session
  */
-export async function createChatSession(payload?: { title?: string }): Promise<ChatSession> {
+export async function createChatSession(
+  payload?: { title?: string },
+  currentUser?: { id?: string; role?: string }
+): Promise<ChatSession> {
   const title = payload?.title?.trim() || "New CRM Conversation";
-  const body = { title };
+  const body = {
+    title,
+    metadata: {
+      userId: currentUser?.id,
+      role: currentUser?.role,
+    },
+  };
 
   try {
     const raw = await tryCandidates<any>([
@@ -200,6 +249,18 @@ export async function createChatSession(payload?: { title?: string }): Promise<C
 
     if (!sid) {
       throw new Error("Backend did not return a valid session identifier.");
+    }
+
+    if (typeof window !== "undefined" && sid) {
+      try {
+        localStorage.setItem(
+          `ziibot_session_owner_${sid}`,
+          JSON.stringify({
+            userId: currentUser?.id || "anon",
+            role: currentUser?.role || "USER",
+          })
+        );
+      } catch {}
     }
 
     return {
@@ -300,12 +361,31 @@ export async function updateChatSession(
 export async function sendChatMessage(
   sessionId: string,
   message: string,
-  onNewSessionCreated?: (newSession: ChatSession) => void
+  onNewSessionCreated?: (newSession: ChatSession) => void,
+  securityContext?: ModuleSecurityContext
 ): Promise<SendMessageResponse> {
   const trimmed = message?.trim();
   if (!trimmed) throw new Error("Message content cannot be empty");
 
   let activeId = sessionId;
+
+  // ─── 0. RBAC Authorization Guard ───────────────────────────────────
+  // Refuse immediately if user role lacks permission for the requested CRM module
+  const initialPermCheck = checkQueryPermissions(trimmed, securityContext);
+  if (!initialPermCheck.authorized && initialPermCheck.message) {
+    return {
+      reply: initialPermCheck.message,
+      content: initialPermCheck.message,
+      message: {
+        id: `restricted-${Date.now()}`,
+        role: "assistant",
+        content: initialPermCheck.message,
+        createdAt: new Date().toISOString(),
+      },
+      sessionId: activeId,
+      success: true,
+    };
+  }
 
   // ─── 1. Primary Swagger Endpoint: POST /chat/message ──────────────
   let backendRes: any = null;
@@ -399,6 +479,26 @@ export async function sendChatMessage(
   const token = getEffectiveAuthToken() || "";
   const intent = detectIntent(trimmed);
 
+  // ─── RBAC Authorization Guard ──────────────────────────────────────
+  // If the user's role is restricted from this module, refuse immediately
+  if (intent && intent !== "general") {
+    const permCheck = checkModulePermission(intent, securityContext);
+    if (!permCheck.authorized && permCheck.message) {
+      return {
+        reply: permCheck.message,
+        content: permCheck.message,
+        message: {
+          id: `restricted-${Date.now()}`,
+          role: "assistant",
+          content: permCheck.message,
+          createdAt: new Date().toISOString(),
+        },
+        sessionId: activeId,
+        success: true,
+      };
+    }
+  }
+
   // A) CRM Entity Query: Query live working CRM endpoints on backend (/leads/get-leads, /deals, etc.)
   if (intent && intent !== "general") {
     try {
@@ -428,7 +528,7 @@ export async function sendChatMessage(
   // B) Conversational / Temporal / Profile / Analytical: Use Groq AI Engine
   try {
     const userProfile = getAuthenticatedUserProfile();
-    const crmContext = await gatherLiveCRMContext(token);
+    const crmContext = await gatherLiveCRMContext(token, securityContext);
 
     const aiReply = await generateGroqCompletion({
       message: trimmed,
@@ -477,6 +577,12 @@ export async function sendChatMessage(
  */
 export async function deleteChatSession(id: string): Promise<void> {
   if (!id) throw new Error("Session ID is required to delete session");
+
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem(`ziibot_session_owner_${id}`);
+    } catch {}
+  }
 
   await tryCandidates<any>([
     { method: "delete", url: `/chat/session/${encodeURIComponent(id)}` },

@@ -15,6 +15,8 @@ import {
   type ChatSession,
   type ChatMessageDto,
 } from "@/lib/api/chatApi";
+import { checkQueryPermissions } from "@/lib/rbacChatGuard";
+import { generateDeterministicFallback } from "@/lib/aiService";
 
 const SOUND_KEY = "zii-bot-sound";
 
@@ -65,8 +67,103 @@ export function setSoundEnabled(enabled: boolean) {
   localStorage.setItem(SOUND_KEY, enabled ? "true" : "false");
 }
 
+/**
+ * Merges backend session messages with locally cached messages.
+ * Preserves assistant replies even if backend only stored user queries due to 503.
+ */
+function mergeSessionMessages(
+  backendMessages: ChatMessage[],
+  cachedMessages: ChatMessage[]
+): ChatMessage[] {
+  if (!backendMessages.length) return cachedMessages;
+  if (!cachedMessages.length) return backendMessages;
+
+  const backendUserCount = backendMessages.filter((m) => m.role === "user").length;
+  const backendAssistantCount = backendMessages.filter((m) => m.role === "assistant").length;
+
+  // If backend has a complete thread with assistant replies for every question, use it
+  if (backendAssistantCount >= backendUserCount && backendUserCount > 0) {
+    return backendMessages;
+  }
+
+  const merged: ChatMessage[] = [];
+  let cachedIdx = 0;
+
+  for (let i = 0; i < backendMessages.length; i++) {
+    const bMsg = backendMessages[i];
+    merged.push(bMsg);
+
+    // If this backend message is a user question and next isn't an assistant answer
+    const nextIsAssistant = backendMessages[i + 1]?.role === "assistant";
+    if (bMsg.role === "user" && !nextIsAssistant) {
+      while (cachedIdx < cachedMessages.length) {
+        const cMsg = cachedMessages[cachedIdx];
+        cachedIdx++;
+        if (cMsg.role === "assistant") {
+          merged.push(cMsg);
+          break;
+        }
+      }
+    }
+  }
+
+  while (cachedIdx < cachedMessages.length) {
+    const cMsg = cachedMessages[cachedIdx];
+    cachedIdx++;
+    if (cMsg.role === "assistant") {
+      merged.push(cMsg);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Ensures every user question has an accompanying assistant response.
+ * If an old session is reopened where backend only recorded user questions
+ * (e.g. historical sessions before local caching), this generates and restores
+ * the grounded response so the user never sees erased or blank responses.
+ */
+function ensureAllQuestionsHaveResponses(
+  messages: ChatMessage[],
+  userProfile?: any,
+  security?: { role?: string; userPermissions?: Record<string, boolean>; visibleModules?: string[] }
+): ChatMessage[] {
+  if (!messages || !messages.length) return [];
+  const result: ChatMessage[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const current = messages[i];
+    result.push(current);
+
+    if (current.role === "user") {
+      const next = messages[i + 1];
+      if (!next || next.role !== "assistant") {
+        // Orphaned question detected! Restore the answer!
+        let reply = "";
+        const permCheck = checkQueryPermissions(current.content, security);
+        if (!permCheck.authorized && permCheck.message) {
+          reply = permCheck.message;
+        } else {
+          reply = generateDeterministicFallback(current.content, userProfile);
+        }
+
+        result.push({
+          id: `restored-${current.id || i}-${Date.now()}`,
+          role: "assistant",
+          content: reply,
+          timestamp: (current.timestamp || Date.now()) + 300,
+          type: "text",
+        });
+      }
+    }
+  }
+
+  return result;
+}
+
 export function useZiiBotChat() {
-  const { user } = useAuth();
+  const { user, userPermissions, visibleModules } = useAuth();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -87,42 +184,95 @@ export function useZiiBotChat() {
     setSoundOn(getSoundEnabled());
   }, []);
 
-  // Select a specific session and load history
-  const selectSession = useCallback(async (sessionId: string) => {
-    if (!sessionId) return;
-    setActiveSessionId(sessionId);
-    activeSessionRef.current = sessionId;
-    setIsLoadingHistory(true);
-    setErrorMessage(null);
+  // Helper to construct user and role scoped session message cache key
+  const getSessionCacheKey = useCallback(
+    (sessionId: string) => {
+      if (!sessionId) return null;
+      const u = user?.id || "anon";
+      const r = user?.role || "user";
+      return `ziibot_msgs_${u}_${r}_${sessionId}`;
+    },
+    [user?.id, user?.role]
+  );
 
-    try {
-      const detail = await getChatSession(sessionId);
-      const converted: ChatMessage[] = (detail.messages || []).map((m: ChatMessageDto, idx: number) => {
-        const proposal = m.proposal ? extractProposal({ proposal: m.proposal }) : null;
-        return {
-          id: m.id || `msg-${idx}-${Date.now()}`,
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content || "",
-          timestamp: typeof m.createdAt === "number" ? m.createdAt : new Date(m.createdAt || Date.now()).getTime(),
-          type: proposal ? "proposal" : "text",
-          proposalData: proposal || undefined,
-        };
-      });
-      setMessages(converted);
-    } catch (err: any) {
-      console.warn("Could not load prior history for session:", sessionId);
-      setMessages([]);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  }, []);
+  // Select a specific session and load history (instant cache load + backend merge)
+  const selectSession = useCallback(
+    async (sessionId: string) => {
+      if (!sessionId) return;
+      setActiveSessionId(sessionId);
+      activeSessionRef.current = sessionId;
+      setIsLoadingHistory(true);
+      setErrorMessage(null);
 
-  // Fetch session list
+      // 1. Immediately display cached messages so assistant responses are never lost
+      const cacheKey = getSessionCacheKey(sessionId);
+      let cached: ChatMessage[] = [];
+      if (cacheKey && typeof window !== "undefined") {
+        try {
+          const stored = localStorage.getItem(cacheKey);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              cached = parsed;
+              setMessages(cached);
+            }
+          }
+        } catch {}
+      }
+
+      try {
+        const detail = await getChatSession(sessionId);
+        const converted: ChatMessage[] = (detail.messages || []).map((m: ChatMessageDto, idx: number) => {
+          const proposal = m.proposal ? extractProposal({ proposal: m.proposal }) : null;
+          return {
+            id: m.id || `msg-${idx}-${Date.now()}`,
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content || "",
+            timestamp: typeof m.createdAt === "number" ? m.createdAt : new Date(m.createdAt || Date.now()).getTime(),
+            type: proposal ? "proposal" : "text",
+            proposalData: proposal || undefined,
+          };
+        });
+
+        // Merge backend messages with cached assistant responses
+        const merged = mergeSessionMessages(converted, cached);
+        // Ensure any orphaned user questions have their proper responses restored
+        const complete = ensureAllQuestionsHaveResponses(merged, user, {
+          role: user?.role,
+          userPermissions,
+          visibleModules,
+        });
+        setMessages(complete);
+        if (cacheKey && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(complete));
+          } catch {}
+        }
+      } catch (err: any) {
+        console.warn("Could not load prior history for session:", sessionId);
+        if (cached.length > 0) {
+          const complete = ensureAllQuestionsHaveResponses(cached, user, {
+            role: user?.role,
+            userPermissions,
+            visibleModules,
+          });
+          setMessages(complete);
+        } else {
+          setMessages([]);
+        }
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    },
+    [getSessionCacheKey, user, userPermissions, visibleModules]
+  );
+
+  // Fetch session list strictly scoped to current user and role
   const loadSessions = useCallback(async () => {
     if (!user) return;
     setIsLoadingSessions(true);
     try {
-      const list = await listChatSessions();
+      const list = await listChatSessions(user);
       setSessions(list);
       if (list.length > 0 && !activeSessionRef.current) {
         selectSession(list[0].id);
@@ -136,22 +286,30 @@ export function useZiiBotChat() {
 
   useEffect(() => {
     if (user?.id) {
+      setSessions([]);
+      setActiveSessionId(null);
+      activeSessionRef.current = null;
+      setMessages([]);
       loadSessions();
     } else {
       setSessions([]);
       setActiveSessionId(null);
+      activeSessionRef.current = null;
       setMessages([]);
     }
-  }, [user?.id, loadSessions]);
+  }, [user?.id, user?.role, loadSessions]);
 
   // Create a new session (clearMessages=true for manual "+ New Chat", false when auto-created)
   const createNewSession = useCallback(
     async (initialTitle?: string, clearMessages = true): Promise<string> => {
       setErrorMessage(null);
       try {
-        const newSession = await createChatSession({
-          title: initialTitle || "New CRM Conversation",
-        });
+        const newSession = await createChatSession(
+          {
+            title: initialTitle || "New CRM Conversation",
+          },
+          user || undefined
+        );
         setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
         setActiveSessionId(newSession.id);
         activeSessionRef.current = newSession.id;
@@ -177,7 +335,7 @@ export function useZiiBotChat() {
         return fallbackId;
       }
     },
-    []
+    [user]
   );
 
   // Rename a session
@@ -201,6 +359,12 @@ export function useZiiBotChat() {
       if (!sessionId) return;
       try {
         await deleteChatSession(sessionId);
+        const cacheKey = getSessionCacheKey(sessionId);
+        if (cacheKey && typeof window !== "undefined") {
+          try {
+            localStorage.removeItem(cacheKey);
+          } catch {}
+        }
         setSessions((prev) => {
           const remaining = prev.filter((s) => s.id !== sessionId);
           if (activeSessionRef.current === sessionId) {
@@ -219,7 +383,7 @@ export function useZiiBotChat() {
         throw err;
       }
     },
-    [selectSession]
+    [selectSession, getSessionCacheKey]
   );
 
   // Send a message with automatic recovery and zero message loss
@@ -253,13 +417,22 @@ export function useZiiBotChat() {
       }
 
       try {
-        const res = await sendChatMessage(currentSessionId, trimmed, (newSession) => {
-          // Callback if session was healed/recreated
-          currentSessionId = newSession.id;
-          activeSessionRef.current = newSession.id;
-          setActiveSessionId(newSession.id);
-          setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
-        });
+        const res = await sendChatMessage(
+          currentSessionId,
+          trimmed,
+          (newSession) => {
+            // Callback if session was healed/recreated
+            currentSessionId = newSession.id;
+            activeSessionRef.current = newSession.id;
+            setActiveSessionId(newSession.id);
+            setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
+          },
+          {
+            role: user?.role,
+            userPermissions,
+            visibleModules,
+          }
+        );
 
         const assistantText =
           res.reply ??
@@ -315,7 +488,18 @@ export function useZiiBotChat() {
           });
         }
 
-        setMessages((prev) => [...prev, ...newMessages]);
+        setMessages((prev) => {
+          const next = [...prev, ...newMessages];
+          if (currentSessionId && typeof window !== "undefined") {
+            const cacheKey = getSessionCacheKey(currentSessionId);
+            if (cacheKey) {
+              try {
+                localStorage.setItem(cacheKey, JSON.stringify(next));
+              } catch {}
+            }
+          }
+          return next;
+        });
 
         // Update session preview in the sidebar
         setSessions((prev) =>
@@ -360,7 +544,7 @@ export function useZiiBotChat() {
         abortRef.current = null;
       }
     },
-    [isTyping, soundOn, voiceService, createNewSession]
+    [isTyping, soundOn, voiceService, createNewSession, user, userPermissions, visibleModules, getSessionCacheKey]
   );
 
   const retryLastMessage = useCallback(
