@@ -81,6 +81,8 @@ import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { getEmployees } from "@/lib/api/hrApi";
 import { useConnectSocket } from "@/hooks/useConnectSocket";
 import { MentionMember } from "./MentionAutocomplete";
+import { useSearchParams } from "next/navigation";
+import { useConnectNotifications } from "@/context/ConnectNotificationContext";
 
 export default function ConnectWorkspace() {
   // Navigation & Data State - initialized from local cache to prevent data loss on reload
@@ -102,6 +104,20 @@ export default function ConnectWorkspace() {
   const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [activeTarget, setActiveTarget] = useState<ActiveTarget | null>(null);
+
+  const searchParams = useSearchParams();
+  const queryConvId = searchParams?.get("conversationId");
+  const queryChanId = searchParams?.get("channelId");
+  const { setActiveChatTarget, subscribeToChannels } = useConnectNotifications();
+
+  useEffect(() => {
+    setActiveChatTarget(
+      activeTarget ? { type: activeTarget.type, id: activeTarget.id } : null
+    );
+    return () => {
+      setActiveChatTarget(null);
+    };
+  }, [activeTarget, setActiveChatTarget]);
 
   // Messages State
   const [messages, setMessages] = useState<ConnectMessage[]>([]);
@@ -231,7 +247,28 @@ export default function ConnectWorkspace() {
       const effectiveChannels = channelsRes.data.length > 0 ? channelsRes.data : channels;
       const effectiveConvs = convsRes.data.length > 0 ? convsRes.data : conversations;
 
-      if (!activeTargetRef.current) {
+      if (effectiveChannels.length > 0) {
+        subscribeToChannels(effectiveChannels);
+      }
+
+      let matchedTarget = false;
+      if (queryChanId) {
+        const found = effectiveChannels.find(
+          (c) => c.id === queryChanId || c.name === queryChanId
+        );
+        if (found) {
+          selectChannel(found);
+          matchedTarget = true;
+        }
+      } else if (queryConvId) {
+        const found = effectiveConvs.find((c) => c.id === queryConvId);
+        if (found) {
+          selectConversation(found);
+          matchedTarget = true;
+        }
+      }
+
+      if (!matchedTarget && !activeTargetRef.current) {
         if (effectiveChannels.length > 0) {
           selectChannel(effectiveChannels[0]);
         } else if (effectiveConvs.length > 0) {
@@ -249,6 +286,27 @@ export default function ConnectWorkspace() {
   /* -------------------------------------------------------------------------- */
   /*                        SERVER-DRIVEN MESSAGE FETCHING                      */
   /* -------------------------------------------------------------------------- */
+
+  // Respond to URL query parameter navigation while Connect workspace is mounted
+  useEffect(() => {
+    if (
+      queryChanId &&
+      activeTargetRef.current?.id !== queryChanId &&
+      (activeTargetRef.current?.item as Channel)?.name !== queryChanId
+    ) {
+      const found = channels.find(
+        (c) => c.id === queryChanId || c.name === queryChanId
+      );
+      if (found) {
+        selectChannel(found);
+      }
+    } else if (queryConvId && activeTargetRef.current?.id !== queryConvId) {
+      const found = conversations.find((c) => c.id === queryConvId);
+      if (found) {
+        selectConversation(found);
+      }
+    }
+  }, [queryChanId, queryConvId, channels, conversations]);
 
   const loadMessagesForTarget = useCallback(async (target: ActiveTarget) => {
     // Prevent stale requests: cancel previous in-flight request
