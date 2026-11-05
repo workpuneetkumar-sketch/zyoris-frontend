@@ -35,10 +35,19 @@ import {
     ChevronDown,
     ChevronRight,
     MoreHorizontal,
+    Info,
 } from "lucide-react";
 import { AttachmentSection } from "@/components/workspace/AttachmentSection";
 import { ExportModal } from "@/components/workspace/ExportModal";
 import { ReassignTaskModal } from "@/components/tasks/ReassignTaskModal";
+import { AlignDevelopersModal } from "@/components/tasks/AlignDevelopersModal";
+import {
+    TaskCollaborator,
+    getTaskCollaborators,
+    getAvatarColors,
+    getInitials,
+    formatTaskDisplayCode,
+} from "@/lib/api/taskCollaboratorsApi";
 import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
 import {
     Task,
@@ -433,6 +442,29 @@ export function TaskDetailModal({
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+    const [isAlignModalOpen, setIsAlignModalOpen] = useState(false);
+
+    // Collaboration features are available in Team Tasks / Board context
+    const isTeamTasks = sourceView === "Team Tasks / Board" || !sourceView;
+
+    const [collaborators, setCollaborators] = useState<TaskCollaborator[]>(() => {
+        return getTaskCollaborators(task.id);
+    });
+
+    useEffect(() => {
+        setCollaborators(getTaskCollaborators(task.id));
+    }, [task.id]);
+
+    useEffect(() => {
+        const handleCollaboratorsUpdate = (e: Event) => {
+            const customEvent = e as CustomEvent<{ taskId: string; collaborators: TaskCollaborator[] }>;
+            if (customEvent.detail && customEvent.detail.taskId === task.id) {
+                setCollaborators(customEvent.detail.collaborators);
+            }
+        };
+        window.addEventListener("zyoris:task-collaborators-updated", handleCollaboratorsUpdate);
+        return () => window.removeEventListener("zyoris:task-collaborators-updated", handleCollaboratorsUpdate);
+    }, [task.id]);
 
     // Collapsible sections state (Notion style)
     const [sectionsOpen, setSectionsOpen] = useState({
@@ -560,7 +592,7 @@ export function TaskDetailModal({
     // Escape key listener for closing modal
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape" && !isExportModalOpen && !isReassignModalOpen) {
+            if (e.key === "Escape" && !isExportModalOpen && !isReassignModalOpen && !isAlignModalOpen) {
                 if (isEditingTitle) {
                     setIsEditingTitle(false);
                     setTitleInput(task.title);
@@ -574,7 +606,7 @@ export function TaskDetailModal({
         };
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [onClose, isExportModalOpen, isReassignModalOpen, isEditingTitle, isEditingDescription, task.title, task.description]);
+    }, [onClose, isExportModalOpen, isReassignModalOpen, isAlignModalOpen, isEditingTitle, isEditingDescription, task.title, task.description]);
 
     // Load team members and projects
     useEffect(() => {
@@ -925,6 +957,16 @@ export function TaskDetailModal({
                                         <span>Reassign Task</span>
                                     </button>
 
+                                    {isTeamTasks && (
+                                        <button
+                                            onClick={() => setIsAlignModalOpen(true)}
+                                            className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                                        >
+                                            <Users size={14} className="text-purple-500" />
+                                            <span>Align Developers</span>
+                                        </button>
+                                    )}
+
                                     <button
                                         onClick={() => setIsExportModalOpen(true)}
                                         className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
@@ -1087,10 +1129,10 @@ export function TaskDetailModal({
                             </select>
                         </div>
 
-                        {/* Assignee */}
+                        {/* Assignee / Primary Assignee */}
                         <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
                             <User size={14} className="text-slate-400" />
-                            <span>Assignee</span>
+                            <span>{isTeamTasks ? "Primary Assignee" : "Assignee"}</span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                             <div className="flex items-center space-x-2 py-1 px-2.5 bg-slate-50 dark:bg-slate-800/60 rounded-lg border border-slate-200/60 dark:border-slate-700/60 text-xs font-semibold text-slate-800 dark:text-slate-200">
@@ -1132,6 +1174,62 @@ export function TaskDetailModal({
                                 </div>
                             )}
                         </div>
+
+                        {/* Collaborators Row (shown when in Team Tasks / Board context) */}
+                        {isTeamTasks && (
+                            <>
+                                <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
+                                    <Users size={14} className="text-purple-500" />
+                                    <span>Collaborators ({collaborators.length})</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    {collaborators.length > 0 ? (
+                                        <div className="flex items-center space-x-2 py-1 px-2.5 bg-purple-50/50 dark:bg-purple-950/20 rounded-lg border border-purple-200/60 dark:border-purple-800/40 text-xs text-slate-800 dark:text-slate-200">
+                                            <div className="flex -space-x-1.5 overflow-hidden">
+                                                {collaborators.map((c) => {
+                                                    const cColors = getAvatarColors(c.name);
+                                                    return (
+                                                        <div
+                                                            key={c.id}
+                                                            title={`${c.name} (${c.department || "Engineering"})`}
+                                                            className={`inline-block w-5 h-5 rounded-full ring-1.5 ring-white dark:ring-slate-900 ${cColors.bg} ${cColors.text} text-[9px] font-bold flex items-center justify-center shrink-0`}
+                                                        >
+                                                            {getInitials(c.name)}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                            <span className="font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[220px]">
+                                                {collaborators.map((c) => c.name).join(", ")}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <span className="text-[11px] text-slate-400 dark:text-slate-500 italic">
+                                            No collaborators aligned
+                                        </span>
+                                    )}
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsAlignModalOpen(true)}
+                                        className="inline-flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 rounded-lg transition"
+                                        title="Align Developers"
+                                    >
+                                        {collaborators.length > 0 ? (
+                                            <>
+                                                <Edit2 size={11} />
+                                                <span>Manage</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Users size={11} />
+                                                <span>+ Align Developers</span>
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </>
+                        )}
 
                         {/* Due Date */}
                         <div className="flex items-center space-x-2 text-xs font-medium text-slate-400 dark:text-slate-500">
@@ -1270,6 +1368,130 @@ export function TaskDetailModal({
                             })}
                         </div>
                     </div>
+
+                    {/* Dedicated Task Assignment Card (Reference Panel 3) */}
+                    {isTeamTasks && (
+                        <div className="bg-slate-50/70 dark:bg-slate-850 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider flex items-center space-x-1.5">
+                                    <Users size={13} className="text-purple-500" />
+                                    <span>Task Assignment</span>
+                                </h3>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Primary Assignee Section */}
+                                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/70 dark:border-slate-800 flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                Primary Assignee
+                                            </span>
+                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                                                Task Owner
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center space-x-2.5">
+                                            <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs font-bold flex items-center justify-center shrink-0">
+                                                {displayAssigneeName && displayAssigneeName !== "Unassigned" ? (
+                                                    displayAssigneeName.slice(0, 2).toUpperCase()
+                                                ) : (
+                                                    <User size={13} />
+                                                )}
+                                            </div>
+                                            <div className="min-w-0">
+                                                <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                                    {displayAssigneeName}
+                                                </div>
+                                                {department && (
+                                                    <div className="text-[10px] text-slate-400">
+                                                        {department}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsReassignModalOpen(true)}
+                                            className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition"
+                                            title="Reassign task"
+                                        >
+                                            <ArrowRightLeft size={12} />
+                                            <span>Reassign</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Collaborators Section */}
+                                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200/70 dark:border-slate-800 flex flex-col justify-between">
+                                    <div>
+                                        <div className="flex items-center justify-between mb-2">
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                                Collaborators ({collaborators.length})
+                                            </span>
+                                            {collaborators.length > 0 && (
+                                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+                                                    Aligned ({collaborators.length})
+                                                </span>
+                                            )}
+                                        </div>
+                                        {collaborators.length > 0 ? (
+                                            <div className="space-y-2">
+                                                <div className="flex -space-x-1.5 overflow-hidden">
+                                                    {collaborators.map((c) => {
+                                                        const cCol = getAvatarColors(c.name);
+                                                        return (
+                                                            <div
+                                                                key={c.id}
+                                                                title={`${c.name} (${c.department || "Engineering"})`}
+                                                                className={`inline-block w-6 h-6 rounded-full ring-2 ring-white dark:ring-slate-900 ${cCol.bg} ${cCol.text} text-[10px] font-bold flex items-center justify-center shrink-0`}
+                                                            >
+                                                                {getInitials(c.name)}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                                <p className="text-xs text-slate-700 dark:text-slate-300 font-medium line-clamp-2">
+                                                    {collaborators.map((c) => c.name).join(" | ")}
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <p className="text-xs text-slate-400 py-1">
+                                                No collaborators aligned to this task.
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end space-x-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setIsAlignModalOpen(true)}
+                                            className="inline-flex items-center space-x-1 px-2.5 py-1 text-xs font-semibold text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/40 rounded-lg transition"
+                                            title="Align Developers"
+                                        >
+                                            {collaborators.length > 0 ? (
+                                                <>
+                                                    <Edit2 size={12} />
+                                                    <span>Manage</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Users size={12} />
+                                                    <span>+ Align Developers</span>
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="text-[11px] text-slate-400 flex items-center space-x-1.5 pt-1">
+                                <Info size={12} className="shrink-0 text-slate-400" />
+                                <span>All task participants are visible to the team.</span>
+                            </div>
+                        </div>
+                    )}
 
                     {/* 3. Description & Content-First Body */}
                     <div className="space-y-3 pt-2">
@@ -1894,6 +2116,40 @@ export function TaskDetailModal({
                     }
                     onClose={() => setIsReassignModalOpen(false)}
                     onSuccess={handleReassignSuccess}
+                />
+            )}
+
+            {/* Align Developers Modal */}
+            {isAlignModalOpen && (
+                <AlignDevelopersModal
+                    isOpen={isAlignModalOpen}
+                    taskId={task.id}
+                    taskTitle={form.title || task.title}
+                    taskCode={formatTaskDisplayCode(task)}
+                    primaryAssignee={
+                        canonicalAssignment?.assignedTo
+                            ? {
+                                  id: canonicalAssignment.assignedTo.id,
+                                  name: canonicalAssignment.assignedTo.name,
+                                  email: canonicalAssignment.assignedTo.email,
+                                  department: canonicalAssignment.department || department || undefined,
+                              }
+                            : task.assignedTo
+                            ? {
+                                  id: task.assignedTo.id,
+                                  name: task.assignedTo.name,
+                                  email: task.assignedTo.email,
+                                  department: department || undefined,
+                              }
+                            : null
+                    }
+                    existingCollaborators={collaborators}
+                    onClose={() => setIsAlignModalOpen(false)}
+                    onSuccess={(updatedCollabs) => {
+                        setCollaborators(updatedCollabs);
+                        setIsAlignModalOpen(false);
+                        if (onRefresh) onRefresh();
+                    }}
                 />
             )}
         </div>
