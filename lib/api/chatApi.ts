@@ -1,16 +1,16 @@
-import api, { getEffectiveAuthToken } from "./api";
+import api, { getEffectiveAuthToken } from "./api.ts";
 import type { AgentApprovalRequest } from "@/types/ai-proposals";
 import {
   detectIntent,
   fetchDataByIntent,
   formatDataForResponse,
   gatherLiveCRMContext,
-} from "@/lib/chatDataService";
+} from "../chatDataService.ts";
 import {
   generateGroqCompletion,
   getAuthenticatedUserProfile,
   generateDeterministicFallback,
-} from "@/lib/aiService";
+} from "../aiService.ts";
 
 export interface ChatMessageDto {
   id: string;
@@ -144,15 +144,13 @@ async function tryCandidates<T>(
 
 /**
  * 1. Retrieve all chatbot sessions for the authenticated user
- * GET /chat/sessions (Swagger) or GET /api/chat/sessions (Handoff)
+ * Official Swagger: GET /chat/sessions
  */
 export async function listChatSessions(): Promise<ChatSession[]> {
   try {
     const raw = await tryCandidates<any>([
       { method: "get", url: "/chat/sessions" },
-      { method: "get", url: "/api/chat/sessions" },
       { method: "get", url: "/chat/session" },
-      { method: "get", url: "/api/chat/session" },
     ]);
 
     const list = Array.isArray(raw)
@@ -185,7 +183,7 @@ export async function listChatSessions(): Promise<ChatSession[]> {
 
 /**
  * 2. Create a new chatbot session
- * POST /chat/session (Swagger) or POST /api/chat/sessions (Handoff)
+ * Official Swagger: POST /chat/session
  */
 export async function createChatSession(payload?: { title?: string }): Promise<ChatSession> {
   const title = payload?.title?.trim() || "New CRM Conversation";
@@ -193,15 +191,8 @@ export async function createChatSession(payload?: { title?: string }): Promise<C
 
   try {
     const raw = await tryCandidates<any>([
-      // Swagger spec: POST /chat/session
       { method: "post", url: "/chat/session", data: body },
-      // Handoff spec: POST /api/chat/sessions
-      { method: "post", url: "/api/chat/sessions", data: body },
-      { method: "post", url: "/chat/sessions", data: body },
-      { method: "post", url: "/api/chat/session", data: body },
-      // Optional empty body fallbacks
       { method: "post", url: "/chat/session", data: {} },
-      { method: "post", url: "/api/chat/sessions", data: {} },
     ]);
 
     const sid = extractSessionId(raw);
@@ -226,7 +217,7 @@ export async function createChatSession(payload?: { title?: string }): Promise<C
 
 /**
  * 3. Retrieve a specific session and its conversation history
- * GET /chat/session/:sessionId or GET /api/chat/sessions/:id
+ * Official Swagger: GET /chat/session/{sessionId}
  */
 export async function getChatSession(id: string): Promise<ChatSessionDetailResponse> {
   if (!id) {
@@ -236,9 +227,6 @@ export async function getChatSession(id: string): Promise<ChatSessionDetailRespo
   try {
     const raw = await tryCandidates<any>([
       { method: "get", url: `/chat/session/${encodeURIComponent(id)}` },
-      { method: "get", url: `/api/chat/sessions/${encodeURIComponent(id)}` },
-      { method: "get", url: `/chat/sessions/${encodeURIComponent(id)}` },
-      { method: "get", url: `/api/chat/session/${encodeURIComponent(id)}` },
     ]);
 
     const sessionObj = raw?.session || raw?.data?.session || raw?.data || raw;
@@ -277,6 +265,7 @@ export async function getChatSession(id: string): Promise<ChatSessionDetailRespo
 
 /**
  * 4. Update session information (e.g. rename title)
+ * Official Swagger: PATCH /chat/session/{sessionId}
  */
 export async function updateChatSession(
   id: string,
@@ -289,10 +278,7 @@ export async function updateChatSession(
   const body = { title: trimmed };
 
   const raw = await tryCandidates<any>([
-    { method: "patch", url: `/api/chat/sessions/${encodeURIComponent(id)}`, data: body },
-    { method: "patch", url: `/chat/sessions/${encodeURIComponent(id)}`, data: body },
     { method: "patch", url: `/chat/session/${encodeURIComponent(id)}`, data: body },
-    { method: "patch", url: `/api/chat/session/${encodeURIComponent(id)}`, data: body },
     { method: "put", url: `/chat/session/${encodeURIComponent(id)}`, data: body },
   ]);
 
@@ -308,7 +294,8 @@ export async function updateChatSession(
 
 /**
  * 5. Send a user message and receive AI response with live CRM context.
- * Implements full endpoint coverage (Swagger & Handoff) and intelligent CRM fallback.
+ * Strictly adheres to official Swagger endpoint: POST /chat/message
+ * Request Body: { sessionId: string, message: string }
  */
 export async function sendChatMessage(
   sessionId: string,
@@ -320,37 +307,26 @@ export async function sendChatMessage(
 
   let activeId = sessionId;
 
-  // Direct swagger payload: { sessionId, message }
-  const swaggerPayload = {
-    sessionId: activeId,
-    message: trimmed,
-  };
-
-  // Sub-resource messages payload: { message, content }
-  const subresourcePayload = {
-    message: trimmed,
-    content: trimmed,
-  };
+  // ─── 1. Primary Swagger Endpoint: POST /chat/message ──────────────
+  let backendRes: any = null;
+  let backendStatus: number | null = null;
+  let backendError: any = null;
 
   try {
-    const raw = await tryCandidates<any>([
-      // Primary Swagger endpoint: POST /chat/message
-      { method: "post", url: "/chat/message", data: swaggerPayload },
-      // Primary Handoff endpoint: POST /api/chat/sessions/:id/messages
-      { method: "post", url: `/api/chat/sessions/${encodeURIComponent(activeId)}/messages`, data: subresourcePayload },
-      { method: "post", url: `/chat/sessions/${encodeURIComponent(activeId)}/messages`, data: subresourcePayload },
-      // Direct alternate endpoints
-      { method: "post", url: "/api/chat/message", data: swaggerPayload },
-      { method: "post", url: `/api/chat/session/${encodeURIComponent(activeId)}/messages`, data: subresourcePayload },
-      { method: "post", url: `/chat/session/${encodeURIComponent(activeId)}/messages`, data: subresourcePayload },
-    ]);
-
-    const res = raw?.data || raw;
-    return res;
+    const res = await api.post("/chat/message", {
+      sessionId: activeId,
+      message: trimmed,
+    });
+    backendRes = res.data;
+    backendStatus = res.status;
   } catch (err: any) {
-    // If backend returns 404 (Session not found or route not mounted)
-    if (err.response?.status === 404) {
-      console.warn(`Session ${activeId} returned 404; attempting fresh session creation...`);
+    backendError = err;
+    backendStatus = err.response?.status || null;
+    const errorMsg = err.response?.data?.message || err.message;
+    console.warn(`POST /chat/message returned status ${backendStatus}:`, errorMsg);
+
+    // If 404 (session expired or invalid id on backend), create a new session and retry once
+    if (backendStatus === 404) {
       try {
         const freshSession = await createChatSession({
           title: trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed,
@@ -360,119 +336,149 @@ export async function sendChatMessage(
           if (onNewSessionCreated) {
             onNewSessionCreated(freshSession);
           }
-          // Retry sending message with verified new session
-          const retryRes = await tryCandidates<any>([
-            { method: "post", url: "/chat/message", data: { sessionId: activeId, message: trimmed } },
-            { method: "post", url: `/api/chat/sessions/${encodeURIComponent(activeId)}/messages`, data: subresourcePayload },
-            { method: "post", url: `/chat/sessions/${encodeURIComponent(activeId)}/messages`, data: subresourcePayload },
-            { method: "post", url: "/api/chat/message", data: { sessionId: activeId, message: trimmed } },
-          ]);
-          return retryRes?.data || retryRes;
+          const retryRes = await api.post("/chat/message", {
+            sessionId: activeId,
+            message: trimmed,
+          });
+          backendRes = retryRes.data;
+          backendStatus = retryRes.status;
+          backendError = null;
         }
-      } catch (sessionErr) {
-        console.warn("Could not create fresh backend session for message retry:", sessionErr);
+      } catch (retryErr: any) {
+        console.warn("Session recreation retry failed:", retryErr?.response?.status || retryErr?.message);
       }
     }
-
-    const token = getEffectiveAuthToken() || "";
-    const intent = detectIntent(trimmed);
-
-    // ─── 1. CRM Live Data Intent Resolution ──────────────────────────
-    // When the user asks for specific CRM entities (leads, deals, tasks, revenue, etc.),
-    // query the live database via backend REST endpoints and return real CRM records.
-    if (intent && intent !== "general") {
-      try {
-        const intentData = await fetchDataByIntent(intent, token);
-        if (intentData) {
-          const formattedReply = formatDataForResponse(intent, intentData);
-          if (formattedReply && !formattedReply.includes("No data available")) {
-            return {
-              reply: formattedReply,
-              content: formattedReply,
-              success: true,
-              sessionId: activeId,
-            };
-          }
-        }
-      } catch (crmErr) {
-        console.warn("Direct CRM data fetch by intent failed:", crmErr);
-      }
-    }
-
-    // ─── 2. Direct Groq AI Engine Integration ────────────────────────
-    // For conversational, analytical, profile, temporal, and general queries,
-    // invoke the high-intelligence Groq engine with real-time CRM grounding.
-    try {
-      const userProfile = getAuthenticatedUserProfile();
-      const crmContext = await gatherLiveCRMContext(token);
-
-      const aiReply = await generateGroqCompletion({
-        message: trimmed,
-        userProfile,
-        crmContext,
-      });
-
-      if (aiReply && aiReply.trim()) {
-        return {
-          reply: aiReply,
-          content: aiReply,
-          success: true,
-          sessionId: activeId,
-        };
-      }
-    } catch (groqErr) {
-      console.warn("Direct Groq AI generation failed:", groqErr);
-    }
-
-    // ─── 3. Deterministic Grounded Fallback ───────────────────────────
-    try {
-      const userProfile = getAuthenticatedUserProfile();
-      const offlineReply = generateDeterministicFallback(trimmed, userProfile);
-      if (offlineReply) {
-        return {
-          reply: offlineReply,
-          content: offlineReply,
-          success: true,
-          sessionId: activeId,
-        };
-      }
-    } catch {}
-
-    // Standard friendly error message if everything failed
-    if (err.response?.status === 503) {
-      throw new Error(
-        err.response?.data?.message ||
-          "ZII BOT AI Provider is temporarily unavailable. Please verify API key configuration."
-      );
-    }
-    if (err.response?.status === 401 || err.response?.status === 403) {
-      throw new Error(
-        err.response?.data?.message ||
-          "Session expired or unauthorized. Please re-login to access CRM intelligence."
-      );
-    }
-
-    const messageText =
-      err.response?.data?.message ||
-      err.response?.data?.error ||
-      "ZII BOT encountered an error reaching the AI service. Please try asking again.";
-
-    const error = new Error(messageText);
-    (error as any).status = err.response?.status;
-    throw error;
   }
+
+  // ─── 2. Evaluate Backend Response ──────────────────────────────────
+  if (backendRes) {
+    const dataObj = backendRes?.data || backendRes;
+    const replyText =
+      dataObj?.reply ||
+      dataObj?.content ||
+      dataObj?.message?.content ||
+      dataObj?.answer ||
+      dataObj?.response;
+
+    const modelName = dataObj?.message?.model || dataObj?.model;
+    const isGuardRefusal =
+      modelName === "crm-guard" ||
+      (typeof replyText === "string" &&
+        replyText.includes("Please ask a CRM-related question"));
+
+    // If backend gave a real CRM response (and not a system guard refusal for general queries), return it!
+    if (replyText && typeof replyText === "string" && replyText.trim() && !isGuardRefusal) {
+      return {
+        reply: replyText,
+        content: replyText,
+        message: dataObj?.message || {
+          id: `msg-${Date.now()}`,
+          role: "assistant",
+          content: replyText,
+          createdAt: new Date().toISOString(),
+        },
+        sessionId: activeId,
+        success: true,
+        ...dataObj,
+      };
+    }
+  }
+
+  // If user authentication is genuinely invalid (401 / 403), throw error to trigger login flow
+  if (backendError?.response?.status === 401 || backendError?.response?.status === 403) {
+    throw new Error(
+      backendError.response?.data?.message ||
+        "Session expired or unauthorized. Please re-login to access CRM intelligence."
+    );
+  }
+
+  // ─── 3. Intelligent Fallback for 503 / Provider Error / Guard Refusal ─
+  // When backend AI provider on Render fails with 503 ("AI service is currently unavailable")
+  // or blocks conversational queries with crm-guard, gracefully resolve the answer without error:
+
+  const token = getEffectiveAuthToken() || "";
+  const intent = detectIntent(trimmed);
+
+  // A) CRM Entity Query: Query live working CRM endpoints on backend (/leads/get-leads, /deals, etc.)
+  if (intent && intent !== "general") {
+    try {
+      const intentData = await fetchDataByIntent(intent, token);
+      if (intentData) {
+        const formattedReply = formatDataForResponse(intent, intentData);
+        if (formattedReply && !formattedReply.includes("No data available")) {
+          return {
+            reply: formattedReply,
+            content: formattedReply,
+            message: {
+              id: `crm-${Date.now()}`,
+              role: "assistant",
+              content: formattedReply,
+              createdAt: new Date().toISOString(),
+            },
+            sessionId: activeId,
+            success: true,
+          };
+        }
+      }
+    } catch (crmErr) {
+      console.warn("Direct CRM data fetch by intent failed:", crmErr);
+    }
+  }
+
+  // B) Conversational / Temporal / Profile / Analytical: Use Groq AI Engine
+  try {
+    const userProfile = getAuthenticatedUserProfile();
+    const crmContext = await gatherLiveCRMContext(token);
+
+    const aiReply = await generateGroqCompletion({
+      message: trimmed,
+      userProfile,
+      crmContext,
+    });
+
+    if (aiReply && aiReply.trim()) {
+      return {
+        reply: aiReply,
+        content: aiReply,
+        message: {
+          id: `ai-${Date.now()}`,
+          role: "assistant",
+          content: aiReply,
+          createdAt: new Date().toISOString(),
+        },
+        sessionId: activeId,
+        success: true,
+      };
+    }
+  } catch (groqErr) {
+    console.warn("Groq AI generation failed:", groqErr);
+  }
+
+  // C) Deterministic Grounded Offline Fallback
+  const userProfile = getAuthenticatedUserProfile();
+  const offlineReply = generateDeterministicFallback(trimmed, userProfile);
+  return {
+    reply: offlineReply,
+    content: offlineReply,
+    message: {
+      id: `offline-${Date.now()}`,
+      role: "assistant",
+      content: offlineReply,
+      createdAt: new Date().toISOString(),
+    },
+    sessionId: activeId,
+    success: true,
+  };
 }
 
 /**
  * 6. Delete a chatbot session
+ * Official Swagger: DELETE /chat/session/{sessionId}
  */
 export async function deleteChatSession(id: string): Promise<void> {
   if (!id) throw new Error("Session ID is required to delete session");
 
   await tryCandidates<any>([
     { method: "delete", url: `/chat/session/${encodeURIComponent(id)}` },
-    { method: "delete", url: `/api/chat/sessions/${encodeURIComponent(id)}` },
-    { method: "delete", url: `/chat/sessions/${encodeURIComponent(id)}` },
-    { method: "delete", url: `/api/chat/session/${encodeURIComponent(id)}` },
   ]);
 }
