@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { Project } from "@/lib/api/projectsApi";
 import { StatusBadge } from "@/components/projects/SharedComponents";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 interface ListViewProps {
   projects: Project[];
@@ -111,20 +112,24 @@ export default function ListView({
                     >
                       <ListChecks size={16} />
                     </button>
-                    <button
-                      onClick={() => onEdit(project)}
-                      className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
-                      title="Edit"
-                    >
-                      <Edit size={16} />
-                    </button>
-                    <button
-                      onClick={() => onDelete(project)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                      title="Delete"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <PermissionGuard permission="projects.update">
+                      <button
+                        onClick={() => onEdit(project)}
+                        className="p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+                        title="Edit"
+                      >
+                        <Edit size={16} />
+                      </button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="projects.delete">
+                      <button
+                        onClick={() => onDelete(project)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </PermissionGuard>
                   </div>
                 </td>
               </tr>
@@ -169,20 +174,24 @@ export default function ListView({
               >
                 <ListChecks size={16} />
               </button>
-              <button
-                onClick={() => onEdit(project)}
-                className="p-1.5 text-gray-500"
-                title="Edit"
-              >
-                <Edit size={16} />
-              </button>
-              <button
-                onClick={() => onDelete(project)}
-                className="p-1.5 text-red-500"
-                title="Delete"
-              >
-                <Trash2 size={16} />
-              </button>
+              <PermissionGuard permission="projects.update">
+                <button
+                  onClick={() => onEdit(project)}
+                  className="p-1.5 text-gray-500"
+                  title="Edit"
+                >
+                  <Edit size={16} />
+                </button>
+              </PermissionGuard>
+              <PermissionGuard permission="projects.delete">
+                <button
+                  onClick={() => onDelete(project)}
+                  className="p-1.5 text-red-500"
+                  title="Delete"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </PermissionGuard>
             </div>
           </div>
         ))}

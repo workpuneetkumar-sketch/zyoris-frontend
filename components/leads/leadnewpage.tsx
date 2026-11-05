@@ -5,6 +5,7 @@ import { useState } from "react";
 import { ClipboardPaste, UserPlus } from "lucide-react";
 import PasteLeadImport from "./PasteLeadImport";
 import { useRouter } from "next/navigation";
+import { useRBAC } from "@/hooks/useRBAC";
 import { toast } from "react-toastify";
 
 import LeadForm, {
@@ -16,6 +17,9 @@ import { createLead, executeAssignmentRule } from "@/lib/api/leadsApi";
 
 export default function NewLeadPage() {
     const router = useRouter();
+    const { hasPermission, permissionsLoaded } = useRBAC();
+
+
 
     const [form, setForm] = useState<LeadFormValues>({
         name: "",
@@ -40,7 +44,28 @@ export default function NewLeadPage() {
     const [loading, setLoading] = useState(false);
     const [creationMode, setCreationMode] = useState<"form" | "paste">("form");
 
+    if (permissionsLoaded && !hasPermission("leads.create")) {
+        return (
+            <div className="max-w-2xl mx-auto py-12 px-4 text-center">
+                <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm">
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h2>
+                    <p className="text-sm text-gray-500 mb-6">You do not have permission to create new leads.</p>
+                    <button
+                        onClick={() => router.push("/leads")}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition"
+                    >
+                        Back to Leads
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     const handleSubmit = async () => {
+        if (!hasPermission("leads.create")) {
+            toast.error("You do not have permission to create leads.");
+            return;
+        }
         console.log('[NewLeadPage] Form values before submission:', form);
 
         const newErrors: {

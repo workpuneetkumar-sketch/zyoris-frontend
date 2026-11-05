@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useState } from "react";
 import {
     Mail,
@@ -306,12 +307,14 @@ function ThreadPanel({ thread, onClose, onReply }: ThreadPanelProps) {
                         {thread.participants.join(", ")}
                     </p>
                 </div>
-                <button
-                    onClick={onReply}
-                    className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
-                >
-                    <Reply size={13} /> Reply
-                </button>
+                <PermissionGuard permission="email.send">
+                    <button
+                        onClick={onReply}
+                        className="flex items-center gap-1.5 h-8 px-4 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
+                    >
+                        <Reply size={13} /> Reply
+                    </button>
+                </PermissionGuard>
             </div>
 
             {/* Emails */}
@@ -456,12 +459,14 @@ export function EmailUI({
                     >
                         <RefreshCw size={16} className={`text-gray-500 ${syncing ? "animate-spin" : ""}`} />
                     </button>
-                    <button
-                        onClick={onOpenCompose}
-                        className="flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                        <Plus size={18} /> Compose
-                    </button>
+                    <PermissionGuard permission="email.send">
+                        <button
+                            onClick={onOpenCompose}
+                            className="flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
+                        >
+                            <Plus size={18} /> Compose
+                        </button>
+                    </PermissionGuard>
                 </div>
             </div>
 

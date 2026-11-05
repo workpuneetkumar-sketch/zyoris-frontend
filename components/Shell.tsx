@@ -64,6 +64,7 @@ import { NotificationBell } from "./NotificationBell";
 import { ConfirmationModal } from "./ui/ConfirmationModal";
 import { CrmSearch } from "./crm/CrmSearch";
 import { TourHeaderButton } from "./tour/TourHeaderButton";
+import { ROUTE_PERMISSION_MAP } from "@/utils/roleRedirect";
 
 type NavItem = {
   href: string;
@@ -750,16 +751,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       };
 
       // ── Key → expanded items ──────────────────────────────────────────
-      const KEY_EXPANSION: Record<string, { href: string; label: string; iconKey: string }[]> = {
+      const KEY_EXPANSION: Record<string, { href: string; label: string; iconKey: string; permission?: string }[]> = {
         crm: [
-          { href: "/leads",       label: "Leads",       iconKey: "leads"       },
-          { href: "/deals",       label: "Deals",       iconKey: "deals"       },
-          { href: "/customers",   label: "Customers",   iconKey: "customers"   },
-          { href: "/contacts",    label: "Contacts",    iconKey: "contacts"    },
-          { href: "/companies",   label: "Companies",   iconKey: "companies"   },
-          { href: "/activities",  label: "Activities",  iconKey: "activities"  },
-          { href: "/sales/execution", label: "Sales Execution", iconKey: "sales" },
-          { href: "/ai-insights", label: "AI Insights", iconKey: "ai-insights" },
+          { href: "/leads",       label: "Leads",       iconKey: "leads",       permission: "leads.view" },
+          { href: "/deals",       label: "Deals",       iconKey: "deals",       permission: "deals.view" },
+          { href: "/customers",   label: "Customers",   iconKey: "customers",   permission: "crm.view" },
+          { href: "/contacts",    label: "Contacts",    iconKey: "contacts",    permission: "contacts.view" },
+          { href: "/companies",   label: "Companies",   iconKey: "companies",   permission: "companies.view" },
+          { href: "/activities",  label: "Activities",  iconKey: "activities",  permission: "leads.view" },
+          { href: "/sales/execution", label: "Sales Execution", iconKey: "sales", permission: "deals.view" },
+          { href: "/ai-insights", label: "AI Insights", iconKey: "ai-insights", permission: "crm.view" },
         ],
         communication: [
           { href: "/workspace",      label: "Workspace",         iconKey: "workspace"      },
@@ -937,7 +938,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             if (groupLabel === "Role Dashboards" && !canSeeRoleDashboards) return;
             if (groupLabel === "Admin Tools" && !isAdmin) return;
             KEY_EXPANSION[keySlug].forEach((sub) => {
-              addItem(groupLabel, sub.href, sub.label, getIcon(sub.iconKey));
+              const hasSubPerm = sub.href === "/customers" ? (hasPermission("customers.view") || hasPermission("crm.view")) : (!sub.permission || hasPermission(sub.permission));
+              if (isAdmin || hasSubPerm) {
+                addItem(groupLabel, sub.href, sub.label, getIcon(sub.iconKey));
+              }
             });
             return;
           }
@@ -952,53 +956,64 @@ export function AppShell({ children }: { children: ReactNode }) {
           if (groupLabel === "Role Dashboards" && !canSeeRoleDashboards) return;
           if (groupLabel === "Admin Tools" && !isAdmin) return;
 
+          // Permission guard for dynamic sidebar item
+          const mapped = ROUTE_PERMISSION_MAP[href] || ROUTE_PERMISSION_MAP[rawRoute];
+          if (!isAdmin && mapped && !mapped.some((perm) => hasPermission(perm))) {
+            return;
+          }
+
           addItem(groupLabel, href, item.label, getIcon(keySlug, item));
         });
 
-      // ── Always force-inject the full Communication and Integration groups ──
-      itemsByGroup["Communication"] = COMMUNICATION_STATIC_GROUP.items.map((i) => ({ ...i }));
-      itemsByGroup["Integration"] = [
-        { href: "/integrations", label: "Integration", icon: Layers },
-      ];
-
-      // ── Always force-inject Day 6 operational agent surfaces into Platform ──
-      const DAY6_PLATFORM_ITEMS = [
-        { href: "/support",          label: "Support Agent",   icon: Headphones },
-        { href: "/data-quality",     label: "Data Quality",    icon: ShieldAlert },
-        { href: "/revops",           label: "RevOps Insights", icon: BarChart3   },
-        { href: "/workflows/drafts", label: "Workflow Drafts", icon: GitBranch   },
-      ];
-      if (!itemsByGroup["Platform"]) {
-        itemsByGroup["Platform"] = DAY6_PLATFORM_ITEMS;
-      } else {
-        DAY6_PLATFORM_ITEMS.forEach(({ href, label, icon }) => {
-          if (!itemsByGroup["Platform"].some((x) => x.href === href)) {
-            itemsByGroup["Platform"].push({ href, label, icon });
-          }
-        });
+      // ── Permission-governed Communication group ──
+      const filteredCommItems = COMMUNICATION_STATIC_GROUP.items.filter((item) => {
+        if (isAdmin) return true;
+        if (item.href === "/tasks") return hasPermission("tasks.view");
+        if (item.href === "/email") return hasPermission("email.access") || hasPermission("communication.access");
+        if (item.href === "/whatsapp") return hasPermission("whatsapp.access") || hasPermission("communication.access");
+        if (item.href === "/calls") return hasPermission("calls.access") || hasPermission("communication.access");
+        if (item.href === "/messages") return hasPermission("messages.access") || hasPermission("communication.access");
+        if (item.href === "/meetings") return hasPermission("meetings.access") || hasPermission("communication.access");
+        return hasPermission("communication.access");
+      });
+      if (filteredCommItems.length > 0) {
+        itemsByGroup["Communication"] = filteredCommItems.map((i) => ({ ...i }));
       }
 
-      // ── Always ensure Sales Execution is present in CRM group and Workspace is removed ──
-      if (itemsByGroup["CRM"]) {
-        itemsByGroup["CRM"] = itemsByGroup["CRM"].filter((x) => x.href !== "/workspace");
-      }
-      if (!itemsByGroup["CRM"]) {
-        itemsByGroup["CRM"] = [
-          { href: "/sales/execution", label: "Sales Execution", icon: TrendingUp },
+      // ── Permission-governed Integration group ──
+      if (isAdmin || hasPermission("integrations.view") || hasPermission("settings.view") || hasPermission("settings.manage") || hasPermission("automation.manage")) {
+        itemsByGroup["Integration"] = [
+          { href: "/integrations", label: "Integration", icon: Layers },
         ];
-      } else {
-        if (!itemsByGroup["CRM"].some((x) => x.href === "/sales/execution")) {
-          itemsByGroup["CRM"].push({ href: "/sales/execution", label: "Sales Execution", icon: TrendingUp });
+      }
+
+      // ── Permission-governed Day 6 operational agent surfaces into Platform ──
+      if (isAdmin || hasPermission("analytics.view") || hasPermission("automation.view")) {
+        const DAY6_PLATFORM_ITEMS = [
+          { href: "/support",          label: "Support Agent",   icon: Headphones },
+          { href: "/data-quality",     label: "Data Quality",    icon: ShieldAlert },
+          { href: "/revops",           label: "RevOps Insights", icon: BarChart3   },
+          { href: "/workflows/drafts", label: "Workflow Drafts", icon: GitBranch   },
+        ];
+        if (!itemsByGroup["Platform"]) {
+          itemsByGroup["Platform"] = DAY6_PLATFORM_ITEMS;
+        } else {
+          DAY6_PLATFORM_ITEMS.forEach(({ href, label, icon }) => {
+            if (!itemsByGroup["Platform"].some((x) => x.href === href)) {
+              itemsByGroup["Platform"].push({ href, label, icon });
+            }
+          });
         }
       }
 
-      // ── Always ensure Workspace is present in Communication group ──
-      if (!itemsByGroup["Communication"]) {
-        itemsByGroup["Communication"] = [
-          { href: "/workspace", label: "Workspace", icon: FileText },
-        ];
-      } else if (!itemsByGroup["Communication"].some((x) => x.href === "/workspace")) {
-        itemsByGroup["Communication"].unshift({ href: "/workspace", label: "Workspace", icon: FileText });
+      // ── Permission-governed Sales Execution in CRM group ──
+      if (isAdmin || hasPermission("deals.view") || hasPermission("crm.view")) {
+        if (itemsByGroup["CRM"]) {
+          itemsByGroup["CRM"] = itemsByGroup["CRM"].filter((x) => x.href !== "/workspace");
+          if (!itemsByGroup["CRM"].some((x) => x.href === "/sales/execution")) {
+            itemsByGroup["CRM"].push({ href: "/sales/execution", label: "Sales Execution", icon: TrendingUp });
+          }
+        }
       }
 
       // ── Build groups in display order ─────────────────────────────────
@@ -1023,7 +1038,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
 
     // ── Static fallback (no API data) ─────────────────────────────────
-    // Communication is always shown to every role — skip the role filter for it.
     return NAV_GROUPS.map((group) => {
       if (group.label === "Role Dashboards" && !canSeeRoleDashboards) {
         return { ...group, items: [] };
@@ -1033,13 +1047,31 @@ export function AppShell({ children }: { children: ReactNode }) {
       }
       return {
         ...group,
-        items: group.label === "Communication"
-          ? group.items
-          : group.items.filter((item) =>
-              user
-                ? item.roles.some((r) => r.toUpperCase() === user.role.toUpperCase())
-                : item.href === "/dashboard"
-            ),
+        items: group.items.filter((item) => {
+          if (isAdmin) return true;
+          if (item.href === "/dashboard") return true;
+          if (group.label === "Communication") {
+            if (item.href === "/tasks") return hasPermission("tasks.view");
+            return hasPermission("communication.access");
+          }
+          if (item.href === "/leads") return hasPermission("leads.view");
+          if (item.href === "/deals") return hasPermission("deals.view");
+          if (item.href === "/contacts") return hasPermission("contacts.view");
+          if (item.href === "/companies") return hasPermission("companies.view");
+          if (item.href === "/customers") return hasPermission("crm.view");
+          if (item.href === "/sales/execution") return hasPermission("deals.view") || hasPermission("crm.view");
+          if (item.href === "/tasks") return hasPermission("tasks.view");
+          if (item.href === "/projects") return hasPermission("projects.view");
+          if (item.href === "/hr" || item.href === "/hr/employees") return hasPermission("employees.view") || hasPermission("hr.view");
+          if (item.href === "/finance") return hasPermission("finance.view");
+          if (item.href === "/payment/invoices") return hasPermission("invoices.view") || hasPermission("finance.view");
+          if (item.href === "/settings") return hasPermission("settings.view");
+          const mapped = ROUTE_PERMISSION_MAP[item.href];
+          if (mapped) {
+            return mapped.some((perm) => hasPermission(perm));
+          }
+          return false;
+        }),
       };
     }).filter((group) => group.items.length > 0);
   })();

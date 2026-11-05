@@ -6,6 +6,7 @@
 // Mock const METRICS and sparkData removed entirely.
 
 import { useCallback, useEffect, useState } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 import { TrendingUp, TrendingDown, DollarSign, Users, Briefcase, Target, RefreshCw, AlertCircle } from "lucide-react";
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from "recharts";
 import { useDashboardCeo } from "@/hooks/useDashboard";
@@ -26,12 +27,22 @@ function fmtPercent(n?: number): string {
   return `${Math.round(pct)}%`;
 }
 
-export function ExecutiveDashboardWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: ceo, loading: ceoLoading, error: ceoError, refetch: refetchCeo } = useDashboardCeo();
+export function ExecutiveDashboardWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("dashboard.view");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: ceo, loading: ceoLoading, error: ceoError, refetch: refetchCeo } = useDashboardCeo(canView);
 
   // Sparkline from revenue forecast — isolated, non-blocking
   const [sparkPoints, setSparkPoints] = useState<{ i: number; v: number }[]>([]);
   useEffect(() => {
+    if (!canView) return;
     fetchForecast()
       .then((f: Forecast) => {
         const pts = f.datapoints.slice(-12).map((d, i) => ({ i, v: d.forecast }));
@@ -43,7 +54,16 @@ export function ExecutiveDashboardWidget({ isPreview }: { isPreview?: boolean })
       .catch((err) => {
         console.error("[ExecutiveDashboardWidget] sparkline fetch failed:", err?.message);
       });
-  }, []);
+  }, [canView]);
+
+  useEffect(() => {
+    if (ceoError && (ceoError.includes("403") || ceoError.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [ceoError, onForbidden]);
+
+  if (!canView) return null;
+  if (ceoError && (ceoError.includes("403") || ceoError.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (ceoLoading) {
@@ -66,6 +86,11 @@ export function ExecutiveDashboardWidget({ isPreview }: { isPreview?: boolean })
   }
 
   // ── Error ────────────────────────────────────────────────────────────────────
+  if (ceoError && (ceoError.includes("403") || ceoError.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
+  }
+
   if (ceoError || !ceo) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 p-3 text-center">

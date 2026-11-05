@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/CashFlowWidget.tsx
 // Real data: GET /analytics/revenue/forecast via useRevenueForecast.
 // The backend returns a single revenue forecast series (no separate inflow/outflow split).
@@ -40,8 +43,26 @@ function CustomTooltip({ active, payload, label }: TooltipProps) {
   );
 }
 
-export function CashFlowWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: forecast, loading, error, refetch } = useRevenueForecast();
+export function CashFlowWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("finance.view");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: forecast, loading, error, refetch } = useRevenueForecast(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (
@@ -55,6 +76,11 @@ export function CashFlowWidget({ isPreview }: { isPreview?: boolean }) {
         <div className="flex-1 bg-gray-50 rounded-xl" />
       </div>
     );
+  }
+
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
   }
 
   if (error) {

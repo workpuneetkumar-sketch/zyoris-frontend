@@ -7,6 +7,7 @@ import { useState, useMemo } from "react";
 import { Search, Plus, X, ChevronDown, ChevronRight } from "lucide-react";
 import { WidgetDefinition } from "@/types/dashboard-builder";
 import { getWidgetCatalogGroups } from "./WidgetRegistry";
+import { useAuth } from "@/context/AuthContext";
 
 interface WidgetLibraryProps {
   catalog: WidgetDefinition[];
@@ -126,9 +127,10 @@ function ModuleGroup({
 
 export function WidgetLibrary({ catalog, isOpen, onClose, onAdd }: WidgetLibraryProps) {
   const [query, setQuery] = useState("");
+  const { userPermissions, isAdmin } = useAuth();
 
-  // Use grouped catalog from registry
-  const groups = useMemo(() => getWidgetCatalogGroups(), []);
+  // Use grouped catalog from registry filtered by user permissions
+  const groups = useMemo(() => getWidgetCatalogGroups(userPermissions, isAdmin), [userPermissions, isAdmin]);
   const lowerQuery = query.toLowerCase().trim();
 
   // Total filtered count

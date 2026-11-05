@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/CRMWidget.tsx
 // Real data:
 //   Funnel → GET /api/deals/pipeline-stats via usePipelineStats
@@ -22,14 +25,31 @@ function relativeTime(iso?: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-export function CRMWidget({ isPreview }: { isPreview?: boolean }) {
-  const pipeline   = usePipelineStats();
-  const activities = useActivityFeed(3);
+export function CRMWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["crm.view", "leads.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const pipeline   = usePipelineStats(canView);
+  const activities = useActivityFeed(3, canView);
 
   const loading = pipeline.loading || activities.loading;
-  // Isolate errors: show pipeline data even if activities fail
   const funnelError = pipeline.error;
-  const error = funnelError; // only block render on pipeline error, not activities
+  const error = funnelError;
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
@@ -54,6 +74,11 @@ export function CRMWidget({ isPreview }: { isPreview?: boolean }) {
   }
 
   // ── Error ────────────────────────────────────────────────────────────────────
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
+  }
+
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 p-3 text-center">

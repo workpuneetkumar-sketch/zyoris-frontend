@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/CommunicationsWidget.tsx
 // Real data: GET /dashboard/stats (emailsSent, callsToday) via useDashboardStats.
 // Mock CHANNELS (Email 284/70%, Calls 142/69%, WhatsApp 97/83%) removed entirely.
@@ -8,8 +11,26 @@
 import { RefreshCw, AlertCircle, Mail, Phone, MessageSquare } from "lucide-react";
 import { useDashboardStats } from "@/hooks/useDashboard";
 
-export function CommunicationsWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: stats, loading, error, refetch } = useDashboardStats();
+export function CommunicationsWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("communication.access");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: stats, loading, error, refetch } = useDashboardStats(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (
@@ -26,6 +47,11 @@ export function CommunicationsWidget({ isPreview }: { isPreview?: boolean }) {
         <div className="flex-1 bg-gray-50 rounded-xl" />
       </div>
     );
+  }
+
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
   }
 
   if (error) {

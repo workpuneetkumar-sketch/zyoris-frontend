@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/MarketingWidget.tsx
 // Real data: GET /dashboard/stats (leads) + GET /analytics/demand/trends (chart).
 // Mock const data (285 Leads, $52 CAC, 4.2x ROI, W1-W6 chart) removed entirely.
@@ -19,12 +22,30 @@ function shortLabel(label?: string): string {
   } catch { return label; }
 }
 
-export function MarketingWidget({ isPreview }: { isPreview?: boolean }) {
-  const stats   = useDashboardStats();
-  const trends  = useDemandTrends();
+export function MarketingWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["marketing.view", "campaigns.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const stats   = useDashboardStats(canView);
+  const trends  = useDemandTrends(canView);
 
   const loading = stats.loading || trends.loading;
   const error   = stats.error ?? trends.error;
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (
@@ -40,6 +61,11 @@ export function MarketingWidget({ isPreview }: { isPreview?: boolean }) {
         <div className="flex-1 bg-gray-50 rounded-xl" />
       </div>
     );
+  }
+
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
   }
 
   if (error) {

@@ -37,6 +37,8 @@ import {
     MoreHorizontal,
 } from "lucide-react";
 import { AttachmentSection } from "@/components/workspace/AttachmentSection";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import { ExportModal } from "@/components/workspace/ExportModal";
 import { ReassignTaskModal } from "@/components/tasks/ReassignTaskModal";
 import { EffectiveAssignmentResponse } from "@/types/workspaceAssignment";
@@ -432,6 +434,8 @@ export function TaskDetailModal({
     const [deleting, setDeleting] = useState(false);
     const [isExportModalOpen, setIsExportModalOpen] = useState(false);
     const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+    const { hasPermission } = useRBAC();
+    const canUpdate = hasPermission("tasks.update");
     const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
 
     // Collapsible sections state (Notion style)
@@ -917,13 +921,15 @@ export function TaskDetailModal({
                                     className="absolute right-0 mt-2 w-48 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1.5 z-30 animate-in fade-in duration-150"
                                     onClick={() => setIsActionsMenuOpen(false)}
                                 >
-                                    <button
-                                        onClick={() => setIsReassignModalOpen(true)}
-                                        className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
-                                    >
-                                        <ArrowRightLeft size={14} className="text-indigo-500" />
-                                        <span>Reassign Task</span>
-                                    </button>
+                                    <PermissionGuard permission="tasks.assign">
+                                        <button
+                                            onClick={() => setIsReassignModalOpen(true)}
+                                            className="w-full flex items-center space-x-2.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition"
+                                        >
+                                            <ArrowRightLeft size={14} className="text-indigo-500" />
+                                            <span>Reassign Task</span>
+                                        </button>
+                                    </PermissionGuard>
 
                                     <button
                                         onClick={() => setIsExportModalOpen(true)}
@@ -934,7 +940,7 @@ export function TaskDetailModal({
                                     </button>
 
                                     {onDelete && (
-                                        <>
+                                        <PermissionGuard permission="tasks.delete">
                                             <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
                                             <button
                                                 onClick={(e) => {
@@ -947,7 +953,7 @@ export function TaskDetailModal({
                                                 <Trash2 size={14} />
                                                 <span>Delete Task</span>
                                             </button>
-                                        </>
+                                        </PermissionGuard>
                                     )}
                                 </div>
                             )}
@@ -1038,13 +1044,15 @@ export function TaskDetailModal({
                                 >
                                     {form.title || task.title}
                                 </h1>
-                                <button
-                                    onClick={() => setIsEditingTitle(true)}
-                                    className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-blue-600 rounded-lg transition shrink-0"
-                                    title="Edit title"
-                                >
-                                    <Edit2 size={16} />
-                                </button>
+                                {canUpdate && (
+                                    <button
+                                        onClick={() => setIsEditingTitle(true)}
+                                        className="opacity-0 group-hover:opacity-100 p-2 text-slate-400 hover:text-blue-600 rounded-lg transition shrink-0"
+                                        title="Edit title"
+                                    >
+                                        <Edit2 size={16} />
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>
@@ -1059,8 +1067,9 @@ export function TaskDetailModal({
                         <div>
                             <select
                                 value={task.status}
+                                disabled={!canUpdate}
                                 onChange={(e) => handleQuickStatusChange(e.target.value as TaskStatus)}
-                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none cursor-pointer border transition ${STATUS_STYLES[task.status]}`}
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none border transition ${!canUpdate ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'} ${STATUS_STYLES[task.status]}`}
                             >
                                 <option value="TODO">To Do</option>
                                 <option value="IN_PROGRESS">In Progress</option>
@@ -1078,8 +1087,9 @@ export function TaskDetailModal({
                         <div>
                             <select
                                 value={task.priority}
+                                disabled={!canUpdate}
                                 onChange={(e) => handleQuickPriorityChange(e.target.value as TaskPriority)}
-                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none cursor-pointer border transition ${PRIORITY_STYLES[task.priority]}`}
+                                className={`text-xs font-semibold px-2.5 py-1 rounded-lg outline-none border transition ${!canUpdate ? 'cursor-not-allowed opacity-80' : 'cursor-pointer'} ${PRIORITY_STYLES[task.priority]}`}
                             >
                                 <option value="LOW">Low</option>
                                 <option value="MEDIUM">Medium</option>
@@ -1104,15 +1114,17 @@ export function TaskDetailModal({
                                 <span className="truncate max-w-[180px]">{displayAssigneeName}</span>
                             </div>
 
-                            <button
-                                type="button"
-                                onClick={() => setIsReassignModalOpen(true)}
-                                className="inline-flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition"
-                                title="Reassign task"
-                            >
-                                <ArrowRightLeft size={11} />
-                                <span>Reassign</span>
-                            </button>
+                            <PermissionGuard permission="tasks.assign">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsReassignModalOpen(true)}
+                                    className="inline-flex items-center space-x-1 px-2 py-1 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-lg transition"
+                                    title="Reassign task"
+                                >
+                                    <ArrowRightLeft size={11} />
+                                    <span>Reassign</span>
+                                </button>
+                            </PermissionGuard>
 
                             {department && (
                                 <span className="text-[11px] text-slate-400 dark:text-slate-500">

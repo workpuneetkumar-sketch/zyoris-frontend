@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/AIInsightsWidget.tsx
 // Real data: GET /dashboard/anomalies via useDashboardAnomalies hook.
 // Mock INSIGHTS array with hardcoded text ("Acme Enterprise is 15 days past...",
@@ -29,8 +32,26 @@ function openZii(item: DashboardAnomalyItem) {
   );
 }
 
-export function AIInsightsWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: anomalies, loading, error, refetch } = useDashboardAnomalies();
+export function AIInsightsWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["ai_copilot.access", "crm.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: anomalies, loading, error, refetch } = useDashboardAnomalies(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (
@@ -46,6 +67,11 @@ export function AIInsightsWidget({ isPreview }: { isPreview?: boolean }) {
         </div>
       </div>
     );
+  }
+
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
   }
 
   if (error) {

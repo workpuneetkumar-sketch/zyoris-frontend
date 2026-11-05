@@ -3,6 +3,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { LeadsTable } from "@/components/leads/LeadsUI";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useLeads } from "@/hooks/useLeads";
 import { Lead, LeadsFilters, DEFAULT_FILTERS } from "@/types/leads";
 import { ConfirmationModal } from "@/components/ui/ConfirmationModal";
@@ -624,46 +625,56 @@ export default function LeadsPage() {
             <p className="text-sm text-gray-500 mt-0.5">Manage and track all incoming leads in one place.</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <button
-              onClick={() => setIdentityResolveOpen(true)}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-              title="Look up an existing canonical customer by email, phone, or external ID"
-            >
-              <SearchIcon size={15} />
-              Resolve Identity
-            </button>
-            <button
-              onClick={() => { setPrefillLeadId(undefined); setConvertLeadOpen(true); }}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-              title="Convert a lead into a canonical customer + contact"
-            >
-              <ArrowRightLeft size={15} />
-              Promote Lead
-            </button>
-            <button
-              onClick={() => setConvertCompanyOpen(true)}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-              title="Convert a company record into a canonical organization customer"
-            >
-              <Building2 size={15} />
-              Convert Company
-            </button>
-            <Link
-              href="/customers"
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-              title="Browse all canonical customers"
-            >
-              <UsersRound size={15} />
-              View Customers
-            </Link>
-            <Link
-              href="/customers/new"
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-              title="Create a new canonical customer"
-            >
-              <UserPlus size={15} />
-              New Customer
-            </Link>
+            <PermissionGuard permission="leads.update">
+              <button
+                onClick={() => setIdentityResolveOpen(true)}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                title="Look up an existing canonical customer by email, phone, or external ID"
+              >
+                <SearchIcon size={15} />
+                Resolve Identity
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="leads.update">
+              <button
+                onClick={() => { setPrefillLeadId(undefined); setConvertLeadOpen(true); }}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                title="Convert a lead into a canonical customer + contact"
+              >
+                <ArrowRightLeft size={15} />
+                Promote Lead
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="companies.update">
+              <button
+                onClick={() => setConvertCompanyOpen(true)}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                title="Convert a company record into a canonical organization customer"
+              >
+                <Building2 size={15} />
+                Convert Company
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="crm.view">
+              <Link
+                href="/customers"
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                title="Browse all canonical customers"
+              >
+                <UsersRound size={15} />
+                View Customers
+              </Link>
+            </PermissionGuard>
+            <PermissionGuard permission="crm.create">
+              <Link
+                href="/customers/new"
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+                title="Create a new canonical customer"
+              >
+                <UserPlus size={15} />
+                New Customer
+              </Link>
+            </PermissionGuard>
             {canAccessIngestion && (
               <>
                 <div className="w-px h-6 bg-gray-200 mx-1" />
@@ -677,27 +688,33 @@ export default function LeadsPage() {
                 </Link>
               </>
             )}
-            <button
-              onClick={() => setIsUploadOpen(true)}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-            >
-              <Upload size={15} />
-              Import
-            </button>
-            <button
-              onClick={handleExport}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
-            >
-              <Download size={15} />
-              Export
-            </button>
-            <button
-              onClick={handleNewLead}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm"
-            >
-              <Plus size={16} />
-              New Lead
-            </button>
+            <PermissionGuard permission="leads.import">
+              <button
+                onClick={() => setIsUploadOpen(true)}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <Upload size={15} />
+                Import
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="leads.export">
+              <button
+                onClick={handleExport}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border border-gray-200 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors shadow-sm"
+              >
+                <Download size={15} />
+                Export
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="leads.create">
+              <button
+                onClick={handleNewLead}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-all shadow-sm"
+              >
+                <Plus size={16} />
+                New Lead
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 

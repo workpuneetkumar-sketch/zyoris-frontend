@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useParams, notFound } from 'next/navigation';
 import { 
   ArrowLeft, 
@@ -378,6 +379,7 @@ export default function EmployeeDetailPage() {
             Back to Employees
           </Link>
           
+          <PermissionGuard permission="employees.update">
           <button 
             onClick={handleEditClick}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm transition-all active:scale-[0.98] shadow-sm w-fit"
@@ -385,6 +387,7 @@ export default function EmployeeDetailPage() {
             <Pencil className="w-4 h-4 text-indigo-600" />
             Edit Profile
           </button>
+          </PermissionGuard>
         </div>
 
         {/* Profile Hero Card */}

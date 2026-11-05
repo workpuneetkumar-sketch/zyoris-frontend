@@ -4,7 +4,9 @@
 // Mock const TASKS removed entirely.
 
 import { CheckCircle2, Circle, Clock, AlertCircle, RefreshCw } from "lucide-react";
+import { useEffect } from "react";
 import { useMyTasks } from "@/hooks/useDashboard";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { Task } from "@/lib/api/tasksApi";
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -29,8 +31,26 @@ function dueLabel(task: Task): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function TasksWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: tasks, loading, error, refetch } = useMyTasks({ limit: 8 });
+export function TasksWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("tasks.view");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: tasks, loading, error, refetch } = useMyTasks({ limit: 8 }, canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (

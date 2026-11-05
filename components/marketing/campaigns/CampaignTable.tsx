@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import {
   Search,
   Eye,
@@ -370,20 +371,24 @@ const CampaignTable: React.FC<Props> = ({
                         >
                           <Eye size={16} />
                         </button>
-                        <button
-                          onClick={() => onEdit(campaign)}
-                          title="Edit campaign"
-                          className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
-                        >
-                          <Pencil size={16} />
-                        </button>
-                        <button
-                          onClick={() => onDelete(campaign.id)}
-                          title="Delete campaign"
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-gray-500 hover:text-red-600"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <PermissionGuard permission="campaigns.update" action="disable" disabledTooltip="You do not have permission to edit campaigns.">
+                          <button
+                            onClick={() => onEdit(campaign)}
+                            title="Edit campaign"
+                            className="p-1.5 hover:bg-gray-100 rounded-lg text-gray-500"
+                          >
+                            <Pencil size={16} />
+                          </button>
+                        </PermissionGuard>
+                        <PermissionGuard permission="campaigns.delete" action="disable" disabledTooltip="You do not have permission to delete campaigns.">
+                          <button
+                            onClick={() => onDelete(campaign.id)}
+                            title="Delete campaign"
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-gray-500 hover:text-red-600"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </PermissionGuard>
                         <button
                           onClick={() => onPerformance(campaign.id)}
                           title="View performance"

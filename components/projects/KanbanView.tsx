@@ -17,6 +17,8 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { Project, UpdateProjectPayload } from "@/lib/api/projectsApi";
+import { useRBAC } from "@/hooks/useRBAC";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 interface KanbanViewProps {
   projects: Project[];
@@ -105,9 +107,11 @@ function ProjectCard({
 
   const otherStatuses = COLUMNS.filter((c) => c.key !== project.status);
 
+  const { hasPermission } = useRBAC();
+  const canUpdate = hasPermission("projects.update");
   return (
     <div
-      draggable={true}
+      draggable={canUpdate}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
       className={`bg-white rounded-xl border transition-all duration-200 cursor-grab active:cursor-grabbing group ${
@@ -168,6 +172,7 @@ function ProjectCard({
                   >
                     <LayoutDashboard size={14} /> Open Workspace
                   </Link>
+                  <PermissionGuard permission="projects.update">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -178,6 +183,7 @@ function ProjectCard({
                   >
                     <Edit size={14} /> Edit
                   </button>
+                  </PermissionGuard>
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -223,6 +229,7 @@ function ProjectCard({
                     </button>
                   )}
                   <div className="border-t border-gray-100 my-1" />
+                  <PermissionGuard permission="projects.delete">
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -233,6 +240,7 @@ function ProjectCard({
                   >
                     <Trash2 size={14} /> Delete
                   </button>
+                  </PermissionGuard>
                 </div>
               </>
             )}
@@ -258,6 +266,7 @@ function ProjectCard({
         </div>
 
         {/* Move Status */}
+        {canUpdate && (
         <div className="relative">
           <button
             onClick={(e) => {
@@ -300,6 +309,7 @@ function ProjectCard({
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   );
@@ -315,6 +325,8 @@ export default function KanbanView({
   onExport,
   onUpdateStatus,
 }: KanbanViewProps) {
+  const { hasPermission } = useRBAC();
+  const canUpdate = hasPermission("projects.update");
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [dragOverCol, setDragOverCol] = useState<StatusColumn | null>(null);
   const [justDroppedProjectId, setJustDroppedProjectId] = useState<string | null>(
@@ -331,6 +343,7 @@ export default function KanbanView({
           <div
             key={col.key}
             onDragOver={(e) => {
+              if (!canUpdate) return;
               e.preventDefault();
               e.dataTransfer.dropEffect = "move";
               if (dragOverCol !== col.key) setDragOverCol(col.key);
@@ -342,6 +355,10 @@ export default function KanbanView({
             onDrop={(e) => {
               e.preventDefault();
               setDragOverCol(null);
+              if (!canUpdate) {
+                setDraggedProjectId(null);
+                return;
+              }
               const projId = e.dataTransfer.getData("text/plain");
               if (projId) {
                 onUpdateStatus(projId, { status: col.key });

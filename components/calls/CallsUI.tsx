@@ -1,5 +1,6 @@
 "use client";
 
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useState, useMemo } from "react";
 import { Plus, X, ChevronLeft, ChevronRight, Phone, PlayCircle, List, Clock, Search, Filter } from "lucide-react";
 import { Call } from "@/lib/api/callsApi";
@@ -215,13 +216,15 @@ export function CallsUI({
                             <Clock size={16} /> Timeline
                         </button>
                     </div>
-                    <button
-                        onClick={() => setIsModalOpen(true)}
-                        className="flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
-                    >
-                        <Plus size={18} />
-                        Log Call
-                    </button>
+                    <PermissionGuard permission="calls.initiate">
+                        <button
+                            onClick={() => setIsModalOpen(true)}
+                            className="flex items-center gap-2 h-10 px-5 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-[14px] font-bold hover:shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5 transition-all duration-200"
+                        >
+                            <Plus size={18} />
+                            Log Call
+                        </button>
+                    </PermissionGuard>
                 </div>
             </div>
 

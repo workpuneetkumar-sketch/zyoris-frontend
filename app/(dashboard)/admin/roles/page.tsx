@@ -197,9 +197,9 @@ function PermissionsPanel({
         // 1. GET /roles/:roleId/permissions  → full permission objects currently assigned to THIS role
         // 2. GET /roles/role_admin/permissions → full catalogue of ALL system permissions
         //    (ADMIN has all permissions, so it's the system catalogue)
-        const [thisRolePerms, adminPerms] = await Promise.allSettled([
+        const [thisRolePerms, catalogueResult] = await Promise.allSettled([
           api.get<PermissionObj[]>(`/roles/${role.id}/permissions`).then(r => r.data),
-          api.get<PermissionObj[]>(`/roles/role_admin/permissions`).then(r => r.data),
+          api.get<PermissionObj[]>('/rbac/permissions').then(r => r.data).catch(() => api.get<PermissionObj[]>('/roles/role_admin/permissions').then(r => r.data)),
         ]);
 
         if (cancelled) return;
@@ -207,9 +207,9 @@ function PermissionsPanel({
         const currentPerms: PermissionObj[] = thisRolePerms.status === "fulfilled" && Array.isArray(thisRolePerms.value)
           ? thisRolePerms.value : [];
 
-        // Use admin perms as the full catalogue; fallback to this role's own perms
-        const cataloguePerms: PermissionObj[] = adminPerms.status === "fulfilled" && Array.isArray(adminPerms.value) && adminPerms.value.length > 0
-          ? adminPerms.value : currentPerms;
+        // Use backend rbac catalogue as full catalogue; fallback to this role's own perms
+        const cataloguePerms: PermissionObj[] = catalogueResult.status === "fulfilled" && Array.isArray(catalogueResult.value) && catalogueResult.value.length > 0
+          ? catalogueResult.value : currentPerms;
 
         const assignedKeys = new Set(currentPerms.map(p => getPermKey(p)));
 

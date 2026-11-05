@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
+import { useRBAC } from "@/hooks/useRBAC";
 import api from "@/lib/api/api";
 import { getDashboardAnomalies, getMorningBriefing, AnomalyAlertItem, MorningBriefingData } from "@/lib/api/aiBriefingApi";
 import { fetchAttendance, fetchLeaves, Attendance, LeaveRequest } from "@/lib/api/hrApi";
@@ -111,7 +112,13 @@ function BriefCard({ icon: Icon, label, text }: {
 
 export default function DashboardPage() {
   const { user, token, sessionStatus } = useAuth();
+  const { hasPermission, hasAnyPermission, permissionsLoaded } = useRBAC();
   const isEmployee = (user?.role || "").toUpperCase() === "EMPLOYEE";
+
+  const canViewDeals = hasAnyPermission(["deals.view", "crm.view"]);
+  const canViewLeads = hasAnyPermission(["leads.view", "crm.view"]);
+  const canViewTasks = hasPermission("tasks.view");
+  const canViewBriefing = hasAnyPermission(["dashboard.view", "ai_copilot.access"]);
 
   const [dashboardStats, setDashboardStats] = useState<DashboardStatsResponse | null>(null);
   const [aiBriefing, setAiBriefing] = useState<MorningBriefingData | null>(null);
@@ -125,6 +132,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (sessionStatus !== "authenticated" || !token) return;
+    if (!permissionsLoaded) return;
 
     if (isEmployee) {
       (async () => {
@@ -165,13 +173,19 @@ export default function DashboardPage() {
         // fallback
       }
 
-      // If key metrics are missing from /dashboard/stats, enrich from live CRM modules
+      // If key metrics are missing from /dashboard/stats, enrich ONLY from modules user has permission to access
       if (statsPayload.leadsCount === undefined || statsPayload.totalDealValue === undefined) {
         try {
           const [pipelineRes, leadsRes, tasksRes] = await Promise.all([
-            api.get<any>("/api/deals/pipeline-stats").catch(() => null) || api.get<any>("/deals/pipeline-stats").catch(() => null),
-            api.get<any>("/leads", { params: { limit: 1 } }).catch(() => null) || api.get<any>("/api/leads", { params: { limit: 1 } }).catch(() => null),
-            api.get<any>("/tasks/my-tasks", { params: { limit: 20 } }).catch(() => null) || api.get<any>("/tasks", { params: { limit: 20 } }).catch(() => null),
+            canViewDeals
+              ? (api.get<any>("/api/deals/pipeline-stats").catch(() => null) || api.get<any>("/deals/pipeline-stats").catch(() => null))
+              : Promise.resolve(null),
+            canViewLeads
+              ? (api.get<any>("/leads", { params: { limit: 1 } }).catch(() => null) || api.get<any>("/api/leads", { params: { limit: 1 } }).catch(() => null))
+              : Promise.resolve(null),
+            canViewTasks
+              ? (api.get<any>("/tasks/my-tasks", { params: { limit: 20 } }).catch(() => null) || api.get<any>("/tasks", { params: { limit: 20 } }).catch(() => null))
+              : Promise.resolve(null),
           ]);
 
           const pRaw = pipelineRes?.data?.data || pipelineRes?.data;
@@ -198,8 +212,8 @@ export default function DashboardPage() {
       }
 
       const [briefingRes, anomaliesRes] = await Promise.all([
-        getMorningBriefing().catch(() => null),
-        getDashboardAnomalies().then((r) => r.anomalies || []).catch(() => []),
+        canViewBriefing ? getMorningBriefing().catch(() => null) : Promise.resolve(null),
+        canViewBriefing ? getDashboardAnomalies().then((r) => r.anomalies || []).catch(() => []) : Promise.resolve([]),
       ]);
 
       setDashboardStats(statsPayload);
@@ -208,16 +222,68 @@ export default function DashboardPage() {
       setAiError(briefingRes ? null : "Unable to load AI executive briefing.");
       setAiLoading(false);
     })();
-  }, [sessionStatus, token, isEmployee]);
+  }, [sessionStatus, token, isEmployee, permissionsLoaded, canViewDeals, canViewLeads, canViewTasks, canViewBriefing]);
 
-  const kpiCards = useMemo(() => [
-    { icon: Users,     label: "Leads Count",      value: typeof dashboardStats?.leadsCount === "number" ? dashboardStats.leadsCount.toLocaleString() : "--", accent: "blue"    as const },
-    { icon: Briefcase, label: "Total Deal Value", value: typeof dashboardStats?.totalDealValue === "number" ? fmtCurrency(Math.round(dashboardStats.totalDealValue)) : "--", accent: "blue" as const },
-    { icon: DollarSign,label: "Revenue",          value: typeof dashboardStats?.revenue === "number" ? fmtCurrency(Math.round(dashboardStats.revenue)) : "--", accent: "emerald" as const },
-    { icon: Clock,     label: "Overdue Tasks",    value: typeof dashboardStats?.overdueTasks === "number" ? dashboardStats.overdueTasks.toLocaleString() : "--", accent: "amber" as const },
-    { icon: Mail,      label: "Emails Sent",      value: typeof dashboardStats?.emailsSent === "number" ? dashboardStats.emailsSent.toLocaleString() : "--", accent: "blue"    as const },
-    { icon: PhoneCall, label: "Calls Today",      value: typeof dashboardStats?.callsToday === "number" ? dashboardStats.callsToday.toLocaleString() : "--", accent: "emerald" as const },
-  ], [dashboardStats]);
+  const kpiCards = useMemo(() => {
+    if (!permissionsLoaded) return [];
+    const cards = [];
+
+    if (canViewLeads) {
+      cards.push({
+        icon: Users,
+        label: "Leads Count",
+        value: typeof dashboardStats?.leadsCount === "number" ? dashboardStats.leadsCount.toLocaleString() : "--",
+        accent: "blue" as const,
+      });
+    }
+
+    if (canViewDeals) {
+      cards.push({
+        icon: Briefcase,
+        label: "Total Deal Value",
+        value: typeof dashboardStats?.totalDealValue === "number" ? fmtCurrency(Math.round(dashboardStats.totalDealValue)) : "--",
+        accent: "blue" as const,
+      });
+    }
+
+    if (hasPermission("finance.view")) {
+      cards.push({
+        icon: DollarSign,
+        label: "Revenue",
+        value: typeof dashboardStats?.revenue === "number" ? fmtCurrency(Math.round(dashboardStats.revenue)) : "--",
+        accent: "emerald" as const,
+      });
+    }
+
+    if (canViewTasks) {
+      cards.push({
+        icon: Clock,
+        label: "Overdue Tasks",
+        value: typeof dashboardStats?.overdueTasks === "number" ? dashboardStats.overdueTasks.toLocaleString() : "--",
+        accent: "amber" as const,
+      });
+    }
+
+    if (hasAnyPermission(["email.access", "communication.access"])) {
+      cards.push({
+        icon: Mail,
+        label: "Emails Sent",
+        value: typeof dashboardStats?.emailsSent === "number" ? dashboardStats.emailsSent.toLocaleString() : "--",
+        accent: "blue" as const,
+      });
+    }
+
+    if (hasAnyPermission(["calls.access", "communication.access"])) {
+      cards.push({
+        icon: PhoneCall,
+        label: "Calls Today",
+        value: typeof dashboardStats?.callsToday === "number" ? dashboardStats.callsToday.toLocaleString() : "--",
+        accent: "emerald" as const,
+      });
+    }
+
+    return cards;
+  }, [dashboardStats, permissionsLoaded, canViewLeads, canViewDeals, canViewTasks, hasPermission, hasAnyPermission]);
 
   // Computed client-side so it always reflects the user's local clock, not the server timezone
   const computeGreeting = () => {
@@ -296,38 +362,42 @@ export default function DashboardPage() {
             </>
           ) : (
             <>
-              <button
-                onClick={() => setShowInsights(true)}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm font-semibold shadow-sm shadow-blue-200 transition-all"
-              >
-                <Sparkles size={14} />
-                <span className="hidden xs:inline">AI Insights</span>
-                <span className="xs:hidden">AI</span>
-              </button>
+              {canViewBriefing && (
+                <>
+                  <button
+                    onClick={() => setShowInsights(true)}
+                    className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-95 text-white text-sm font-semibold shadow-sm shadow-blue-200 transition-all"
+                  >
+                    <Sparkles size={14} />
+                    <span className="hidden xs:inline">AI Insights</span>
+                    <span className="xs:hidden">AI</span>
+                  </button>
 
-              <button
-                onClick={() => setShowWeeklyBriefing((v) => !v)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
-                  showWeeklyBriefing
-                    ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-200"
-                    : "bg-white hover:bg-blue-50 text-blue-700 border-blue-200 shadow-sm"
-                }`}
-              >
-                <CalendarDays size={14} />
-                <span className="hidden sm:inline">Weekly AI Briefing</span>
-                <span className="sm:hidden">Weekly</span>
-                <span
-                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                    showWeeklyBriefing ? "bg-blue-400" : "bg-gray-300"
-                  }`}
-                >
-                  <span
-                    className={`absolute h-3 w-3 rounded-full bg-white shadow transition-transform ${
-                      showWeeklyBriefing ? "translate-x-3.5" : "translate-x-0.5"
+                  <button
+                    onClick={() => setShowWeeklyBriefing((v) => !v)}
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                      showWeeklyBriefing
+                        ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-200"
+                        : "bg-white hover:bg-blue-50 text-blue-700 border-blue-200 shadow-sm"
                     }`}
-                  />
-                </span>
-              </button>
+                  >
+                    <CalendarDays size={14} />
+                    <span className="hidden sm:inline">Weekly AI Briefing</span>
+                    <span className="sm:hidden">Weekly</span>
+                    <span
+                      className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                        showWeeklyBriefing ? "bg-blue-400" : "bg-gray-300"
+                      }`}
+                    >
+                      <span
+                        className={`absolute h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                          showWeeklyBriefing ? "translate-x-3.5" : "translate-x-0.5"
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </>
+              )}
 
               <button
                 onClick={() => setIsEditing(true)}
@@ -475,47 +545,65 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* ── AI Executive Briefing (Management Only) ───────── */}
-          <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-100">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
-                <Sparkles size={15} className="text-blue-600" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-bold text-gray-900">AI Executive Briefing</p>
-                  <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">BETA</span>
+          {canViewBriefing && (
+            <div className="px-4 sm:px-6 pt-5 pb-4 border-b border-gray-100">
+              <div className="flex items-center gap-2.5 mb-4">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                  <Sparkles size={15} className="text-blue-600" />
                 </div>
-                <p className="text-xs text-gray-400">Overnight summary and key system signals</p>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-gray-900">AI Executive Briefing</p>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-1.5 py-0.5 rounded-full">BETA</span>
+                  </div>
+                  <p className="text-xs text-gray-400">Overnight summary and key system signals</p>
+                </div>
               </div>
-            </div>
 
-            {aiLoading ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                {[0,1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />)}
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                <BriefCard icon={Sparkles}   label="Greeting" text={aiBriefing?.greeting ?? "AI briefing will appear here once available."} />
-                <BriefCard icon={Briefcase}  label="Brief #1"  text={aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."} />
-                {aiBriefing?.summaryBullets?.[1] != null && (
-                  <BriefCard icon={Clock}    label="Brief #2"  text={aiBriefing.summaryBullets[1]} />
-                )}
-                <BriefCard icon={DollarSign} label="Signal"    text={aiAnomalies?.[0]?.title ?? aiBriefing?.topPriorityAction ?? "No anomaly signal generated yet."} />
-              </div>
-            )}
-          </div>
+              {aiLoading ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  {[0,1,2,3].map(i => <div key={i} className="h-20 rounded-xl bg-gray-50 border border-gray-100 animate-pulse" />)}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <BriefCard icon={Sparkles}   label="Greeting" text={aiBriefing?.greeting ?? "AI briefing will appear here once available."} />
+                  <BriefCard icon={Briefcase}  label="Brief #1"  text={aiBriefing?.summaryBullets?.[0] ?? "No summary bullet generated yet."} />
+                  {aiBriefing?.summaryBullets?.[1] != null && (
+                    <BriefCard icon={Clock}    label="Brief #2"  text={aiBriefing.summaryBullets[1]} />
+                  )}
+                  <BriefCard icon={DollarSign} label="Signal"    text={aiAnomalies?.[0]?.title ?? aiBriefing?.topPriorityAction ?? "No anomaly signal generated yet."} />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ── Key Metrics (Management Only) ────────────────── */}
-          <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Key Metrics</p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {kpiCards.map((card, i) => (
-                <div key={card.label} className="animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both" style={{ animationDelay: `${i * 60}ms` }}>
-                  <KpiCard {...card} />
-                </div>
-              ))}
+          {kpiCards.length > 0 && (
+            <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Key Metrics</p>
+              <div
+                className={`grid gap-3 ${
+                  kpiCards.length === 1
+                    ? "grid-cols-1 max-w-xs"
+                    : kpiCards.length === 2
+                    ? "grid-cols-2 max-w-md"
+                    : kpiCards.length === 3
+                    ? "grid-cols-1 sm:grid-cols-3 max-w-3xl"
+                    : kpiCards.length === 4
+                    ? "grid-cols-2 sm:grid-cols-2 lg:grid-cols-4"
+                    : kpiCards.length === 5
+                    ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+                    : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-6"
+                }`}
+              >
+                {kpiCards.map((card, i) => (
+                  <div key={card.label} className="animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both" style={{ animationDelay: `${i * 60}ms` }}>
+                    <KpiCard {...card} />
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 

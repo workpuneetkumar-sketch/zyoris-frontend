@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import {
   Search,
   ChevronLeft,
@@ -139,13 +140,15 @@ function EmptyState({
           Reset Filters
         </button>
       ) : (
-        <button
-          onClick={onCreateClick}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all"
-        >
-          <Plus size={16} />
-          Create Invoice
-        </button>
+        <PermissionGuard permission="invoices.create">
+          <button
+            onClick={onCreateClick}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all"
+          >
+            <Plus size={16} />
+            Create Invoice
+          </button>
+        </PermissionGuard>
       )}
     </div>
   );
@@ -446,6 +449,7 @@ export function InvoiceTable({
                           )}
                           {inv.status !== "PAID" &&
                             inv.status !== "OVERDUE" && (
+                              <PermissionGuard permission="invoices.update" action="disable" disabledTooltip="You do not have permission to update invoice status.">
                               <select
                                 onChange={async (e) => {
                                   const ns = e.target.value as
@@ -466,6 +470,7 @@ export function InvoiceTable({
                                   <option value="PAID">Mark Paid</option>
                                 )}
                               </select>
+                              </PermissionGuard>
                             )}
                         </div>
                       </td>

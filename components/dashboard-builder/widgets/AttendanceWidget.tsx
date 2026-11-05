@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/AttendanceWidget.tsx
 // Real data: GET /hr/employees/get-employees via useHREmployees hook.
 // Mock ATTENDANCE_DATA (Present 87%, Late 8%, Absent 5%) and TEAM_DATA (Engineering 24/25 etc.)
@@ -37,8 +40,26 @@ function classifyEmployee(e: HREmployee): "present" | "leave" | "absent" | null 
   return null;
 }
 
-export function AttendanceWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: employees, loading, error, refetch } = useHREmployees();
+export function AttendanceWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["attendance.view", "hr.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: employees, loading, error, refetch } = useHREmployees(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (
@@ -56,6 +77,11 @@ export function AttendanceWidget({ isPreview }: { isPreview?: boolean }) {
         </div>
       </div>
     );
+  }
+
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
   }
 
   if (error) {

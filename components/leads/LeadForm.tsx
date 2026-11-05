@@ -36,6 +36,7 @@ export interface LeadFormValues {
 interface LeadFormProps {
     form: LeadFormValues;
     setForm: React.Dispatch<React.SetStateAction<LeadFormValues>>;
+    disabled?: boolean;
     errors?: {
         name?: string;
         email?: string;
@@ -46,6 +47,7 @@ interface LeadFormProps {
 export default function LeadForm({
     form,
     setForm,
+    disabled = false,
     errors = {},
 }: LeadFormProps) {
     const [tagInput, setTagInput] = useState("");
@@ -120,6 +122,7 @@ export default function LeadForm({
                             type="text"
                             name="name"
                             value={form.name}
+                            disabled={disabled}
                             onChange={handleChange}
                             placeholder="John Smith"
                             className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none
@@ -145,6 +148,7 @@ export default function LeadForm({
                             type="email"
                             name="email"
                             value={form.email}
+                            disabled={disabled}
                             onChange={handleChange}
                             placeholder="user@example.com"
                             className={`w-full h-10 rounded-lg border px-3 text-sm text-gray-900 outline-none
@@ -170,6 +174,7 @@ export default function LeadForm({
                             type="tel"
                             name="phone"
                             value={form.phone}
+                            disabled={disabled}
                             onChange={handleChange}
                             placeholder="+91 99999 99999"
                             className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
@@ -185,6 +190,7 @@ export default function LeadForm({
                             type="text"
                             name="company"
                             value={form.company}
+                            disabled={disabled}
                             onChange={handleChange}
                             placeholder="Acme Corp"
                             className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
@@ -200,6 +206,7 @@ export default function LeadForm({
                             type="text"
                             name="city"
                             value={form.city}
+                            disabled={disabled}
                             onChange={handleChange}
                             placeholder="Mumbai"
                             className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
@@ -214,6 +221,7 @@ export default function LeadForm({
                         <select
                             name="source"
                             value={form.source}
+                            disabled={disabled}
                             onChange={handleChange}
                             className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         >
@@ -246,6 +254,7 @@ export default function LeadForm({
                         <select
                             name="status"
                             value={form.status}
+                            disabled={disabled}
                             onChange={handleChange}
                             className="w-full h-10 rounded-lg border border-gray-300 px-3 text-sm text-gray-900 outline-none focus:border-blue-500"
                         >
@@ -268,6 +277,7 @@ export default function LeadForm({
                             type="number"
                             name="estimatedValue"
                             value={form.estimatedValue}
+                            disabled={disabled}
                             min="0"
                             step="0.01"
                             onChange={handleChange}
@@ -304,17 +314,20 @@ export default function LeadForm({
                                 >
                                     {typeof tag === "string" ? tag : tag.label}
 
+                                    {!disabled && (
                                     <button
                                         type="button"
                                         onClick={() => removeTag(index)}
                                     >
                                         ×
                                     </button>
+                                    )}
                                 </span>
                             ))}
 
                             <input
                                 value={tagInput}
+                                disabled={disabled}
                                 onChange={(e) =>
                                     setTagInput(e.target.value)
                                 }
@@ -341,6 +354,7 @@ export default function LeadForm({
                 <textarea
                     name="note"
                     value={form.note}
+                    disabled={disabled}
                     onChange={handleChange}
                     placeholder="Additional notes..."
                     rows={5}

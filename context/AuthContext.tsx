@@ -80,6 +80,9 @@ interface AuthContextValue {
     visibleDashboards: DashboardItem[];
     visibleModules: string[];
     hasPermission: (permission: string) => boolean;
+    hasAllPermissions: (permissions: string[]) => boolean;
+    hasAnyPermission: (permissions: string[]) => boolean;
+    refreshPermissions: () => Promise<void>;
     login: (email: string, password: string, loginType?: LoginType) => Promise<AuthResponse>;
     /** Clear the last auth error (e.g. when the user edits a field or switches screens). */
     clearError: () => void;
@@ -98,6 +101,7 @@ interface AuthContextValue {
     permissionsLoaded: boolean;
     isLoading: boolean; // Backward-compatibility alias for isInitializing
     isAuthenticated: boolean;
+    isAdmin: boolean;
     /** Last auth error message from login() or register(). Cleared on the next attempt. */
     error: string | null;
 }
@@ -161,9 +165,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   const hasPermission = useCallback(
-    (permission: string): boolean => userPermissions[permission] === true,
+    (permission: string): boolean => Boolean(userPermissions && userPermissions[permission] === true),
     [userPermissions]
   );
+
+  const hasAllPermissions = useCallback(
+    (permissions: string[]): boolean => {
+      if (!permissions || permissions.length === 0) return true;
+      if (!userPermissions) return false;
+      return permissions.every((p) => userPermissions[p] === true);
+    },
+    [userPermissions]
+  );
+
+  const hasAnyPermission = useCallback(
+    (permissions: string[]): boolean => {
+      if (!permissions || permissions.length === 0) return true;
+      if (!userPermissions) return false;
+      return permissions.some((p) => userPermissions[p] === true);
+    },
+    [userPermissions]
+  );
+
+  const refreshPermissions = useCallback(async (): Promise<void> => {
+    try {
+      const [rbacMe, frontendPerms] = await Promise.all([
+        getRbacMe(),
+        getFrontendPermissions(),
+      ]);
+      setUserPermissions(rbacMe.permissions || {});
+      setSidebarItems(frontendPerms.sidebar || []);
+      setVisibleDashboards(frontendPerms.dashboards || []);
+      setVisibleModules(frontendPerms.modules || []);
+      setPermissionsLoaded(true);
+    } catch (err) {
+      if (process.env.NODE_ENV === "development") {
+        console.warn("[auth] Failed to refresh permissions:", err);
+      }
+    }
+  }, []);
 
   // ── Wipe all React auth state (does NOT touch storage — caller handles that) ──
   const wipeReactState = useCallback(() => {
@@ -603,6 +643,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         visibleDashboards,
         visibleModules,
         hasPermission,
+        hasAllPermissions,
+        hasAnyPermission,
+        refreshPermissions,
         login,
         register,
         logout,
@@ -611,6 +654,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isInitializing,
         permissionsLoaded,
         isLoading: isInitializing,
+        isAdmin: (user?.role || "").toUpperCase() === "ADMIN" || (user?.role || "").toUpperCase() === "SUPERADMIN",
         isAuthenticated,
         error,
         clearError,

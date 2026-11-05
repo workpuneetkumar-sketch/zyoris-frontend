@@ -1,4 +1,5 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import { useState } from "react";
 import {
@@ -570,13 +571,15 @@ export function CompaniesUI({
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Manage enterprise accounts, company details, and linked contact lists.</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => setIsCreateOpen(true)}
-                    className="flex items-center gap-2 h-9 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md shrink-0"
-                >
-                    <Plus size={15} />
-                    New Company
-                </button>
+                <PermissionGuard permission="companies.create">
+                    <button
+                        onClick={() => setIsCreateOpen(true)}
+                        className="flex items-center gap-2 h-9 px-4 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold transition-all shadow-xs hover:shadow-md shrink-0"
+                    >
+                        <Plus size={15} />
+                        New Company
+                    </button>
+                </PermissionGuard>
             </div>
 
             {/* Stat Summary Cards */}
@@ -894,29 +897,47 @@ export function CompaniesUI({
                             className="fixed z-[9999] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xl py-1.5 w-36 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
                             style={{ top: menuPos.top, left: menuPos.left }}
                         >
-                            {["View Details", "Edit", "Delete"].map((action) => (
-                                <button
-                                    key={action}
-                                    onClick={() => {
-                                        const company = safeCompanies.find((c) => c.id === openMenu);
-                                        if (!company) return;
-                                        setOpenMenu(null);
-                                        setMenuPos(null);
-                                        if (action === "View Details") {
-                                            onSelectCompany(company);
-                                        } else if (action === "Edit") {
-                                            setEditingCompany(company);
-                                        } else if (action === "Delete") {
-                                            onDelete(company.id, company.name);
-                                        }
-                                    }}
-                                    className={`w-full text-left px-4 py-2 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${
-                                        action === "Delete" ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-200"
-                                    }`}
-                                >
-                                    {action}
-                                </button>
-                            ))}
+                            {["View Details", "Edit", "Delete"].map((action) => {
+                                const btn = (
+                                    <button
+                                        key={action}
+                                        onClick={() => {
+                                            const company = safeCompanies.find((c) => c.id === openMenu);
+                                            if (!company) return;
+                                            setOpenMenu(null);
+                                            setMenuPos(null);
+                                            if (action === "View Details") {
+                                                onSelectCompany(company);
+                                            } else if (action === "Edit") {
+                                                setEditingCompany(company);
+                                            } else if (action === "Delete") {
+                                                onDelete(company.id, company.name);
+                                            }
+                                        }}
+                                        className={`w-full text-left px-4 py-2 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${
+                                            action === "Delete" ? "text-rose-600 dark:text-rose-400" : "text-slate-700 dark:text-slate-200"
+                                        }`}
+                                    >
+                                        {action}
+                                    </button>
+                                );
+
+                                if (action === "Edit") {
+                                    return (
+                                        <PermissionGuard key={action} permission="companies.update" action="disable" disabledTooltip="You do not have permission to edit companies.">
+                                            {btn}
+                                        </PermissionGuard>
+                                    );
+                                }
+                                if (action === "Delete") {
+                                    return (
+                                        <PermissionGuard key={action} permission="companies.delete" action="disable" disabledTooltip="You do not have permission to delete companies.">
+                                            {btn}
+                                        </PermissionGuard>
+                                    );
+                                }
+                                return btn;
+                            })}
                         </div>
                     )}
                 </>

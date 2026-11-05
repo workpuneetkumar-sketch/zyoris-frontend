@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-toastify";
 import { WidgetDefinition, WidgetInstance, SavedDashboardLayout } from "@/types/dashboard-builder";
 import { getWidgetCatalog, getWidgetCatalogGrouped } from "@/lib/api/dashboardWidgetService";
+import { isWidgetPermitted, compactLayout } from "@/components/dashboard-builder/WidgetRegistry";
 import {
   listLayouts,
   createLayout,
@@ -43,7 +44,7 @@ function useDebounce<T>(value: T, delay: number): T {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useDashboardBuilder(userRole?: string) {
-  const { sessionStatus, token } = useAuth();
+  const { sessionStatus, token, userPermissions, isAdmin, permissionsLoaded } = useAuth();
   // ── Widget catalog ────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState<WidgetDefinition[]>([]);
 
@@ -84,7 +85,24 @@ export function useDashboardBuilder(userRole?: string) {
     return JSON.stringify(sortedA) !== JSON.stringify(sortedB);
   }, [widgets, initialWidgets]);
 
-  const isEmpty = !isLoading && widgets.length === 0;
+  const permittedWidgets = useMemo(() => {
+    if (isAdmin) return widgets;
+    if (!permissionsLoaded) return [];
+    const filtered = widgets.filter((w) =>
+      isWidgetPermitted(w.widgetId, userPermissions, isAdmin)
+    );
+    return compactLayout(filtered);
+  }, [widgets, userPermissions, isAdmin, permissionsLoaded]);
+
+  const permittedCatalog = useMemo(() => {
+    if (isAdmin) return catalog;
+    if (!permissionsLoaded) return [];
+    return catalog.filter((c) =>
+      isWidgetPermitted(c.id, userPermissions, isAdmin)
+    );
+  }, [catalog, userPermissions, isAdmin, permissionsLoaded]);
+
+  const isEmpty = !isLoading && permittedWidgets.length === 0;
 
   const activeLayout = useMemo(
     () => layouts.find((l) => l.id === activeLayoutId) ?? null,
@@ -420,8 +438,8 @@ export function useDashboardBuilder(userRole?: string) {
 
   return {
     // State
-    catalog,
-    widgets,
+    catalog: permittedCatalog,
+    widgets: permittedWidgets,
     layouts,
     activeLayout,
     activeLayoutId,

@@ -3,6 +3,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import {
   Search,
   ChevronLeft,
@@ -121,13 +122,15 @@ export function EmptyState({
           Reset Filters
         </button>
       ) : (
-        <button
-          onClick={onCreateClick}
-          className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5"
-        >
-          <Plus size={18} />
-          Create Your First Expense
-        </button>
+        <PermissionGuard permission="expenses.create">
+          <button
+            onClick={onCreateClick}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5"
+          >
+            <Plus size={18} />
+            Create Your First Expense
+          </button>
+        </PermissionGuard>
       )}
     </div>
   );
@@ -342,6 +345,7 @@ export function ExpenseRow({
       <td className="px-4 py-4">
         <div className="flex items-center justify-center gap-2">
           {/* Edit Button */}
+          <PermissionGuard permission="expenses.update" action="disable" disabledTooltip="You do not have permission to edit expenses.">
           <button
             onClick={() => onEdit(expense)}
             className="p-2 rounded-lg hover:bg-gray-100 transition-all"
@@ -349,8 +353,10 @@ export function ExpenseRow({
           >
             <Edit2 size={16} className="text-gray-500" />
           </button>
+          </PermissionGuard>
 
           {/* Delete Button */}
+          <PermissionGuard permission="expenses.delete" action="disable" disabledTooltip="You do not have permission to delete expenses.">
           <button
             onClick={() => onDelete(expense.id)}
             disabled={isDeleting}
@@ -363,9 +369,11 @@ export function ExpenseRow({
               <Trash2 size={16} className="text-rose-400 hover:text-rose-600" />
             )}
           </button>
+          </PermissionGuard>
 
           {/* Approve Button */}
           {expense.status === "PENDING" && (
+            <PermissionGuard permission="expenses.approve" action="disable" disabledTooltip="You do not have permission to approve expenses.">
             <button
               onClick={() => onApprove(expense.id)}
               disabled={!!approvingId}
@@ -378,10 +386,12 @@ export function ExpenseRow({
               )}
               Approve
             </button>
+            </PermissionGuard>
           )}
 
           {/* Reimburse Button */}
           {expense.status === "APPROVED" && (
+            <PermissionGuard permission="expenses.approve" action="disable" disabledTooltip="You do not have permission to reimburse expenses.">
             <button
               onClick={() => onReimburse(expense.id)}
               disabled={!!isReimbursing}
@@ -394,6 +404,7 @@ export function ExpenseRow({
               )}
               Reimburse
             </button>
+            </PermissionGuard>
           )}
         </div>
       </td>
