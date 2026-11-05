@@ -209,6 +209,8 @@ export function normalizeBackendBlock(block: any): WorkspaceBlock {
   };
 
   const formatting = {
+    ...(block.properties?.formatting || {}),
+    ...(contentObj.properties?.formatting || {}),
     ...(block.formatting || {}),
     ...(contentObj.formatting || {}),
     ...(grid ? { grid } : {}),
@@ -749,6 +751,7 @@ export async function updateWorkspaceBlock(
       text: payload.text || "",
       content: payload.content,
       properties: payload.properties,
+      formatting: payload.formatting,
       position: payload.position || 10,
       updatedAt: new Date().toISOString(),
     };
@@ -776,6 +779,7 @@ export async function updateWorkspaceBlock(
       text: payload.text || "",
       content: payload.content,
       properties: payload.properties,
+      formatting: payload.formatting,
       position: payload.position || 10,
       updatedAt: new Date().toISOString(),
     };
@@ -1955,4 +1959,3 @@ export async function importTasksCsv(
     throw error;
   }
 }
-

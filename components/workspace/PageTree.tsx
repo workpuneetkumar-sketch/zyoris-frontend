@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { WorkspacePageNode } from "@/types/workspace";
@@ -38,11 +39,15 @@ import {
   Sparkles,
 } from "lucide-react";
 
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
 interface PageTreeProps {
   nodes: WorkspacePageNode[];
   onAddSubpage?: (parentId: string) => void;
   onRefreshTree?: () => void;
   depth?: number;
+  currentUserId?: string;
 }
 
 const PageTreeNodeItem: React.FC<{
@@ -51,9 +56,11 @@ const PageTreeNodeItem: React.FC<{
   onAddSubpage?: (parentId: string) => void;
   onRefreshTree?: () => void;
   depth: number;
-}> = ({ node, pageTree, onAddSubpage, onRefreshTree, depth }) => {
+  currentUserId?: string;
+}> = ({ node, pageTree, onAddSubpage, onRefreshTree, depth, currentUserId }) => {
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [isMoveModalOpen, setIsMoveModalOpen] = useState<boolean>(false);
 
   // FE2 feature modals — opened from the context menu
@@ -64,7 +71,8 @@ const PageTreeNodeItem: React.FC<{
 
   const pathname = usePathname();
   const router = useRouter();
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
+  const menuDropdownRef = useRef<HTMLDivElement>(null);
 
   const hasChildren = Array.isArray(node.children) && node.children.length > 0;
   const safeId = node.id && node.id !== "[id]" && !node.id.includes("[id]") ? node.id : "";
@@ -73,13 +81,57 @@ const PageTreeNodeItem: React.FC<{
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setIsMenuOpen(false);
-      }
+      const target = e.target as Node;
+      if (menuTriggerRef.current?.contains(target) || menuDropdownRef.current?.contains(target)) return;
+      setIsMenuOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useIsomorphicLayoutEffect(() => {
+    if (!isMenuOpen) {
+      setMenuPosition(null);
+      return;
+    }
+
+    const updateMenuPosition = () => {
+      const trigger = menuTriggerRef.current;
+      const dropdown = menuDropdownRef.current;
+      if (!trigger || !dropdown) return;
+
+      const triggerRect = trigger.getBoundingClientRect();
+      if (triggerRect.bottom <= 0 || triggerRect.top >= window.innerHeight) {
+        setIsMenuOpen(false);
+        return;
+      }
+
+      const margin = 8;
+      const menuWidth = dropdown.offsetWidth;
+      const menuHeight = dropdown.offsetHeight;
+      const belowTop = triggerRect.bottom + 4;
+      const top =
+        belowTop + menuHeight <= window.innerHeight - margin
+          ? belowTop
+          : Math.max(margin, triggerRect.top - menuHeight - 4);
+      const left = Math.max(
+        margin,
+        Math.min(triggerRect.right - menuWidth, window.innerWidth - menuWidth - margin)
+      );
+
+      setMenuPosition((current) =>
+        current?.top === top && current.left === left ? current : { top, left }
+      );
+    };
+
+    updateMenuPosition();
+    window.addEventListener("resize", updateMenuPosition);
+    window.addEventListener("scroll", updateMenuPosition, true);
+    return () => {
+      window.removeEventListener("resize", updateMenuPosition);
+      window.removeEventListener("scroll", updateMenuPosition, true);
+    };
+  }, [isMenuOpen]);
 
   const handleDelete = async () => {
     if (!safeId) return;
@@ -218,11 +270,24 @@ const PageTreeNodeItem: React.FC<{
               )}
             </span>
             <span className="truncate font-medium">{node.title || "Untitled"}</span>
+            {node.assignment && (
+              <span
+                title={`Assigned to ${node.assignment.assignedUserName}`}
+                aria-label={`Assigned to ${node.assignment.assignedUserName}`}
+                className={`max-w-16 shrink-0 truncate rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                  node.assignment.assignedUserId === currentUserId
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300"
+                    : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                }`}
+              >
+                {node.assignment.assignedUserId === currentUserId ? "You" : node.assignment.assignedUserName}
+              </span>
+            )}
           </Link>
         </div>
 
         {/* Hover Action Buttons */}
-        <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition" ref={menuRef}>
+        <div className="opacity-0 group-hover:opacity-100 flex items-center space-x-1 transition">
           {onAddSubpage && (
             <button
               type="button"
@@ -238,10 +303,11 @@ const PageTreeNodeItem: React.FC<{
           )}
 
           <button
+            ref={menuTriggerRef}
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setIsMenuOpen(!isMenuOpen);
+              setIsMenuOpen((open) => !open);
             }}
             title="Page options"
             className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition"
@@ -250,8 +316,12 @@ const PageTreeNodeItem: React.FC<{
           </button>
 
           {/* ── Context Dropdown Menu ─────────────────────────────────────── */}
-          {isMenuOpen && (
-            <div className="absolute right-2 top-7 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-50 py-1 text-left animate-in fade-in duration-100">
+          {isMenuOpen && typeof document !== "undefined" && createPortal(
+            <div
+              ref={menuDropdownRef}
+              style={{ top: menuPosition?.top ?? 0, left: menuPosition?.left ?? 0 }}
+              className="fixed w-52 max-h-[calc(100vh-1rem)] overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-[1000] py-1 text-left animate-in fade-in duration-100"
+            >
 
               {/* ── Navigation / create ── */}
               <button
@@ -375,7 +445,8 @@ const PageTreeNodeItem: React.FC<{
                 <Trash2 className="w-3.5 h-3.5" />
                 <span>Delete Page</span>
               </button>
-            </div>
+            </div>,
+            document.body
           )}
         </div>
       </div>
@@ -390,6 +461,7 @@ const PageTreeNodeItem: React.FC<{
               onAddSubpage={onAddSubpage}
               onRefreshTree={onRefreshTree}
               depth={depth + 1}
+              currentUserId={currentUserId}
             />
           ))}
         </div>
@@ -471,6 +543,7 @@ export const PageTree: React.FC<PageTreeProps> = ({
   onAddSubpage,
   onRefreshTree,
   depth = 0,
+  currentUserId,
 }) => {
   if (!nodes || nodes.length === 0) {
     return (
@@ -490,6 +563,7 @@ export const PageTree: React.FC<PageTreeProps> = ({
           onAddSubpage={onAddSubpage}
           onRefreshTree={onRefreshTree}
           depth={depth}
+          currentUserId={currentUserId}
         />
       ))}
     </div>

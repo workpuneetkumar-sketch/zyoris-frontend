@@ -141,7 +141,7 @@ export default function CalendarToolbar({
           >
             <PanelLeft size={16} />
             {activeFilterCount > 0 && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#FF5630] ring-2 ring-white" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-[#2563EB] ring-2 ring-white" />
             )}
           </button>
 
@@ -287,7 +287,7 @@ export default function CalendarToolbar({
           <button
             type="button"
             onClick={onCreateEvent}
-            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[#FF5630] hover:bg-[#FF4842] text-white font-semibold text-[12px] shadow-xs active:scale-95 transition-all shrink-0"
+            className="flex items-center justify-center gap-1.5 px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-[12px] shadow-xs active:scale-95 transition-all shrink-0"
           >
             <Plus size={15} strokeWidth={2.5} />
             <span className="hidden sm:inline">New Event</span>

@@ -92,6 +92,7 @@ import {
   Database as DatabaseIcon,
   Send,
   ChevronRight,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface BlockEditorProps {
@@ -226,6 +227,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
             text: updatedFields.text,
             content: updatedFields.content,
             properties: updatedFields.properties,
+            formatting: updatedFields.formatting,
             parentBlockId: updatedFields.parentBlockId || updatedFields.parentId,
             position: updatedFields.position,
           });
@@ -259,6 +261,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
             text: b.text || "",
             content: b.content,
             properties: b.properties,
+            formatting: b.formatting,
             position: b.position,
           });
         }
@@ -395,6 +398,7 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
 
     triggerAutosave(targetBlock.id, {
       ...updatedBlock,
+      formatting: newFormatting,
       properties: { ...updatedBlock.properties, formatting: newFormatting },
     });
   };
@@ -570,7 +574,18 @@ export const BlockEditor: React.FC<BlockEditorProps> = ({
           {blocks.length} block{blocks.length !== 1 ? "s" : ""}
         </span>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => handleCreateBlock("image")}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/40 transition"
+              title="Insert an image block"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              <span>Add image</span>
+            </button>
+          )}
           {saveStatus === "saving" && (
             <span className="inline-flex items-center space-x-1.5 text-amber-600 dark:text-amber-400 font-semibold bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-900/50 animate-pulse">
               <Loader2 className="w-3.5 h-3.5 animate-spin" />

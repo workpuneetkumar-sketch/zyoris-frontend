@@ -142,7 +142,7 @@ export default function MonthView({
                 <span
                   className={`w-6 h-6 md:w-7 md:h-7 mx-auto md:mx-0 md:ml-auto text-xs flex items-center justify-center rounded-full transition-colors ${
                     isToday
-                      ? "bg-[#FF5630] text-white font-bold shadow-sm"
+                      ? "bg-[#2563EB] text-white font-bold shadow-sm"
                       : isSelected
                       ? "bg-[#212B36] text-white font-semibold"
                       : !isCurrentMonth
@@ -250,7 +250,7 @@ export default function MonthView({
           <button
             type="button"
             onClick={() => onCreateEventForDate(selectedDate)}
-            className="px-3 py-1.5 rounded-lg bg-[#FF5630] hover:bg-[#FF4842] text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors shrink-0"
+            className="px-3 py-1.5 rounded-lg bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold flex items-center gap-1 shadow-sm transition-colors shrink-0"
           >
             <Plus size={14} />
             <span>Add</span>
@@ -377,7 +377,7 @@ export default function MonthView({
                   setOverflowDayDate(null);
                   onCreateEventForDate(d);
                 }}
-                className="text-xs font-semibold text-[#FF5630] hover:text-[#FF4842] flex items-center gap-1"
+                className="text-xs font-semibold text-[#2563EB] hover:text-[#1D4ED8] flex items-center gap-1"
               >
                 <Plus size={13} />
                 <span>Add Event</span>
@@ -391,7 +391,7 @@ export default function MonthView({
                     setOverflowDayDate(null);
                     onSwitchToDayView(d);
                   }}
-                  className="text-xs font-semibold text-[#212B36] hover:text-[#FF5630] flex items-center gap-1 transition-colors"
+                  className="text-xs font-semibold text-[#212B36] hover:text-[#2563EB] flex items-center gap-1 transition-colors"
                 >
                   <span>Day timeline</span>
                   <ArrowRight size={13} />

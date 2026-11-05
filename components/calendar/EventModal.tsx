@@ -420,8 +420,8 @@ export default function EventModal({
           className="p-5 space-y-4 overflow-y-auto flex-1"
         >
           {error && (
-            <div className="p-3 bg-[#FF5630]/15 border border-[#FF5630]/40 rounded-xl flex items-center gap-2 text-xs text-[#FFAB91]">
-              <AlertCircle size={15} className="shrink-0 text-[#FF5630]" />
+            <div className="p-3 bg-[#2563EB]/15 border border-[#2563EB]/40 rounded-xl flex items-center gap-2 text-xs text-[#93C5FD]">
+              <AlertCircle size={15} className="shrink-0 text-[#2563EB]" />
               <span>{error}</span>
             </div>
           )}
@@ -429,7 +429,7 @@ export default function EventModal({
           {/* Event Title */}
           <div>
             <label className="block text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider mb-1.5">
-              Event Title <span className="text-[#FF5630]">*</span>
+              Event Title <span className="text-[#2563EB]">*</span>
             </label>
             <input
               type="text"
@@ -437,7 +437,7 @@ export default function EventModal({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Design System Review"
-              className="w-full px-3.5 py-2.5 bg-[#28323D] border border-white/10 rounded-xl text-[14px] font-semibold text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#FF5630] transition-all"
+              className="w-full px-3.5 py-2.5 bg-[#28323D] border border-white/10 rounded-xl text-[14px] font-semibold text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#2563EB] transition-all"
             />
           </div>
 
@@ -445,7 +445,7 @@ export default function EventModal({
           <div className="p-3.5 rounded-xl bg-[#161C24] border border-[#28323D] space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider flex items-center gap-1.5">
-                <Palette size={12} className="text-[#FF5630]" />
+                <Palette size={12} className="text-[#2563EB]" />
                 <span>Category & Color Theme</span>
               </span>
               <span
@@ -519,14 +519,14 @@ export default function EventModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider mb-1">
-                Date <span className="text-[#FF5630]">*</span>
+                Date <span className="text-[#2563EB]">*</span>
               </label>
               <input
                 type="date"
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#FF5630] [color-scheme:dark]"
+                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#2563EB] [color-scheme:dark]"
               />
             </div>
 
@@ -539,7 +539,7 @@ export default function EventModal({
                 onChange={(e) =>
                   setDepartment(e.target.value as CalendarDepartment)
                 }
-                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#FF5630]"
+                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#2563EB]"
               >
                 {DEPARTMENTS.map((d) => (
                   <option key={d.id} value={d.id} className="bg-[#1C252E]">
@@ -554,7 +554,7 @@ export default function EventModal({
           <div className="p-4 rounded-xl bg-[#161C24] border border-[#28323D] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock size={14} className="text-[#FF5630]" />
+                <Clock size={14} className="text-[#2563EB]" />
                 <span className="text-xs font-semibold text-white">
                   Time & Duration
                 </span>
@@ -569,7 +569,7 @@ export default function EventModal({
                     type="checkbox"
                     checked={allDay}
                     onChange={(e) => setAllDay(e.target.checked)}
-                    className="rounded border-white/20 bg-[#28323D] text-[#FF5630] focus:ring-0"
+                    className="rounded border-white/20 bg-[#28323D] text-[#2563EB] focus:ring-0"
                   />
                   <span>All day</span>
                 </label>
@@ -578,7 +578,7 @@ export default function EventModal({
                   <button
                     type="button"
                     onClick={() => setShowDial(!showDial)}
-                    className="text-[11px] font-semibold text-[#FF5630] hover:underline"
+                    className="text-[11px] font-semibold text-[#2563EB] hover:underline"
                   >
                     {showDial ? "Hide Dial" : "Clock Dial"}
                   </button>
@@ -593,7 +593,7 @@ export default function EventModal({
                     onClick={() => setActiveDialTarget("start")}
                     className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                       activeDialTarget === "start"
-                        ? "bg-[#28323D] border-[#FF5630]"
+                        ? "bg-[#28323D] border-[#2563EB]"
                         : "bg-[#28323D]/60 border-white/5"
                     }`}
                   >
@@ -614,7 +614,7 @@ export default function EventModal({
                     onClick={() => setActiveDialTarget("end")}
                     className={`p-2.5 rounded-xl border transition-all cursor-pointer ${
                       activeDialTarget === "end"
-                        ? "bg-[#28323D] border-[#FF5630]"
+                        ? "bg-[#28323D] border-[#2563EB]"
                         : "bg-[#28323D]/60 border-white/5"
                     }`}
                   >
@@ -672,7 +672,7 @@ export default function EventModal({
                           cx={endPt.x}
                           cy={endPt.y}
                           r="6"
-                          fill="#FF5630"
+                          fill="#2563EB"
                           stroke="#FFFFFF"
                           strokeWidth="2"
                         />
@@ -701,7 +701,7 @@ export default function EventModal({
                             }}
                             className={`absolute -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full text-[10px] font-bold flex items-center justify-center transition-all ${
                               isHourSelected
-                                ? "bg-[#FF5630] text-white shadow-sm scale-110"
+                                ? "bg-[#2563EB] text-white shadow-sm scale-110"
                                 : "text-[#AAB4BE] hover:text-white"
                             }`}
                           >
@@ -730,7 +730,7 @@ export default function EventModal({
                           onClick={() => setActiveDialTarget("start")}
                           className={`flex-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
                             activeDialTarget === "start"
-                              ? "bg-[#FF5630] text-white"
+                              ? "bg-[#2563EB] text-white"
                               : "text-[#AAB4BE] hover:text-white"
                           }`}
                         >
@@ -741,7 +741,7 @@ export default function EventModal({
                           onClick={() => setActiveDialTarget("end")}
                           className={`flex-1 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all ${
                             activeDialTarget === "end"
-                              ? "bg-[#FF5630] text-white"
+                              ? "bg-[#2563EB] text-white"
                               : "text-[#AAB4BE] hover:text-white"
                           }`}
                         >
@@ -802,7 +802,7 @@ export default function EventModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider mb-1 flex items-center gap-1">
-                <MapPin size={12} className="text-[#FF5630]" />
+                <MapPin size={12} className="text-[#2563EB]" />
                 <span>Location / Address</span>
               </label>
               <input
@@ -810,19 +810,19 @@ export default function EventModal({
                 value={customLocation}
                 onChange={(e) => setCustomLocation(e.target.value)}
                 placeholder="Office floor, address, or city..."
-                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#FF5630]"
+                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#2563EB]"
               />
             </div>
 
             <div>
               <label className="block text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider mb-1 flex items-center gap-1">
-                <Building size={12} className="text-[#FF5630]" />
+                <Building size={12} className="text-[#2563EB]" />
                 <span>Room Booking</span>
               </label>
               <select
                 value={room}
                 onChange={(e) => setRoom(e.target.value)}
-                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#FF5630]"
+                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#2563EB]"
               >
                 <option value="" className="bg-[#1C252E]">
                   No Room Selected
@@ -840,13 +840,13 @@ export default function EventModal({
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="block text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider mb-1 flex items-center gap-1">
-                <Video size={12} className="text-[#FF5630]" />
+                <Video size={12} className="text-[#2563EB]" />
                 <span>Platform</span>
               </label>
               <select
                 value={provider}
                 onChange={(e) => setProvider(e.target.value)}
-                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#FF5630]"
+                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#2563EB]"
               >
                 <option value="google_meet" className="bg-[#1C252E]">
                   Google Meet
@@ -872,7 +872,7 @@ export default function EventModal({
                 value={meetingLink}
                 onChange={(e) => setMeetingLink(e.target.value)}
                 placeholder="https://meet.google.com/..."
-                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#FF5630]"
+                className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#2563EB]"
               />
             </div>
           </div>
@@ -887,14 +887,14 @@ export default function EventModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add meeting agenda, context, or preparation notes..."
-              className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#FF5630] resize-none"
+              className="w-full px-3 py-2 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#2563EB] resize-none"
             />
           </div>
 
           {/* Participants */}
           <div>
             <label className="block text-[11px] font-semibold text-[#AAB4BE] uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-              <Users size={12} className="text-[#FF5630]" />
+              <Users size={12} className="text-[#2563EB]" />
               <span>Guests & Participants ({participants.length})</span>
             </label>
             <div className="flex gap-2 mb-2">
@@ -909,7 +909,7 @@ export default function EventModal({
                   }
                 }}
                 placeholder="Add guest name or email..."
-                className="flex-1 px-3 py-1.5 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#FF5630]"
+                className="flex-1 px-3 py-1.5 bg-[#28323D] border border-white/10 rounded-xl text-xs text-white placeholder-[#AAB4BE]/60 focus:outline-none focus:border-[#2563EB]"
               />
               <button
                 type="button"
@@ -927,14 +927,14 @@ export default function EventModal({
                     key={idx}
                     className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#28323D] rounded-lg text-xs font-medium text-white"
                   >
-                    <span className="w-4 h-4 rounded-full bg-[#FF5630]/20 text-[#FF5630] text-[10px] font-bold flex items-center justify-center">
+                    <span className="w-4 h-4 rounded-full bg-[#2563EB]/20 text-[#2563EB] text-[10px] font-bold flex items-center justify-center">
                       {p.name.charAt(0).toUpperCase()}
                     </span>
                     <span>{p.name}</span>
                     <button
                       type="button"
                       onClick={() => handleRemoveParticipant(idx)}
-                      className="text-[#AAB4BE] hover:text-[#FF5630] ml-0.5"
+                      className="text-[#AAB4BE] hover:text-[#2563EB] ml-0.5"
                     >
                       <X size={12} />
                     </button>
@@ -1057,7 +1057,7 @@ export default function EventModal({
                 type="button"
                 onClick={handleDelete}
                 disabled={isDeleting || isSubmitting}
-                className="px-3.5 py-2 text-[#FF5630] hover:bg-[#FF5630]/15 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-[#FF5630]/30"
+                className="px-3.5 py-2 text-[#2563EB] hover:bg-[#2563EB]/15 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-[#2563EB]/30"
               >
                 {isDeleting ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -1082,7 +1082,7 @@ export default function EventModal({
               <button
                 type="submit"
                 disabled={isSubmitting || isDeleting}
-                className="px-5 py-2.5 bg-[#FF5630] hover:bg-[#FF4842] text-white rounded-xl text-xs font-bold shadow-md active:scale-95 transition-all flex items-center gap-2"
+                className="px-5 py-2.5 bg-[#2563EB] hover:bg-[#1D4ED8] text-white rounded-xl text-xs font-bold shadow-md active:scale-95 transition-all flex items-center gap-2"
               >
                 {isSubmitting && <Loader2 size={14} className="animate-spin" />}
                 <span>{initialEvent ? "Save Changes" : "Create Event"}</span>

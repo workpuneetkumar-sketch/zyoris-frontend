@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { WorkspacePageNode } from "@/types/workspace";
 import { PageTree } from "./PageTree";
+import { useAuth } from "@/context/AuthContext";
+import { useWorkspacePageAssignments } from "@/hooks/useWorkspacePageAssignments";
 import {
   Home,
   CheckSquare,
@@ -19,6 +21,7 @@ import {
   Loader2,
   RefreshCw,
   X,
+  UserCheck,
 } from "lucide-react";
 
 interface WorkspaceSidebarProps {
@@ -43,6 +46,40 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
   onCloseMobile,
 }) => {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const { assignments, currentUserId, storageError } = useWorkspacePageAssignments();
+  const [showAssignedOnly, setShowAssignedOnly] = React.useState(false);
+
+  const pagesWithAssignments = React.useMemo(() => {
+    const addAssignments = (nodes: WorkspacePageNode[]): WorkspacePageNode[] =>
+      nodes.map((node) => ({
+        ...node,
+        assignment: assignments[node.id] || null,
+        children: node.children ? addAssignments(node.children) : [],
+      }));
+    return addAssignments(pageTree || []);
+  }, [pageTree, assignments]);
+
+  const assignedPageCount = React.useMemo(() => {
+    const countAssigned = (nodes: WorkspacePageNode[]): number =>
+      nodes.reduce((count, node) => {
+        const assignedToCurrentUser = assignments[node.id]?.assignedUserId === currentUserId;
+        return count + Number(assignedToCurrentUser) + countAssigned(node.children || []);
+      }, 0);
+    return countAssigned(pageTree || []);
+  }, [assignments, currentUserId, pageTree]);
+
+  const visiblePageTree = React.useMemo(() => {
+    if (!showAssignedOnly || !currentUserId) return pagesWithAssignments;
+    const keepAssignedPages = (nodes: WorkspacePageNode[]): WorkspacePageNode[] =>
+      nodes.flatMap((node) => {
+        const children = keepAssignedPages(node.children || []);
+        const assignedToCurrentUser = node.assignment?.assignedUserId === currentUserId;
+        if (!assignedToCurrentUser && children.length === 0) return [];
+        return [{ ...node, children }];
+      });
+    return keepAssignedPages(pagesWithAssignments);
+  }, [showAssignedOnly, currentUserId, pagesWithAssignments]);
 
   const NAV_ITEMS_PRIMARY = [
     { href: "/workspace", label: "Home", icon: Home, exact: true },
@@ -99,7 +136,7 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
 
   const containerClasses = isMobileView
     ? "h-full w-full bg-white dark:bg-slate-900 flex flex-col overflow-hidden"
-    : "w-64 shrink-0 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col max-h-[calc(100vh-7.5rem)] sticky top-3 overflow-hidden select-none";
+    : "w-72 shrink-0 bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 rounded-2xl shadow-xs flex flex-col max-h-[calc(100vh-7.5rem)] sticky top-3 overflow-hidden select-none";
 
   return (
     <aside className={containerClasses}>
@@ -174,7 +211,30 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <Plus className="w-3.5 h-3.5" />
             </button>
           </div>
+
         </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAssignedOnly((current) => !current)}
+          aria-pressed={showAssignedOnly}
+          disabled={!user?.id}
+          className={`mb-2 flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs font-medium transition ${
+            showAssignedOnly
+              ? "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
+              : "text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+          } disabled:cursor-not-allowed disabled:opacity-50`}
+        >
+          <UserCheck className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex-1">Assigned to me</span>
+          <span className="rounded-full bg-white/80 px-1.5 py-0.5 text-[10px] dark:bg-slate-900/70">{assignedPageCount}</span>
+        </button>
+
+        {storageError && (
+          <p role="alert" className="mb-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-[10px] text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+            {storageError}
+          </p>
+        )}
 
         {isLoadingTree ? (
           <div className="px-3 py-4 space-y-2 animate-pulse">
@@ -196,11 +256,16 @@ export const WorkspaceSidebar: React.FC<WorkspaceSidebarProps> = ({
               <span>Retry</span>
             </button>
           </div>
+        ) : showAssignedOnly && visiblePageTree.length === 0 ? (
+          <div className="px-3 py-4 text-xs text-slate-400">
+            No pages are assigned to you in this browser.
+          </div>
         ) : (
           <PageTree
-            nodes={pageTree}
+            nodes={visiblePageTree}
             onAddSubpage={(parentId) => onOpenCreatePageModal(parentId, "document")}
             onRefreshTree={onRefetchTree}
+            currentUserId={currentUserId}
           />
         )}
       </div>

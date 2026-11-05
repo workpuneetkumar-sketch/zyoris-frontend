@@ -192,7 +192,7 @@ export default function ScheduleView({
             <button
               type="button"
               onClick={onCreateEvent}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FF5630] hover:bg-[#FF4842] text-white font-semibold text-xs shadow-sm transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-xs shadow-sm transition-all"
             >
               <Plus size={15} strokeWidth={2.2} />
               <span>New Event</span>
@@ -212,7 +212,7 @@ export default function ScheduleView({
                   <span
                     className={`px-2.5 py-0.5 rounded-lg text-xs font-semibold ${
                       isToday
-                        ? "bg-[#FF5630] text-white"
+                        ? "bg-[#2563EB] text-white"
                         : isSelected
                         ? "bg-[#212B36] text-white"
                         : "bg-[#F4F6F8] text-[#212B36]"
@@ -266,7 +266,7 @@ export default function ScheduleView({
                           {/* Event Details */}
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2 mb-1">
-                              <h4 className="text-sm font-semibold text-[#212B36] group-hover:text-[#FF5630] transition-colors truncate">
+                              <h4 className="text-sm font-semibold text-[#212B36] group-hover:text-[#2563EB] transition-colors truncate">
                                 {evt.title}
                               </h4>
                               <span

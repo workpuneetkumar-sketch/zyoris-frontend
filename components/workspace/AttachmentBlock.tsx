@@ -19,6 +19,8 @@ import { uploadDocument } from '@/lib/api/documentsApi';
 import { createAttachment, getAttachmentDownloadUrl, detachAttachment, Attachment } from '@/lib/api/attachmentApi';
 import { AttachmentPreviewModal } from './AttachmentPreviewModal';
 
+const MAX_IMAGE_SIZE_BYTES = 25 * 1024 * 1024;
+
 interface AttachmentBlockProps {
   blockId: string;
   pageId: string;
@@ -55,6 +57,17 @@ export const AttachmentBlock: React.FC<AttachmentBlockProps> = ({
   const mimeType = formatting?.mimeType || '';
 
   const handleFileUpload = async (file: File) => {
+    if (blockType === 'image') {
+      if (!file.type.startsWith('image/')) {
+        setError('Choose a supported image file.');
+        return;
+      }
+      if (file.size > MAX_IMAGE_SIZE_BYTES) {
+        setError('Images must be 25 MB or smaller.');
+        return;
+      }
+    }
+
     setIsUploading(true);
     setError(null);
     setUploadProgress(10);
@@ -62,7 +75,14 @@ export const AttachmentBlock: React.FC<AttachmentBlockProps> = ({
     try {
       // Step 1: Upload raw document to S3/Server
       setUploadProgress(30);
-      const docRes = await uploadDocument(file);
+      const docRes = await uploadDocument(
+        file,
+        (percent) => setUploadProgress(30 + Math.round(percent * 0.4)),
+        false
+      );
+      if (blockType === 'image' && !docRes.s3Url) {
+        throw new Error('The image upload did not return a preview URL.');
+      }
       setUploadProgress(70);
 
       // Step 2: Create formal Attachment link to current page
@@ -193,6 +213,7 @@ export const AttachmentBlock: React.FC<AttachmentBlockProps> = ({
             </p>
             <p className="text-xs text-slate-400">
               Drag & drop here or click to browse
+              {blockType === 'image' && ' · Image files up to 25 MB'}
             </p>
           </div>
           <label className="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 hover:bg-indigo-100 dark:hover:bg-indigo-900/50 rounded-lg transition-colors">
@@ -203,7 +224,9 @@ export const AttachmentBlock: React.FC<AttachmentBlockProps> = ({
               className="hidden"
               accept={blockType === 'image' ? 'image/*' : '*'}
               onChange={(e) => {
-                if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
+                const file = e.target.files?.[0];
+                e.target.value = '';
+                if (file) handleFileUpload(file);
               }}
             />
           </label>
@@ -248,11 +271,13 @@ export const AttachmentBlock: React.FC<AttachmentBlockProps> = ({
     <div className="my-2 group relative">
       {isImage && fileUrl ? (
         <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-900/5 dark:bg-slate-950">
-          <div className="relative max-h-96 flex items-center justify-center bg-slate-950/20">
+          <div className="relative max-h-96 w-full flex items-center justify-center bg-slate-950/20">
             <img
               src={fileUrl}
               alt={fileName}
-              className="max-h-96 w-auto object-contain rounded-t-xl"
+              loading="lazy"
+              decoding="async"
+              className="max-h-96 max-w-full h-auto w-auto object-contain rounded-t-xl"
             />
             <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 p-1.5 rounded-lg bg-black/70 backdrop-blur-md text-white">
               <button

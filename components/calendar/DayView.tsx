@@ -169,7 +169,7 @@ export default function DayView({
                     dayIsSelected
                       ? "bg-[#212B36] text-white"
                       : dayIsToday
-                      ? "bg-[#FF5630]/10 text-[#FF5630]"
+                      ? "bg-[#2563EB]/10 text-[#2563EB]"
                       : "hover:bg-[#F4F6F8] text-[#637381]"
                   }`}
                 >
@@ -259,12 +259,12 @@ export default function DayView({
                 }}
               >
                 <div className="w-16 pr-2 flex justify-end">
-                  <span className="px-1.5 py-0.5 rounded bg-[#FF5630] text-white text-[10px] font-bold shadow-sm">
+                  <span className="px-1.5 py-0.5 rounded bg-[#2563EB] text-white text-[10px] font-bold shadow-sm">
                     {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </div>
-                <div className="w-2.5 h-2.5 rounded-full bg-[#FF5630] -ml-1" />
-                <div className="flex-1 h-[2px] bg-[#FF5630]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#2563EB] -ml-1" />
+                <div className="flex-1 h-[2px] bg-[#2563EB]" />
               </div>
             )}
 

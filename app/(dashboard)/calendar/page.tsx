@@ -446,7 +446,7 @@ export default function CalendarPage() {
           <main className="flex-1 min-w-0 flex flex-col bg-white">
             {isLoading && events.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center min-h-[520px] p-8">
-                <Loader2 className="w-8 h-8 animate-spin text-[#FF5630] mb-3" />
+                <Loader2 className="w-8 h-8 animate-spin text-[#2563EB] mb-3" />
                 <p className="text-[#212B36] font-bold text-sm">
                   Loading your schedule...
                 </p>
@@ -456,7 +456,7 @@ export default function CalendarPage() {
               </div>
             ) : error && events.length === 0 ? (
               <div className="flex-1 flex flex-col items-center justify-center min-h-[520px] p-8">
-                <AlertCircle className="w-10 h-10 text-[#FF5630] mb-3" />
+                <AlertCircle className="w-10 h-10 text-[#2563EB] mb-3" />
                 <p className="text-[#212B36] font-bold text-base mb-1">
                   {error}
                 </p>
@@ -545,7 +545,7 @@ export default function CalendarPage() {
       <button
         type="button"
         onClick={() => handleOpenCreateModal(selectedDate)}
-        className="calendar-create-fab fixed bottom-24 right-6 z-40 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#FF5630] hover:bg-[#FF4842] text-white shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center"
+        className="calendar-create-fab fixed bottom-24 right-6 z-40 w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-lg hover:shadow-xl active:scale-95 transition-all flex items-center justify-center"
         title="Create New Event"
         aria-label="Create New Event"
       >

@@ -385,7 +385,7 @@ test("13. Design System Tokens & RFC 5545 .ics Export", async (t) => {
     assert.equal(CALENDAR_SURFACE_TOKENS.outerBg, "#F4F6F8");
     assert.equal(CALENDAR_SURFACE_TOKENS.workspaceBg, "#FFFFFF");
     assert.equal(CALENDAR_SURFACE_TOKENS.darkModalBg, "#1C252E");
-    assert.equal(CALENDAR_SURFACE_TOKENS.coralAccent, "#FF5630");
+    assert.equal(CALENDAR_SURFACE_TOKENS.blueAccent, "#2563EB");
 
     assert.equal(EVENT_COLOR_PRESETS.development.bg, "#E4EAFE");
     assert.equal(EVENT_COLOR_PRESETS.development.accent, "#667EEA");
