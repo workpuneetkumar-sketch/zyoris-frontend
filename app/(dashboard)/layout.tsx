@@ -7,6 +7,8 @@ import { useRouter, usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { attachAudioUnlock } from "@/lib/notificationSound";
 import { AccessDenied } from "@/components/ui/AccessDenied";
+import { ConnectNotificationProvider } from "@/context/ConnectNotificationContext";
+import { ConnectToastContainer } from "@/components/connect/ConnectToastContainer";
 
 // Public paths that never need a session check — skip the ?next= param for them
 const PUBLIC_AUTH_PATHS = ["/login", "/admin/login", "/register"];
@@ -140,7 +142,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isAllowed = isPathAllowed(path, sidebarItems, visibleDashboards, user?.role, userPermissions);
   }
 
-  if (!isAllowed) {
+  return (
+    <ConnectNotificationProvider>
+      <AppShell>{!isAllowed ? <AccessDenied /> : children}</AppShell>
+      <ConnectToastContainer />
+    </ConnectNotificationProvider>
+  );
+
+  /*
     return (
       <AppShell>
         <AccessDenied />
@@ -148,5 +157,5 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
-  return <AppShell>{children}</AppShell>;
+  */
 }
