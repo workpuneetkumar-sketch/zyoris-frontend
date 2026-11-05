@@ -34,12 +34,16 @@ interface HookState<T> {
   refetch: () => void;
 }
 
-function useApiData<T>(fetcher: () => Promise<T>): HookState<T> {
+function useApiData<T>(fetcher: () => Promise<T>, enabled: boolean = true): HookState<T> {
   const [data, setData]       = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -50,7 +54,7 @@ function useApiData<T>(fetcher: () => Promise<T>): HookState<T> {
     } finally {
       setLoading(false);
     }
-  }, [fetcher]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [fetcher, enabled]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -59,91 +63,95 @@ function useApiData<T>(fetcher: () => Promise<T>): HookState<T> {
 
 // ─── Individual hooks ─────────────────────────────────────────────────────────
 
-export function useDashboardStats(): HookState<DashboardStats> {
+export function useDashboardStats(enabled: boolean = true): HookState<DashboardStats> {
   const fetcher = useCallback(() => getDashboardStats(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function useDashboardBriefing(): HookState<DashboardBriefing> {
+export function useDashboardBriefing(enabled: boolean = true): HookState<DashboardBriefing> {
   const fetcher = useCallback(() => getDashboardBriefing(false), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function useWeeklyBriefing(): HookState<DashboardBriefing> {
+export function useWeeklyBriefing(enabled: boolean = true): HookState<DashboardBriefing> {
   const fetcher = useCallback(() => getDashboardBriefing(true), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function useDashboardAnomalies(): HookState<DashboardAnomalies> {
+export function useDashboardAnomalies(enabled: boolean = true): HookState<DashboardAnomalies> {
   const fetcher = useCallback(() => getDashboardAnomalies(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function useDashboardCeo(): HookState<DashboardCeo> {
+export function useDashboardCeo(enabled: boolean = true): HookState<DashboardCeo> {
   const fetcher = useCallback(() => getDashboardCeo(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function useDashboardCfo(): HookState<DashboardCfo> {
+export function useDashboardCfo(enabled: boolean = true): HookState<DashboardCfo> {
   const fetcher = useCallback(() => getDashboardCfo(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function useDashboardOperations(): HookState<DashboardOperations> {
+export function useDashboardOperations(enabled: boolean = true): HookState<DashboardOperations> {
   const fetcher = useCallback(() => getDashboardOperations(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** Recent org activity feed — uses safe fallback if /activities/timeline returns 400 */
-export function useActivityFeed(limit = 20): HookState<TimelineActivity[]> {
+export function useActivityFeed(limit = 20, enabled: boolean = true): HookState<TimelineActivity[]> {
   const fetcher = useCallback(() => getActivitiesFeed(limit), [limit]);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
-export function usePipelineStats(): HookState<PipelineStatsData> {
+export function usePipelineStats(enabled: boolean = true): HookState<PipelineStatsData> {
   const fetcher = useCallback(() => getPipelineStats(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** HR employees — total count, by-department breakdown, on-leave count */
-export function useHREmployees(): HookState<HREmployee[]> {
+export function useHREmployees(enabled: boolean = true): HookState<HREmployee[]> {
   const fetcher = useCallback(() => getHREmployees(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** Conversion scores per deal */
-export function useConversionScores(): HookState<ConversionScore[]> {
+export function useConversionScores(enabled: boolean = true): HookState<ConversionScore[]> {
   const fetcher = useCallback(() => getConversionScores(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** Revenue forecast time-series */
-export function useRevenueForecast(): HookState<RevenueForeCastData> {
+export function useRevenueForecast(enabled: boolean = true): HookState<RevenueForeCastData> {
   const fetcher = useCallback(() => getRevenueForecast(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** Demand trends (visitors/conversions proxy) */
-export function useDemandTrends(): HookState<DemandTrendsData> {
+export function useDemandTrends(enabled: boolean = true): HookState<DemandTrendsData> {
   const fetcher = useCallback(() => getDemandTrends(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** Dashboard sales endpoint */
-export function useDashboardSales(): HookState<DashboardSales> {
+export function useDashboardSales(enabled: boolean = true): HookState<DashboardSales> {
   const fetcher = useCallback(() => getDashboardSales(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 /** Tasks assigned to the current user */
 interface UseMyTasksState extends HookState<Task[]> { total: number; }
-export function useMyTasks(params?: TaskQueryParams): UseMyTasksState {
+export function useMyTasks(params?: TaskQueryParams, enabled: boolean = true): UseMyTasksState {
   const [data, setData]       = useState<Task[] | null>(null);
   const [total, setTotal]     = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
   const [error, setError]     = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -155,16 +163,16 @@ export function useMyTasks(params?: TaskQueryParams): UseMyTasksState {
     } finally {
       setLoading(false);
     }
-  }, [JSON.stringify(params)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(params), enabled]);
 
   useEffect(() => { load(); }, [load]);
   return { data, total, loading, error, refetch: load };
 }
 
 /** Projects list */
-export function useProjects(): HookState<Project[]> {
+export function useProjects(enabled: boolean = true): HookState<Project[]> {
   const fetcher = useCallback(() => getProjects(), []);
-  return useApiData(fetcher);
+  return useApiData(fetcher, enabled);
 }
 
 // ─── end of file

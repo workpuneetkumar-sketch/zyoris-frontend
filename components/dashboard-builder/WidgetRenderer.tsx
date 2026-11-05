@@ -10,9 +10,10 @@ import { AlertTriangle } from "lucide-react";
 interface WidgetRendererProps {
   widgetId: string;
   isPreview?: boolean;
+  onForbidden?: () => void;
 }
 
-export function WidgetRenderer({ widgetId, isPreview }: WidgetRendererProps) {
+export function WidgetRenderer({ widgetId, isPreview, onForbidden }: WidgetRendererProps) {
   const entry = getWidgetEntry(widgetId);
 
   if (!entry) {
@@ -30,6 +31,5 @@ export function WidgetRenderer({ widgetId, isPreview }: WidgetRendererProps) {
   }
 
   const { component: WidgetComponent } = entry;
-  // Pass only isPreview — widgetId is available in each widget's own closure
-  return <WidgetComponent isPreview={isPreview} />;
+  return <WidgetComponent isPreview={isPreview} onForbidden={onForbidden} />;
 }

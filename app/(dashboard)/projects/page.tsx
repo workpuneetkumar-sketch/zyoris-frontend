@@ -29,6 +29,8 @@ import {
 
 import { Skeleton } from "@/components/projects/SharedComponents";
 import ProjectFormModal from "@/components/projects/ProjectFormModal";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import MilestonesModal from "@/components/projects/MilestonesModal";
 import TeamModal from "@/components/projects/TeamMembersModal";
 import { ProjectAttachmentsModal } from "@/components/projects/ProjectAttachmentsModal";
@@ -57,6 +59,7 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ViewKey>("kanban");
+  const { hasPermission } = useRBAC();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -145,6 +148,10 @@ export default function ProjectsPage() {
     id: string,
     payload: UpdateProjectPayload
   ) => {
+    if (!hasPermission("projects.update")) {
+      showToast("error", "You do not have permission to update projects.");
+      return;
+    }
     // Optimistic update for instant 0ms UI feedback
     setProjects((prev) =>
       prev.map((p) => (p.id === id ? { ...p, ...payload } : p))
@@ -177,21 +184,37 @@ export default function ProjectsPage() {
   // ── Shared action callbacks for views ─────────────────────
 
   const openEdit = (project: Project) => {
+    if (!hasPermission("projects.update")) {
+      showToast("error", "You do not have permission to edit projects.");
+      return;
+    }
     setSelectedProject(project);
     setShowEditModal(true);
   };
 
   const openDelete = (project: Project) => {
+    if (!hasPermission("projects.delete")) {
+      showToast("error", "You do not have permission to delete projects.");
+      return;
+    }
     setSelectedProject(project);
     setShowDeleteModal(true);
   };
 
   const openTeam = (project: Project) => {
+    if (!hasPermission("projects.update")) {
+      showToast("error", "You do not have permission to manage team members.");
+      return;
+    }
     setSelectedProject(project);
     setShowTeamModal(true);
   };
 
   const openMilestones = (project: Project) => {
+    if (!hasPermission("projects.update") && !hasPermission("projects.view")) {
+      showToast("error", "You do not have permission to view milestones.");
+      return;
+    }
     setSelectedProject(project);
     setShowMilestonesModal(true);
   };
@@ -253,13 +276,15 @@ export default function ProjectsPage() {
             Manage all your projects and teams
           </p>
         </div>
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition"
-        >
-          <Plus size={18} />
-          Create Project
-        </button>
+        <PermissionGuard permission="projects.create">
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition"
+          >
+            <Plus size={18} />
+            Create Project
+          </button>
+        </PermissionGuard>
       </div>
 
       {/* Stat Cards */}

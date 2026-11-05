@@ -55,31 +55,65 @@ export function isRoleDashboardAllowed(pathname: string, userRole?: string): boo
   return true;
 }
 
+/**
+ * Canonical route to required view/access permissions mapping.
+ * Access to any route or sub-route requires at least one of the listed permissions.
+ */
+export const ROUTE_PERMISSION_MAP: Record<string, string[]> = {
+  "/leads": ["leads.view", "crm.view"],
+  "/deals": ["deals.view", "crm.view"],
+  "/contacts": ["contacts.view", "crm.view"],
+  "/companies": ["companies.view", "crm.view"],
+  "/customers": ["customers.view", "crm.view"],
+  "/sales/execution": ["crm.view", "deals.view"],
+  "/sales/activities": ["crm.view", "leads.view"],
+  "/ai-insights": ["crm.view", "ai_copilot.access"],
+  "/activities": ["crm.view", "leads.view"],
+  "/tasks": ["tasks.view"],
+  "/projects": ["projects.view"],
+  "/documents": ["documents.view"],
+  "/knowledge-base": ["knowledge.view"],
+  "/hr": ["employees.view", "hr.view"],
+  "/hr/employees": ["employees.view", "hr.view"],
+  "/hr/attendance": ["attendance.view", "hr.view"],
+  "/hr/leaves": ["leaves.view", "hr.view"],
+  "/hr/payroll": ["payslips.view", "hr.view"],
+  "/finance": ["finance.view"],
+  "/finance/invoices": ["invoices.view", "finance.view"],
+  "/payment": ["invoices.view", "finance.view"],
+  "/payment/invoices": ["invoices.view", "finance.view"],
+  "/finance/expenses": ["expenses.view", "finance.view"],
+  "/marketing": ["marketing.view", "campaigns.view"],
+  "/marketing/campaigns": ["campaigns.view", "marketing.view"],
+  "/analytics": ["analytics.view"],
+  "/reports": ["reports.view"],
+  "/automation": ["automation.view", "automation.manage"],
+  "/settings": ["settings.view", "settings.manage"],
+  "/integrations": ["integrations.view", "settings.view", "settings.manage", "automation.manage"],
+  "/communications": ["communication.access"],
+  "/workspace": ["communication.access"],
+  "/email": ["email.access", "communication.access"],
+  "/whatsapp": ["whatsapp.access", "communication.access"],
+  "/calls": ["calls.access", "communication.access"],
+  "/messages": ["messages.access", "communication.access"],
+  "/connect": ["messages.access", "communication.access"],
+  "/meetings": ["meetings.access", "communication.access"],
+  "/calendar": ["communication.access", "attendance.view", "shifts.view"],
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // isPathAllowed
 //
 // Single source of truth for route-access checks. Called by the dashboard
 // layout on every navigation to decide whether the current user may visit the
 // requested URL.
-//
-// Rules (checked in order):
-//   1. A handful of paths are always accessible (dashboard, profile, portal…).
-//   2. If the `sidebarItems` array from the permissions API is non-empty, a
-//      path is allowed when it matches (or starts with) any sidebar item's
-//      `route`.  The `visible` flag is IGNORED here — the backend already
-//      filtered the list; every item it returned is accessible.
-//   3. Well-known "deep" routes that live under a sidebar route (e.g.
-//      /leads/123, /deals/abc) are automatically covered by the prefix check
-//      in rule 2, so no extra whitelist is needed.
-//   4. If the sidebar list is empty (permissions not yet loaded, or the user
-//      genuinely has no modules) we fall through to a broad static allow-list
-//      so the user is never incorrectly locked out while the API is loading.
 // ─────────────────────────────────────────────────────────────────────────────
 export const isPathAllowed = (
   pathname: string,
   sidebarItems: SidebarItem[],
   _visibleDashboards: DashboardItem[] = [],   // kept for API compatibility, unused
-  userRole?: string
+  userRole?: string,
+  userPermissions?: Record<string, boolean>
 ): boolean => {
   // Normalise trailing slash
   const path =
@@ -100,64 +134,42 @@ export const isPathAllowed = (
     return isRoleDashboardAllowed(path, userRole);
   }
 
-  // ── 1. Always-allowed paths ──────────────────────────────────────────────
-  const ALWAYS_ALLOWED = [
+  // ── 1. Truly Universal Routes ──────────────────────────────────────────────
+  // Only generic non-tenant user pages belong here.
+  const UNIVERSAL_ROUTES = [
     "/dashboard",
     "/profile",
     "/portal",
     "/notifications",
-    "/ai-insights",
-    "/analytics",
-    "/leads",
-    "/deals",
-    "/contacts",
-    "/companies",
-    "/customers",
-    "/finance",
-    "/hr",
-    "/settings",
-    "/communications",
-    "/email",
-    "/whatsapp",
-    "/calls",
-    "/messages",
-    "/connect",
-    "/meetings",
-    "/calendar",
-    "/tasks",
-    "/projects",
-    "/integrations",
-    "/workspace",
-    // Agentic CRM — Day 1-3
-    "/agents",
-    "/tools",
-    "/approvals",
-    "/executions",
-    "/memory",
-    // Day 6 — Operational Agent surfaces
-    "/support",
-    "/data-quality",
-    "/revops",
-    "/workflows/drafts",
-    // deep sub-routes that don't need an explicit sidebar entry
-    "/leads/assignment",
-    "/dashboard/reminders",
-    "/dashboard/builder",
-    "/dashboard/contacts",
-    // Day 6 Agent pages
-    "/support",
-    "/revops",
-    "/reports",
-    // Ingestion Center routes (gated at page level)
-    "/ingestion",
-    "/leads/ingest",
   ];
 
-  if (ALWAYS_ALLOWED.some((p) => path === p || path.startsWith(`${p}/`))) {
+  if (UNIVERSAL_ROUTES.some((p) => path === p || path.startsWith(`${p}/`))) {
     return true;
   }
 
-  // ── 2. Dynamic check against the RBAC sidebar returned by the API ────────
+  // ── 2. Permission-Based Validation (when userPermissions is available) ─────
+  if (userPermissions !== undefined) {
+    if (isAdmin) return true;
+
+    // Check if the route (or parent prefix) is in the permission map
+    for (const [routePrefix, requiredPerms] of Object.entries(ROUTE_PERMISSION_MAP)) {
+      if (path === routePrefix || path.startsWith(`${routePrefix}/`)) {
+        const hasAccess = requiredPerms.some((perm) => userPermissions[perm] === true);
+        return hasAccess;
+      }
+    }
+
+    // If path is in dynamic sidebar returned by backend for this user
+    const inSidebar = sidebarItems.some(
+      (item) => item.route && (path === item.route || path.startsWith(`${item.route}/`))
+    );
+    if (inSidebar) return true;
+
+    // Default to denying access when permissions are loaded and route not permitted
+    return false;
+  }
+
+  // ── 3. Dynamic check against the RBAC sidebar returned by the API (Legacy/Fallback) ──
   if (sidebarItems.length > 0) {
     // Direct route match
     const directMatch = sidebarItems.some(
@@ -167,8 +179,7 @@ export const isPathAllowed = (
     );
     if (directMatch) return true;
 
-    // Aggregate key expansion — if the API returns key:"crm" that expands to
-    // /leads, /deals, etc., those sub-routes must also be allowed
+    // Aggregate key expansion
     const CRM_EXPANSION = [
       "/leads",
       "/deals",
@@ -180,7 +191,17 @@ export const isPathAllowed = (
       "/sales/execution",
       "/sales/activities",
     ];
-    const COMM_EXPANSION = ["/communications", "/email", "/whatsapp", "/calls", "/messages", "/meetings", "/calendar", "/tasks", "/projects"];
+    const COMM_EXPANSION = [
+      "/communications",
+      "/email",
+      "/whatsapp",
+      "/calls",
+      "/messages",
+      "/meetings",
+      "/calendar",
+      "/tasks",
+      "/projects",
+    ];
 
     const hasCrmKey = sidebarItems.some((item) => (item.key ?? "").toLowerCase() === "crm");
     const hasCommKey = sidebarItems.some((item) => ["communications", "communication"].includes((item.key ?? "").toLowerCase()));
@@ -188,47 +209,17 @@ export const isPathAllowed = (
     if (hasCrmKey && CRM_EXPANSION.some((p) => path === p || path.startsWith(`${p}/`))) return true;
     if (hasCommKey && COMM_EXPANSION.some((p) => path === p || path.startsWith(`${p}/`))) return true;
 
-    // tasks/calendar are standalone keys that map directly
     const standAloneRoutes = sidebarItems.map((item) => item.route).filter(Boolean);
     if (standAloneRoutes.some((r) => path === r || path.startsWith(`${r!}/`))) return true;
 
-    // Role-specific dashboards — check against allowed roles
     if (isRoleDashboardPath(path)) {
       return isRoleDashboardAllowed(path, userRole);
     }
 
-    if (isAdmin) {
-      const ADMIN_SUBROUTES = [
-        "/admin/rbac",
-        "/admin/roles",
-        "/admin/user-roles",
-        "/admin/audit",
-        "/admin/permission-matrix",
-        // Day 7
-        "/admin/agents/config",
-        "/admin/agents/observability",
-        "/admin/agents/versions",
-      ];
-      const normalizedAdminPath = [
-        "/dashboard/ceo",
-        "/dashboard/cfo",
-        "/dashboard/sales",
-        "/dashboard/operations",
-      ].includes(path)
-        ? path.replace("/dashboard/", "/")
-        : path;
-      if (ADMIN_SUBROUTES.some((p) => normalizedAdminPath === p || normalizedAdminPath.startsWith(`${p}/`))) {
-        return true;
-      }
-    }
-
-    // Path not matched → block
     return false;
   }
 
-  // ── 3. Fallback: permissions not yet loaded — allow everything to prevent
-  //    false redirects during the loading window, EXCEPT admin routes for non-admins
-  //    and role dashboards for unauthorized roles ──
+  // ── 4. Fallback: permissions not yet loaded ──────────────────────────────
   if (isAdminPath) {
     return isAdmin;
   }

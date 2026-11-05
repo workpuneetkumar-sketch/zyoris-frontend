@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import {
   X,
   Plus,
@@ -369,6 +370,7 @@ export function InvoiceDetailModal({
             </span>
             <div className="flex gap-2">
               {invoice.status === "DRAFT" && (
+                <PermissionGuard permission="invoices.update" action="disable">
                 <button 
                   onClick={() => handleStatusUpdate("SENT")} 
                   disabled={updatingStatus} 
@@ -376,8 +378,10 @@ export function InvoiceDetailModal({
                 >
                   Mark as Sent
                 </button>
+                </PermissionGuard>
               )}
               {invoice.status === "SENT" && (
+                <PermissionGuard permission="invoices.update" action="disable">
                 <button 
                   onClick={() => handleStatusUpdate("PAID")} 
                   disabled={updatingStatus} 
@@ -385,6 +389,7 @@ export function InvoiceDetailModal({
                 >
                   Mark as Paid
                 </button>
+                </PermissionGuard>
               )}
             </div>
           </div>

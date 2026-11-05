@@ -19,6 +19,8 @@ import {
 import { CreateInvoiceModal, InvoiceDetailModal } from "@/components/finance/invoices/InvoiceModals";
 import { StatsCards } from "@/components/finance/invoices/InvoiceStats";
 import { InvoiceTable } from "@/components/finance/invoices/InvoiceTable";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import { InvoicePreviewModal } from "@/components/finance/invoices/InvoicePreviewModal";
 import * as XLSX from "xlsx";
 
@@ -70,6 +72,7 @@ function Toast({ toast, onClose }: { toast: ToastMessage; onClose: () => void })
 
 export default function InvoicesPage() {
   const router = useRouter();
+  const { hasPermission } = useRBAC();
   const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -193,12 +196,16 @@ export default function InvoicesPage() {
             <p className="text-sm text-gray-500 mt-0.5">Manage and track all your invoices</p>
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-white transition-all">
-              <FileSpreadsheet size={16} className="text-green-600" /> Export
-            </button>
-            <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all">
-              <Plus size={16} /> Create Invoice
-            </button>
+            <PermissionGuard permission="invoices.view">
+              <button onClick={handleExportExcel} className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-700 hover:bg-white transition-all">
+                <FileSpreadsheet size={16} className="text-green-600" /> Export
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="invoices.create">
+              <button onClick={() => setShowCreateModal(true)} className="flex items-center gap-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg shadow-sm transition-all">
+                <Plus size={16} /> Create Invoice
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 

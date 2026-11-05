@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useRBAC } from "@/hooks/useRBAC";
 import { toast } from "react-toastify";
 import { Lead, LeadsFilters, DEFAULT_FILTERS, PER_PAGE } from "@/types/leads";
 import { fetchLeads, deleteLead, convertLeadToDeal, isLeadSoftDeleted } from "@/lib/api/leadsApi";
@@ -56,6 +57,7 @@ function buildLeadsCsv(leads: Lead[]) {
 
 export function useLeads() {
     const router = useRouter();
+    const { hasPermission } = useRBAC();
 
     // ── State ─────────────────────────────────────────────────────────────────
     const [leads, setLeads] = useState<Lead[]>([]);
@@ -102,10 +104,18 @@ export function useLeads() {
     }
 
     function handleNewLead() {
+        if (!hasPermission("leads.create")) {
+            toast.error("You do not have permission to create leads.");
+            return;
+        }
         router.push("/leads/new");
     }
 
     async function handleExport() {
+        if (!hasPermission("leads.export")) {
+            toast.error("You do not have permission to export leads.");
+            return;
+        }
         try {
             const csv = buildLeadsCsv(leads);
             const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -128,12 +138,24 @@ export function useLeads() {
                 router.push(`/leads/${lead.id}`);
                 break;
             case "Edit":
+                if (!hasPermission("leads.update")) {
+                    toast.error("You do not have permission to edit leads.");
+                    return;
+                }
                 router.push(`/leads/${lead.id}/edit`);
                 break;
             case "Assign":
+                if (!hasPermission("leads.assign")) {
+                    toast.error("You do not have permission to assign leads.");
+                    return;
+                }
                 router.push(`/leads/${lead.id}/assign`);
                 break;
             case "Convert": {
+                if (!hasPermission("leads.update") || !hasPermission("deals.create")) {
+                    toast.error("You do not have permission to convert leads.");
+                    return;
+                }
                 if (lead.status === "DEAD") {
                     toast.warning("This lead is dead and cannot be converted.");
                     return;
@@ -144,6 +166,10 @@ export function useLeads() {
                 break;
             }
             case "Delete": {
+                if (!hasPermission("leads.delete")) {
+                    toast.error("You do not have permission to delete leads.");
+                    return;
+                }
                 setConfirmAction({ type: "Delete", lead });
                 break;
             }
@@ -152,6 +178,10 @@ export function useLeads() {
 
     // ── Execute Delete ──────────────────────────────────────────────────────
     const executeDelete = useCallback(async (lead: Lead) => {
+        if (!hasPermission("leads.delete")) {
+            toast.error("You do not have permission to delete leads.");
+            return;
+        }
         setDeletingId(lead.id);
         try {
             const result = await deleteLead(lead.id);

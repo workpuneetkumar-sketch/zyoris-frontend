@@ -7,7 +7,9 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from "recharts";
 import { RefreshCw, AlertCircle } from "lucide-react";
+import { useEffect } from "react";
 import { usePipelineStats } from "@/hooks/useDashboard";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { PipelineStageStat } from "@/lib/api/dashboardApi";
 
 const COLORS = ["#6366f1", "#8b5cf6", "#a78bfa", "#c4b5fd", "#10b981",
@@ -41,8 +43,26 @@ function CustomTooltip({ active, payload, label }: TooltipProps) {
   );
 }
 
-export function PipelineWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: raw, loading, error, refetch } = usePipelineStats();
+export function PipelineWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["deals.view", "crm.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: raw, loading, error, refetch } = usePipelineStats(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {

@@ -28,6 +28,8 @@ import {
   getWorkspacePage,
 } from "@/lib/api/workspaceApi";
 import { StatusBadge } from "@/components/projects/SharedComponents";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import { ProjectDatabaseTable } from "./ProjectDatabaseTable";
 import { ProjectTaskCreateModal } from "./ProjectTaskCreateModal";
 import TeamMembersModal from "@/components/projects/TeamMembersModal";
@@ -171,6 +173,7 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
   initialProject,
 }) => {
   const router = useRouter();
+  const { hasPermission } = useRBAC();
   const [project, setProject] = useState<Project>(initialProject);
   const [activeTab, setActiveTab] = useState<WorkspaceTabKey>("overview");
   const [loading, setLoading] = useState(false);
@@ -446,13 +449,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
         </div>
 
         <div className="flex items-center space-x-2">
-          <button
-            onClick={() => setIsTeamModalOpen(true)}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition"
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Team ({members.length})</span>
-          </button>
+          <PermissionGuard permission="projects.update">
+            <button
+              onClick={() => setIsTeamModalOpen(true)}
+              className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition"
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Team ({members.length})</span>
+            </button>
+          </PermissionGuard>
           <button
             onClick={() => setIsMilestonesModalOpen(true)}
             className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-semibold transition"
@@ -526,13 +531,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               </div>
             </div>
 
-            <button
-              onClick={() => setIsCreateTaskOpen(true)}
-              className="w-full inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create Task</span>
-            </button>
+            <PermissionGuard permission="tasks.create">
+              <button
+                onClick={() => setIsCreateTaskOpen(true)}
+                className="w-full inline-flex items-center justify-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Task</span>
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 
@@ -649,12 +656,14 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               {tasks.length === 0 ? (
                 <div className="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl space-y-2">
                   <p className="text-xs text-slate-400">No tasks created under this project yet.</p>
-                  <button
-                    onClick={() => setIsCreateTaskOpen(true)}
-                    className="text-xs font-bold text-blue-600 hover:underline"
-                  >
-                    + Create First Task
-                  </button>
+                  <PermissionGuard permission="tasks.create">
+                    <button
+                      onClick={() => setIsCreateTaskOpen(true)}
+                      className="text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      + Create First Task
+                    </button>
+                  </PermissionGuard>
                 </div>
               ) : (
                 <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -700,12 +709,14 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
                     Team Members
                   </h3>
                 </div>
-                <button
-                  onClick={() => setIsTeamModalOpen(true)}
-                  className="text-xs font-semibold text-blue-600 hover:underline"
-                >
-                  Manage
-                </button>
+                <PermissionGuard permission="projects.update">
+                  <button
+                    onClick={() => setIsTeamModalOpen(true)}
+                    className="text-xs font-semibold text-blue-600 hover:underline"
+                  >
+                    Manage
+                  </button>
+                </PermissionGuard>
               </div>
 
               {members.length === 0 ? (
@@ -786,13 +797,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               </select>
             </div>
 
-            <button
-              onClick={() => setIsCreateTaskOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Create Task</span>
-            </button>
+            <PermissionGuard permission="tasks.create">
+              <button
+                onClick={() => setIsCreateTaskOpen(true)}
+                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Create Task</span>
+              </button>
+            </PermissionGuard>
           </div>
 
           {/* Tasks Grid / Board */}
@@ -810,13 +823,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 Create a task under this project. Tasks created here automatically inherit this project ID.
               </p>
-              <button
-                onClick={() => setIsCreateTaskOpen(true)}
-                className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Create Task</span>
-              </button>
+              <PermissionGuard permission="tasks.create">
+                <button
+                  onClick={() => setIsCreateTaskOpen(true)}
+                  className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Task</span>
+                </button>
+              </PermissionGuard>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -913,13 +928,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
                 Documentation pages created specifically for this project.
               </p>
             </div>
-            <button
-              onClick={() => setIsCreatePageOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>New Page</span>
-            </button>
+            <PermissionGuard permission="projects.update">
+              <button
+                onClick={() => setIsCreatePageOpen(true)}
+                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Page</span>
+              </button>
+            </PermissionGuard>
           </div>
 
           {loadingPages ? (
@@ -936,13 +953,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 Organize requirements, system designs, and user guides inside this project.
               </p>
-              <button
-                onClick={() => setIsCreatePageOpen(true)}
-                className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Create Page</span>
-              </button>
+              <PermissionGuard permission="projects.update">
+                <button
+                  onClick={() => setIsCreatePageOpen(true)}
+                  className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Create Page</span>
+                </button>
+              </PermissionGuard>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -987,13 +1006,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               />
             </div>
 
-            <button
-              onClick={() => setIsLinkFileOpen(true)}
-              className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Link Existing File</span>
-            </button>
+            <PermissionGuard permission="projects.update">
+              <button
+                onClick={() => setIsLinkFileOpen(true)}
+                className="inline-flex items-center space-x-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold shadow-xs transition shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Link Existing File</span>
+              </button>
+            </PermissionGuard>
           </div>
 
           {loadingFiles ? (
@@ -1010,13 +1031,15 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
               <p className="text-xs text-slate-400 max-w-md mx-auto">
                 Link existing uploaded documents, design briefs, or spreadsheets.
               </p>
-              <button
-                onClick={() => setIsLinkFileOpen(true)}
-                className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Link File</span>
-              </button>
+              <PermissionGuard permission="projects.update">
+                <button
+                  onClick={() => setIsLinkFileOpen(true)}
+                  className="inline-flex items-center space-x-1 px-3.5 py-1.5 bg-blue-600 text-white rounded-xl text-xs font-semibold"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Link File</span>
+                </button>
+              </PermissionGuard>
             </div>
           ) : (
             <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
@@ -1101,18 +1124,20 @@ export const ProjectWorkspace: React.FC<ProjectWorkspaceProps> = ({
                   Attach an inline database table to manage structured asset lists, test cases, feature matrices, or customer registries under this project.
                 </p>
               </div>
-              <button
-                onClick={handleInitializeDatabase}
-                disabled={isInitializingDb}
-                className="inline-flex items-center space-x-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50 transition"
-              >
-                {isInitializingDb ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Plus className="w-4 h-4" />
-                )}
-                <span>Initialize Project Database</span>
-              </button>
+              <PermissionGuard permission="projects.update">
+                <button
+                  onClick={handleInitializeDatabase}
+                  disabled={isInitializingDb}
+                  className="inline-flex items-center space-x-2 px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-semibold shadow-xs disabled:opacity-50 transition"
+                >
+                  {isInitializingDb ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                  <span>Initialize Project Database</span>
+                </button>
+              </PermissionGuard>
             </div>
           )}
         </div>

@@ -26,6 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     permissionsLoaded,
     sidebarItems,
     visibleDashboards,
+    userPermissions,
   } = useAuth();
 
   const router = useRouter();
@@ -105,6 +106,27 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     );
   }
 
+  const isUniversalRoute = [
+    "/dashboard",
+    "/profile",
+    "/portal",
+    "/notifications",
+  ].some((p) => path === p || path.startsWith(`${p}/`));
+
+  // If permissions are still loading and this is a protected non-universal route,
+  // show loading indicator to prevent flashes of unauthorized content
+  if (!permissionsLoaded && !isUniversalRoute && !isAdminPath && !isRoleDashboardPath(path)) {
+    return (
+      <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
+        <div
+          className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
+          role="status"
+          aria-label="Loading permissions…"
+        />
+      </div>
+    );
+  }
+
   const isAdmin =
     roleVerificationStatus === "verified" &&
     user?.role?.trim().toUpperCase() === "ADMIN";
@@ -114,8 +136,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     isAllowed = isAdmin;
   } else if (isRoleDashboardPath(path)) {
     isAllowed = isRoleDashboardAllowed(path, user?.role);
-  } else if (permissionsLoaded && sidebarItems && sidebarItems.length > 0) {
-    isAllowed = isPathAllowed(path, sidebarItems, visibleDashboards, user?.role);
+  } else if (permissionsLoaded) {
+    isAllowed = isPathAllowed(path, sidebarItems, visibleDashboards, user?.role, userPermissions);
   }
 
   if (!isAllowed) {

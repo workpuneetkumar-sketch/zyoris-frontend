@@ -2,6 +2,7 @@
 
 "use client";
 
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import {
   Clock,
   LogIn,
@@ -121,50 +122,54 @@ export default function HRCheckInOut({
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={onCheckIn}
-            disabled={
-              isCheckingIn ||
-              currentUserAttendance.checkedIn ||
-              !currentEmployee
-            }
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-              ${
-                currentUserAttendance.checkedIn
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            {isCheckingIn ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <LogIn className="h-4 w-4" />
-            )}
-            {currentUserAttendance.checkedIn ? "Checked In" : "Check In"}
-          </button>
-          <button
-            onClick={onCheckOut}
-            disabled={
-              isCheckingOut ||
-              !currentUserAttendance.checkedIn ||
-              currentUserAttendance.checkedOut ||
-              !currentEmployee
-            }
-            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-              ${
+          <PermissionGuard permission="attendance.create" action="disable" disabledTooltip="You do not have permission to check in.">
+            <button
+              onClick={onCheckIn}
+              disabled={
+                isCheckingIn ||
+                currentUserAttendance.checkedIn ||
+                !currentEmployee
+              }
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                ${
+                  currentUserAttendance.checkedIn
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-emerald-600 text-white hover:bg-emerald-700 active:bg-emerald-800"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isCheckingIn ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogIn className="h-4 w-4" />
+              )}
+              {currentUserAttendance.checkedIn ? "Checked In" : "Check In"}
+            </button>
+          </PermissionGuard>
+          <PermissionGuard permission="attendance.create" action="disable" disabledTooltip="You do not have permission to check out.">
+            <button
+              onClick={onCheckOut}
+              disabled={
+                isCheckingOut ||
                 !currentUserAttendance.checkedIn ||
-                currentUserAttendance.checkedOut
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-violet-600 text-white hover:bg-violet-700 active:bg-violet-800"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            {isCheckingOut ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <LogOut className="h-4 w-4" />
-            )}
-            {currentUserAttendance.checkedOut ? "Checked Out" : "Check Out"}
-          </button>
+                currentUserAttendance.checkedOut ||
+                !currentEmployee
+              }
+              className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                ${
+                  !currentUserAttendance.checkedIn ||
+                  currentUserAttendance.checkedOut
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-violet-600 text-white hover:bg-violet-700 active:bg-violet-800"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              {isCheckingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              {currentUserAttendance.checkedOut ? "Checked Out" : "Check Out"}
+            </button>
+          </PermissionGuard>
         </div>
       </div>
 

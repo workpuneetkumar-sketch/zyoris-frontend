@@ -1,4 +1,5 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import { Plus, Megaphone, X } from "lucide-react";
@@ -168,12 +169,14 @@ export default function CampaignsPage() {
             Track, manage, and optimise your marketing campaigns
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-xl shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
-        >
-          <Plus size={18} /> New Campaign
-        </button>
+        <PermissionGuard permission="campaigns.create">
+          <button
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-sm font-semibold rounded-xl shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all"
+          >
+            <Plus size={18} /> New Campaign
+          </button>
+        </PermissionGuard>
       </div>
 
       {/* Stats Cards */}

@@ -16,6 +16,8 @@ import {
 import { WhatsAppTab } from "@/hooks/useWhatsApp";
 import { AIInsightsPanel } from "@/components/whatsapp/AIInsightsPanel";
 import { BroadcastComposerModal } from "@/components/whatsapp/BroadcastComposerModal";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 
 interface WhatsAppUIProps {
     conversations: WhatsAppConversation[];
@@ -129,6 +131,7 @@ function BusinessProfileModal({
 
 /* ── Main WhatsAppUI Component ──────────────────────────────────────────────── */
 export function WhatsAppUI({
+
     conversations, selectedConversation, selectedConversationId, setSelectedConversationId,
     activeTab, setActiveTab, loading, error, isDemoMode, sending,
     waStatus, waProfile, waStatusLoading,
@@ -160,6 +163,8 @@ export function WhatsAppUI({
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const router = useRouter();
+    const { hasPermission } = useRBAC();
+    const canSend = hasPermission("whatsapp.send");
 
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -353,9 +358,11 @@ function formatDateDivider(isoStr: string) {
                         </button>
                     )}
                     {/* Broadcast */}
+                    <PermissionGuard permission="whatsapp.send">
                     <button onClick={() => setShowBroadcastModal(true)} className="px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-md flex items-center gap-2">
                         <Radio size={16}/><span>Broadcast</span>
                     </button>
+                    </PermissionGuard>
                 </div>
             </div>
 
@@ -573,8 +580,8 @@ function formatDateDivider(isoStr: string) {
                                             </button>
                                         </>
                                     )}
-                                    <input type="text" placeholder="Type a message…" value={messageInput} onChange={e=>setMessageInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSend()} className="flex-1 rounded-2xl border border-gray-200 px-4 py-2.5 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-gray-50/50 focus:bg-white shadow-sm"/>
-                                    <button onClick={handleSend} disabled={!messageInput.trim()||sending} className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center hover:shadow-lg disabled:opacity-50 transition-all shrink-0 shadow-md shadow-blue-200"><Send size={16} className="ml-0.5"/></button>
+                                    <input type="text" placeholder={canSend ? "Type a message…" : "You do not have permission to send messages"} disabled={!canSend} value={messageInput} onChange={e=>setMessageInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleSend()} className="flex-1 rounded-2xl border border-gray-200 px-4 py-2.5 text-[14px] outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all bg-gray-50/50 focus:bg-white shadow-sm"/>
+                                    <button onClick={handleSend} disabled={!canSend||!messageInput.trim()||sending} className="bg-gradient-to-br from-blue-600 to-indigo-600 text-white w-10 h-10 rounded-2xl flex items-center justify-center hover:shadow-lg disabled:opacity-50 transition-all shrink-0 shadow-md shadow-blue-200"><Send size={16} className="ml-0.5"/></button>
                                 </div>
                             </div>
                         </div>

@@ -1,5 +1,7 @@
 // components/tasks/TasksUI.tsx
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import { cleanTaskDescription } from "@/utils/taskUtils";
 
 import { useState, useEffect, useRef } from "react";
@@ -605,6 +607,8 @@ export function TasksUI({
     onRetry,
 }: TasksUIProps) {
     const [viewMode, setViewMode] = useState<ViewMode>("LIST");
+    const { hasPermission } = useRBAC();
+    const canUpdateTask = hasPermission("tasks.update");
     const [isFiltersOpen, setIsFiltersOpen] = useState(false);
     const [members, setMembers] = useState<TeamMember[]>([]);
     const [bulkResult, setBulkResult] = useState<BulkUpdateResponse | null>(null);
@@ -801,13 +805,15 @@ export function TasksUI({
                         </div>
 
                         {/* Create Task Button */}
-                        <button
-                            onClick={() => openCreateWithStatus("TODO")}
-                            className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-500/20 active:scale-95"
-                        >
-                            <Plus size={15} />
-                            <span>Create Task</span>
-                        </button>
+                        <PermissionGuard permission="tasks.create">
+                            <button
+                                onClick={() => openCreateWithStatus("TODO")}
+                                className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-500/20 active:scale-95"
+                            >
+                                <Plus size={15} />
+                                <span>Create Task</span>
+                            </button>
+                        </PermissionGuard>
                     </div>
                 </div>
 
@@ -1098,12 +1104,14 @@ export function TasksUI({
                                     Clear Filters
                                 </button>
                             )}
-                            <button
-                                onClick={() => openCreateWithStatus("TODO")}
-                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
-                            >
-                                Create Task
-                            </button>
+                            <PermissionGuard permission="tasks.create">
+                                <button
+                                    onClick={() => openCreateWithStatus("TODO")}
+                                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
+                                >
+                                    Create Task
+                                </button>
+                            </PermissionGuard>
                         </div>
                     </div>
                 ) : (
@@ -1136,6 +1144,7 @@ export function TasksUI({
                                                 onDrop={async (e) => {
                                                     e.preventDefault();
                                                     setDragOverCol(null);
+                                                    if (!canUpdateTask) return;
                                                     const taskId = e.dataTransfer.getData("text/plain") || draggedTaskId;
                                                     if (taskId) {
                                                         try {
@@ -1171,6 +1180,7 @@ export function TasksUI({
                                                         <span className={`px-2 py-0.5 text-[11px] font-bold rounded-md ${col.badge}`}>
                                                             {colTasks.length}
                                                         </span>
+                                                        <PermissionGuard permission="tasks.create">
                                                         <button
                                                             onClick={() => openCreateWithStatus(col.status)}
                                                             title={`Add task to ${col.label}`}
@@ -1178,6 +1188,7 @@ export function TasksUI({
                                                         >
                                                             <Plus size={14} />
                                                         </button>
+                                                        </PermissionGuard>
                                                     </div>
                                                 </div>
 
@@ -1200,8 +1211,12 @@ export function TasksUI({
                                                         return (
                                                             <div
                                                                 key={task.id}
-                                                                draggable
+                                                                draggable={canUpdateTask}
                                                                 onDragStart={(e) => {
+                                                                    if (!canUpdateTask) {
+                                                                        e.preventDefault();
+                                                                        return;
+                                                                    }
                                                                     e.dataTransfer.setData("text/plain", task.id);
                                                                     setDraggedTaskId(task.id);
                                                                 }}
@@ -1362,6 +1377,7 @@ export function TasksUI({
                                                 </div>
 
                                                 {/* Bottom Add button */}
+                                                <PermissionGuard permission="tasks.create">
                                                 <button
                                                     onClick={() => openCreateWithStatus(col.status)}
                                                     className="w-full mt-3 py-2 bg-white/60 dark:bg-slate-800/40 hover:bg-white dark:hover:bg-slate-800 border border-slate-200/60 dark:border-slate-700/60 text-slate-600 dark:text-slate-300 rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1"
@@ -1369,6 +1385,7 @@ export function TasksUI({
                                                     <Plus size={13} />
                                                     <span>Add Task</span>
                                                 </button>
+                                                </PermissionGuard>
                                             </div>
                                         );
                                     })}
@@ -1429,9 +1446,10 @@ export function TasksUI({
                                                         <td className="px-4 py-3.5">
                                                             <div className="flex items-center space-x-2.5">
                                                                 <button
-                                                                    onClick={() => onCycleStatus(task)}
-                                                                    title={`Status: ${STATUS_LABELS[task.status]} — click to advance`}
-                                                                    className="hover:scale-110 transition-transform"
+                                                                    disabled={!canUpdateTask}
+                                                                    onClick={() => { if (!canUpdateTask) return; onCycleStatus(task); }}
+                                                                    title={`Status: ${STATUS_LABELS[task.status]}`}
+                                                                    className={canUpdateTask ? "hover:scale-110 transition-transform cursor-pointer" : "cursor-default opacity-80"}
                                                                 >
                                                                     <StatusIcon status={task.status} />
                                                                 </button>
@@ -1579,7 +1597,7 @@ export function TasksUI({
                                     setBulkStatus(val);
                                     if (val) handleApplyBulkUpdate({ status: val });
                                 }}
-                                disabled={bulkUpdating}
+                                disabled={bulkUpdating || !canUpdateTask}
                                 className="px-3 py-1.5 rounded-xl bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 text-xs font-semibold outline-none border border-slate-700 dark:border-slate-300"
                             >
                                 <option value="">Set Status...</option>
@@ -1598,7 +1616,7 @@ export function TasksUI({
                                     setBulkPriority(val);
                                     if (val) handleApplyBulkUpdate({ priority: val });
                                 }}
-                                disabled={bulkUpdating}
+                                disabled={bulkUpdating || !canUpdateTask}
                                 className="px-3 py-1.5 rounded-xl bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 text-xs font-semibold outline-none border border-slate-700 dark:border-slate-300"
                             >
                                 <option value="">Set Priority...</option>
@@ -1615,7 +1633,7 @@ export function TasksUI({
                                     setBulkAssignee(val);
                                     if (val) handleApplyBulkUpdate({ assignedToId: val === "unassigned" ? null : val });
                                 }}
-                                disabled={bulkUpdating}
+                                disabled={bulkUpdating || !canUpdateTask}
                                 className="px-3 py-1.5 rounded-xl bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900 text-xs font-semibold outline-none border border-slate-700 dark:border-slate-300"
                             >
                                 <option value="">Assign To...</option>

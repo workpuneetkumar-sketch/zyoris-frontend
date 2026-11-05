@@ -38,6 +38,8 @@ import { Deal, DealsFilters, DEFAULT_DEAL_STAGES } from "@/types/deals";
 import { OPPORTUNITY_TYPES, OpportunityType } from "@/types/enterpriseDeals";
 import { getStageConfig } from "@/lib/dealConfig";
 import { CreateDealPayload, deleteDeal } from "@/lib/api/dealsApi";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import { formatCurrencyWithSnapshot } from "@/utils/currencyFormat";
 import {
     Pipeline,
@@ -523,6 +525,8 @@ function DealCard({
     onDeleteDeal?: (deal: Deal) => void;
 }) {
     const router = useRouter();
+    const { hasPermission } = useRBAC();
+    const canUpdate = hasPermission("deals.update");
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [copied, setCopied] = useState(false);
 
@@ -619,8 +623,14 @@ function DealCard({
 
     return (
         <div
-            draggable
-            onDragStart={handleDragStart}
+            draggable={canUpdate}
+            onDragStart={(e) => {
+                if (!canUpdate) {
+                    e.preventDefault();
+                    return;
+                }
+                handleDragStart(e);
+            }}
             onDragEnd={handleDragEnd}
             className={`block group cursor-grab active:cursor-grabbing transition-all select-none ${
                 isDragging ? "opacity-35 scale-95 shadow-md ring-2 ring-blue-500 rounded-xl" : ""
@@ -695,19 +705,21 @@ function DealCard({
                                     {onDeleteDeal && (
                                         <>
                                             <div className="border-t border-gray-100 my-1" />
-                                            <button
-                                                type="button"
-                                                onClick={(e) => {
-                                                    e.preventDefault();
-                                                    e.stopPropagation();
-                                                    setIsMenuOpen(false);
-                                                    onDeleteDeal(deal);
-                                                }}
-                                                className="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 text-left font-medium"
-                                            >
-                                                <XCircle size={13} className="text-red-500" />
-                                                <span>Delete Deal</span>
-                                            </button>
+                                            <PermissionGuard permission="deals.delete" action="disable" disabledTooltip="You do not have permission to delete deals.">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setIsMenuOpen(false);
+                                                        onDeleteDeal(deal);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 text-left font-medium"
+                                                >
+                                                    <XCircle size={13} className="text-red-500" />
+                                                    <span>Delete Deal</span>
+                                                </button>
+                                            </PermissionGuard>
                                         </>
                                     )}
                                 </div>
@@ -836,6 +848,8 @@ function KanbanColumn({
     onRequestTransition,
     onDeleteDeal,
 }: {
+    // Permission check
+
     stage: string;
     stageObj?: PipelineStage;
     stageIndex: number;
@@ -853,6 +867,8 @@ function KanbanColumn({
     onRequestTransition?: (deal: Deal, targetStage: string) => void;
     onDeleteDeal?: (deal: Deal) => void;
 }) {
+    const { hasPermission } = useRBAC();
+    const canUpdate = hasPermission("deals.update");
     const cfg = getStageConfig(stage);
     const [isDragOver, setIsDragOver] = useState(false);
 
@@ -862,6 +878,7 @@ function KanbanColumn({
     );
 
     const handleDragOver = (e: React.DragEvent) => {
+        if (!canUpdate) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         if (!isDragOver) setIsDragOver(true);
@@ -880,6 +897,10 @@ function KanbanColumn({
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
         setIsDragOver(false);
+        if (!canUpdate) {
+            toast.error("You do not have permission to update deals.");
+            return;
+        }
         try {
             const raw = e.dataTransfer.getData("application/json");
             let dealId = "";
@@ -991,13 +1012,15 @@ function KanbanColumn({
 
             {/* Add deal footer */}
             <div className="px-2.5 pb-2.5 pt-1">
-                <button
-                    onClick={() => onAddDeal(stage)}
-                    className="w-full flex items-center justify-center gap-1.5 h-8 rounded-lg border border-dashed border-gray-200 text-[12px] font-medium text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/60 transition-colors"
-                >
-                    <Plus size={12} />
-                    Add Deal
-                </button>
+                <PermissionGuard permission="deals.create">
+                    <button
+                        onClick={() => onAddDeal(stage)}
+                        className="w-full flex items-center justify-center gap-1.5 h-8 rounded-lg border border-dashed border-gray-200 text-[12px] font-medium text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/60 transition-colors"
+                    >
+                        <Plus size={12} />
+                        Add Deal
+                    </button>
+                </PermissionGuard>
             </div>
         </div>
     );
@@ -1202,6 +1225,7 @@ export function DealsUI({
                             />
 
                             {onCreateStage && onUpdateStage && onDeleteStage && onReorderStages && (
+                                <PermissionGuard permission="deals.update">
                                 <PipelineStageManager
                                     pipelineId={selectedPipeline?.id}
                                     stages={stages}
@@ -1212,6 +1236,7 @@ export function DealsUI({
                                     onReorderStages={onReorderStages}
                                     onRefresh={onRefreshWorkspace ?? (() => {})}
                                 />
+                                </PermissionGuard>
                             )}
                         </div>
                     )}
@@ -1303,13 +1328,15 @@ export function DealsUI({
                     </button>
 
                     {/* New Deal — primary action */}
-                    <button
-                        onClick={() => onOpenCreate(stages?.[0]?.name || allStages[0] || "NEW")}
-                        className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
-                    >
-                        <Plus size={14} />
-                        New Deal
-                    </button>
+                    <PermissionGuard permission="deals.create">
+                        <button
+                            onClick={() => onOpenCreate(stages?.[0]?.name || allStages[0] || "NEW")}
+                            className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                        >
+                            <Plus size={14} />
+                            New Deal
+                        </button>
+                    </PermissionGuard>
                 </div>
             </div>
 
@@ -1805,19 +1832,21 @@ function TableRowActions({
                         {onDeleteDeal && (
                             <>
                                 <div className="border-t border-gray-100 my-1" />
-                                <button
-                                    type="button"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setIsMenuOpen(false);
-                                        onDeleteDeal(deal);
-                                    }}
-                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 text-left font-medium"
-                                >
-                                    <XCircle size={13} className="text-red-500" />
-                                    <span>Delete Deal</span>
-                                </button>
+                                <PermissionGuard permission="deals.delete" action="disable" disabledTooltip="You do not have permission to delete deals.">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setIsMenuOpen(false);
+                                            onDeleteDeal(deal);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 text-left font-medium"
+                                    >
+                                        <XCircle size={13} className="text-red-500" />
+                                        <span>Delete Deal</span>
+                                    </button>
+                                </PermissionGuard>
                             </>
                         )}
                     </div>
