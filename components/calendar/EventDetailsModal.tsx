@@ -346,7 +346,7 @@ export default function EventDetailsModal({
             <button
               type="button"
               onClick={handleDelete}
-              className="px-3.5 py-2 text-[#FF5630] hover:bg-[#FF5630]/10 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-[#FF5630]/30 bg-white"
+              className="px-3.5 py-2 text-[#2563EB] hover:bg-[#2563EB]/10 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-[#2563EB]/30 bg-white"
             >
               <Trash2 size={14} />
               <span>Delete</span>

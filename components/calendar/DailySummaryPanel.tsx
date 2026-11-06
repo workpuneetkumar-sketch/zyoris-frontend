@@ -356,7 +356,7 @@ export default function DailySummaryPanel({
                 <button
                   type="button"
                   onClick={() => onOpenCreate(selectedDate)}
-                  className="text-[11px] font-semibold text-[#FF5630] hover:underline"
+                  className="text-[11px] font-semibold text-[#2563EB] hover:underline"
                 >
                   + Add
                 </button>

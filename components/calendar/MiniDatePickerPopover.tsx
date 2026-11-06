@@ -185,15 +185,15 @@ export default function MiniDatePickerPopover({
                   }}
                   className={`relative h-8 w-8 mx-auto flex items-center justify-center text-xs rounded-full transition-all ${
                     sel
-                      ? "bg-[#FF5630] text-white font-bold shadow-sm"
+                      ? "bg-[#2563EB] text-white font-bold shadow-sm"
                       : tod
-                      ? "border border-[#FF5630] text-[#FF5630] font-bold"
+                      ? "border border-[#2563EB] text-[#2563EB] font-bold"
                       : "text-[#212B36] font-medium hover:bg-[#F4F6F8]"
                   }`}
                 >
                   <span>{dayNum}</span>
                   {hasEvt && !sel && (
-                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#FF5630]" />
+                    <span className="absolute bottom-1 w-1 h-1 rounded-full bg-[#2563EB]" />
                   )}
                 </button>
               );
@@ -210,7 +210,7 @@ export default function MiniDatePickerPopover({
                   onSelectDate(now);
                   onClose?.();
                 }}
-                className="text-[#FF5630] hover:text-[#FF4842] font-semibold"
+                className="text-[#2563EB] hover:text-[#1D4ED8] font-semibold"
               >
                 Today
               </button>
@@ -256,7 +256,7 @@ export default function MiniDatePickerPopover({
               }}
               className={`py-2 text-xs font-semibold rounded-lg transition-colors ${
                 y === year
-                  ? "bg-[#FF5630] text-white font-bold"
+                  ? "bg-[#2563EB] text-white font-bold"
                   : "text-[#212B36] hover:bg-[#F4F6F8]"
               }`}
             >

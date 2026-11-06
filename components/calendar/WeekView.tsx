@@ -91,7 +91,7 @@ export default function WeekView({
         <button
           type="button"
           onClick={() => setShowFullDay(!showFullDay)}
-          className="text-[#212B36] hover:text-[#FF5630] font-semibold transition-colors"
+          className="text-[#212B36] hover:text-[#2563EB] font-semibold transition-colors"
         >
           {effectiveFullDay ? "Business Hours (8 AM – 8 PM)" : "All 24 Hours"}
         </button>
@@ -120,7 +120,7 @@ export default function WeekView({
                 >
                   <p
                     className={`text-[11px] font-medium uppercase tracking-wide ${
-                      isToday ? "text-[#FF5630] font-semibold" : "text-[#637381]"
+                      isToday ? "text-[#2563EB] font-semibold" : "text-[#637381]"
                     }`}
                   >
                     {date.toLocaleDateString("en-US", { weekday: "short" })}
@@ -129,7 +129,7 @@ export default function WeekView({
                     <span
                       className={`w-7 h-7 text-sm flex items-center justify-center rounded-full transition-colors ${
                         isToday
-                          ? "bg-[#FF5630] text-white font-bold shadow-sm"
+                          ? "bg-[#2563EB] text-white font-bold shadow-sm"
                           : isSelected
                           ? "bg-[#212B36] text-white font-semibold"
                           : "text-[#212B36] font-semibold"
@@ -250,8 +250,8 @@ export default function WeekView({
                             top: `${((currentTimeMinutes - startHour * 60) / 60) * rowHeight}px`,
                           }}
                         >
-                          <div className="w-2.5 h-2.5 rounded-full bg-[#FF5630] shadow-sm -ml-1.5" />
-                          <div className="flex-1 h-[2px] bg-[#FF5630]" />
+                          <div className="w-2.5 h-2.5 rounded-full bg-[#2563EB] shadow-sm -ml-1.5" />
+                          <div className="flex-1 h-[2px] bg-[#2563EB]" />
                         </div>
                       )}
 

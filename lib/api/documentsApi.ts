@@ -82,7 +82,8 @@ export async function getDocumentById(id: string): Promise<Document> {
 // ─── अपलोड ──────────────────────────────────────────────────────────────
 export async function uploadDocument(
   file: File,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  fallbackToLocal = true
 ): Promise<Document> {
   try {
     const formData = new FormData();
@@ -99,6 +100,7 @@ export async function uploadDocument(
     return res.data?.data || res.data;
   } catch (error: any) {
     console.error("Upload error:", error);
+    if (!fallbackToLocal) throw error;
     const objectUrl = typeof window !== "undefined" && window.URL ? window.URL.createObjectURL(file) : "";
     const localDoc: Document = {
       id: `doc-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,

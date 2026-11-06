@@ -17,9 +17,9 @@ export const CALENDAR_SURFACE_TOKENS = {
   darkInputBg: "#28323D",
   darkTextPrimary: "#FFFFFF",
   darkTextSecondary: "#AAB4BE",
-  coralPrimary: "#FF5630",
-  coralAccent: "#FF5630",
-  coralHover: "#FF4842",
+  bluePrimary: "#2563EB",
+  blueAccent: "#2563EB",
+  blueHover: "#1D4ED8",
 } as const;
 
 export interface PastelColorPreset {
@@ -232,8 +232,8 @@ export const DEPARTMENT_CALENDAR_TOKENS: Record<
   company: {
     id: "company",
     label: "Company-Wide",
-    dot: "#FF5630",
-    color: "#FF5630",
+    dot: "#2563EB",
+    color: "#2563EB",
     bg: "#FDE8E8",
     text: "#B53838",
   },

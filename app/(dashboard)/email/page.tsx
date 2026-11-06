@@ -5,7 +5,6 @@ import { useEmail } from "@/hooks/useEmail";
 
 export default function EmailPage() {
     const {
-        threads,
         filteredThreads,
         total,
         loading,
@@ -14,28 +13,24 @@ export default function EmailPage() {
         sending,
         sendError,
         syncing,
+        syncNotice,
+        draftError,
         selectedThread,
         search,
         selectedLabel,
-        templates,
-        loadingTemplates,
-        connectingGmail,
-        gmailConnectError,
         setSearch,
         setSelectedLabel,
         setIsComposeOpen,
         setSelectedThread,
         handleSend,
-        handleScheduleSend,
-        handleCreateTemplate,
         handleSync,
-        handleConnectGmail,
+        handleSaveDraft,
+        handleDeleteDraft,
         retry,
     } = useEmail();
 
     return (
         <EmailUI
-            threads={threads}
             filteredThreads={filteredThreads}
             total={total}
             loading={loading}
@@ -44,22 +39,19 @@ export default function EmailPage() {
             sending={sending}
             sendError={sendError}
             syncing={syncing}
+            syncNotice={syncNotice}
+            draftError={draftError}
             selectedThread={selectedThread}
             search={search}
             selectedLabel={selectedLabel}
-            templates={templates}
-            loadingTemplates={loadingTemplates}
-            connectingGmail={connectingGmail}
-            gmailConnectError={gmailConnectError}
             onSearchChange={setSearch}
             onLabelChange={setSelectedLabel}
             onOpenCompose={() => setIsComposeOpen(true)}
             onCloseCompose={() => setIsComposeOpen(false)}
             onSendEmail={handleSend}
-            onScheduleEmail={handleScheduleSend}
-            onCreateTemplate={handleCreateTemplate}
+            onSaveDraft={handleSaveDraft}
+            onDeleteDraft={handleDeleteDraft}
             onSyncEmails={handleSync}
-            onConnectGmail={handleConnectGmail}
             onSelectThread={setSelectedThread}
             onRetry={retry}
         />

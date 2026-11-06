@@ -1,112 +1,47 @@
 "use client";
 
-import { ShieldCheck, Mail, RefreshCw, CheckCircle2, ExternalLink, AlertCircle, Sparkles, ArrowRight } from "lucide-react";
+import { Mail, ShieldCheck } from "lucide-react";
 
-interface GmailConnectScreenProps {
-    connecting: boolean;
-    error: string | null;
-    onConnect: () => void;
-}
+const PROVIDERS = ["Gmail", "Yahoo Mail", "Outlook / Microsoft 365", "Custom company email", "Other IMAP/SMTP providers"];
 
-export function GmailConnectScreen({ connecting, error, onConnect }: GmailConnectScreenProps) {
+export function GmailConnectScreen() {
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8 max-w-3xl mx-auto space-y-8 animate-in fade-in zoom-in-95 duration-200">
-            {/* Top Banner & Badge */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-gray-100">
-                <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-red-500 via-yellow-500 to-blue-500 p-0.5 shadow-md shrink-0">
-                        <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center">
-                            <Mail className="w-7 h-7 text-red-500" />
+        <section className="mx-auto max-w-3xl space-y-6 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm sm:p-8">
+            <header className="flex items-start gap-4 border-b border-gray-100 pb-6">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                    <Mail size={24} />
+                </div>
+                <div>
+                    <h2 className="text-xl font-bold tracking-tight text-gray-900">Email accounts</h2>
+                    <p className="mt-1 text-sm leading-relaxed text-gray-500">
+                        Connect a mailbox provider when account authorization and mailbox synchronization are available on the server.
+                    </p>
+                </div>
+            </header>
+
+            <div className="space-y-3">
+                {PROVIDERS.map((provider) => (
+                    <div key={provider} className="flex flex-col justify-between gap-3 rounded-xl border border-gray-200 p-4 sm:flex-row sm:items-center">
+                        <div className="flex items-center gap-3">
+                            <Mail size={18} className="text-gray-400" />
+                            <div>
+                                <p className="text-sm font-semibold text-gray-800">{provider}</p>
+                                <p className="text-xs text-gray-500">Connection status unavailable · server integration required</p>
+                            </div>
                         </div>
+                        <button disabled title="Account authorization is not available in the current backend" className="h-9 shrink-0 rounded-lg border border-gray-200 px-4 text-xs font-semibold text-gray-400 disabled:cursor-not-allowed">
+                            Connect unavailable
+                        </button>
                     </div>
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <h2 className="text-xl font-bold text-gray-900 tracking-tight">Gmail OAuth 2.0 Integration</h2>
-                            <span className="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold border border-blue-100 flex items-center gap-1">
-                                <Sparkles size={12} /> Google Cloud Sync
-                            </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                            Connect your Google workspace account to sync inbox, send emails, and track communications seamlessy.
-                        </p>
-                    </div>
-                </div>
+                ))}
             </div>
 
-            {/* Error Banner if any */}
-            {error && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                        <p className="font-bold">OAuth Connection Notice</p>
-                        <p>{error}</p>
-                    </div>
-                </div>
-            )}
-
-            {/* Feature Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-2">
-                    <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs">
-                        <Mail size={16} />
-                    </div>
-                    <h3 className="text-xs font-bold text-gray-900">2-Way Sync</h3>
-                    <p className="text-[11px] text-gray-500 leading-relaxed">
-                        Sync incoming and outgoing emails directly with your CRM workspace threads.
-                    </p>
-                </div>
-
-                <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-2">
-                    <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold text-xs">
-                        <CheckCircle2 size={16} />
-                    </div>
-                    <h3 className="text-xs font-bold text-gray-900">OAuth Security</h3>
-                    <p className="text-[11px] text-gray-500 leading-relaxed">
-                        Industry standard Google OAuth 2.0 authentication. No passwords stored.
-                    </p>
-                </div>
-
-                <div className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 space-y-2">
-                    <div className="w-8 h-8 rounded-lg bg-purple-100 text-purple-600 flex items-center justify-center font-bold text-xs">
-                        <ShieldCheck size={16} />
-                    </div>
-                    <h3 className="text-xs font-bold text-gray-900">Template Dispatch</h3>
-                    <p className="text-[11px] text-gray-500 leading-relaxed">
-                        Send automated outreach and template responses using your connected Google account.
-                    </p>
-                </div>
+            <div className="flex items-start gap-3 rounded-xl bg-gray-50 p-4 text-xs leading-relaxed text-gray-600">
+                <ShieldCheck size={17} className="mt-0.5 shrink-0 text-blue-600" />
+                <p>
+                    No provider credentials or access tokens are collected here. The deployed backend currently has no email account listing or OAuth authorization route, so the interface cannot truthfully show connected accounts or initiate a connection yet.
+                </p>
             </div>
-
-            {/* Connect Action Box */}
-            <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/50 to-purple-50/80 border border-blue-100 text-center space-y-4">
-                <div className="max-w-md mx-auto space-y-2">
-                    <h3 className="text-base font-bold text-gray-900">Authorize Google Account Access</h3>
-                    <p className="text-xs text-gray-600">
-                        Clicking the button below will redirect you to Google's official authorization page to grant permission.
-                    </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                    <button
-                        onClick={onConnect}
-                        disabled={connecting}
-                        className="w-full sm:w-auto px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-500/20 transition-all disabled:opacity-60"
-                    >
-                        {connecting ? (
-                            <>
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                Connecting to Google...
-                            </>
-                        ) : (
-                            <>
-                                <ExternalLink className="w-4 h-4" />
-                                Connect Gmail Account
-                                <ArrowRight className="w-4 h-4 ml-1" />
-                            </>
-                        )}
-                    </button>
-                </div>
-            </div>
-        </div>
+        </section>
     );
 }

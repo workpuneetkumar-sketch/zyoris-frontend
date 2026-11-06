@@ -150,7 +150,7 @@ export default function CalendarSidebarFilters({
           <button
             type="button"
             onClick={() => onOpenCreate(selectedDate)}
-            className="w-full py-2.5 px-4 rounded-xl bg-[#FF5630] hover:bg-[#FF4842] text-white font-semibold text-[13px] shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2"
+            className="w-full py-2.5 px-4 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-semibold text-[13px] shadow-sm active:scale-[0.99] transition-all flex items-center justify-center gap-2"
           >
             <Plus size={16} strokeWidth={2.5} />
             <span>Create Event</span>
