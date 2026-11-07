@@ -51,7 +51,6 @@ export default function DashboardBuilderPage() {
 
   const handleAddWidget = (def: WidgetDefinition) => {
     addWidget(def);
-    setLibraryOpen(false);
   };
 
   // ── Error state ────────────────────────────────────────────────────────────
@@ -111,6 +110,7 @@ export default function DashboardBuilderPage() {
         {/* Widget Library — fixed sidebar panel */}
         <WidgetLibrary
           catalog={catalog}
+          widgets={widgets}
           isOpen={libraryOpen}
           onClose={() => setLibraryOpen(false)}
           onAdd={handleAddWidget}

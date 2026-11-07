@@ -198,23 +198,36 @@ export function useDashboardBuilder(userRole?: string) {
 
   const addWidget = useCallback(
     (def: WidgetDefinition) => {
-      const maxY = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
-      const newInstance: WidgetInstance = {
-        widgetId: def.id,
-        instanceId: `inst-${def.id}-${Date.now()}`,
-        x: 0,
-        y: maxY,
-        w: def.defaultW,
-        h: def.defaultH,
-      };
-      setWidgets((prev) => [...prev, newInstance]);
+      if (widgets.some((widget) => widget.widgetId === def.id)) {
+        toast.info(`${def.title} is already on your dashboard.`);
+        return;
+      }
+
+      const newInstanceId = `inst-${def.id}-${Date.now()}`;
+      setWidgets((prev) => {
+        if (prev.some((widget) => widget.widgetId === def.id)) return prev;
+        const maxY = prev.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0);
+        const newInstance: WidgetInstance = {
+          widgetId: def.id,
+          instanceId: newInstanceId,
+          x: 0,
+          y: maxY,
+          w: def.defaultW,
+          h: def.defaultH,
+        };
+        return [...prev, newInstance];
+      });
     },
     [widgets]
   );
 
   const undoRemove = useCallback(() => {
     if (!removedWidget) return;
-    setWidgets((prev) => [...prev, removedWidget.instance]);
+    setWidgets((prev) =>
+      prev.some((widget) => widget.widgetId === removedWidget.instance.widgetId)
+        ? prev
+        : [...prev, removedWidget.instance]
+    );
     setRemovedWidget(null);
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
   }, [removedWidget]);
