@@ -306,7 +306,7 @@ export default function DashboardPage() {
   const [showInsights, setShowInsights] = useState(false);
   const [showWeeklyBriefing, setShowWeeklyBriefing] = useState(false);
 
-  const handleAddWidget = (def: WidgetDefinition) => { builder.addWidget(def); setLibraryOpen(false); };
+  const handleAddWidget = (def: WidgetDefinition) => { builder.addWidget(def); };
 
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return "-";
@@ -695,6 +695,7 @@ export default function DashboardPage() {
               />
               <WidgetLibrary
                 catalog={builder.catalog}
+                widgets={builder.widgets}
                 isOpen={libraryOpen}
                 onClose={() => setLibraryOpen(false)}
                 onAdd={handleAddWidget}
