@@ -16,12 +16,7 @@ export default function HomePage() {
     if (!isAuthenticated) {
       router.replace("/login");
     } else {
-      router.replace(
-        roleVerificationStatus === "verified" &&
-          user?.role?.toUpperCase() === "ADMIN"
-          ? "/admin"
-          : "/dashboard"
-      );
+      router.replace("/dashboard");
     }
   }, [isInitializing, isAuthenticated, roleVerificationStatus, user, router]);
 

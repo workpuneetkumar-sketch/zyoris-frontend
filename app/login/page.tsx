@@ -34,11 +34,7 @@ function LoginPageInner() {
       return;
     }
 
-    const defaultDestination =
-      roleVerificationStatus === "verified" &&
-      user?.role?.toUpperCase() === "ADMIN"
-        ? "/admin"
-        : DEFAULT_DESTINATION;
+    const defaultDestination = DEFAULT_DESTINATION;
     router.replace(nextParam ?? defaultDestination);
   }, [sessionStatus, roleVerificationStatus, user, nextParam, router]);
 

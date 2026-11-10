@@ -3619,5 +3619,8 @@ body {
 }
 
 .Toastify__progress-bar {
-  display: none !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
 }
