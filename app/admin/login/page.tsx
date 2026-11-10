@@ -78,7 +78,7 @@ function AdminLoginPageInner() {
       roleVerificationStatus === "verified" &&
       user?.role?.toUpperCase() === "ADMIN"
     ) {
-      router.replace("/admin");
+      router.replace("/dashboard");
     }
   }, [sessionStatus, roleVerificationStatus, user, router]);
 
@@ -110,7 +110,7 @@ function AdminLoginPageInner() {
         return;
       }
 
-      router.replace("/admin");
+      router.replace("/dashboard");
     } catch (error: unknown) {
       setFormError(getLoginErrorMessage(error));
     } finally {

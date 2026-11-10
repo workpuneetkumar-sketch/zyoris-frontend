@@ -76,7 +76,7 @@ export default function WorkspaceTrashPage() {
     setDeletingId(page.id);
     try {
       await permanentDeleteWorkspacePage(page.id);
-      toast.success("Page permanently deleted.");
+      toast.success("Page permanently deleted.", { autoClose: 5000 });
 
       if (typeof window !== "undefined") {
         window.dispatchEvent(

@@ -226,7 +226,7 @@ export function toast(message: string, options: ToastOptions = {}) {
   const {
     type = "info",
     description,
-    duration = 4000,
+    duration = 5000,
     action,
     onDismiss,
     onAutoClose,
@@ -285,7 +285,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           close: <MinimalCloseIcon />,
         }}
         toastOptions={{
-          duration: 4000,
+          duration: 5000,
           classNames: {
             toast:
               "w-full sm:w-[420px] max-w-[420px] flex items-start gap-3.5 p-4 rounded-2xl shadow-[0_4px_16px_-2px_rgba(0,0,0,0.05),_0_2px_6px_-1px_rgba(0,0,0,0.03)] border font-sans text-left transition-all",
