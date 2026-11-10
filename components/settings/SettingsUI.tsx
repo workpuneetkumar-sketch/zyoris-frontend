@@ -1505,7 +1505,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ── My Company Tab (unchanged premium UI) ────────────────────────────────────
+// ── My Company Tab ───────────────────────────────────────────────────────────
 
 type CompanyType = "registered" | "unregistered" | null;
 type CompanySection = "basic" | "address" | "contact" | "tax" | "bank";
@@ -1542,52 +1542,186 @@ const INDIAN_STATES = [
   "Lakshadweep", "Puducherry",
 ];
 
+// Matches the backend Zod regex: /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/
+const GST_REGEX = /^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d]$/;
+const PAN_REGEX = /^[A-Z]{5}\d{4}[A-Z]$/;
+const IFSC_REGEX = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+interface FieldErrors {
+  companyName?: string;
+  gstNumber?: string;
+  panNumber?: string;
+  ifscCode?: string;
+  phone?: string;
+  email?: string;
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  country?: string;
+  bankName?: string;
+  accountHolderName?: string;
+  accountNumber?: string;
+}
+
+function validateForm(form: CompanyFormData, isReg: boolean): FieldErrors {
+  const errs: FieldErrors = {};
+  if (!form.companyName.trim()) errs.companyName = "Company name is required.";
+  if (isReg) {
+    if (form.gstNumber && !GST_REGEX.test(form.gstNumber.toUpperCase()))
+      errs.gstNumber = "Invalid GST number. Format: 22AAAAA0000A1Z5";
+    if (form.panNumber && !PAN_REGEX.test(form.panNumber.toUpperCase()))
+      errs.panNumber = "Invalid PAN. Format: ABCDE1234F";
+  }
+  if (form.panNumber && !PAN_REGEX.test(form.panNumber.toUpperCase()))
+    errs.panNumber = "Invalid PAN. Format: ABCDE1234F";
+  if (form.ifscCode && !IFSC_REGEX.test(form.ifscCode.toUpperCase()))
+    errs.ifscCode = "Invalid IFSC. Format: SBIN0001234";
+  if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+    errs.email = "Invalid email address.";
+  return errs;
+}
+
 function MyCompanyTab() {
   const [companyType, setCompanyType] = useState<CompanyType>(null);
   const [activeSection, setActiveSection] = useState<CompanySection>("basic");
   const [form, setForm] = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  // true = profile exists on server, false = needs POST /create
+  const [profileExists, setProfileExists] = useState(false);
+  // snapshot used by Cancel to restore
+  const [savedForm, setSavedForm] = useState<CompanyFormData>(EMPTY_COMPANY_FORM);
   const logoRef = useRef<HTMLInputElement>(null);
 
-  const SK_REG = "zyoris-company-registered";
-  const SK_UNREG = "zyoris-company-unregistered";
-
+  // Load existing profile from backend when companyType is chosen
   useEffect(() => {
     if (!companyType) return;
-    const stored = localStorage.getItem(companyType === "registered" ? SK_REG : SK_UNREG);
-    if (stored) { try { const p = JSON.parse(stored); setForm(p); setLogoPreview(p.logo ?? null); } catch { } }
-    else { setForm(EMPTY_COMPANY_FORM); setLogoPreview(null); }
-    setIsEditing(false); setActiveSection("basic");
-  }, [companyType]);
+    setLoading(true);
+    setFieldErrors({});
+    import("@/lib/api/myCompanyApi").then(({ fetchMyCompanyProfile, profileToFlat }) => {
+      fetchMyCompanyProfile()
+        .then((profile) => {
+          if (profile) {
+            const flat = profileToFlat(profile);
+            // Keep logo from localStorage (server doesn't store image blobs)
+            const SK = companyType === "registered" ? "zyoris-company-logo-reg" : "zyoris-company-logo-unreg";
+            const storedLogo = typeof localStorage !== "undefined" ? localStorage.getItem(SK) : null;
+            const withLogo: CompanyFormData = { ...flat, logo: storedLogo ?? null };
+            setForm(withLogo);
+            setSavedForm(withLogo);
+            setLogoPreview(storedLogo);
+            setProfileExists(true);
+            // Determine type from server if user hasn't picked yet
+            setCompanyType(profile.isGstRegistered ? "registered" : "unregistered");
+          } else {
+            setForm(EMPTY_COMPANY_FORM);
+            setSavedForm(EMPTY_COMPANY_FORM);
+            setLogoPreview(null);
+            setProfileExists(false);
+          }
+          setIsEditing(false);
+          setActiveSection("basic");
+        })
+        .catch(() => {
+          // Network error – fall back to localStorage so the UI still works offline
+          const SK = companyType === "registered" ? "zyoris-company-registered" : "zyoris-company-unregistered";
+          const stored = typeof localStorage !== "undefined" ? localStorage.getItem(SK) : null;
+          if (stored) {
+            try {
+              const p = JSON.parse(stored);
+              setForm(p);
+              setSavedForm(p);
+              setLogoPreview(p.logo ?? null);
+            } catch { /* ignore */ }
+          }
+          toast.error("Could not load company profile from server. Showing local data.");
+        })
+        .finally(() => setLoading(false));
+    });
+  }, [companyType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => { const r = reader.result as string; setLogoPreview(r); setForm((p) => ({ ...p, logo: r })); };
+    reader.onloadend = () => {
+      const r = reader.result as string;
+      setLogoPreview(r);
+      setForm((p) => ({ ...p, logo: r }));
+      // Persist logo blob locally (server doesn't store image binaries here)
+      const SK = companyType === "registered" ? "zyoris-company-logo-reg" : "zyoris-company-logo-unreg";
+      if (typeof localStorage !== "undefined") localStorage.setItem(SK, r);
+    };
     reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
-    if (!form.companyName.trim()) { toast.error("Company name is required."); return; }
+    const isReg = companyType === "registered";
+    const errs = validateForm(form, isReg);
+    if (Object.keys(errs).length > 0) {
+      setFieldErrors(errs);
+      toast.error("Please fix the highlighted errors before saving.");
+      return;
+    }
+    setFieldErrors({});
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 600));
-    localStorage.setItem(companyType === "registered" ? SK_REG : SK_UNREG, JSON.stringify(form));
-    setSaving(false); setIsEditing(false);
-    toast.success("Company details saved!");
+    try {
+      const { createMyCompanyProfile, updateMyCompanyProfile } = await import("@/lib/api/myCompanyApi");
+      const flat = {
+        ...form,
+        isGstRegistered: isReg,
+        gstNumber: form.gstNumber.toUpperCase(),
+        panNumber: form.panNumber.toUpperCase(),
+        ifscCode: form.ifscCode.toUpperCase(),
+      };
+      if (profileExists) {
+        await updateMyCompanyProfile(flat);
+      } else {
+        await createMyCompanyProfile(flat);
+        setProfileExists(true);
+      }
+      setSavedForm({ ...form });
+      setIsEditing(false);
+      toast.success("Company details saved!");
+    } catch (err: any) {
+      // Surface field-level validation errors from backend (Zod 400)
+      const details: Array<{ field: string; message: string }> = err?.response?.data?.details ?? [];
+      if (details.length > 0) {
+        const beErrs: FieldErrors = {};
+        details.forEach(({ field, message }) => {
+          // Backend field paths are like "tax.gstNumber", "address.line1", etc.
+          const key = field.split(".").pop() as keyof FieldErrors | undefined;
+          if (key) (beErrs as any)[key] = message;
+        });
+        setFieldErrors(beErrs);
+        toast.error("Please fix the highlighted errors.");
+      } else {
+        toast.error(err?.response?.data?.message ?? "Failed to save company details.");
+      }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancel = () => {
-    const stored = localStorage.getItem(companyType === "registered" ? SK_REG : SK_UNREG);
-    if (stored) { try { const p = JSON.parse(stored); setForm(p); setLogoPreview(p.logo ?? null); } catch { } }
-    else { setForm(EMPTY_COMPANY_FORM); setLogoPreview(null); }
+    setForm({ ...savedForm });
+    setLogoPreview(savedForm.logo ?? null);
+    setFieldErrors({});
     setIsEditing(false);
   };
 
   const fc = (key: keyof CompanyFormData) =>
-    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
       setForm((p) => ({ ...p, [key]: e.target.value }));
+      // Clear the field error as the user types
+      if (fieldErrors[key as keyof FieldErrors]) {
+        setFieldErrors((prev) => { const n = { ...prev }; delete n[key as keyof FieldErrors]; return n; });
+      }
+    };
 
   if (!companyType) {
     return (
@@ -1659,6 +1793,15 @@ function MyCompanyTab() {
     );
   }
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 gap-3 text-gray-400">
+        <Loader2 size={28} className="animate-spin text-blue-500" />
+        <span className="text-sm">Loading company profile…</span>
+      </div>
+    );
+  }
+
   const isReg = companyType === "registered";
   const SECTION_NAV: { id: CompanySection; label: string; icon: React.ReactNode }[] = [
     { id: "basic", label: "Basic Info", icon: <Building2 size={14} /> },
@@ -1667,6 +1810,16 @@ function MyCompanyTab() {
     { id: "tax", label: "Tax & Legal", icon: <FileText size={14} /> },
     { id: "bank", label: "Bank Details", icon: <Landmark size={14} /> },
   ];
+
+  // Tabs with errors get a red dot so the user knows where to look
+  const tabHasError = (id: CompanySection): boolean => {
+    if (id === "basic") return !!fieldErrors.companyName;
+    if (id === "contact") return !!(fieldErrors.email || fieldErrors.phone);
+    if (id === "address") return !!(fieldErrors.addressLine1 || fieldErrors.city || fieldErrors.state || fieldErrors.pincode || fieldErrors.country);
+    if (id === "tax") return !!(fieldErrors.gstNumber || fieldErrors.panNumber);
+    if (id === "bank") return !!(fieldErrors.bankName || fieldErrors.accountHolderName || fieldErrors.accountNumber || fieldErrors.ifscCode);
+    return false;
+  };
 
   return (
     <div>
@@ -1695,6 +1848,11 @@ function MyCompanyTab() {
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.15)", borderColor: "rgba(255,255,255,0.3)", color: "white", border: "1px solid" }}>
                   {isReg ? "GST Registered" : "Unregistered"}
                 </span>
+                {profileExists && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-500/20 border border-green-400/30 text-green-100">
+                    Saved
+                  </span>
+                )}
               </div>
               <p className="text-white/70 text-xs">{isReg ? "Complete all sections for full tax compliance" : "Fill in your basic business details"}</p>
             </div>
@@ -1725,10 +1883,12 @@ function MyCompanyTab() {
       <div className="flex gap-1 mb-6 bg-gray-100 p-1 rounded-xl overflow-x-auto">
         {SECTION_NAV.map((s) => (
           <button key={s.id} onClick={() => setActiveSection(s.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 ${activeSection === s.id ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-white/50"
-              }`}>
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex-shrink-0 relative ${activeSection === s.id ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700 hover:bg-white/50"}`}>
             <span className={activeSection === s.id ? "text-blue-500" : "text-gray-400"}>{s.icon}</span>
             {s.label}
+            {tabHasError(s.id) && (
+              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" title="This section has errors" />
+            )}
           </button>
         ))}
       </div>
@@ -1737,36 +1897,69 @@ function MyCompanyTab() {
       {activeSection === "basic" && (
         <MCSection title="Basic Information" subtitle="Your company's core identity and registration details" icon={<Building2 size={16} />} color="blue">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MCField label="Company Name" required htmlFor="cname"><MCInput id="cname" placeholder="e.g. Acme Pvt Ltd" disabled={!isEditing} value={form.companyName} onChange={fc("companyName")} /></MCField>
-            <MCField label="Legal / Trade Name" htmlFor="lname"><MCInput id="lname" placeholder="Full registered name" disabled={!isEditing} value={form.legalName} onChange={fc("legalName")} /></MCField>
+            <MCField label="Company Name" required htmlFor="cname" error={fieldErrors.companyName}>
+              <MCInput id="cname" placeholder="e.g. Acme Pvt Ltd" disabled={!isEditing} value={form.companyName} onChange={fc("companyName")} />
+            </MCField>
+            <MCField label="Legal / Trade Name" htmlFor="lname">
+              <MCInput id="lname" placeholder="Full registered name" disabled={!isEditing} value={form.legalName} onChange={fc("legalName")} />
+            </MCField>
             <MCField label="Business Type" htmlFor="btype">
               <MCSelect id="btype" disabled={!isEditing} value={form.businessType} onChange={fc("businessType")}>
                 <option value="">Select business type</option>
                 {BUSINESS_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
               </MCSelect>
             </MCField>
-            <MCField label="Incorporation Date" htmlFor="incdate"><MCInput id="incdate" type="date" disabled={!isEditing} value={form.incorporationDate} onChange={fc("incorporationDate")} /></MCField>
+            <MCField label="Incorporation Date" htmlFor="incdate">
+              <MCInput id="incdate" type="date" disabled={!isEditing} value={form.incorporationDate} onChange={fc("incorporationDate")} />
+            </MCField>
           </div>
         </MCSection>
       )}
       {activeSection === "address" && (
         <MCSection title="Registered Address" subtitle="Official business address used in invoices and documents" icon={<MapPin size={16} />} color="green">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="md:col-span-2"><MCField label="Address Line 1" htmlFor="adr1"><MCInput id="adr1" placeholder="Street, Building, Floor" disabled={!isEditing} value={form.addressLine1} onChange={fc("addressLine1")} /></MCField></div>
-            <div className="md:col-span-2"><MCField label="Address Line 2" htmlFor="adr2"><MCInput id="adr2" placeholder="Area, Landmark (optional)" disabled={!isEditing} value={form.addressLine2} onChange={fc("addressLine2")} /></MCField></div>
-            <MCField label="City" htmlFor="city"><MCInput id="city" placeholder="City" disabled={!isEditing} value={form.city} onChange={fc("city")} /></MCField>
-            <MCField label="State" htmlFor="state"><MCSelect id="state" disabled={!isEditing} value={form.state} onChange={fc("state")}><option value="">Select state</option>{INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}</MCSelect></MCField>
-            <MCField label="Pincode" htmlFor="pin"><MCInput id="pin" placeholder="6-digit PIN" disabled={!isEditing} maxLength={6} value={form.pincode} onChange={fc("pincode")} /></MCField>
-            <MCField label="Country" htmlFor="country"><MCInput id="country" placeholder="Country" disabled={!isEditing} value={form.country} onChange={fc("country")} /></MCField>
+            <div className="md:col-span-2">
+              <MCField label="Address Line 1" htmlFor="adr1" error={fieldErrors.addressLine1}>
+                <MCInput id="adr1" placeholder="Street, Building, Floor" disabled={!isEditing} value={form.addressLine1} onChange={fc("addressLine1")} />
+              </MCField>
+            </div>
+            <div className="md:col-span-2">
+              <MCField label="Address Line 2" htmlFor="adr2">
+                <MCInput id="adr2" placeholder="Area, Landmark (optional)" disabled={!isEditing} value={form.addressLine2} onChange={fc("addressLine2")} />
+              </MCField>
+            </div>
+            <MCField label="City" htmlFor="city" error={fieldErrors.city}>
+              <MCInput id="city" placeholder="City" disabled={!isEditing} value={form.city} onChange={fc("city")} />
+            </MCField>
+            <MCField label="State" htmlFor="state" error={fieldErrors.state}>
+              <MCSelect id="state" disabled={!isEditing} value={form.state} onChange={fc("state")}>
+                <option value="">Select state</option>
+                {INDIAN_STATES.map((s) => <option key={s} value={s}>{s}</option>)}
+              </MCSelect>
+            </MCField>
+            <MCField label="Pincode" htmlFor="pin" error={fieldErrors.pincode}>
+              <MCInput id="pin" placeholder="6-digit PIN" disabled={!isEditing} maxLength={6} value={form.pincode} onChange={fc("pincode")} />
+            </MCField>
+            <MCField label="Country" htmlFor="country" error={fieldErrors.country}>
+              <MCInput id="country" placeholder="Country" disabled={!isEditing} value={form.country} onChange={fc("country")} />
+            </MCField>
           </div>
         </MCSection>
       )}
       {activeSection === "contact" && (
         <MCSection title="Contact Details" subtitle="How clients and partners can reach your business" icon={<Phone size={16} />} color="purple">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MCField label="Phone Number" htmlFor="cphone"><MCInput id="cphone" placeholder="+91 98765 43210" disabled={!isEditing} value={form.phone} onChange={fc("phone")} /></MCField>
-            <MCField label="Email Address" htmlFor="cemail"><MCInput id="cemail" type="email" placeholder="info@company.com" disabled={!isEditing} value={form.email} onChange={fc("email")} /></MCField>
-            <div className="md:col-span-2"><MCField label="Website" htmlFor="cweb"><MCInput id="cweb" placeholder="https://www.yourcompany.com" disabled={!isEditing} value={form.website} onChange={fc("website")} /></MCField></div>
+            <MCField label="Phone Number" htmlFor="cphone" error={fieldErrors.phone}>
+              <MCInput id="cphone" placeholder="+91 98765 43210" disabled={!isEditing} value={form.phone} onChange={fc("phone")} />
+            </MCField>
+            <MCField label="Email Address" htmlFor="cemail" error={fieldErrors.email}>
+              <MCInput id="cemail" type="email" placeholder="info@company.com" disabled={!isEditing} value={form.email} onChange={fc("email")} />
+            </MCField>
+            <div className="md:col-span-2">
+              <MCField label="Website" htmlFor="cweb">
+                <MCInput id="cweb" placeholder="https://www.yourcompany.com" disabled={!isEditing} value={form.website} onChange={fc("website")} />
+              </MCField>
+            </div>
           </div>
         </MCSection>
       )}
@@ -1774,15 +1967,51 @@ function MyCompanyTab() {
         isReg ? (
           <MCSection title="Tax & Legal Details" subtitle="Required for GST compliance, e-invoicing, and audits" icon={<FileText size={16} />} color="red">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <MCField label="GST Number" required htmlFor="gst"><MCInput id="gst" placeholder="e.g. 22AAAAA0000A1Z5" disabled={!isEditing} maxLength={15} style={{ textTransform: "uppercase" }} value={form.gstNumber} onChange={fc("gstNumber")} /></MCField>
-              <MCField label="PAN Number" required htmlFor="pan"><MCInput id="pan" placeholder="e.g. ABCDE1234F" disabled={!isEditing} maxLength={10} style={{ textTransform: "uppercase" }} value={form.panNumber} onChange={fc("panNumber")} /></MCField>
-              <MCField label="CIN Number" htmlFor="cin"><MCInput id="cin" placeholder="e.g. U74999MH2010PTC123456" disabled={!isEditing} style={{ textTransform: "uppercase" }} value={form.cinNumber} onChange={fc("cinNumber")} /></MCField>
+              <MCField label="GST Number" required htmlFor="gst" error={fieldErrors.gstNumber}
+                hint="Format: 22AAAAA0000A1Z5 (15 characters)">
+                <MCInput id="gst" placeholder="e.g. 22AAAAA0000A1Z5" disabled={!isEditing} maxLength={15}
+                  style={{ textTransform: "uppercase" }} value={form.gstNumber} onChange={(e) => {
+                    fc("gstNumber")(e);
+                    const val = e.target.value.toUpperCase();
+                    if (val && !GST_REGEX.test(val))
+                      setFieldErrors((p) => ({ ...p, gstNumber: "Invalid GST number. Format: 22AAAAA0000A1Z5" }));
+                    else
+                      setFieldErrors((p) => { const n = { ...p }; delete n.gstNumber; return n; });
+                  }} />
+              </MCField>
+              <MCField label="PAN Number" required htmlFor="pan" error={fieldErrors.panNumber}
+                hint="Format: ABCDE1234F (10 characters)">
+                <MCInput id="pan" placeholder="e.g. ABCDE1234F" disabled={!isEditing} maxLength={10}
+                  style={{ textTransform: "uppercase" }} value={form.panNumber} onChange={(e) => {
+                    fc("panNumber")(e);
+                    const val = e.target.value.toUpperCase();
+                    if (val && !PAN_REGEX.test(val))
+                      setFieldErrors((p) => ({ ...p, panNumber: "Invalid PAN. Format: ABCDE1234F" }));
+                    else
+                      setFieldErrors((p) => { const n = { ...p }; delete n.panNumber; return n; });
+                  }} />
+              </MCField>
+              <MCField label="CIN Number" htmlFor="cin">
+                <MCInput id="cin" placeholder="e.g. U74999MH2010PTC123456" disabled={!isEditing}
+                  style={{ textTransform: "uppercase" }} value={form.cinNumber} onChange={fc("cinNumber")} />
+              </MCField>
             </div>
           </MCSection>
         ) : (
           <MCSection title="Legal Details" subtitle="Basic legal identifier for your business" icon={<Hash size={16} />} color="amber">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <MCField label="PAN Number (Optional)" htmlFor="pan2"><MCInput id="pan2" placeholder="e.g. ABCDE1234F" disabled={!isEditing} maxLength={10} style={{ textTransform: "uppercase" }} value={form.panNumber} onChange={fc("panNumber")} /></MCField>
+              <MCField label="PAN Number (Optional)" htmlFor="pan2" error={fieldErrors.panNumber}
+                hint="Format: ABCDE1234F (10 characters)">
+                <MCInput id="pan2" placeholder="e.g. ABCDE1234F" disabled={!isEditing} maxLength={10}
+                  style={{ textTransform: "uppercase" }} value={form.panNumber} onChange={(e) => {
+                    fc("panNumber")(e);
+                    const val = e.target.value.toUpperCase();
+                    if (val && !PAN_REGEX.test(val))
+                      setFieldErrors((p) => ({ ...p, panNumber: "Invalid PAN. Format: ABCDE1234F" }));
+                    else
+                      setFieldErrors((p) => { const n = { ...p }; delete n.panNumber; return n; });
+                  }} />
+              </MCField>
             </div>
             <div className="mt-4 flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-4 py-3">
               <BadgeCheck size={15} className="text-amber-500 flex-shrink-0" />
@@ -1794,10 +2023,27 @@ function MyCompanyTab() {
       {activeSection === "bank" && (
         <MCSection title="Bank Details" subtitle="Used for payment processing and financial documents" icon={<Landmark size={16} />} color="indigo">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <MCField label="Bank Name" htmlFor="bkname"><MCInput id="bkname" placeholder="e.g. State Bank of India" disabled={!isEditing} value={form.bankName} onChange={fc("bankName")} /></MCField>
-            <MCField label="Account Holder Name" htmlFor="holder"><MCInput id="holder" placeholder="Name on account" disabled={!isEditing} value={form.accountHolderName} onChange={fc("accountHolderName")} /></MCField>
-            <MCField label="Account Number" htmlFor="accno"><MCInput id="accno" placeholder="Bank account number" disabled={!isEditing} value={form.accountNumber} onChange={fc("accountNumber")} /></MCField>
-            <MCField label="IFSC Code" htmlFor="ifsc"><MCInput id="ifsc" placeholder="e.g. SBIN0001234" disabled={!isEditing} style={{ textTransform: "uppercase" }} value={form.ifscCode} onChange={fc("ifscCode")} /></MCField>
+            <MCField label="Bank Name" htmlFor="bkname" error={fieldErrors.bankName}>
+              <MCInput id="bkname" placeholder="e.g. State Bank of India" disabled={!isEditing} value={form.bankName} onChange={fc("bankName")} />
+            </MCField>
+            <MCField label="Account Holder Name" htmlFor="holder" error={fieldErrors.accountHolderName}>
+              <MCInput id="holder" placeholder="Name on account" disabled={!isEditing} value={form.accountHolderName} onChange={fc("accountHolderName")} />
+            </MCField>
+            <MCField label="Account Number" htmlFor="accno" error={fieldErrors.accountNumber}>
+              <MCInput id="accno" placeholder="Bank account number" disabled={!isEditing} value={form.accountNumber} onChange={fc("accountNumber")} />
+            </MCField>
+            <MCField label="IFSC Code" htmlFor="ifsc" error={fieldErrors.ifscCode}
+              hint="Format: SBIN0001234 (11 characters)">
+              <MCInput id="ifsc" placeholder="e.g. SBIN0001234" disabled={!isEditing}
+                style={{ textTransform: "uppercase" }} value={form.ifscCode} onChange={(e) => {
+                  fc("ifscCode")(e);
+                  const val = e.target.value.toUpperCase();
+                  if (val && !IFSC_REGEX.test(val))
+                    setFieldErrors((p) => ({ ...p, ifscCode: "Invalid IFSC. Format: SBIN0001234" }));
+                  else
+                    setFieldErrors((p) => { const n = { ...p }; delete n.ifscCode; return n; });
+                }} />
+            </MCField>
           </div>
         </MCSection>
       )}
@@ -1834,8 +2080,10 @@ function MCSection({ title, subtitle, icon, color = "blue", children }: {
   );
 }
 
-function MCField({ label, htmlFor, required, children }: {
-  label: string; htmlFor: string; required?: boolean; children: React.ReactNode;
+function MCField({ label, htmlFor, required, error, hint, children }: {
+  label: string; htmlFor: string; required?: boolean;
+  error?: string; hint?: string;
+  children: React.ReactNode;
 }) {
   return (
     <div className="space-y-1.5">
@@ -1843,6 +2091,8 @@ function MCField({ label, htmlFor, required, children }: {
         {label}{required && <span className="text-red-400">*</span>}
       </label>
       {children}
+      {hint && !error && <p className="text-[11px] text-gray-400">{hint}</p>}
+      {error && <p className="text-[11px] text-red-500 font-medium flex items-center gap-1"><AlertCircle size={11} />{error}</p>}
     </div>
   );
 }
