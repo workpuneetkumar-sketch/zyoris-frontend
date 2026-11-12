@@ -59,9 +59,21 @@ import {
   testIntegrationConnectionApi,
   testPreflightConnectionApi,
   getIntegrationSchemaApi,
+  discoverPreflightSchemaApi,
   createIntegrationMappingApi,
   updateIntegrationMappingApi,
 } from "@/lib/api/integrationsApi";
+import {
+  CANONICAL_TARGET_MODULES,
+  extractConnectorConfigFields,
+  isSecretConfigField,
+  normalizeOptionalSecret,
+  buildWizardIntegrationPayload,
+  buildPreflightTestPayload,
+  buildPreflightDiscoverPayload,
+  toStrictUpdatePayload,
+  isProviderManagedOAuth,
+} from "@/lib/utils/integrationContracts";
 import { WizardProgress } from "./wizard/WizardProgress";
 import { WizardFooter } from "./wizard/WizardFooter";
 import { integrationWizardSteps } from "./wizard/wizardSteps";
@@ -114,11 +126,11 @@ const integrationFormSchema = z.object({
     ),
   apiUrl: z
     .string()
-    .min(1, "API Endpoint URL is required")
     .refine(
       (val) => {
+        if (!val || !val.trim()) return true;
         try {
-          const url = new URL(val);
+          const url = new URL(val.trim());
           return url.protocol === "http:" || url.protocol === "https:";
         } catch {
           return false;
@@ -194,134 +206,16 @@ const integrationFormSchema = z.object({
 
 type FormValues = z.infer<typeof integrationFormSchema>;
 
-const AVAILABLE_MODULES = [
-  {
-    id: "leads",
-    label: "Leads (CRM)",
-    entity: "Lead",
-    targetFields: [
-      { key: "name", label: "Full Name", required: true },
-      { key: "email", label: "Email Address", required: true },
-      { key: "company", label: "Company Name" },
-      { key: "phone", label: "Phone Number" },
-      { key: "status", label: "Lead Status" },
-      { key: "source", label: "Lead Source" },
-      { key: "value", label: "Estimated Value" },
-      { key: "notes", label: "Notes / Description" },
-    ],
-  },
-  {
-    id: "deals",
-    label: "Deals / Pipeline (CRM)",
-    entity: "Deal",
-    targetFields: [
-      { key: "title", label: "Deal Title", required: true },
-      { key: "amount", label: "Deal Value / Amount", required: true },
-      { key: "stage", label: "Pipeline Stage" },
-      { key: "company", label: "Associated Company" },
-      { key: "closeDate", label: "Expected Close Date" },
-      { key: "owner", label: "Deal Owner" },
-    ],
-  },
-  {
-    id: "contacts",
-    label: "Contacts (CRM)",
-    entity: "Contact",
-    targetFields: [
-      { key: "firstName", label: "First Name", required: true },
-      { key: "lastName", label: "Last Name", required: true },
-      { key: "email", label: "Email Address", required: true },
-      { key: "phone", label: "Phone Number" },
-      { key: "jobTitle", label: "Job Title" },
-      { key: "department", label: "Department" },
-    ],
-  },
-  {
-    id: "companies",
-    label: "Companies (CRM)",
-    entity: "Company",
-    targetFields: [
-      { key: "name", label: "Company Name", required: true },
-      { key: "domain", label: "Website / Domain" },
-      { key: "industry", label: "Industry" },
-      { key: "size", label: "Employee Count" },
-      { key: "city", label: "City" },
-      { key: "country", label: "Country" },
-    ],
-  },
-  {
-    id: "finance",
-    label: "Invoices & Payments (Finance)",
-    entity: "Invoice",
-    targetFields: [
-      { key: "invoiceNumber", label: "Invoice Number", required: true },
-      { key: "amount", label: "Total Amount", required: true },
-      { key: "currency", label: "Currency Code" },
-      { key: "dueDate", label: "Due Date" },
-      { key: "status", label: "Payment Status" },
-      { key: "customerEmail", label: "Customer Email" },
-    ],
-  },
-  {
-    id: "hr",
-    label: "Employees & Attendance (HR)",
-    entity: "Employee",
-    targetFields: [
-      { key: "employeeId", label: "Employee ID", required: true },
-      { key: "name", label: "Full Name", required: true },
-      { key: "email", label: "Work Email", required: true },
-      { key: "role", label: "Designation" },
-      { key: "department", label: "Department" },
-      { key: "status", label: "Employment Status" },
-    ],
-  },
-  {
-    id: "tasks",
-    label: "Tasks & Workflows",
-    entity: "Task",
-    targetFields: [
-      { key: "title", label: "Task Title", required: true },
-      { key: "description", label: "Description" },
-      { key: "status", label: "Status" },
-      { key: "priority", label: "Priority" },
-      { key: "dueDate", label: "Due Date" },
-    ],
-  },
-  {
-    id: "communications",
-    label: "Communications (Email/Chat)",
-    entity: "Message",
-    targetFields: [
-      { key: "subject", label: "Subject / Header", required: true },
-      { key: "body", label: "Message Content" },
-      { key: "sender", label: "Sender" },
-      { key: "recipient", label: "Recipient" },
-      { key: "sentAt", label: "Timestamp" },
-    ],
-  },
-  {
-    id: "projects",
-    label: "Projects & Boards",
-    entity: "Project",
-    targetFields: [
-      { key: "name", label: "Project Name", required: true },
-      { key: "description", label: "Description" },
-      { key: "status", label: "Status" },
-      { key: "budget", label: "Budget" },
-    ],
-  },
-  {
-    id: "custom",
-    label: "Custom Entity",
-    entity: "CustomRecord",
-    targetFields: [
-      { key: "externalId", label: "External Record ID", required: true },
-      { key: "title", label: "Title / Name", required: true },
-      { key: "data", label: "Payload Data" },
-      { key: "updatedAt", label: "Last Modified" },
-    ],
-  },
-];
+const AVAILABLE_MODULES = CANONICAL_TARGET_MODULES.map((mod) => ({
+  id: mod.id,
+  label: mod.label,
+  entity: mod.entities[0].name,
+  targetFields: mod.entities[0].targetFields.map((tf) => ({
+    key: tf.key,
+    label: tf.label,
+    required: Boolean(tf.required),
+  })),
+}));
 
 /**
  * Sanitizes and redacts sensitive error messages before display
@@ -409,6 +303,8 @@ export function IntegrationWizardModal({
   );
   const [step, setStep] = useState<1 | 2 | 3 | 4 | 5 | 6 | 7>(1);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
+  const [dynamicSecrets, setDynamicSecrets] = useState<Record<string, string>>({});
+  const [mappingPersistenceError, setMappingPersistenceError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activationSuccess, setActivationSuccess] = useState(false);
   const [isActivationConfirmed, setIsActivationConfirmed] = useState(false);
@@ -453,6 +349,8 @@ export function IntegrationWizardModal({
     setDiscoveredSchema(null);
     setSchemaError(null);
     setMappedFields({});
+    setDynamicSecrets({});
+    setMappingPersistenceError(null);
     setActivationSuccess(false);
     setIsActivationConfirmed(false);
   }, [initialConnector, isOpen, resetConnectionTest]);
@@ -527,13 +425,61 @@ export function IntegrationWizardModal({
   // Keep form values updated when selected connector changes
   useEffect(() => {
     if (selectedConnector) {
-      setValue("displayName", `${selectedConnector.name} Integration`);
-      if (selectedConnector.configSchema?.endpoint?.defaultUrl) {
-        setValue("apiUrl", selectedConnector.configSchema.endpoint.defaultUrl);
+      const savedConfig =
+        (selectedConnector.connectionState?.config as Record<string, any> | undefined) ||
+        {};
+      const configFieldList = extractConnectorConfigFields(selectedConnector);
+      const seededDynamic: Record<string, any> = {};
+      for (const field of configFieldList) {
+        if (isSecretConfigField(field)) continue;
+        const savedVal = savedConfig[field.name];
+        if (savedVal !== undefined && savedVal !== null && savedVal !== "") {
+          seededDynamic[field.name] = savedVal;
+        } else if (field.defaultValue !== undefined) {
+          seededDynamic[field.name] = field.defaultValue;
+        }
+      }
+
+      setValue(
+        "displayName",
+        selectedConnector.connectionState?.name ||
+          (savedConfig.displayName as string) ||
+          `${selectedConnector.name} Integration`
+      );
+      setValue(
+        "apiUrl",
+        (typeof savedConfig.baseUrl === "string" && savedConfig.baseUrl) ||
+          (typeof savedConfig.apiUrl === "string" && savedConfig.apiUrl) ||
+          selectedConnector.configSchema?.endpoint?.defaultUrl ||
+          ""
+      );
+      if (savedConfig.httpMethod) {
+        setValue("httpMethod", savedConfig.httpMethod as HttpMethod);
+      } else if (selectedConnector.configSchema?.endpoint?.defaultMethod) {
+        setValue(
+          "httpMethod",
+          selectedConnector.configSchema.endpoint.defaultMethod as HttpMethod
+        );
+      }
+      if (savedConfig.syncDirection) {
+        setValue("syncDirection", savedConfig.syncDirection as SyncDirection);
+      }
+      if (savedConfig.syncFrequency) {
+        setValue("syncFrequency", savedConfig.syncFrequency as SyncFrequency);
+      }
+      if (typeof savedConfig.targetModule === "string") {
+        setValue("targetModule", savedConfig.targetModule);
+      }
+      if (typeof savedConfig.targetEntity === "string") {
+        setValue("targetEntity", savedConfig.targetEntity);
       }
       if (selectedConnector.authType) {
         setValue("authType", selectedConnector.authType as AuthType);
       }
+      setValue("dynamicFields", seededDynamic);
+      setDynamicSecrets({});
+      setMappingPersistenceError(null);
+
       const existingId =
         selectedConnector.connectionId ||
         selectedConnector.connectionState?.id ||
@@ -603,6 +549,41 @@ export function IntegrationWizardModal({
     currentHttpMethod
   );
 
+  const connectorConfigFields = useMemo(
+    () => extractConnectorConfigFields(selectedConnector),
+    [selectedConnector]
+  );
+
+  const nonSecretConfigFields = useMemo(
+    () =>
+      connectorConfigFields.filter(
+        (field) => !isSecretConfigField(field) && field.name !== "baseUrl"
+      ),
+    [connectorConfigFields]
+  );
+
+  const secretConfigFields = useMemo(
+    () => connectorConfigFields.filter((field) => isSecretConfigField(field)),
+    [connectorConfigFields]
+  );
+
+  const requiresEndpointUrl = useMemo(
+    () =>
+      Boolean(
+        selectedConnector?.configSchema?.endpoint?.required ||
+          selectedConnector?.provider?.toUpperCase() === "CUSTOM_API" ||
+          connectorConfigFields.some(
+            (field) => field.name === "baseUrl" && field.required
+          )
+      ),
+    [selectedConnector, connectorConfigFields]
+  );
+
+  const isOAuthConnector = useMemo(
+    () => currentAuthType === "OAUTH2" || isProviderManagedOAuth(selectedConnector),
+    [currentAuthType, selectedConnector]
+  );
+
   const currentModuleConfig = useMemo(() => {
     return (
       AVAILABLE_MODULES.find((m) => m.id === currentTargetModule) ||
@@ -611,26 +592,12 @@ export function IntegrationWizardModal({
   }, [currentTargetModule]);
 
   const supportedEntities = useMemo(() => {
-    const connectorEntities: string[] = [];
-    if (selectedConnector?.configSchema?.modules) {
-      selectedConnector.configSchema.modules.forEach((mod) => {
-        if (mod.entities && Array.isArray(mod.entities)) {
-          connectorEntities.push(...mod.entities);
-        }
-      });
-    }
     const moduleEntity = currentModuleConfig?.entity;
     const availableDefaults = AVAILABLE_MODULES.map((m) => m.entity);
     return Array.from(
-      new Set(
-        [
-          ...(moduleEntity ? [moduleEntity] : []),
-          ...connectorEntities,
-          ...availableDefaults,
-        ].filter(Boolean)
-      )
+      new Set([...(moduleEntity ? [moduleEntity] : []), ...availableDefaults])
     );
-  }, [selectedConnector, currentModuleConfig]);
+  }, [currentModuleConfig]);
 
   const getVerifiedExistingIntegrationId = (
     connector: Connector | null,
@@ -659,59 +626,84 @@ export function IntegrationWizardModal({
     );
   };
 
-  const buildPayload = (data: FormValues): CreateIntegrationPayload => {
-    const connector = selectedConnector || initialConnector || {
-      id: "custom",
-      provider: "custom",
-      name: data.displayName || "Custom Integration",
-    };
-
-    const credentials: Record<string, any> = {};
-    if (data.authType === "API_KEY") {
-      credentials.headerName = data.apiKeyName || "X-API-Key";
-      credentials.apiKey = data.apiKeyValue;
-    } else if (data.authType === "BEARER_TOKEN") {
-      credentials.token = data.bearerToken;
-    } else if (data.authType === "BASIC_AUTH") {
-      credentials.username = data.basicUsername;
-      credentials.password = data.basicPassword;
-    } else if (data.authType === "WEBHOOK_SECRET") {
-      credentials.secret = data.webhookSecret;
+  const isSecretCoveredByPrimaryAuth = (fieldName: string): boolean => {
+    if (currentAuthType === "API_KEY" && fieldName === "apiKey") return true;
+    if (
+      (currentAuthType === "BEARER_TOKEN" || currentAuthType === "OAUTH2") &&
+      fieldName === "accessToken"
+    ) {
+      return true;
     }
+    if (currentAuthType === "OAUTH2" && fieldName === "clientSecret") return true;
+    if (currentAuthType === "BASIC_AUTH" && fieldName === "password") return true;
+    if (currentAuthType === "WEBHOOK_SECRET" && fieldName === "webhookSecret") return true;
+    return false;
+  };
 
-    const headers: Record<string, string> = {};
-    data.headers?.forEach((header) => {
-      if (header.key.trim() && header.value.trim()) {
-        headers[header.key.trim()] = header.value.trim();
+  const extraSecretConfigFields = useMemo(
+    () =>
+      secretConfigFields.filter(
+        (field) => !isSecretCoveredByPrimaryAuth(field.name)
+      ),
+    [secretConfigFields, currentAuthType]
+  );
+
+  const getMissingRequiredNonSecretFields = (values: FormValues): string[] => {
+    const missing: string[] = [];
+    const isOAuth =
+      currentAuthType === "OAUTH2" || isProviderManagedOAuth(selectedConnector);
+    if (!isOAuth && requiresEndpointUrl && !values.apiUrl?.trim()) {
+      missing.push("API Endpoint URL");
+    }
+    const dyn = values.dynamicFields || {};
+    for (const field of nonSecretConfigFields) {
+      if (!field.required) continue;
+      const val = dyn[field.name];
+      if (val === undefined || val === null || String(val).trim() === "") {
+        missing.push(field.label || field.name);
       }
-    });
+    }
+    return missing;
+  };
 
-    return {
-      connectorId: connector.id,
-      provider: connector.provider,
-      name: data.displayName,
+  const getMissingRequiredSecretFields = (): string[] => {
+    if (currentAuthType === "OAUTH2") return [];
+    const missing: string[] = [];
+    for (const field of extraSecretConfigFields) {
+      if (!field.required) continue;
+      if (!normalizeOptionalSecret(dynamicSecrets[field.name])) {
+        missing.push(field.label || field.name);
+      }
+    }
+    return missing;
+  };
+
+  const buildPayload = (data: FormValues): CreateIntegrationPayload => {
+    return buildWizardIntegrationPayload({
+      connector: selectedConnector || initialConnector || null,
       displayName: data.displayName,
       targetModule: data.targetModule,
       targetEntity: data.targetEntity,
       apiUrl: data.apiUrl,
       httpMethod: data.httpMethod,
       authType: data.authType,
-      credentials,
+      apiKeyName: data.apiKeyName,
+      apiKeyValue: data.apiKeyValue,
+      bearerToken: data.bearerToken,
+      basicUsername: data.basicUsername,
+      basicPassword: data.basicPassword,
+      oauthClientId: data.oauthClientId,
+      oauthClientSecret: data.oauthClientSecret,
+      webhookSecret: data.webhookSecret,
       syncDirection: data.syncDirection,
       syncFrequency: data.syncFrequency,
-      headers,
-      config: {
-        ...(data.dynamicFields || {}),
-        contentType: data.contentType,
-        queryParams: data.queryParams?.filter(
-          (param) => Boolean(param.key?.trim())
-        ).map((param) => ({
-          key: param.key.trim(),
-          value: param.value ? param.value.trim() : "",
-        })),
-        requestBody: parseRequestBody(data.requestBody),
-      },
-    };
+      headers: data.headers,
+      contentType: data.contentType,
+      queryParams: data.queryParams,
+      requestBody: parseRequestBody(data.requestBody),
+      dynamicFields: data.dynamicFields,
+      dynamicSecrets,
+    });
   };
 
   const toggleSecretVisibility = (key: string) => {
@@ -762,8 +754,18 @@ export function IntegrationWizardModal({
     if (isTesting) return; // Prevent duplicate requests
 
     const values = watch();
-    if (!values.apiUrl) {
-      toast.error("Please enter a valid API URL before testing connectivity.");
+    const missingNonSecrets = getMissingRequiredNonSecretFields(values);
+    const missingSecrets = getMissingRequiredSecretFields();
+    if (missingNonSecrets.length > 0) {
+      toast.error(
+        `Please complete required configuration fields before testing: ${missingNonSecrets.join(", ")}`
+      );
+      return;
+    }
+    if (missingSecrets.length > 0 && !activeIntegrationId) {
+      toast.error(
+        `Please provide required credential fields before testing: ${missingSecrets.join(", ")}`
+      );
       return;
     }
 
@@ -779,20 +781,12 @@ export function IntegrationWizardModal({
 
         let currentTargetId = activeIntegrationId || verifiedExistingTargetId || null;
 
-        // Use pre-flight test connection endpoint if available for validating credentials without saving
+        // Use pre-flight test connection endpoint for validating unsaved credentials without persisting
         if (!currentTargetId) {
           try {
-            const preflightRes = await testPreflightConnectionApi({
-              provider: payload.provider,
-              authType: payload.authType,
-              credentials: payload.credentials || {},
-              config: {
-                apiUrl: payload.apiUrl,
-                httpMethod: payload.httpMethod,
-                headers: payload.headers,
-                ...(payload.config || {}),
-              },
-            });
+            const preflightRes = await testPreflightConnectionApi(
+              buildPreflightTestPayload(payload)
+            );
 
             const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
             if (preflightRes.success) {
@@ -852,16 +846,10 @@ export function IntegrationWizardModal({
         // If active integration was already created and user edited fields before re-testing, sync configuration
         if (activeIntegrationId && onUpdateIntegration) {
           try {
-            await onUpdateIntegration(activeIntegrationId, {
-              displayName: payload.displayName,
-              apiUrl: payload.apiUrl,
-              httpMethod: payload.httpMethod,
-              credentials: payload.credentials,
-              headers: payload.headers,
-              config: payload.config,
-              syncDirection: payload.syncDirection,
-              syncFrequency: payload.syncFrequency,
-            });
+            await onUpdateIntegration(
+              activeIntegrationId,
+              toStrictUpdatePayload(payload)
+            );
           } catch (updateErr) {
             console.warn("Failed to sync updated configuration before test:", updateErr);
           }
@@ -950,16 +938,8 @@ export function IntegrationWizardModal({
    */
   const handleDiscoverSchema = useCallback(
     async (forceRefetch = false) => {
-      const targetId =
-        activeIntegrationId ||
-        selectedConnector?.connectionId ||
-        selectedConnector?.connectionState?.id ||
-        (selectedConnector?.isConnected ? selectedConnector?.id : null) ||
-        selectedConnector?.id ||
-        selectedConnector?.provider;
-
-      if (!targetId) {
-        toast.error("No active integration identifier available for schema discovery.");
+      if (!selectedConnector) {
+        toast.error("Please select a connector before discovering schema.");
         return;
       }
 
@@ -969,15 +949,25 @@ export function IntegrationWizardModal({
 
       if (isLoadingSchema) return;
 
+      const realIntegrationId =
+        activeIntegrationId ||
+        selectedConnector?.connectionId ||
+        selectedConnector?.connectionState?.id ||
+        (selectedConnector?.isConnected ? selectedConnector?.id : null);
+
       setIsLoadingSchema(true);
       setSchemaError(null);
 
       try {
-        const schemaRes = onDiscoverSchema
-          ? await onDiscoverSchema(targetId)
-          : onFetchSchema
-            ? await onFetchSchema(targetId)
-            : await getIntegrationSchemaApi(targetId);
+        const schemaRes = realIntegrationId
+          ? onDiscoverSchema
+            ? await onDiscoverSchema(realIntegrationId)
+            : onFetchSchema
+              ? await onFetchSchema(realIntegrationId)
+              : await getIntegrationSchemaApi(realIntegrationId)
+          : await discoverPreflightSchemaApi(
+              buildPreflightDiscoverPayload(buildPayload(watch()))
+            );
 
         setDiscoveredSchema(schemaRes);
 
@@ -1074,19 +1064,32 @@ export function IntegrationWizardModal({
   // Trigger OAuth Connect
   const handleInitiateOAuth = async () => {
     if (!selectedConnector) return;
+    const values = watch();
+    const missingNonSecrets = getMissingRequiredNonSecretFields(values);
+    if (missingNonSecrets.length > 0) {
+      toast.error(
+        `Please complete required connector fields before OAuth authorization: ${missingNonSecrets.join(", ")}`
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const values = watch();
+      const wizardPayload = buildPayload(values);
+      const dyn = values.dynamicFields || {};
       const res = await onOAuthConnect(selectedConnector.provider, {
+        name: wizardPayload.name,
         clientId: values.oauthClientId,
         clientSecret: values.oauthClientSecret,
         scopes: values.oauthScopes,
         targetModule: values.targetModule,
         targetEntity: values.targetEntity,
-        apiUrl: values.apiUrl,
-        httpMethod: values.httpMethod,
-        syncDirection: values.syncDirection,
-        syncFrequency: values.syncFrequency,
+        ...(wizardPayload.baseUrl ? { baseUrl: wizardPayload.baseUrl } : {}),
+        ...(wizardPayload.redirectUri ? { redirectUri: wizardPayload.redirectUri } : {}),
+        ...(dyn.shopDomain ? { shop: String(dyn.shopDomain).trim() } : {}),
+        ...(dyn.dataCenter ? { dataCenter: String(dyn.dataCenter).trim() } : {}),
+        ...(dyn.instanceUrl ? { instanceUrl: String(dyn.instanceUrl).trim() } : {}),
+        config: wizardPayload.config,
       });
 
       const targetUrl =
@@ -1153,63 +1156,88 @@ export function IntegrationWizardModal({
       );
     };
 
+    const persistFieldMappings = async (
+      integrationId: string,
+      onlyDirty: boolean
+    ): Promise<boolean> => {
+      if (rawMappingEntries.length === 0) return true;
+      const sourceEntName =
+        activeEntity?.name || activeEntity?.label || "DefaultEntity";
+      const targetEntName = data.targetEntity || "DefaultEntity";
+      const failures: Array<{ field: string; message: string }> = [];
+
+      for (const entry of rawMappingEntries) {
+        if (!entry.sourceField) continue;
+        if (onlyDirty && !entry.isDirty) continue;
+        try {
+          if (onlyDirty && entry.backendMappingId) {
+            await updateIntegrationMappingApi(
+              integrationId,
+              entry.backendMappingId,
+              {
+                sourceEntity: sourceEntName,
+                sourceField: entry.sourceField,
+                targetEntity: targetEntName,
+                targetField: entry.targetField,
+                status: entry.status,
+                transformation: {
+                  type: entry.transformationType || "none",
+                  config: entry.transformationConfig,
+                  defaultValue: entry.defaultValue,
+                },
+              }
+            );
+          } else {
+            await createIntegrationMappingApi(integrationId, {
+              sourceEntity: sourceEntName,
+              sourceField: entry.sourceField,
+              targetEntity: targetEntName,
+              targetField: entry.targetField,
+              status: entry.status || "ACTIVE",
+              confidence: 1,
+              transformation: {
+                type: entry.transformationType || "none",
+                config: entry.transformationConfig,
+                defaultValue: entry.defaultValue,
+              },
+            });
+          }
+        } catch (mapErr) {
+          failures.push({
+            field: entry.targetField,
+            message: formatBackendError(mapErr),
+          });
+        }
+      }
+
+      if (failures.length > 0) {
+        const summary = failures
+          .map((f) => `${f.field} (${f.message})`)
+          .join("; ");
+        setMappingPersistenceError(summary);
+        toast.error(
+          `Integration saved, but failed to persist field mappings: ${summary}`
+        );
+        return false;
+      }
+
+      return true;
+    };
+
+    setMappingPersistenceError(null);
+
     if (activeIntegrationId && onUpdateIntegration) {
       setIsSubmitting(true);
       try {
         const payload = buildPayload(data);
-
-        if (rawMappingEntries.length > 0) {
-          const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
-          const targetEntName = data.targetEntity || "DefaultEntity";
-
-          for (const entry of rawMappingEntries) {
-            if (entry.sourceField && entry.isDirty) {
-              try {
-                if (entry.backendMappingId) {
-                  await updateIntegrationMappingApi(activeIntegrationId, entry.backendMappingId, {
-                    sourceEntity: sourceEntName,
-                    sourceField: entry.sourceField,
-                    targetEntity: targetEntName,
-                    targetField: entry.targetField,
-                    status: entry.status,
-                    transformation: {
-                      type: entry.transformationType || "none",
-                      config: entry.transformationConfig,
-                      defaultValue: entry.defaultValue,
-                    },
-                  });
-                } else {
-                  await createIntegrationMappingApi(activeIntegrationId, {
-                    sourceEntity: sourceEntName,
-                    sourceField: entry.sourceField,
-                    targetEntity: targetEntName,
-                    targetField: entry.targetField,
-                    status: entry.status || "ACTIVE",
-                    confidence: 1,
-                    transformation: {
-                      type: entry.transformationType || "none",
-                      config: entry.transformationConfig,
-                      defaultValue: entry.defaultValue,
-                    },
-                  });
-                }
-              } catch (mapErr) {
-                console.warn(`Could not sync mapping for ${entry.targetField}:`, mapErr);
-              }
-            }
-          }
+        await onUpdateIntegration(
+          activeIntegrationId,
+          toStrictUpdatePayload(payload)
+        );
+        const mappingsOk = await persistFieldMappings(activeIntegrationId, true);
+        if (!mappingsOk) {
+          return;
         }
-
-        await onUpdateIntegration(activeIntegrationId, {
-          displayName: payload.displayName,
-          syncDirection: payload.syncDirection,
-          syncFrequency: payload.syncFrequency,
-          apiUrl: payload.apiUrl,
-          httpMethod: payload.httpMethod,
-          headers: payload.headers,
-          credentials: payload.credentials,
-          config: payload.config,
-        });
         setActivationSuccess(true);
         toast.success(`Successfully activated ${selectedConnector.name}!`);
       } catch (err: any) {
@@ -1226,39 +1254,19 @@ export function IntegrationWizardModal({
       const payload = buildPayload(data);
 
       const created = await onSubmit(payload);
-      const newIntegrationId = created?.id;
+      const newIntegrationId = created?.id || extractIntegrationId(created);
+      if (newIntegrationId) {
+        setActiveIntegrationId(newIntegrationId);
+      }
 
-      if (newIntegrationId && rawMappingEntries.length > 0) {
-        const sourceEntName = activeEntity?.name || activeEntity?.label || "DefaultEntity";
-        const targetEntName = data.targetEntity || "DefaultEntity";
-
-        for (const entry of rawMappingEntries) {
-          if (entry.sourceField) {
-            try {
-              await createIntegrationMappingApi(newIntegrationId, {
-                sourceEntity: sourceEntName,
-                sourceField: entry.sourceField,
-                targetEntity: targetEntName,
-                targetField: entry.targetField,
-                status: entry.status || "ACTIVE",
-                confidence: 1,
-                transformation: {
-                  type: entry.transformationType || "none",
-                  config: entry.transformationConfig,
-                  defaultValue: entry.defaultValue,
-                },
-              });
-            } catch (mapErr) {
-              console.warn(`Could not sync mapping for ${entry.targetField}:`, mapErr);
-            }
-          }
+      if (newIntegrationId) {
+        const mappingsOk = await persistFieldMappings(newIntegrationId, false);
+        if (!mappingsOk) {
+          return;
         }
       }
 
       setActivationSuccess(true);
-      if (newIntegrationId) {
-        setActiveIntegrationId(newIntegrationId);
-      }
       toast.success(`Successfully activated ${selectedConnector.name}!`);
     } catch (err: any) {
       const errorMsg = formatBackendError(err);
@@ -1539,134 +1547,151 @@ export function IntegrationWizardModal({
                 </div>
               </div>
 
-              {/* API URL & Method */}
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                <div className="sm:col-span-3">
-                  <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
-                    API Endpoint URL *
-                  </label>
-                  <div className="relative">
-                    <Globe className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-                    <input
-                      type="url"
-                      {...register("apiUrl")}
-                      placeholder="https://api.connector.com/v1/resource"
-                      className="w-full pl-9 pr-3.5 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none transition-colors"
-                    />
-                  </div>
-                  {errors.apiUrl && (
-                    <p className="text-xs text-error mt-1">
-                      {errors.apiUrl.message}
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
-                    HTTP Method *
-                  </label>
-                  <select
-                    {...register("httpMethod")}
-                    className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none transition-colors font-mono"
-                  >
-                    <option value="GET">GET</option>
-                    <option value="POST">POST</option>
-                    <option value="PUT">PUT</option>
-                    <option value="PATCH">PATCH</option>
-                    <option value="DELETE">DELETE</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* REST request configuration */}
-              <div className="space-y-3 rounded-xl border border-border bg-surface-secondary/30 p-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* API URL & Method / Provider Managed Endpoint */}
+              {isOAuthConnector ? (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-start gap-3">
+                  <ShieldCheck className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
                   <div>
-                    <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
-                      Content Type
-                    </label>
-                    <select
-                      {...register("contentType")}
-                      className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
-                    >
-                      {REST_CONTENT_TYPES.map((contentType) => (
-                        <option key={contentType} value={contentType}>
-                          {contentType}
-                        </option>
-                      ))}
-                    </select>
+                    <h4 className="text-sm font-semibold text-text">
+                      Provider-Managed Integration Endpoint
+                    </h4>
+                    <p className="text-xs text-text-secondary mt-1 leading-relaxed">
+                      API endpoints, OAuth handshakes, and token lifecycles are automatically managed by the Zyoris{" "}
+                      {selectedConnector?.name || "OAuth"} connector. Generic REST endpoint parameters are not required.
+                    </p>
                   </div>
-                  {supportsRequestBody ? (
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div className="sm:col-span-3">
+                      <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                        API Endpoint URL *
+                      </label>
+                      <div className="relative">
+                        <Globe className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+                        <input
+                          type="url"
+                          {...register("apiUrl")}
+                          placeholder="https://api.connector.com/v1/resource"
+                          className="w-full pl-9 pr-3.5 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none transition-colors"
+                        />
+                      </div>
+                      {errors.apiUrl && (
+                        <p className="text-xs text-error mt-1">
+                          {errors.apiUrl.message}
+                        </p>
+                      )}
+                    </div>
+
                     <div>
                       <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
-                        Request Body (JSON)
+                        HTTP Method *
                       </label>
-                      <textarea
-                        {...register("requestBody")}
-                        rows={3}
-                        placeholder={'{"field": "value"}'}
-                        className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
-                      />
-                      {errors.requestBody && (
-                        <p className="text-xs text-error mt-1">
-                          {errors.requestBody.message}
+                      <select
+                        {...register("httpMethod")}
+                        className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none transition-colors font-mono"
+                      >
+                        <option value="GET">GET</option>
+                        <option value="POST">POST</option>
+                        <option value="PUT">PUT</option>
+                        <option value="PATCH">PATCH</option>
+                        <option value="DELETE">DELETE</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* REST request configuration */}
+                  <div className="space-y-3 rounded-xl border border-border bg-surface-secondary/30 p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                          Content Type
+                        </label>
+                        <select
+                          {...register("contentType")}
+                          className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                        >
+                          {REST_CONTENT_TYPES.map((contentType) => (
+                            <option key={contentType} value={contentType}>
+                              {contentType}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      {supportsRequestBody ? (
+                        <div>
+                          <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                            Request Body (JSON)
+                          </label>
+                          <textarea
+                            {...register("requestBody")}
+                            rows={3}
+                            placeholder={'{"field": "value"}'}
+                            className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                          />
+                          {errors.requestBody && (
+                            <p className="text-xs text-error mt-1">
+                              {errors.requestBody.message}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="self-end text-xs text-text-muted pb-2">
+                          {currentHttpMethod} requests do not send a request body.
                         </p>
                       )}
                     </div>
-                  ) : (
-                    <p className="self-end text-xs text-text-muted pb-2">
-                      {currentHttpMethod} requests do not send a request body.
-                    </p>
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-semibold text-text uppercase tracking-wider">
-                      Query Parameters
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => appendQueryParam({ key: "", value: "" })}
-                      className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark font-medium transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Parameter</span>
-                    </button>
-                  </div>
-                  {queryParamFields.map((field, idx) => (
-                    <div key={field.id} className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="text"
-                          {...register(`queryParams.${idx}.key` as const)}
-                          placeholder="Parameter name"
-                          className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                        />
-                        <input
-                          type="text"
-                          {...register(`queryParams.${idx}.value` as const)}
-                          placeholder="Parameter value"
-                          className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
-                        />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-semibold text-text uppercase tracking-wider">
+                          Query Parameters
+                        </label>
                         <button
                           type="button"
-                          onClick={() => removeQueryParam(idx)}
-                          className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
-                          aria-label="Remove query parameter"
+                          onClick={() => appendQueryParam({ key: "", value: "" })}
+                          className="flex items-center gap-1 text-xs text-primary hover:text-primary-dark font-medium transition-colors"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Parameter</span>
                         </button>
                       </div>
-                      {errors.queryParams?.[idx]?.key && (
-                        <p className="text-[10px] text-error pl-1">
-                          {errors.queryParams[idx]?.key?.message}
-                        </p>
-                      )}
+                      {queryParamFields.map((field, idx) => (
+                        <div key={field.id} className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="text"
+                              {...register(`queryParams.${idx}.key` as const)}
+                              placeholder="Parameter name"
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                            />
+                            <input
+                              type="text"
+                              {...register(`queryParams.${idx}.value` as const)}
+                              placeholder="Parameter value"
+                              className="flex-1 px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeQueryParam(idx)}
+                              className="p-1.5 text-text-muted hover:text-error hover:bg-surface-hover rounded-lg transition-colors"
+                              aria-label="Remove query parameter"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                          {errors.queryParams?.[idx]?.key && (
+                            <p className="text-[10px] text-error pl-1">
+                              {errors.queryParams[idx]?.key?.message}
+                            </p>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                </>
+              )}
 
               {/* Sync Direction & Frequency */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1707,6 +1732,136 @@ export function IntegrationWizardModal({
                   </select>
                 </div>
               </div>
+
+              {/* Provider-Specific Configuration Fields */}
+              {nonSecretConfigFields.length > 0 && (
+                <div className="p-4 rounded-xl border border-border bg-surface-secondary/40 space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-text">
+                      <Sliders className="w-4 h-4 text-primary" />
+                      <span>
+                        {selectedConnector?.name || "Connector"} Settings
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-text-muted">
+                      Provider-specific configuration
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {nonSecretConfigFields.map((field) => {
+                      const currentDynamic = watch("dynamicFields") || {};
+                      const currentValue =
+                        currentDynamic[field.name] ?? field.defaultValue ?? "";
+                      const inputId = `wizard-dyn-${field.name}`;
+
+                      return (
+                        <div key={field.name} className="space-y-1">
+                          <label
+                            htmlFor={inputId}
+                            className="block text-xs font-medium text-text"
+                          >
+                            {field.label || field.name}
+                            {field.required && (
+                              <span className="text-error ml-0.5">*</span>
+                            )}
+                          </label>
+
+                          {field.type === "select" && Array.isArray(field.options) ? (
+                            <select
+                              id={inputId}
+                              value={String(currentValue)}
+                              onChange={(e) =>
+                                setValue(
+                                  "dynamicFields",
+                                  {
+                                    ...currentDynamic,
+                                    [field.name]: e.target.value,
+                                  },
+                                  { shouldDirty: true }
+                                )
+                              }
+                              className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none transition-colors"
+                            >
+                              {!field.required && (
+                                <option value="">Select an option...</option>
+                              )}
+                              {field.options.map((opt) => (
+                                <option key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </option>
+                              ))}
+                            </select>
+                          ) : field.type === "boolean" ? (
+                            <label
+                              htmlFor={inputId}
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-surface text-xs text-text cursor-pointer"
+                            >
+                              <input
+                                id={inputId}
+                                type="checkbox"
+                                checked={Boolean(currentValue)}
+                                onChange={(e) =>
+                                  setValue(
+                                    "dynamicFields",
+                                    {
+                                      ...currentDynamic,
+                                      [field.name]: e.target.checked,
+                                    },
+                                    { shouldDirty: true }
+                                  )
+                                }
+                                className="rounded border-border text-primary focus:ring-primary"
+                              />
+                              <span>{field.helpText || "Enabled"}</span>
+                            </label>
+                          ) : (
+                            <input
+                              id={inputId}
+                              type={
+                                field.type === "number"
+                                  ? "number"
+                                  : field.type === "url"
+                                    ? "url"
+                                    : "text"
+                              }
+                              value={String(currentValue)}
+                              onChange={(e) =>
+                                setValue(
+                                  "dynamicFields",
+                                  {
+                                    ...currentDynamic,
+                                    [field.name]:
+                                      field.type === "number"
+                                        ? e.target.value === ""
+                                          ? ""
+                                          : Number(e.target.value)
+                                        : e.target.value,
+                                  },
+                                  { shouldDirty: true }
+                                )
+                              }
+                              placeholder={
+                                field.placeholder ||
+                                (field.defaultValue !== undefined
+                                  ? String(field.defaultValue)
+                                  : `Enter ${field.label || field.name}`)
+                              }
+                              className="w-full px-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                            />
+                          )}
+
+                          {(field.helpText || field.description) &&
+                            field.type !== "boolean" && (
+                              <p className="text-[11px] text-text-muted">
+                                {field.helpText || field.description}
+                              </p>
+                            )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -1960,6 +2115,65 @@ export function IntegrationWizardModal({
                   <p className="text-xs text-text-muted">
                     No authentication credentials will be attached to outgoing sync requests.
                   </p>
+                )}
+
+                {extraSecretConfigFields.length > 0 && (
+                  <div className="pt-3 border-t border-border/60 space-y-3">
+                    <div className="text-xs font-semibold text-text">
+                      Additional {selectedConnector?.name || "Connector"} Secrets
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {extraSecretConfigFields.map((field) => {
+                        const toggleKey = `dyn_${field.name}`;
+                        const isRequired = Boolean(field.required) && !activeIntegrationId;
+                        return (
+                          <div key={field.name}>
+                            <label className="block text-xs text-text-muted mb-1">
+                              {field.label || field.name}
+                              {isRequired && (
+                                <span className="text-error ml-0.5">*</span>
+                              )}
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showSecrets[toggleKey] ? "text" : "password"}
+                                value={dynamicSecrets[field.name] || ""}
+                                onChange={(e) =>
+                                  setDynamicSecrets((prev) => ({
+                                    ...prev,
+                                    [field.name]: e.target.value,
+                                  }))
+                                }
+                                placeholder={
+                                  activeIntegrationId
+                                    ? "Leave blank to keep existing secret"
+                                    : field.placeholder || "••••••••••••••••"
+                                }
+                                className="w-full pr-10 pl-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => toggleSecretVisibility(toggleKey)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                                aria-label={`Toggle ${field.label || field.name} visibility`}
+                              >
+                                {showSecrets[toggleKey] ? (
+                                  <EyeOff className="w-4 h-4" />
+                                ) : (
+                                  <Eye className="w-4 h-4" />
+                                )}
+                              </button>
+                            </div>
+                            {(field.helpText || field.description) && (
+                              <p className="text-[11px] text-text-muted mt-1">
+                                {field.helpText || field.description}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 )}
               </div>
 
@@ -2566,7 +2780,19 @@ export function IntegrationWizardModal({
 
           {/* STEP 7: REVIEW & ENABLE */}
           {step === 7 && (
-            <ReviewAndEnableStep
+            <>
+              {mappingPersistenceError && (
+                <div className="mb-4 p-3.5 rounded-xl border border-error/30 bg-error/10 text-error text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <div className="font-semibold">
+                      Field Mapping Persistence Error
+                    </div>
+                    <div>{mappingPersistenceError}</div>
+                  </div>
+                </div>
+              )}
+              <ReviewAndEnableStep
               connector={selectedConnector}
               displayName={watch("displayName") || `${selectedConnector?.name || "Custom"} Integration`}
               targetModule={watch("targetModule") || "leads"}
@@ -2593,6 +2819,7 @@ export function IntegrationWizardModal({
                 onClose();
               }}
             />
+            </>
           )}
         </form>
 
@@ -2643,21 +2870,29 @@ export function IntegrationWizardModal({
                   }
 
                   if (step === 2) {
-                    const isValid = await trigger([
+                    const fieldsToTrigger: (keyof FormValues)[] = [
                       "displayName",
                       "targetModule",
                       "targetEntity",
-                      "apiUrl",
-                      "httpMethod",
-                      "contentType",
-                      "requestBody",
-                      "queryParams",
                       "syncDirection",
                       "syncFrequency",
-                    ]);
-                    if (!isValid) {
+                    ];
+                    if (!isOAuthConnector) {
+                      fieldsToTrigger.push(
+                        "apiUrl",
+                        "httpMethod",
+                        "contentType",
+                        "requestBody",
+                        "queryParams"
+                      );
+                    }
+                    const isValid = await trigger(fieldsToTrigger);
+                    const missingConfig = getMissingRequiredNonSecretFields(watch());
+                    if (!isValid || missingConfig.length > 0) {
                       toast.error(
-                        "Please resolve configuration validation errors before proceeding."
+                        missingConfig.length > 0
+                          ? `Please complete required fields: ${missingConfig.join(", ")}`
+                          : "Please resolve configuration validation errors before proceeding."
                       );
                       return;
                     }
@@ -2677,9 +2912,35 @@ export function IntegrationWizardModal({
                       fieldsToValidate.push("webhookSecret");
                     }
                     const isValid = await trigger(fieldsToValidate);
-                    if (!isValid) {
+                    const values = watch();
+                    const missingSecrets = !activeIntegrationId
+                      ? getMissingRequiredSecretFields()
+                      : [];
+
+                    if (!activeIntegrationId) {
+                      if (
+                        currentAuthType === "API_KEY" &&
+                        !normalizeOptionalSecret(values.apiKeyValue)
+                      ) {
+                        missingSecrets.unshift("API Key");
+                      } else if (
+                        currentAuthType === "BEARER_TOKEN" &&
+                        !normalizeOptionalSecret(values.bearerToken)
+                      ) {
+                        missingSecrets.unshift("Access / Bearer Token");
+                      } else if (
+                        currentAuthType === "WEBHOOK_SECRET" &&
+                        !normalizeOptionalSecret(values.webhookSecret)
+                      ) {
+                        missingSecrets.unshift("Webhook Signing Secret");
+                      }
+                    }
+
+                    if (!isValid || missingSecrets.length > 0) {
                       toast.error(
-                        "Please provide valid authentication credentials before proceeding."
+                        missingSecrets.length > 0
+                          ? `Please provide required credentials: ${missingSecrets.join(", ")}`
+                          : "Please provide valid authentication credentials before proceeding."
                       );
                       return;
                     }
