@@ -1,4 +1,4 @@
-// Voice Service for ZiiBot - Speech to Text & Text to Speech
+// Voice Service for ZiiBot - Speech to Text & Low-Latency Text to Speech
 
 // Type definitions for Web Speech API
 interface SpeechRecognitionEvent extends Event {
@@ -42,6 +42,7 @@ export class VoiceService {
   private onErrorCallback: ((error: string) => void) | null = null;
   private voicesLoaded = false;
   private voices: SpeechSynthesisVoice[] = [];
+  private cachedMaleVoice: SpeechSynthesisVoice | null = null;
 
   constructor() {
     if (typeof window === "undefined") return;
@@ -91,10 +92,16 @@ export class VoiceService {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       this.synthesis = window.speechSynthesis;
       this.loadVoices();
+      // Pre-warm synthesis engine to prevent Chrome pause deadlock
+      try {
+        if (this.synthesis.paused) {
+          this.synthesis.resume();
+        }
+      } catch {}
     }
   }
 
-  // Load available voices
+  // Load available voices and pre-select male voice immediately
   private loadVoices(): void {
     if (!this.synthesis) return;
 
@@ -102,6 +109,7 @@ export class VoiceService {
       this.voices = this.synthesis.getVoices() || [];
       if (this.voices.length > 0) {
         this.voicesLoaded = true;
+        this.cachedMaleVoice = this.findBestMaleVoice();
         return;
       }
 
@@ -109,6 +117,7 @@ export class VoiceService {
         if (this.synthesis) {
           this.voices = this.synthesis.getVoices() || [];
           this.voicesLoaded = true;
+          this.cachedMaleVoice = this.findBestMaleVoice();
         }
       };
 
@@ -117,9 +126,10 @@ export class VoiceService {
           this.voices = this.synthesis.getVoices() || [];
           if (this.voices.length > 0) {
             this.voicesLoaded = true;
+            this.cachedMaleVoice = this.findBestMaleVoice();
           }
         }
-      }, 500);
+      }, 300);
     } catch (e) {
       console.warn("Could not load voices:", e);
     }
@@ -171,7 +181,7 @@ export class VoiceService {
   /**
    * Helper to select a natural, high-quality MALE voice
    */
-  private selectMaleVoice(): SpeechSynthesisVoice | null {
+  private findBestMaleVoice(): SpeechSynthesisVoice | null {
     if (!this.voices || this.voices.length === 0) {
       if (this.synthesis) {
         this.voices = this.synthesis.getVoices() || [];
@@ -235,7 +245,10 @@ export class VoiceService {
   }
 
   /**
-   * Speak text with a clear MALE voice, excluding all emojis and noisy markdown symbols
+   * Low-latency speech synthesis:
+   * 1. Pre-warms and unfreezes Chrome audio engine.
+   * 2. Cleans text & strips all emojis.
+   * 3. Chunks text into sentences so Sentence 1 starts playing instantly without waiting for whole block synthesis.
    */
   speak(text: string, onEnd?: () => void): void {
     if (!this.synthesis || typeof window === "undefined") {
@@ -243,12 +256,15 @@ export class VoiceService {
       return;
     }
 
-    // Cancel any ongoing speech
+    // Unpause / resume synthesis engine immediately to clear Chrome background audio lag
     try {
+      if (this.synthesis.paused) {
+        this.synthesis.resume();
+      }
       this.synthesis.cancel();
     } catch {}
 
-    // Clean text strictly: strip all emojis and clean markdown
+    // Clean text strictly: strip all emojis and formatting
     let cleanText = text
       // Remove all emojis using unicode property escapes & ranges
       .replace(/\p{Extended_Pictographic}/gu, "")
@@ -276,23 +292,41 @@ export class VoiceService {
       return;
     }
 
+    const maleVoice = this.cachedMaleVoice || this.findBestMaleVoice();
+
+    // Chunk by sentence boundaries so playback starts in <50ms without buffering whole text
+    const rawSentences = cleanText.split(/(?<=[.!?])\s+/);
+    const sentences = rawSentences.map((s) => s.trim()).filter((s) => s.length > 0);
+
+    if (sentences.length === 0) {
+      onEnd?.();
+      return;
+    }
+
     try {
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = "en-US";
-      // Male voice parameters: calm, articulate, slightly deeper natural male pitch
-      utterance.rate = 0.96;
-      utterance.pitch = 0.90;
-      utterance.volume = 1.0;
+      sentences.forEach((sentence, idx) => {
+        const utterance = new SpeechSynthesisUtterance(sentence);
+        utterance.lang = "en-US";
+        utterance.rate = 1.0;
+        utterance.pitch = 0.90;
+        utterance.volume = 1.0;
 
-      const maleVoice = this.selectMaleVoice();
-      if (maleVoice) {
-        utterance.voice = maleVoice;
+        if (maleVoice) {
+          utterance.voice = maleVoice;
+        }
+
+        if (idx === sentences.length - 1) {
+          utterance.onend = () => onEnd?.();
+          utterance.onerror = () => onEnd?.();
+        }
+
+        this.synthesis?.speak(utterance);
+      });
+
+      // Resume immediately in case browser started in paused state
+      if (this.synthesis.paused) {
+        this.synthesis.resume();
       }
-
-      utterance.onend = () => onEnd?.();
-      utterance.onerror = () => onEnd?.();
-
-      this.synthesis.speak(utterance);
     } catch (e) {
       console.warn("Speech synthesis error:", e);
       onEnd?.();

@@ -26,6 +26,8 @@ import {
   Moon,
   MessageSquare,
   Plus,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { getVoiceService } from "./voiceService";
 import { toast } from "react-toastify";
@@ -269,11 +271,17 @@ export function ZiiBotPanel({
 
   const [inputValue, setInputValue] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
 
   const voiceService = getVoiceService();
   const currentScope = useMemo(() => getRouteScope(pathname), [pathname]);
+
+  // Reset fullscreen when dockMode changes
+  useEffect(() => {
+    setIsFullscreen(false);
+  }, [dockMode]);
 
   useEffect(() => {
     if (isOpen) {
@@ -361,24 +369,30 @@ export function ZiiBotPanel({
   return (
     <motion.div
       initial={
-        dockMode === "side"
+        isFullscreen
+          ? { opacity: 0, scale: 0.98 }
+          : dockMode === "side"
           ? { opacity: 0, x: 40 }
           : { opacity: 0, y: 40 }
       }
-      animate={{ opacity: 1, x: 0, y: 0 }}
+      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
       exit={
-        dockMode === "side"
+        isFullscreen
+          ? { opacity: 0, scale: 0.98 }
+          : dockMode === "side"
           ? { opacity: 0, x: 40 }
           : { opacity: 0, y: 40 }
       }
       transition={{ duration: 0.22, ease: "easeOut" }}
-      className={`fixed z-50 flex overflow-hidden shadow-2xl transition-colors ${
+      className={`fixed z-50 flex overflow-hidden shadow-2xl transition-all duration-200 ${
         isDark ? "bg-[#09090b] text-zinc-100" : "bg-white text-zinc-900"
       } ${
-        dockMode === "side"
-          ? "top-0 right-0 bottom-0 w-[460px] max-w-full h-screen border-l " +
+        isFullscreen
+          ? "inset-0 w-screen h-screen max-w-none max-h-none border-none rounded-none"
+          : dockMode === "side"
+          ? "top-0 right-0 bottom-8 w-[480px] max-w-full border-l " +
             (isDark ? "border-zinc-800" : "border-zinc-200")
-          : "bottom-0 left-0 right-0 h-[400px] max-h-[75vh] w-full border-t " +
+          : "bottom-8 left-0 right-0 h-[400px] max-h-[75vh] w-full border-t " +
             (isDark ? "border-zinc-800" : "border-zinc-200")
       }`}
     >
@@ -498,9 +512,31 @@ export function ZiiBotPanel({
               {chat.soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
             </button>
 
+            {/* Enlarge / Fullscreen Button (Requirement 1: when layout is vertical / side) */}
+            {dockMode === "side" && (
+              <button
+                onClick={() => setIsFullscreen((prev) => !prev)}
+                className={`p-1.5 rounded-md transition-colors ${
+                  isFullscreen
+                    ? isDark
+                      ? "text-white bg-zinc-800"
+                      : "text-zinc-950 bg-zinc-100"
+                    : isDark
+                    ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                    : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                }`}
+                title={isFullscreen ? "Restore side view" : "Enlarge to full screen"}
+              >
+                {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            )}
+
             {/* Dock Toggle with Tooltip */}
             <button
-              onClick={onToggleDock}
+              onClick={() => {
+                setIsFullscreen(false);
+                onToggleDock();
+              }}
               className={`p-1.5 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -513,7 +549,10 @@ export function ZiiBotPanel({
 
             {/* Close */}
             <button
-              onClick={onClose}
+              onClick={() => {
+                setIsFullscreen(false);
+                onClose();
+              }}
               className={`p-1.5 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
@@ -531,7 +570,7 @@ export function ZiiBotPanel({
           ref={scrollRef}
           className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 zii-chat-scroll ${
             isDark ? "bg-[#09090b]" : "bg-white"
-          } ${dockMode === "bottom" ? "max-w-4xl mx-auto w-full" : ""}`}
+          } ${dockMode === "bottom" || isFullscreen ? "max-w-4xl mx-auto w-full" : ""}`}
         >
           {/* Welcome / Suggestions State */}
           {chat.showGreeting && (
@@ -600,7 +639,7 @@ export function ZiiBotPanel({
         {/* ── Input Box (Resend Style) ── */}
         <div
           className={`p-3 pt-2 flex-shrink-0 ${
-            dockMode === "bottom" ? "max-w-4xl mx-auto w-full" : ""
+            dockMode === "bottom" || isFullscreen ? "max-w-4xl mx-auto w-full" : ""
           }`}
         >
           {attachedFileName && (

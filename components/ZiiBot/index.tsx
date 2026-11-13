@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import Link from "next/link";
+import { AnimatePresence } from "framer-motion";
 import { Plus } from "lucide-react";
 import { ZiiBotPanel } from "./ZiiBotPanel";
 import { useZiiBotChat } from "./useZiiBotChat";
@@ -100,7 +101,6 @@ export function ZiiBot() {
   );
 
   // Requirement: "the ask anything should be after login n from the dashboard it should be visible"
-  // Hide completely when user is not authenticated or session is checking
   if (sessionStatus === "checking" || !isAuthenticated) {
     return null;
   }
@@ -136,60 +136,65 @@ export function ZiiBot() {
         )}
       </AnimatePresence>
 
-      {/* ── Resend Minimal Bottom Trigger Bar ── */}
-      <div
-        className={`fixed z-40 transition-all duration-200 select-none ${
-          panelOpen && dockMode === "bottom"
-            ? "bottom-2 right-4"
-            : "bottom-4 right-4"
+      {/* ── Resend Exact Bottom Bar (Non-Floating, Full Width, Responsive to Dark/Light) ── */}
+      <footer
+        className={`fixed bottom-0 left-0 right-0 h-8 z-40 border-t flex items-center justify-between px-4 text-xs font-mono select-none transition-colors duration-150 ${
+          isDark
+            ? "bg-[#000000] border-zinc-800 text-zinc-400"
+            : "bg-[#ffffff] border-zinc-200 text-zinc-600"
         }`}
       >
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className={`flex items-center gap-1.5 p-1 rounded-full backdrop-blur-md transition-colors ${
-            isDark
-              ? "bg-zinc-950/90 border border-zinc-800 text-zinc-300 shadow-xl"
-              : "bg-white/95 border border-zinc-200 text-zinc-700 shadow-lg"
-          }`}
-        >
-          {/* Quick prompt trigger pill (shown when closed) */}
-          {!panelOpen && (
-            <button
-              type="button"
-              onClick={() => openWithPrompt("What can you do for me across the OS?")}
-              className={`px-3 py-1 rounded-full text-xs transition-colors truncate max-w-[170px] ${
-                isDark
-                  ? "text-zinc-400 hover:text-white hover:bg-zinc-900/80"
-                  : "text-zinc-500 hover:text-zinc-950 hover:bg-zinc-100"
-              }`}
-            >
-              what can you do for me
-            </button>
-          )}
+        {/* Left: /docs */}
+        <div className="flex items-center gap-1">
+          <Link
+            href="/documents"
+            className={`transition-colors text-xs ${
+              isDark ? "hover:text-white" : "hover:text-zinc-950"
+            }`}
+            title="Documentation & Workspace Documents"
+          >
+            /docs
+          </Link>
+        </div>
 
-          {/* Primary Trigger: + Ask anything */}
+        {/* Right: what can you do for me + Ask anything */}
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => openWithPrompt("What can you do for me across the OS?")}
+            className={`transition-colors font-sans text-xs ${
+              isDark
+                ? "text-zinc-400 hover:text-white"
+                : "text-zinc-500 hover:text-zinc-950"
+            }`}
+          >
+            what can you do for me
+          </button>
+
           <button
             type="button"
             data-tour="ziibot-button"
             onClick={() => setPanelOpen((prev) => !prev)}
             aria-label={panelOpen ? "Close Ask anything" : "Ask anything"}
             title="Ask anything"
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1 font-sans text-xs font-medium transition-colors ${
               panelOpen
                 ? isDark
-                  ? "bg-zinc-800 text-white hover:bg-zinc-700"
-                  : "bg-zinc-900 text-white hover:bg-black"
+                  ? "text-white"
+                  : "text-zinc-950"
                 : isDark
-                ? "text-zinc-200 hover:text-white hover:bg-zinc-900"
-                : "text-zinc-800 hover:text-black hover:bg-zinc-100"
+                ? "text-zinc-300 hover:text-white"
+                : "text-zinc-700 hover:text-zinc-950"
             }`}
           >
-            <Plus size={13} className={panelOpen ? "rotate-45 transition-transform" : "transition-transform"} />
+            <Plus
+              size={13}
+              className={panelOpen ? "rotate-45 transition-transform" : "transition-transform"}
+            />
             <span>Ask anything</span>
           </button>
-        </motion.div>
-      </div>
+        </div>
+      </footer>
     </>
   );
 }
