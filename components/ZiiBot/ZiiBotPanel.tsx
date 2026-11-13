@@ -298,6 +298,30 @@ export function ZiiBotPanel({
     }
   }, [chat.messages, chat.isTyping]);
 
+  /**
+   * Requirement: When conversations part gets opened, automatically enter full screen
+   */
+  const handleToggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsFullscreen(true);
+      } else {
+        if (dockMode === "side") {
+          setIsFullscreen(false);
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleCloseSidebar = () => {
+    setSidebarOpen(false);
+    if (dockMode === "side") {
+      setIsFullscreen(false);
+    }
+  };
+
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     const rawText = inputValue.trim();
@@ -411,12 +435,15 @@ export function ZiiBotPanel({
             <ZiiBotSidebar
               sessions={chat.sessions}
               activeSessionId={chat.activeSessionId}
-              onSelectSession={chat.selectSession}
+              onSelectSession={(id) => {
+                chat.selectSession(id);
+                // When in full screen, user can keep reading or close
+              }}
               onNewChat={() => chat.createNewSession()}
               onRenameSession={chat.renameSession}
               onDeleteSession={chat.deleteSession}
               isLoading={chat.isLoadingSessions}
-              onCloseMobile={() => setSidebarOpen(false)}
+              onCloseMobile={handleCloseSidebar}
               className="w-full h-full"
               isDark={isDark}
             />
@@ -428,19 +455,19 @@ export function ZiiBotPanel({
       <div className="flex-1 flex flex-col h-full min-w-0">
         {/* Top Header */}
         <div
-          className={`flex items-center justify-between px-4 py-3 border-b flex-shrink-0 gap-2 ${
+          className={`flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0 gap-3 ${
             isDark ? "border-zinc-800/80 bg-[#09090b]" : "border-zinc-200/80 bg-white"
           }`}
         >
-          {/* Header Left: Title + Conversations button + New Chat */}
-          <div className="flex items-center gap-2 min-w-0">
+          {/* Header Left: Title + Conversations button + Compact New button */}
+          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
             <h2 className="text-sm font-semibold tracking-tight whitespace-nowrap">Ask anything</h2>
 
-            {/* View All Conversations toggle */}
+            {/* View All Conversations toggle (auto fullscreens) */}
             <button
               type="button"
-              onClick={() => setSidebarOpen((prev) => !prev)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
+              onClick={handleToggleSidebar}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all whitespace-nowrap ${
                 sidebarOpen
                   ? isDark
                     ? "bg-zinc-800 text-white border-zinc-700 shadow-xs"
@@ -449,13 +476,13 @@ export function ZiiBotPanel({
                   ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800"
                   : "bg-zinc-100/80 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border-zinc-200"
               }`}
-              title={sidebarOpen ? "Hide conversations history" : "View all past conversations"}
+              title={sidebarOpen ? "Hide conversations" : "View all conversations (opens fullscreen)"}
             >
               <MessageSquare size={13} />
-              <span className="hidden sm:inline">Conversations</span>
+              <span className="truncate">Conversations</span>
               {chat.sessions.length > 0 && (
                 <span
-                  className={`px-1 rounded text-[10px] font-mono ${
+                  className={`px-1.5 py-0.2 rounded text-[10px] font-mono leading-none ${
                     isDark ? "bg-zinc-800 text-zinc-300" : "bg-zinc-200 text-zinc-700"
                   }`}
                 >
@@ -464,27 +491,25 @@ export function ZiiBotPanel({
               )}
             </button>
 
-            {/* Quick New Chat button */}
+            {/* Compact New Chat icon button */}
             <button
               type="button"
               onClick={() => {
                 chat.createNewSession();
-                setSidebarOpen(false);
                 toast.success("Started new chat");
               }}
-              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+              className={`p-1.5 rounded-lg border transition-all active:scale-95 flex-shrink-0 ${
                 isDark
                   ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800"
                   : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950 border-zinc-200"
               }`}
-              title="Start a new conversation"
+              title="Start a new chat session"
             >
-              <Plus size={12} />
-              <span className="hidden sm:inline">New</span>
+              <Plus size={13} />
             </button>
           </div>
 
-          {/* Action Icons Right */}
+          {/* Action Icons Right (fixed size, never collapses into left buttons) */}
           <div className="flex items-center gap-1 flex-shrink-0">
             {/* Theme Toggle (Changes ONLY Chatbot Theme) */}
             <button
@@ -512,7 +537,7 @@ export function ZiiBotPanel({
               {chat.soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
             </button>
 
-            {/* Enlarge / Fullscreen Button (Requirement 1: when layout is vertical / side) */}
+            {/* Enlarge / Fullscreen Button */}
             {dockMode === "side" && (
               <button
                 onClick={() => setIsFullscreen((prev) => !prev)}
@@ -551,6 +576,7 @@ export function ZiiBotPanel({
             <button
               onClick={() => {
                 setIsFullscreen(false);
+                setSidebarOpen(false);
                 onClose();
               }}
               className={`p-1.5 rounded-md transition-colors ${
