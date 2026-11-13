@@ -70,6 +70,7 @@ export interface ConnectorSchemaField {
   type:
     | "text"
     | "password"
+    | "secret"
     | "url"
     | "select"
     | "textarea"
@@ -78,6 +79,7 @@ export interface ConnectorSchemaField {
   required?: boolean;
   placeholder?: string;
   description?: string;
+  helpText?: string;
   options?: ConnectorFieldOption[];
   defaultValue?: any;
   sensitive?: boolean;
@@ -91,6 +93,7 @@ export interface ConnectorAuthSchema {
 export interface ConnectorEndpointSchema {
   defaultUrl?: string;
   urlPlaceholder?: string;
+  required?: boolean;
   supportedMethods?: HttpMethod[];
   defaultMethod?: HttpMethod;
   headers?: Record<string, string>;
@@ -140,13 +143,25 @@ export interface Connector {
   isConnected?: boolean;
   available?: boolean;
   connectionId?: string;
+  integration?: {
+    id: string;
+    name?: string;
+    status: IntegrationStatus | string;
+    isEnabled?: boolean;
+    lastSyncedAt?: string | null;
+    config?: Record<string, any> | null;
+  } | null;
   connectionState?: {
     id?: string;
+    name?: string;
     status?: IntegrationStatus | string;
+    isEnabled?: boolean;
     lastSyncAt?: string;
+    lastSyncedAt?: string | null;
     errorCount?: number;
     lastError?: string;
     displayName?: string;
+    config?: Record<string, any> | null;
   };
   authType?: AuthType | string;
   supportedAuthTypes?: (AuthType | string)[];
@@ -155,6 +170,7 @@ export interface Connector {
   supportedMethods?: HttpMethod[];
   capabilities?: string[];
   configSchema?: ConnectorConfigSchema;
+  configFields?: ConnectorSchemaField[];
   permissions?: ConnectorPermissions;
   popular?: boolean;
   website?: string;
@@ -200,6 +216,9 @@ export interface CreateIntegrationPayload {
   authType?: AuthType | string;
   apiKey?: string;
   apiSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  clientSecret?: string;
   webhookSecret?: string;
   password?: string;
   customSecrets?: Record<string, any>;
@@ -227,9 +246,14 @@ export interface UpdateIntegrationPayload {
   config?: Record<string, any>;
   apiKey?: string;
   apiSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  clientSecret?: string;
   webhookSecret?: string;
   password?: string;
   customSecrets?: Record<string, any>;
+  baseUrl?: string;
+  redirectUri?: string;
   syncFrequency?: SyncFrequency;
   syncDirection?: SyncDirection;
   apiUrl?: string;
@@ -393,6 +417,9 @@ export interface SyncResponse {
   recordsProcessed?: number;
   syncedAt?: string;
   data?: Record<string, any>;
+  status?: string;
+  alreadyRunning?: boolean;
+  syncRunId?: string;
 }
 
 export interface RotateCredentialsPayload {
@@ -686,8 +713,35 @@ export interface WorkspaceMappingState {
 export interface PreflightTestPayload {
   provider: string;
   authType?: string;
-  credentials: Record<string, any>;
+  apiKey?: string;
+  apiSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  webhookSecret?: string;
+  clientId?: string;
+  clientSecret?: string;
+  password?: string;
+  customSecrets?: Record<string, any>;
+  baseUrl?: string;
+  credentials?: Record<string, any>;
   config?: Record<string, any>;
+}
+
+export interface DiscoverPreflightPayload {
+  provider: string;
+  authType?: string;
+  apiKey?: string;
+  apiSecret?: string;
+  accessToken?: string;
+  refreshToken?: string;
+  webhookSecret?: string;
+  clientId?: string;
+  clientSecret?: string;
+  password?: string;
+  customSecrets?: Record<string, any>;
+  baseUrl?: string;
+  config?: Record<string, any>;
+  samplePayload?: unknown;
 }
 
 export interface PreflightTestResponse {
@@ -756,6 +810,7 @@ export interface SyncLogsResponse {
 }
 
 export type SyncRunStatus =
+  | "QUEUED"
   | "PENDING"
   | "RUNNING"
   | "SUCCESS"

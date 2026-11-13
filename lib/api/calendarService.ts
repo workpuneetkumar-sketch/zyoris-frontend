@@ -287,8 +287,11 @@ export function convertMeetingToEvent(
   const parsedDate = parseDateSafe(dateSource);
   const dateStr = dateSource ? formatDateKey(parsedDate) : formatDateKey(new Date());
 
-  const startStr = extractTime(m.startTime, "09:00");
-  const endStr = m.endTime
+  const isAllDay = Boolean((m as any).allDay || (m as any).isAllDay);
+  const startStr = isAllDay ? "" : extractTime(m.startTime, "09:00");
+  const endStr = isAllDay
+    ? ""
+    : m.endTime
     ? extractTime(m.endTime, addMinutesToTimeStr(startStr, 60))
     : addMinutesToTimeStr(startStr, 60);
 
@@ -299,11 +302,11 @@ export function convertMeetingToEvent(
   const baseEvent: UnifiedCalendarEvent = {
     id: m.id,
     title: m.title || "Untitled Meeting",
-    description: m.description,
+    description: m.description || (m as any).aiSummary || undefined,
     date: dateStr,
     startTime: startStr,
     endTime: endStr,
-    allDay: false,
+    allDay: isAllDay,
     category: ((m as any).category as CalendarCategory) || "meeting",
     department: ((m as any).department as CalendarDepartment) || "development",
     room: (m as any).room || undefined,
