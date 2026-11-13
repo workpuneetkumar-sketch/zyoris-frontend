@@ -6,14 +6,15 @@ import { Calculator, TrendingUp, DollarSign, Layers } from "lucide-react";
 interface MarkdownContentProps {
   content: string;
   className?: string;
+  isDark?: boolean;
 }
 
 /**
- * High-fidelity, safe parser for CRM assistant responses in crisp light theme.
+ * High-fidelity, safe parser for OS assistant responses with dual theme support.
  * Formats mathematical calculations, deal revenue, lead counts, pipeline metrics,
  * percentages, currency values, bullet lists, markdown tables, and headings beautifully.
  */
-export function MarkdownContent({ content, className = "" }: MarkdownContentProps) {
+export function MarkdownContent({ content, className = "", isDark = false }: MarkdownContentProps) {
   const elements = useMemo(() => {
     if (!content) return null;
 
@@ -28,11 +29,13 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         parsed.push(
           <ul
             key={`ul-${parsed.length}`}
-            className="my-2 space-y-1.5 pl-4 list-disc marker:text-blue-600 text-gray-800"
+            className={`my-2 space-y-1.5 pl-4 list-disc marker:text-emerald-500 ${
+              isDark ? "text-zinc-300" : "text-zinc-800"
+            }`}
           >
             {listBuffer.items.map((item, idx) => (
               <li key={idx} className="leading-relaxed">
-                {renderInline(item)}
+                {renderInline(item, isDark)}
               </li>
             ))}
           </ul>
@@ -41,11 +44,13 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         parsed.push(
           <ol
             key={`ol-${parsed.length}`}
-            className="my-2 space-y-1.5 pl-4 list-decimal marker:text-blue-600 text-gray-800 font-medium"
+            className={`my-2 space-y-1.5 pl-4 list-decimal marker:text-emerald-500 font-medium ${
+              isDark ? "text-zinc-300" : "text-zinc-800"
+            }`}
           >
             {listBuffer.items.map((item, idx) => (
               <li key={idx} className="leading-relaxed">
-                {renderInline(item)}
+                {renderInline(item, isDark)}
               </li>
             ))}
           </ol>
@@ -72,24 +77,41 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         parsed.push(
           <div
             key={`table-${parsed.length}`}
-            className="my-3 overflow-x-auto rounded-xl border border-gray-200 shadow-xs bg-white"
+            className={`my-3 overflow-x-auto rounded-xl border shadow-xs ${
+              isDark ? "border-zinc-800 bg-zinc-900/60" : "border-zinc-200 bg-white"
+            }`}
           >
             <table className="min-w-full text-xs text-left border-collapse">
-              <thead className="bg-slate-50 text-gray-700 uppercase font-bold tracking-wider">
+              <thead
+                className={`uppercase font-bold tracking-wider ${
+                  isDark ? "bg-zinc-800/80 text-zinc-300" : "bg-zinc-50 text-zinc-700"
+                }`}
+              >
                 <tr>
                   {headers.map((h, i) => (
-                    <th key={i} className="px-3 py-2 border-b border-gray-200">
-                      {renderInline(h)}
+                    <th
+                      key={i}
+                      className={`px-3 py-2 border-b ${isDark ? "border-zinc-800" : "border-zinc-200"}`}
+                    >
+                      {renderInline(h, isDark)}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white">
+              <tbody className={`divide-y ${isDark ? "divide-zinc-800/60" : "divide-zinc-100"}`}>
                 {dataRows.map((row, rIdx) => (
-                  <tr key={rIdx} className="hover:bg-blue-50/40 transition-colors">
+                  <tr
+                    key={rIdx}
+                    className={`transition-colors ${
+                      isDark ? "hover:bg-zinc-800/40" : "hover:bg-zinc-50"
+                    }`}
+                  >
                     {row.map((cell, cIdx) => (
-                      <td key={cIdx} className="px-3 py-2 text-gray-700">
-                        {renderInline(cell)}
+                      <td
+                        key={cIdx}
+                        className={`px-3 py-2 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}
+                      >
+                        {renderInline(cell, isDark)}
                       </td>
                     ))}
                   </tr>
@@ -117,7 +139,6 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
       }
 
       // Check for standalone prominent KPI metric line:
-      // e.g. "• Total Revenue: $1,450,000" or "**Deal Value**: $450,000 (+15%)"
       const kpiMatch = trimmed.match(
         /^(?:[•*-]\s*)?\*\*?([A-Za-z\s/&]+)\*\*?:\s*([$€£₹][0-9,]+(?:\.[0-9]+)?(?:\s*(?:[kKmMbB]|million|billion|thousand))?|[0-9,]+(?:\.[0-9]+)?%)(.*)$/
       );
@@ -130,30 +151,46 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         parsed.push(
           <div
             key={`kpi-${i}`}
-            className="my-2 p-2.5 px-3.5 rounded-xl bg-gradient-to-r from-blue-50/70 via-indigo-50/40 to-white border border-blue-100 shadow-2xs flex items-center justify-between"
+            className={`my-2 p-2.5 px-3.5 rounded-xl border flex items-center justify-between ${
+              isDark
+                ? "bg-zinc-900 border-zinc-800"
+                : "bg-zinc-50 border-zinc-200"
+            }`}
           >
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-7 h-7 rounded-lg bg-blue-600/10 text-blue-700 flex items-center justify-center flex-shrink-0">
+              <div
+                className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                  isDark ? "bg-zinc-800 text-zinc-200" : "bg-zinc-200 text-zinc-800"
+                }`}
+              >
                 {metricValue.startsWith("$") || metricValue.startsWith("€") || metricValue.startsWith("₹") ? (
-                  <DollarSign size={14} className="text-blue-600" />
+                  <DollarSign size={14} className={isDark ? "text-emerald-400" : "text-emerald-600"} />
                 ) : metricValue.endsWith("%") ? (
-                  <TrendingUp size={14} className="text-indigo-600" />
+                  <TrendingUp size={14} className={isDark ? "text-blue-400" : "text-blue-600"} />
                 ) : (
-                  <Layers size={14} className="text-blue-600" />
+                  <Layers size={14} className={isDark ? "text-zinc-300" : "text-zinc-700"} />
                 )}
               </div>
               <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 truncate">
+                <p
+                  className={`text-[11px] font-semibold uppercase tracking-wider truncate ${
+                    isDark ? "text-zinc-400" : "text-zinc-500"
+                  }`}
+                >
                   {label}
                 </p>
-                <p className="text-base font-extrabold text-slate-900 font-mono tracking-tight">
+                <p
+                  className={`text-base font-extrabold font-mono tracking-tight ${
+                    isDark ? "text-white" : "text-zinc-900"
+                  }`}
+                >
                   {metricValue}
                 </p>
               </div>
             </div>
             {extra && (
-              <div className="text-xs text-slate-600 pl-2">
-                {renderInline(extra)}
+              <div className={`text-xs pl-2 ${isDark ? "text-zinc-400" : "text-zinc-600"}`}>
+                {renderInline(extra, isDark)}
               </div>
             )}
           </div>
@@ -195,8 +232,13 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
       // Headings
       if (trimmed.startsWith("### ")) {
         parsed.push(
-          <h4 key={`h3-${i}`} className="text-sm font-bold text-blue-700 mt-3 mb-1">
-            {renderInline(trimmed.slice(4))}
+          <h4
+            key={`h3-${i}`}
+            className={`text-sm font-semibold mt-3 mb-1 ${
+              isDark ? "text-zinc-200" : "text-zinc-900"
+            }`}
+          >
+            {renderInline(trimmed.slice(4), isDark)}
           </h4>
         );
         continue;
@@ -205,9 +247,11 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         parsed.push(
           <h3
             key={`h2-${i}`}
-            className="text-base font-bold text-gray-900 mt-3.5 mb-1.5 pb-1 border-b border-gray-100"
+            className={`text-base font-bold mt-3.5 mb-1.5 pb-1 border-b ${
+              isDark ? "text-white border-zinc-800" : "text-zinc-950 border-zinc-200"
+            }`}
           >
-            {renderInline(trimmed.slice(3))}
+            {renderInline(trimmed.slice(3), isDark)}
           </h3>
         );
         continue;
@@ -216,9 +260,11 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
         parsed.push(
           <h2
             key={`h1-${i}`}
-            className="text-lg font-bold text-gray-900 mt-4 mb-2 pb-1 border-b border-gray-200"
+            className={`text-lg font-bold mt-4 mb-2 pb-1 border-b ${
+              isDark ? "text-white border-zinc-800" : "text-zinc-950 border-zinc-200"
+            }`}
           >
-            {renderInline(trimmed.slice(2))}
+            {renderInline(trimmed.slice(2), isDark)}
           </h2>
         );
         continue;
@@ -226,8 +272,11 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
 
       // Regular paragraph line
       parsed.push(
-        <p key={`p-${i}`} className="my-1 leading-relaxed text-gray-800">
-          {renderInline(trimmed)}
+        <p
+          key={`p-${i}`}
+          className={`my-1 leading-relaxed ${isDark ? "text-zinc-200" : "text-zinc-800"}`}
+        >
+          {renderInline(trimmed, isDark)}
         </p>
       );
     }
@@ -236,7 +285,7 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
     flushTable();
 
     return parsed;
-  }, [content]);
+  }, [content, isDark]);
 
   return <div className={`text-sm leading-relaxed ${className}`}>{elements}</div>;
 }
@@ -244,17 +293,9 @@ export function MarkdownContent({ content, className = "" }: MarkdownContentProp
 /**
  * Parses bold, inline code, links, currencies, percentages, counts, and math calculations
  */
-function renderInline(text: string): React.ReactNode {
+function renderInline(text: string, isDark: boolean = false): React.ReactNode {
   if (!text) return null;
 
-  // Master regex pattern matching:
-  // 1. Bold (**text**)
-  // 2. Inline code (`code`)
-  // 3. Links ([text](url))
-  // 4. Equations (e.g. 15 × $10,000 = $150,000 or 12 / 15 = 80%)
-  // 5. Currencies (e.g. $1,450,000, $2.5M, €50,000, ₹10,00,000)
-  // 6. Percentages (e.g. +18.5%, 92%, -4%)
-  // 7. CRM metrics (e.g. 142 leads, 58 deals, 12 tasks)
   const masterRegex =
     /(\*\*.*?\*\*|`.*?`|\[.*?\]\(.*?\)|(?:\b\d+(?:,\d{3})*(?:\.\d+)?\s*[×x*\/+-]\s*[$€£₹]?\d+(?:,\d{3})*(?:\.\d+)?(?:\s*=\s*[$€£₹]?\d+(?:,\d{3})*(?:\.\d+)?)?\b)|(?:[$€£₹]\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?(?:\s*(?:[kKmMbB]|million|billion|thousand|lakh|crore))?\b)|(?:[+-]?\b\d+(?:\.\d+)?%\b)|(?:\b\d+(?:,\d{3})*\s+(?:leads|deals|contacts|companies|accounts|tasks|opportunities|stages|pipelines|members|users|invoices|calls|emails)\b))/gi;
 
@@ -273,8 +314,11 @@ function renderInline(text: string): React.ReactNode {
     if (token.startsWith("**") && token.endsWith("**")) {
       const boldText = token.slice(2, -2);
       parts.push(
-        <strong key={`b-${match.index}`} className="font-bold text-slate-900">
-          {renderInline(boldText)}
+        <strong
+          key={`b-${match.index}`}
+          className={`font-semibold ${isDark ? "text-white" : "text-zinc-950"}`}
+        >
+          {renderInline(boldText, isDark)}
         </strong>
       );
     }
@@ -287,10 +331,14 @@ function renderInline(text: string): React.ReactNode {
       parts.push(
         <span
           key={`c-${match.index}`}
-          className={`font-mono text-xs px-1.5 py-0.5 rounded ${
+          className={`font-mono text-xs px-1.5 py-0.5 rounded border ${
             isStatus
-              ? "bg-blue-50 text-blue-700 border border-blue-200 font-bold"
-              : "bg-slate-100 text-slate-800 border border-slate-200 font-mono"
+              ? isDark
+                ? "bg-emerald-950/60 text-emerald-400 border-emerald-800 font-bold"
+                : "bg-emerald-50 text-emerald-700 border-emerald-200 font-bold"
+              : isDark
+              ? "bg-zinc-800 text-zinc-300 border-zinc-700 font-mono"
+              : "bg-zinc-100 text-zinc-800 border-zinc-200 font-mono"
           }`}
         >
           {codeText}
@@ -307,7 +355,9 @@ function renderInline(text: string): React.ReactNode {
             href={linkMatch[2]}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-blue-600 underline hover:text-blue-800 font-semibold"
+            className={`underline font-medium ${
+              isDark ? "text-blue-400 hover:text-blue-300" : "text-blue-600 hover:text-blue-800"
+            }`}
           >
             {linkMatch[1]}
           </a>
@@ -321,9 +371,13 @@ function renderInline(text: string): React.ReactNode {
       parts.push(
         <span
           key={`eq-${match.index}`}
-          className="inline-flex items-center gap-1 font-mono font-bold text-indigo-900 bg-indigo-50/90 px-2 py-0.5 rounded-lg border border-indigo-200/90 shadow-2xs text-[12px] mx-1"
+          className={`inline-flex items-center gap-1 font-mono font-medium px-2 py-0.5 rounded border text-[12px] mx-1 ${
+            isDark
+              ? "bg-zinc-800/80 text-zinc-200 border-zinc-700"
+              : "bg-zinc-100 text-zinc-800 border-zinc-200"
+          }`}
         >
-          <Calculator size={11} className="text-indigo-600 inline" />
+          <Calculator size={11} className={isDark ? "text-zinc-400" : "text-zinc-600"} />
           {token}
         </span>
       );
@@ -333,7 +387,11 @@ function renderInline(text: string): React.ReactNode {
       parts.push(
         <span
           key={`curr-${match.index}`}
-          className="inline-flex items-center font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/90 shadow-2xs text-[12.5px] mx-0.5"
+          className={`inline-flex items-center font-mono font-semibold px-2 py-0.5 rounded border text-[12px] mx-0.5 ${
+            isDark
+              ? "bg-emerald-950/50 text-emerald-400 border-emerald-800/60"
+              : "bg-emerald-50 text-emerald-800 border-emerald-200"
+          }`}
         >
           {token}
         </span>
@@ -344,18 +402,26 @@ function renderInline(text: string): React.ReactNode {
       parts.push(
         <span
           key={`pct-${match.index}`}
-          className="inline-flex items-center font-mono font-bold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded-md border border-blue-200/90 shadow-2xs text-[12px] mx-0.5"
+          className={`inline-flex items-center font-mono font-semibold px-1.5 py-0.5 rounded border text-[12px] mx-0.5 ${
+            isDark
+              ? "bg-blue-950/50 text-blue-400 border-blue-800/60"
+              : "bg-blue-50 text-blue-700 border-blue-200"
+          }`}
         >
           {token}
         </span>
       );
     }
-    // 7. CRM metrics / counts
+    // 7. System metrics / counts
     else if (/\b\d/.test(token)) {
       parts.push(
         <span
           key={`cnt-${match.index}`}
-          className="inline-flex items-center font-mono font-semibold text-slate-800 bg-slate-100 px-1.5 py-0.5 rounded-md border border-slate-200 text-[12px] mx-0.5"
+          className={`inline-flex items-center font-mono font-medium px-1.5 py-0.5 rounded border text-[12px] mx-0.5 ${
+            isDark
+              ? "bg-zinc-800/80 text-zinc-300 border-zinc-700"
+              : "bg-zinc-100 text-zinc-800 border-zinc-200"
+          }`}
         >
           {token}
         </span>

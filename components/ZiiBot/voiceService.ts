@@ -27,7 +27,6 @@ interface SpeechRecognitionConstructor {
   new (): SpeechRecognition;
 }
 
-// Simplified global declaration
 declare global {
   interface Window {
     SpeechRecognition: SpeechRecognitionConstructor;
@@ -46,20 +45,20 @@ export class VoiceService {
 
   constructor() {
     if (typeof window === "undefined") return;
-    
+
     // Initialize Speech Recognition
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
-      this.recognition.lang = 'en-US';
+      this.recognition.lang = "en-US";
       this.recognition.continuous = false;
       this.recognition.interimResults = true;
       this.recognition.maxAlternatives = 1;
-      
+
       this.recognition.onresult = (event: SpeechRecognitionEvent) => {
-        let finalTranscript = '';
-        let interimTranscript = '';
-        
+        let finalTranscript = "";
+        let interimTranscript = "";
+
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
           if (result.isFinal) {
@@ -68,94 +67,85 @@ export class VoiceService {
             interimTranscript += result[0].transcript;
           }
         }
-        
+
         if (finalTranscript) {
           this.onResultCallback?.(finalTranscript);
           this.stopListening();
         } else if (interimTranscript) {
-          this.onResultCallback?.(interimTranscript + '...');
+          this.onResultCallback?.(interimTranscript + "...");
         }
       };
-      
+
       this.recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
-        console.warn('Speech recognition error:', event.error);
+        console.warn("Speech recognition error:", event.error);
         this.onErrorCallback?.(event.error);
         this.isListening = false;
       };
-      
+
       this.recognition.onend = () => {
         this.isListening = false;
       };
     }
-    
-    // Initialize Speech Synthesis - use window.speechSynthesis directly
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
+
+    // Initialize Speech Synthesis
+    if (typeof window !== "undefined" && window.speechSynthesis) {
       this.synthesis = window.speechSynthesis;
-      
-      // Load voices
       this.loadVoices();
     }
   }
 
   // Load available voices
   private loadVoices(): void {
-    if (!this.synthesis || this.voicesLoaded) return;
-    
+    if (!this.synthesis) return;
+
     try {
-      // Try to get voices immediately
       this.voices = this.synthesis.getVoices() || [];
-      
       if (this.voices.length > 0) {
         this.voicesLoaded = true;
-        console.log('✅ Voices loaded:', this.voices.length);
         return;
       }
-      
-      // If no voices, wait for them to load
+
       this.synthesis.onvoiceschanged = () => {
         if (this.synthesis) {
           this.voices = this.synthesis.getVoices() || [];
           this.voicesLoaded = true;
-          console.log('✅ Voices loaded:', this.voices.length);
         }
       };
-      
-      // Fallback: check again after a delay
+
       setTimeout(() => {
         if (!this.voicesLoaded && this.synthesis) {
           this.voices = this.synthesis.getVoices() || [];
           if (this.voices.length > 0) {
             this.voicesLoaded = true;
-            console.log('✅ Voices loaded (fallback):', this.voices.length);
           }
         }
-      }, 1000);
+      }, 500);
     } catch (e) {
-      console.warn('⚠️ Could not load voices:', e);
+      console.warn("Could not load voices:", e);
     }
   }
 
   // Start listening for voice input
   startListening(onResult: (text: string) => void, onError?: (error: string) => void): boolean {
     if (!this.recognition) {
-      onError?.('Speech recognition is not supported in this browser');
+      onError?.("Speech recognition is not supported in this browser");
       return false;
     }
-    
+
     if (this.isListening) {
       this.stopListening();
     }
-    
+
     this.onResultCallback = onResult;
     this.onErrorCallback = onError || null;
     this.isListening = true;
-    
+
     try {
       this.recognition.start();
       return true;
     } catch (e) {
       this.isListening = false;
-      onError?.('Failed to start listening. Please try again.');
+      onError?.("Failed to start listening. Please try again.");
       return false;
     }
   }
@@ -165,132 +155,170 @@ export class VoiceService {
     if (this.recognition && this.isListening) {
       try {
         this.recognition.stop();
-      } catch (e) {
-        // Ignore
-      }
+      } catch {}
     }
     this.isListening = false;
   }
 
-  // Check if currently listening
   isCurrentlyListening(): boolean {
     return this.isListening;
   }
 
-  // Check if speech recognition is supported
   isSpeechSupported(): boolean {
     return !!this.recognition;
   }
 
-  // Speak text (Voice Output)
+  /**
+   * Helper to select a natural, high-quality MALE voice
+   */
+  private selectMaleVoice(): SpeechSynthesisVoice | null {
+    if (!this.voices || this.voices.length === 0) {
+      if (this.synthesis) {
+        this.voices = this.synthesis.getVoices() || [];
+      }
+    }
+
+    if (this.voices.length === 0) return null;
+
+    const femaleKeywords = [
+      "female", "samantha", "victoria", "zira", "karen", "susan", "tessa",
+      "moira", "fiona", "agnes", "kathy", "princess", "vicki", "veena",
+      "alice", "jenny", "aria", "hazel", "catherine", "siri"
+    ];
+
+    // Priority ranked male voices across macOS, Chrome, Windows & Linux
+    const preferredMaleNames = [
+      "Google UK English Male",
+      "Google US English Male",
+      "Alex",
+      "Daniel",
+      "Microsoft David",
+      "Microsoft Mark",
+      "Microsoft George",
+      "Microsoft Guy",
+      "Fred",
+      "Tom",
+      "Oliver",
+      "Aaron",
+      "Arthur",
+    ];
+
+    // 1. Try to find a known preferred male voice
+    for (const name of preferredMaleNames) {
+      const match = this.voices.find(
+        (v) => v.name && v.name.toLowerCase().includes(name.toLowerCase())
+      );
+      if (match) return match;
+    }
+
+    // 2. Search for any English voice with "male" in name and NOT containing female keywords
+    const maleKeywordVoice = this.voices.find((v) => {
+      const lower = (v.name || "").toLowerCase();
+      const isEnglish = (v.lang || "").toLowerCase().startsWith("en");
+      const hasMale = lower.includes("male") && !lower.includes("female");
+      const hasFemale = femaleKeywords.some((f) => lower.includes(f));
+      return isEnglish && hasMale && !hasFemale;
+    });
+    if (maleKeywordVoice) return maleKeywordVoice;
+
+    // 3. Fallback: Any English voice that does NOT match female keywords
+    const nonFemaleEnglish = this.voices.find((v) => {
+      const lower = (v.name || "").toLowerCase();
+      const isEnglish = (v.lang || "").toLowerCase().startsWith("en");
+      const hasFemale = femaleKeywords.some((f) => lower.includes(f));
+      return isEnglish && !hasFemale;
+    });
+    if (nonFemaleEnglish) return nonFemaleEnglish;
+
+    // 4. Any English voice
+    return this.voices.find((v) => (v.lang || "").toLowerCase().startsWith("en")) || this.voices[0] || null;
+  }
+
+  /**
+   * Speak text with a clear MALE voice, excluding all emojis and noisy markdown symbols
+   */
   speak(text: string, onEnd?: () => void): void {
     if (!this.synthesis || typeof window === "undefined") {
       onEnd?.();
       return;
     }
-    
+
     // Cancel any ongoing speech
     try {
       this.synthesis.cancel();
-    } catch (e) {
-      // Ignore
-    }
-    
-    // Clean text - remove markdown and special characters
-    const cleanText = text
-      .replace(/\*\*/g, '')
-      .replace(/\n/g, '. ')
-      .replace(/\*/g, '')
-      .replace(/#/g, '')
-      .replace(/\d\.\s/g, '')
-      .replace(/\s+/g, ' ')
+    } catch {}
+
+    // Clean text strictly: strip all emojis and clean markdown
+    let cleanText = text
+      // Remove all emojis using unicode property escapes & ranges
+      .replace(/\p{Extended_Pictographic}/gu, "")
+      .replace(
+        /[\u{1F300}-\u{1F5FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{1F700}-\u{1F77F}\u{1F780}-\u{1F7FF}\u{1F800}-\u{1F8FF}\u{1F900}-\u{1F9FF}\u{1FA00}-\u{1FA6F}\u{1FA70}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{2300}-\u{23FF}]/gu,
+        ""
+      )
+      // Strip code blocks
+      .replace(/```[\s\S]*?```/g, " ")
+      // Strip inline code backticks
+      .replace(/`([^`]+)`/g, "$1")
+      // Markdown links: [Title](url) -> Title
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      // Strip markdown formatting symbols
+      .replace(/[*_#~>|]/g, " ")
+      // Clean lists and bullets
+      .replace(/^[•*-]\s+/gm, "")
+      .replace(/^\d+\.\s+/gm, "")
+      .replace(/\n+/g, ". ")
+      .replace(/\s+/g, " ")
       .trim();
-    
-    // Don't speak empty text
+
     if (!cleanText) {
       onEnd?.();
       return;
     }
-    
+
     try {
       const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = 'en-US';
-      utterance.rate = 0.9;
-      utterance.pitch = 1.0;
+      utterance.lang = "en-US";
+      // Male voice parameters: calm, articulate, slightly deeper natural male pitch
+      utterance.rate = 0.96;
+      utterance.pitch = 0.90;
       utterance.volume = 1.0;
-      
-      // Try to find a good voice
-      if (this.voices.length === 0) {
-        // Try to reload voices
-        this.loadVoices();
+
+      const maleVoice = this.selectMaleVoice();
+      if (maleVoice) {
+        utterance.voice = maleVoice;
       }
-      
-      // Preferred voices in order
-      const preferredNames = [
-        'Google UK English Female',
-        'Google US English', 
-        'Samantha',
-        'Alex',
-        'Microsoft David',
-        'Microsoft Zira'
-      ];
-      
-      let preferredVoice = null;
-      for (const name of preferredNames) {
-        preferredVoice = this.voices.find(v => v.name && v.name.includes(name));
-        if (preferredVoice) break;
-      }
-      
-      // Fallback to any English voice
-      if (!preferredVoice) {
-        preferredVoice = this.voices.find(v => v.lang && v.lang.startsWith('en'));
-      }
-      
-      if (preferredVoice) {
-        utterance.voice = preferredVoice;
-      }
-      
-      utterance.onend = () => {
-        onEnd?.();
-      };
-      
-      utterance.onerror = () => {
-        onEnd?.();
-      };
-      
+
+      utterance.onend = () => onEnd?.();
+      utterance.onerror = () => onEnd?.();
+
       this.synthesis.speak(utterance);
     } catch (e) {
-      console.warn('Speech synthesis error:', e);
+      console.warn("Speech synthesis error:", e);
       onEnd?.();
     }
   }
 
-  // Stop speaking
   stopSpeaking(): void {
     if (this.synthesis) {
       try {
         this.synthesis.cancel();
-      } catch (e) {
-        // Ignore
-      }
+      } catch {}
     }
   }
 
-  // Check if currently speaking
   isSpeaking(): boolean {
     try {
       return this.synthesis ? this.synthesis.speaking : false;
-    } catch (e) {
+    } catch {
       return false;
     }
   }
 
-  // Check if speech synthesis is supported
   isSpeechSynthesisSupported(): boolean {
     return !!this.synthesis;
   }
 
-  // Get available voices (for debugging)
   getVoices(): SpeechSynthesisVoice[] {
     return this.voices;
   }
@@ -306,16 +334,12 @@ export function getVoiceService(): VoiceService {
   return voiceServiceInstance;
 }
 
-// Load voices (call this once on app startup)
 export function loadVoices(): void {
   if (typeof window === "undefined") return;
   try {
     const synthesis = window.speechSynthesis;
     if (synthesis) {
-      // Trigger voice loading
       synthesis.getVoices();
     }
-  } catch (e) {
-    // Ignore
-  }
+  } catch {}
 }

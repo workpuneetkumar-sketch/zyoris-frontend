@@ -1,16 +1,14 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ZiiBotAvatar } from "./ZiiBotAvatar";
+import { usePathname } from "next/navigation";
 import { ZiiBotSidebar } from "./ZiiBotSidebar";
 import { MarkdownContent } from "./MarkdownContent";
 import type { ChatMessage, useZiiBotChat } from "./useZiiBotChat";
 import { ContextualSuggestions } from "./ContextualSuggestions";
 import {
-  Send,
-  Minimize2,
-  Maximize2,
+  ArrowUp,
   X,
   Volume2,
   VolumeX,
@@ -20,11 +18,14 @@ import {
   Check,
   RotateCcw,
   AlertCircle,
-  PanelLeftOpen,
-  PanelLeftClose,
   Mic,
   MicOff,
-  Sparkles,
+  Paperclip,
+  Scan,
+  Sun,
+  Moon,
+  MessageSquare,
+  Plus,
 } from "lucide-react";
 import { getVoiceService } from "./voiceService";
 import { toast } from "react-toastify";
@@ -33,20 +34,100 @@ import { ActionProposalCard } from "@/components/ai/ActionProposalCard";
 interface ZiiBotPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
+  dockMode: "side" | "bottom";
+  onToggleDock: () => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
   chat: ReturnType<typeof useZiiBotChat>;
-  darkMode: boolean;
 }
 
-// ─── Message Bubble ─────────────────────────────────────────────
+function DockToBottomIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <line x1="3" x2="21" y1="15" y2="15" />
+    </svg>
+  );
+}
+
+function DockToSideIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <line x1="15" x2="15" y1="3" y2="21" />
+    </svg>
+  );
+}
+
+function getRouteScope(pathname: string | null): string {
+  if (!pathname || pathname === "/" || pathname === "/dashboard") return "Dashboard";
+  const segment = pathname.split("/").filter(Boolean)[0] || "";
+  const map: Record<string, string> = {
+    domains: "Domains",
+    leads: "Leads",
+    deals: "Deals",
+    customers: "Customers",
+    contacts: "Contacts",
+    companies: "Companies",
+    workspace: "Workspace",
+    documents: "Documents",
+    analytics: "Analytics",
+    reports: "Reports",
+    finance: "Finance",
+    tasks: "Tasks",
+    calendar: "Calendar",
+    automation: "Automation",
+    workflows: "Workflows",
+    agents: "Agents",
+    tools: "Tools",
+    settings: "Settings",
+    whatsapp: "WhatsApp",
+    email: "Email",
+    messages: "Messages",
+    support: "Support",
+    integrations: "Integrations",
+    connect: "Connect",
+    ceo: "Executive",
+    cfo: "Financial",
+    team: "Team",
+    hr: "HR",
+    knowledge: "Knowledge",
+    "knowledge-base": "Knowledge",
+  };
+  if (map[segment.toLowerCase()]) return map[segment.toLowerCase()];
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
+}
+
+// ─── Minimal Resend Message Bubble ──────────────────────────────
 
 function MessageBubble({
   message,
   onRetry,
+  isDark,
 }: {
   message: ChatMessage;
   onRetry?: (text?: string) => void;
+  isDark: boolean;
 }) {
   const isUser = message.role === "user";
   const [copied, setCopied] = useState(false);
@@ -65,30 +146,35 @@ function MessageBubble({
     if (type === "up") {
       toast.success("Thanks for your feedback!");
     } else {
-      toast.info("Thanks! We'll refine CRM responses.");
+      toast.info("Thanks! We'll refine system responses.");
     }
   };
 
   if (message.isError) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 10 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-start gap-2.5 my-2 max-w-[90%]"
+        className="my-2 max-w-[95%]"
       >
-        <ZiiBotAvatar size="message" isIdle={false} />
-        <div className="flex-1 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs shadow-sm">
-          <div className="flex items-center gap-1.5 font-bold text-rose-700 mb-1">
-            <AlertCircle size={14} className="text-rose-600 flex-shrink-0" />
-            <span>CRM Assistant Notice</span>
+        <div
+          className={`p-3 rounded-xl border text-xs ${
+            isDark
+              ? "bg-rose-950/30 border-rose-900/60 text-rose-300"
+              : "bg-rose-50 border-rose-200 text-rose-900"
+          }`}
+        >
+          <div className="flex items-center gap-1.5 font-semibold text-rose-500 mb-1">
+            <AlertCircle size={14} className="flex-shrink-0" />
+            <span>System Notice</span>
           </div>
-          <p className="leading-relaxed mb-2.5 text-rose-800">{message.content}</p>
+          <p className="leading-relaxed mb-2 opacity-90">{message.content}</p>
           {onRetry && message.failedText && (
             <button
               onClick={() => onRetry(message.failedText)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors shadow-sm active:scale-95"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs transition-colors"
             >
-              <RotateCcw size={12} />
+              <RotateCcw size={11} />
               <span>Retry question</span>
             </button>
           )}
@@ -99,53 +185,59 @@ function MessageBubble({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.22, ease: "easeOut" }}
-      className={`flex items-end gap-2.5 my-2.5 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className={`my-2 flex flex-col ${isUser ? "items-end" : "items-start"}`}
     >
-      {!isUser && <ZiiBotAvatar size="message" isIdle={true} />}
-
-      <div className={`flex flex-col ${isUser ? "items-end" : "items-start"} max-w-[85%]`}>
+      {isUser ? (
         <div
-          className={`px-4 py-3 rounded-2xl leading-relaxed text-xs sm:text-sm ${
-            isUser
-              ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-none shadow-md shadow-blue-500/15"
-              : "bg-white text-gray-800 border border-gray-200/90 rounded-bl-none shadow-sm"
+          className={`px-3.5 py-2 rounded-2xl max-w-[85%] text-xs sm:text-sm leading-relaxed ${
+            isDark
+              ? "bg-zinc-800 text-zinc-100 border border-zinc-700/60"
+              : "bg-zinc-900 text-white"
           }`}
         >
-          {isUser ? (
-            <p className="whitespace-pre-wrap select-text">{message.content}</p>
-          ) : (
-            <MarkdownContent content={message.content} />
-          )}
+          <p className="whitespace-pre-wrap select-text">{message.content}</p>
         </div>
+      ) : (
+        <div className="w-full text-xs sm:text-sm leading-relaxed px-1">
+          <MarkdownContent content={message.content} isDark={isDark} />
 
-        {/* Message actions for assistant */}
-        {!isUser && (
-          <div className="flex items-center gap-2 mt-1 ml-1 text-gray-400 text-[11px]">
+          {/* Minimal actions bar */}
+          <div
+            className={`flex items-center gap-2 mt-1.5 text-[11px] ${
+              isDark ? "text-zinc-500" : "text-zinc-400"
+            }`}
+          >
             <button
               onClick={handleCopy}
-              className="p-1 hover:text-blue-600 hover:bg-gray-100 rounded transition-colors"
+              className={`p-1 rounded transition-colors ${
+                isDark ? "hover:text-zinc-200 hover:bg-zinc-800" : "hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
               title="Copy message"
             >
-              {copied ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+              {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
             </button>
 
             {rating ? (
-              <span className="text-[10px] text-gray-400 italic">Feedback recorded</span>
+              <span className="text-[10px] italic">Feedback noted</span>
             ) : (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-0.5">
                 <button
                   onClick={() => handleRating("up")}
-                  className="p-1 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+                  className={`p-1 rounded transition-colors ${
+                    isDark ? "hover:text-emerald-400 hover:bg-zinc-800" : "hover:text-emerald-600 hover:bg-zinc-100"
+                  }`}
                   title="Helpful"
                 >
                   <ThumbsUp size={12} />
                 </button>
                 <button
                   onClick={() => handleRating("down")}
-                  className="p-1 hover:text-rose-600 hover:bg-rose-50 rounded transition-colors"
+                  className={`p-1 rounded transition-colors ${
+                    isDark ? "hover:text-rose-400 hover:bg-zinc-800" : "hover:text-rose-600 hover:bg-zinc-100"
+                  }`}
                   title="Not helpful"
                 >
                   <ThumbsDown size={12} />
@@ -153,37 +245,39 @@ function MessageBubble({
               </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </motion.div>
   );
 }
 
-// ─── Main Panel Component (Pure White Theme) ─────────────────────
+// ─── Main Panel Component ────────────────────────────────────────
 
 export function ZiiBotPanel({
   isOpen,
   onClose,
-  isFullscreen,
-  onToggleFullscreen,
+  dockMode,
+  onToggleDock,
+  isDark,
+  onToggleTheme,
   chat,
 }: ZiiBotPanelProps) {
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [inputValue, setInputValue] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(isFullscreen);
-  const [isRecording, setIsRecording] = useState(false);
-  const voiceService = getVoiceService();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (isFullscreen) {
-      setSidebarOpen(true);
-    }
-  }, [isFullscreen]);
+  const [inputValue, setInputValue] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
+
+  const voiceService = getVoiceService();
+  const currentScope = useMemo(() => getRouteScope(pathname), [pathname]);
 
   useEffect(() => {
     if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 150);
+      setTimeout(() => inputRef.current?.focus(), 120);
     }
   }, [isOpen]);
 
@@ -198,11 +292,18 @@ export function ZiiBotPanel({
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
-    const text = inputValue.trim();
-    if (text && !chat.isTyping) {
-      chat.sendMessage(text);
-      setInputValue("");
+    const rawText = inputValue.trim();
+    if (!rawText && !attachedFileName) return;
+    if (chat.isTyping) return;
+
+    let fullText = rawText;
+    if (attachedFileName) {
+      fullText = `[Context Attachment: ${attachedFileName}]\n${rawText}`;
+      setAttachedFileName(null);
     }
+
+    chat.sendMessage(fullText);
+    setInputValue("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -247,29 +348,51 @@ export function ZiiBotPanel({
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAttachedFileName(file.name);
+      toast.info(`Attached context: ${file.name}`);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 30, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 30, scale: 0.96 }}
-      transition={{ duration: 0.28, ease: "easeOut" }}
-      className={`fixed z-50 flex shadow-2xl overflow-hidden bg-white border border-gray-200 text-gray-900 ${
-        isFullscreen
-          ? "inset-0 w-screen h-screen rounded-none"
-          : "bottom-24 right-6 w-[470px] max-w-[calc(100vw-2rem)] h-[660px] max-h-[calc(100vh-7rem)] rounded-3xl"
+      initial={
+        dockMode === "side"
+          ? { opacity: 0, x: 40 }
+          : { opacity: 0, y: 40 }
+      }
+      animate={{ opacity: 1, x: 0, y: 0 }}
+      exit={
+        dockMode === "side"
+          ? { opacity: 0, x: 40 }
+          : { opacity: 0, y: 40 }
+      }
+      transition={{ duration: 0.22, ease: "easeOut" }}
+      className={`fixed z-50 flex overflow-hidden shadow-2xl transition-colors ${
+        isDark ? "bg-[#09090b] text-zinc-100" : "bg-white text-zinc-900"
+      } ${
+        dockMode === "side"
+          ? "top-0 right-0 bottom-0 w-[460px] max-w-full h-screen border-l " +
+            (isDark ? "border-zinc-800" : "border-zinc-200")
+          : "bottom-0 left-0 right-0 h-[400px] max-h-[75vh] w-full border-t " +
+            (isDark ? "border-zinc-800" : "border-zinc-200")
       }`}
     >
-      {/* ── Left Sidebar (Conversations History) ── */}
+      {/* ── Left Sidebar (History & Conversations Drawer) ── */}
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: isFullscreen ? 280 : 240, opacity: 1 }}
+            animate={{ width: 280, opacity: 1 }}
             exit={{ width: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="flex-shrink-0 h-full overflow-hidden z-20"
+            transition={{ duration: 0.18 }}
+            className={`flex-shrink-0 h-full overflow-hidden z-20 border-r ${
+              isDark ? "border-zinc-800/80" : "border-zinc-200/80"
+            }`}
           >
             <ZiiBotSidebar
               sessions={chat.sessions}
@@ -281,69 +404,124 @@ export function ZiiBotPanel({
               isLoading={chat.isLoadingSessions}
               onCloseMobile={() => setSidebarOpen(false)}
               className="w-full h-full"
+              isDark={isDark}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* ── Main Chat Area ── */}
-      <div className="flex-1 flex flex-col h-full min-w-0 bg-white">
+      <div className="flex-1 flex flex-col h-full min-w-0">
         {/* Top Header */}
-        <div className="relative flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 shadow-xs">
-          <div className="flex items-center gap-3 min-w-0">
-            {/* Sidebar toggle */}
+        <div
+          className={`flex items-center justify-between px-4 py-3 border-b flex-shrink-0 gap-2 ${
+            isDark ? "border-zinc-800/80 bg-[#09090b]" : "border-zinc-200/80 bg-white"
+          }`}
+        >
+          {/* Header Left: Title + Conversations button + New Chat */}
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-sm font-semibold tracking-tight whitespace-nowrap">Ask anything</h2>
+
+            {/* View All Conversations toggle */}
             <button
+              type="button"
               onClick={() => setSidebarOpen((prev) => !prev)}
-              className={`p-1.5 rounded-xl border transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all ${
                 sidebarOpen
-                  ? "bg-blue-50 border-blue-200 text-blue-600"
-                  : "bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800"
+                  ? isDark
+                    ? "bg-zinc-800 text-white border-zinc-700 shadow-xs"
+                    : "bg-zinc-100 text-zinc-950 border-zinc-300 shadow-xs"
+                  : isDark
+                  ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800"
+                  : "bg-zinc-100/80 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border-zinc-200"
               }`}
-              title={sidebarOpen ? "Hide chat history" : "Show chat history"}
+              title={sidebarOpen ? "Hide conversations history" : "View all past conversations"}
             >
-              {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+              <MessageSquare size={13} />
+              <span className="hidden sm:inline">Conversations</span>
+              {chat.sessions.length > 0 && (
+                <span
+                  className={`px-1 rounded text-[10px] font-mono ${
+                    isDark ? "bg-zinc-800 text-zinc-300" : "bg-zinc-200 text-zinc-700"
+                  }`}
+                >
+                  {chat.sessions.length}
+                </span>
+              )}
             </button>
 
-            {/* Mascot Avatar */}
-            <ZiiBotAvatar size="panel" isIdle={!chat.isTyping} isTyping={chat.isTyping} showStatus />
-
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h3 className="font-bold text-sm tracking-wide text-gray-900">ZII BOT</h3>
-                <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-blue-600 tracking-wider">
-                  CRM AI
-                </span>
-              </div>
-              <p className="text-[11px] text-gray-400 truncate max-w-[200px] sm:max-w-[260px]">
-                {chat.activeSession?.title || "CRM Intelligence Assistant"}
-              </p>
-            </div>
+            {/* Quick New Chat button */}
+            <button
+              type="button"
+              onClick={() => {
+                chat.createNewSession();
+                setSidebarOpen(false);
+                toast.success("Started new chat");
+              }}
+              className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium border transition-all active:scale-95 ${
+                isDark
+                  ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800"
+                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950 border-zinc-200"
+              }`}
+              title="Start a new conversation"
+            >
+              <Plus size={12} />
+              <span className="hidden sm:inline">New</span>
+            </button>
           </div>
 
-          {/* Action icons */}
-          <div className="flex items-center gap-1">
+          {/* Action Icons Right */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Theme Toggle (Changes ONLY Chatbot Theme) */}
+            <button
+              onClick={onToggleTheme}
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title={isDark ? "Switch chatbot to light mode" : "Switch chatbot to dark mode"}
+            >
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
+            {/* Audio Toggle */}
             <button
               onClick={chat.toggleSound}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
               title={chat.soundOn ? "Mute audio" : "Enable audio"}
             >
-              {chat.soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+              {chat.soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
             </button>
 
+            {/* Dock Toggle with Tooltip */}
             <button
-              onClick={onToggleFullscreen}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-              title={isFullscreen ? "Exit fullscreen" : "Expand fullscreen"}
+              onClick={onToggleDock}
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title={dockMode === "side" ? "Dock to bottom" : "Dock to side"}
             >
-              {isFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              {dockMode === "side" ? <DockToBottomIcon /> : <DockToSideIcon />}
             </button>
 
+            {/* Close */}
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-              title="Close assistant"
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title="Close"
             >
-              <X size={18} />
+              <X size={16} />
             </button>
           </div>
         </div>
@@ -351,45 +529,27 @@ export function ZiiBotPanel({
         {/* ── Conversation Message List ── */}
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto px-4 py-4 space-y-2 zii-chat-scroll bg-[#F8FAFC]"
+          className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 zii-chat-scroll ${
+            isDark ? "bg-[#09090b]" : "bg-white"
+          } ${dockMode === "bottom" ? "max-w-4xl mx-auto w-full" : ""}`}
         >
-          {/* Welcome Empty State */}
+          {/* Welcome / Suggestions State */}
           {chat.showGreeting && (
-            <motion.div
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex flex-col items-center justify-center text-center py-6 px-3"
-            >
-              <div className="mb-3 relative">
-                <ZiiBotAvatar size="hero" isIdle={true} />
-              </div>
-
-              <h4 className="text-base font-extrabold text-gray-900 mb-1 flex items-center gap-1.5 justify-center">
-                <span>Welcome to ZII BOT</span>
-                <Sparkles size={16} className="text-blue-600 animate-spin" style={{ animationDuration: "6s" }} />
-              </h4>
-
-              <p className="text-xs text-gray-600 max-w-sm mb-4 leading-relaxed">
-                Your AI assistant specialized in Zyoris CRM. Ask about your authorized{" "}
-                <span className="text-blue-600 font-semibold">Leads</span>,{" "}
-                <span className="text-blue-600 font-semibold">Deals</span>,{" "}
-                <span className="text-blue-600 font-semibold">Pipelines</span>,{" "}
-                <span className="text-blue-600 font-semibold">Tasks</span>, and{" "}
-                <span className="text-blue-600 font-semibold">Datasets</span>.
-              </p>
-
-              <div className="w-full max-w-md">
-                <ContextualSuggestions onSelect={(prompt) => chat.sendMessage(prompt)} />
-              </div>
-            </motion.div>
+            <div className="flex flex-col justify-end h-full py-2">
+              <ContextualSuggestions
+                pathname={pathname}
+                onSelect={(prompt) => chat.sendMessage(prompt)}
+                isDark={isDark}
+              />
+            </div>
           )}
 
-          {/* Messages */}
+          {/* Render Messages */}
           {chat.messages.map((msg) =>
             msg.type === "proposal" && msg.proposalData ? (
               <motion.div
                 key={msg.id}
-                initial={{ opacity: 0, y: 10 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="my-3"
               >
@@ -403,6 +563,7 @@ export function ZiiBotPanel({
                 key={msg.id}
                 message={msg}
                 onRetry={(text) => chat.retryLastMessage(text)}
+                isDark={isDark}
               />
             )
           )}
@@ -410,78 +571,173 @@ export function ZiiBotPanel({
           {/* Typing Indicator */}
           {chat.isTyping && (
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
+              initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-2.5 my-2"
+              className="flex items-center gap-2 py-1 text-xs"
             >
-              <ZiiBotAvatar size="message" isIdle={false} isTyping={true} />
-              <div className="px-4 py-2.5 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center gap-2">
-                <span className="text-xs text-blue-600 font-medium">Querying CRM intelligence</span>
-                <div className="flex gap-1 items-center">
-                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                  <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                </div>
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+              <span className={isDark ? "text-zinc-400" : "text-zinc-500"}>
+                Analyzing system intelligence
+              </span>
+              <div className="flex gap-1 items-center">
+                <span
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  style={{ animationDelay: "0ms" }}
+                />
+                <span
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  style={{ animationDelay: "150ms" }}
+                />
+                <span
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  style={{ animationDelay: "300ms" }}
+                />
               </div>
             </motion.div>
           )}
         </div>
 
-        {/* ── Input Box ── */}
-        <div className="p-3 bg-white border-t border-gray-100">
-          <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
-            {/* Voice record button */}
-            <button
-              type="button"
-              onClick={handleToggleVoice}
-              className={`p-2.5 rounded-xl border transition-all ${
-                isRecording
-                  ? "bg-rose-50 border-rose-400 text-rose-600 animate-pulse"
-                  : "bg-gray-50 border-gray-200 text-gray-500 hover:text-gray-800 hover:bg-gray-100"
+        {/* ── Input Box (Resend Style) ── */}
+        <div
+          className={`p-3 pt-2 flex-shrink-0 ${
+            dockMode === "bottom" ? "max-w-4xl mx-auto w-full" : ""
+          }`}
+        >
+          {attachedFileName && (
+            <div
+              className={`flex items-center justify-between px-3 py-1 mb-2 rounded-lg text-xs border ${
+                isDark
+                  ? "bg-zinc-900 border-zinc-800 text-zinc-300"
+                  : "bg-zinc-100 border-zinc-200 text-zinc-700"
               }`}
-              title={isRecording ? "Stop voice listening" : "Speak CRM question"}
             >
-              {isRecording ? <MicOff size={16} /> : <Mic size={16} />}
-            </button>
+              <span className="truncate flex items-center gap-1.5">
+                <Paperclip size={12} className="opacity-70" />
+                <span>{attachedFileName}</span>
+              </span>
+              <button
+                onClick={() => setAttachedFileName(null)}
+                className="hover:opacity-75 p-0.5"
+                title="Remove attachment"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          )}
 
-            {/* Text input */}
-            <input
-              ref={inputRef}
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                isRecording
-                  ? "Listening to speech..."
-                  : "Ask a CRM question (e.g. leads, deals, tasks)..."
-              }
-              disabled={chat.isTyping}
-              className="flex-1 px-3.5 py-2.5 bg-gray-50 border border-gray-200 focus:bg-white focus:border-blue-500 focus:ring-2 focus:ring-blue-100 rounded-xl text-xs sm:text-sm text-gray-900 placeholder-gray-400 outline-none transition-all disabled:opacity-50"
-            />
+          <div
+            className={`rounded-2xl border transition-all duration-150 p-2.5 ${
+              isDark
+                ? "bg-[#121214] border-zinc-800/90 focus-within:border-zinc-700 shadow-lg"
+                : "bg-white border-zinc-200/90 focus-within:border-zinc-400 shadow-sm"
+            }`}
+          >
+            {/* Top row: > prompt symbol + text input */}
+            <form onSubmit={handleSubmit} className="flex items-center gap-2">
+              <span
+                className={`font-mono text-sm font-medium select-none pl-1 ${
+                  isDark ? "text-zinc-500" : "text-zinc-400"
+                }`}
+              >
+                &gt;
+              </span>
 
-            {/* Send button */}
-            <button
-              type="submit"
-              disabled={chat.isTyping || !inputValue.trim()}
-              className={`p-2.5 rounded-xl flex items-center justify-center transition-all ${
-                chat.isTyping || !inputValue.trim()
-                  ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                  : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md shadow-blue-500/20 active:scale-95"
-              }`}
-              title="Send message"
-            >
-              <Send size={16} />
-            </button>
-          </form>
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isRecording ? "Listening to voice..." : "What can I do for you today?"
+                }
+                disabled={chat.isTyping}
+                className={`flex-1 bg-transparent text-xs sm:text-sm outline-none ${
+                  isDark
+                    ? "text-zinc-100 placeholder-zinc-500"
+                    : "text-zinc-900 placeholder-zinc-400"
+                }`}
+              />
+            </form>
 
-          {/* Subtext info */}
-          <div className="flex items-center justify-between mt-2 px-1 text-[10px] text-gray-400">
-            <span>ZII BOT CRM Assistant</span>
-            <span className="flex items-center gap-1 text-gray-500">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Live CRM Context Scoped
-            </span>
+            {/* Bottom row: Green dot, Scope badge, Attachments, Send */}
+            <div className="flex items-center justify-between mt-2.5 pt-1">
+              {/* Left: Green status dot + Scope pill */}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] flex-shrink-0" />
+
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border truncate select-none ${
+                    isDark
+                      ? "bg-zinc-800/80 border-zinc-700/60 text-zinc-300"
+                      : "bg-zinc-100 border-zinc-200 text-zinc-700"
+                  }`}
+                  title={`Context scoped to ${currentScope}`}
+                >
+                  <Scan size={11} className={isDark ? "text-zinc-400" : "text-zinc-500"} />
+                  <span className="truncate">{currentScope}</span>
+                </div>
+              </div>
+
+              {/* Right: Hidden file input, Paperclip, Mic, Send */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {/* Paperclip */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    isDark
+                      ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  }`}
+                  title="Attach file or context"
+                >
+                  <Paperclip size={14} />
+                </button>
+
+                {/* Mic */}
+                <button
+                  type="button"
+                  onClick={handleToggleVoice}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    isRecording
+                      ? "text-rose-500 bg-rose-500/10 animate-pulse"
+                      : isDark
+                      ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  }`}
+                  title={isRecording ? "Stop listening" : "Voice input"}
+                >
+                  {isRecording ? <MicOff size={14} /> : <Mic size={14} />}
+                </button>
+
+                {/* Send button (Up Arrow) */}
+                <button
+                  type="button"
+                  onClick={() => handleSubmit()}
+                  disabled={chat.isTyping || (!inputValue.trim() && !attachedFileName)}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                    !chat.isTyping && (inputValue.trim() || attachedFileName)
+                      ? isDark
+                        ? "bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm active:scale-95 cursor-pointer"
+                        : "bg-zinc-900 text-white hover:bg-black shadow-sm active:scale-95 cursor-pointer"
+                      : isDark
+                      ? "bg-zinc-800/60 text-zinc-600 cursor-not-allowed"
+                      : "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                  }`}
+                  title="Send"
+                >
+                  <ArrowUp size={14} strokeWidth={2.4} />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
