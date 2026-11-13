@@ -11,6 +11,7 @@ import Script from "next/script";
 import { InvoiceProvider } from "@/context/InvoiceContext";
 import { PaymentProvider } from "@/context/PaymentContext";
 import { TourProvider } from "@/components/tour/TourProvider";
+import { ClientErrorBoundary } from "@/components/ui/ClientErrorBoundary";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 export const metadata: Metadata = {
@@ -80,12 +81,16 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <InvoiceProvider>
                   <PaymentProvider>
                     <TourProvider>
-                      {children}
+                      <ClientErrorBoundary>
+                        {children}
+                      </ClientErrorBoundary>
                     </TourProvider>
                   </PaymentProvider>
                 </InvoiceProvider>
               </NotificationProvider>
-              <ZiiBot />
+              <ClientErrorBoundary silent>
+                <ZiiBot />
+              </ClientErrorBoundary>
             </AuthProvider>
           </ToastProvider>
         </ThemeProvider>

@@ -5,20 +5,31 @@ import { useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 
 export default function HomePage() {
-  const { isAuthenticated, isInitializing, user, roleVerificationStatus } = useAuth();
+  const { isAuthenticated, sessionStatus, roleVerificationStatus, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (
-      isInitializing ||
-      (isAuthenticated && roleVerificationStatus === "checking")
-    ) return;
+    if (sessionStatus === "checking") return;
+
     if (!isAuthenticated) {
-      router.replace("/login");
+      if (typeof window !== "undefined") {
+        window.location.replace("/login");
+      } else {
+        router.replace("/login");
+      }
     } else {
       router.replace("/dashboard");
     }
-  }, [isInitializing, isAuthenticated, roleVerificationStatus, user, router]);
+  }, [sessionStatus, isAuthenticated, roleVerificationStatus, user, router]);
 
-  return null;
+  return (
+    <div className="h-screen w-screen bg-[#f5f7fb] flex items-center justify-center">
+      <div
+        className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
+        role="status"
+        aria-label="Loading Zyoris…"
+      />
+    </div>
+  );
 }
+

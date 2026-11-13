@@ -312,7 +312,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           window.location.pathname.startsWith("/admin/login") ||
           window.location.pathname.startsWith("/register"));
 
-      const cachedUser: User | null = parsed?.user ?? null;
+      let cachedUser: User | null = parsed?.user ?? null;
+      if (!cachedUser && typeof window !== "undefined") {
+        try {
+          const rawUser = localStorage.getItem("user");
+          if (rawUser) {
+            cachedUser = JSON.parse(rawUser);
+          }
+        } catch {}
+      }
+
+      if (!cachedUser && effectiveToken) {
+        // Construct fallback user so network glitch doesn't drop the user session
+        try {
+          const role = (typeof window !== "undefined" ? localStorage.getItem("userRole") : null) || "USER";
+          cachedUser = { id: "cached-session", email: "", name: role === "ADMIN" ? "Admin" : "User", role };
+        } catch {}
+      }
+
       if (cachedUser) {
         const isAdmin = (cachedUser.role || "").toUpperCase() === "ADMIN";
         if (isAdmin && (!cachedUser.name || cachedUser.name.trim().toLowerCase() === "user")) {
@@ -390,11 +407,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           clearAuthStorage();
           wipeReactState();
         } else {
-      // Network / 5xx — keep the optimistic session alive so the user
+          // Network / 5xx — keep the optimistic session alive so the user
           // is not logged out on a flaky connection.
           if (process.env.NODE_ENV === "development") {
             // Only log in dev; never log the raw error object in production.
             console.warn("[auth] Session validation failed (non-auth error), keeping session.");
+          }
+          if (effectiveToken && !isPublicAuthPage) {
+            setIsAuthenticated(true);
+            setSessionStatus("authenticated");
           }
         }
       } finally {
@@ -403,7 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         );
         setPermissionsLoaded(true);
         setIsInitializing(false);
-        setSessionStatus((prev) => (prev === "checking" ? "unauthenticated" : prev));
+        setSessionStatus((prev) => (prev === "checking" ? (effectiveToken ? "authenticated" : "unauthenticated") : prev));
       }
     };
 

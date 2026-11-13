@@ -29,8 +29,17 @@ export default function SettingsPage() {
         load();
     }, [user, isInitializing, router]);
 
-    if (isInitializing) return null;
-    if (!user) return null;
+    if (isInitializing || !user) {
+        return (
+            <div className="flex items-center justify-center min-h-[350px]">
+                <div
+                    className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"
+                    role="status"
+                    aria-label="Loading settings…"
+                />
+            </div>
+        );
+    }
 
     return (
         <SettingsUI
