@@ -307,7 +307,7 @@ export class VoiceService {
       sentences.forEach((sentence, idx) => {
         const utterance = new SpeechSynthesisUtterance(sentence);
         utterance.lang = "en-US";
-        utterance.rate = 1.45;
+        utterance.rate = 1.15;
         utterance.pitch = 0.90;
         utterance.volume = 1.0;
 
