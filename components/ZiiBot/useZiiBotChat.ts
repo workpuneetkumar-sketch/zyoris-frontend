@@ -1,15 +1,23 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { ZII_GREETING } from "./ZiiBotAvatar";
-import { getOrgSummary, getRoleContext, OrgSummary } from "@/lib/api/organizationsApi";
 import { useAuth } from "@/context/AuthContext";
 import { getVoiceService } from "./voiceService";
-import api from "@/lib/api/api";
+import { playMessageSound, playSendSound } from "./sounds";
 import type { AgentApprovalRequest } from "@/types/ai-proposals";
+import {
+  listChatSessions,
+  createChatSession,
+  getChatSession,
+  updateChatSession,
+  deleteChatSession,
+  sendChatMessage,
+  type ChatSession,
+  type ChatMessageDto,
+} from "@/lib/api/chatApi";
+import { checkQueryPermissions } from "@/lib/rbacChatGuard";
+import { generateDeterministicFallback } from "@/lib/aiService";
 
-const SESSION_KEY = "zii-bot-session";
-const HISTORY_KEY = "zii-bot-history";
 const SOUND_KEY = "zii-bot-sound";
 
 export interface ChatMessage {
@@ -17,83 +25,35 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
   timestamp: number;
-  /**
-   * "text"     — standard assistant reply, rendered as HTML via formatMessageContent()
-   * "proposal" — an AgentApprovalRequest; rendered as ActionProposalCard instead of text
-   */
   type?: "text" | "proposal";
-  /** Present only when type === "proposal" */
   proposalData?: AgentApprovalRequest;
+  isError?: boolean;
+  failedText?: string;
 }
 
-// ─── Helper: detect and extract an AgentApprovalRequest from the API response ──
-//
-// The backend may embed the approval request in several shapes:
-//   { reply: "...", proposal: { id, agentId, actionPreview, ... } }
-//   { proposal: { ... } }
-//   { data: { proposal: { ... } } }
-//   { agentApprovalRequest: { ... } }
-//
-// Returns null if no proposal is found (treat as a normal text message).
 function extractProposal(data: Record<string, unknown>): AgentApprovalRequest | null {
   try {
-    // Direct top-level
     const candidates = [
       data.proposal,
       data.agentApprovalRequest,
       data.approvalRequest,
       (data.data as Record<string, unknown> | undefined)?.proposal,
       (data.data as Record<string, unknown> | undefined)?.agentApprovalRequest,
+      (data.message as Record<string, unknown> | undefined)?.proposal,
     ];
 
     for (const candidate of candidates) {
-      if (
-        candidate &&
-        typeof candidate === "object" &&
-        !Array.isArray(candidate)
-      ) {
+      if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) {
         const c = candidate as Record<string, unknown>;
-        // Validate it looks like an AgentApprovalRequest
         if (c.id && c.actionPreview && typeof c.actionPreview === "object") {
           return c as unknown as AgentApprovalRequest;
         }
       }
     }
   } catch {
-    // Never crash the chat over a parse error
+    // Ignore parse errors
   }
   return null;
-}
-
-function getSessionId(): string {
-  if (typeof window === "undefined") return "";
-  let s = sessionStorage.getItem(SESSION_KEY);
-  if (!s) {
-    s = `zii-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-    sessionStorage.setItem(SESSION_KEY, s);
-  }
-  return s;
-}
-
-function loadHistory(): ChatMessage[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = sessionStorage.getItem(HISTORY_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ChatMessage[];
-    return Array.isArray(parsed) ? parsed.slice(-50) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveHistory(messages: ChatMessage[]) {
-  if (typeof window === "undefined") return;
-  try {
-    sessionStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-50)));
-  } catch {
-    // Ignore
-  }
 }
 
 export function getSoundEnabled(): boolean {
@@ -107,133 +67,420 @@ export function setSoundEnabled(enabled: boolean) {
   localStorage.setItem(SOUND_KEY, enabled ? "true" : "false");
 }
 
-function playNotificationSound() {
-  if (!getSoundEnabled() || typeof window === "undefined") return;
-  try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    osc.type = "sine";
-    gain.gain.setValueAtTime(0.08, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.12);
-  } catch {
-    // Ignore
+/**
+ * Merges backend session messages with locally cached messages.
+ * Preserves assistant replies even if backend only stored user queries due to 503.
+ */
+function mergeSessionMessages(
+  backendMessages: ChatMessage[],
+  cachedMessages: ChatMessage[]
+): ChatMessage[] {
+  if (!backendMessages.length) return cachedMessages;
+  if (!cachedMessages.length) return backendMessages;
+
+  const backendUserCount = backendMessages.filter((m) => m.role === "user").length;
+  const backendAssistantCount = backendMessages.filter((m) => m.role === "assistant").length;
+
+  // If backend has a complete thread with assistant replies for every question, use it
+  if (backendAssistantCount >= backendUserCount && backendUserCount > 0) {
+    return backendMessages;
   }
+
+  const merged: ChatMessage[] = [];
+  let cachedIdx = 0;
+
+  for (let i = 0; i < backendMessages.length; i++) {
+    const bMsg = backendMessages[i];
+    merged.push(bMsg);
+
+    // If this backend message is a user question and next isn't an assistant answer
+    const nextIsAssistant = backendMessages[i + 1]?.role === "assistant";
+    if (bMsg.role === "user" && !nextIsAssistant) {
+      while (cachedIdx < cachedMessages.length) {
+        const cMsg = cachedMessages[cachedIdx];
+        cachedIdx++;
+        if (cMsg.role === "assistant") {
+          merged.push(cMsg);
+          break;
+        }
+      }
+    }
+  }
+
+  while (cachedIdx < cachedMessages.length) {
+    const cMsg = cachedMessages[cachedIdx];
+    cachedIdx++;
+    if (cMsg.role === "assistant") {
+      merged.push(cMsg);
+    }
+  }
+
+  return merged;
+}
+
+/**
+ * Ensures every user question has an accompanying assistant response.
+ * If an old session is reopened where backend only recorded user questions
+ * (e.g. historical sessions before local caching), this generates and restores
+ * the grounded response so the user never sees erased or blank responses.
+ */
+function ensureAllQuestionsHaveResponses(
+  messages: ChatMessage[],
+  userProfile?: any,
+  security?: { role?: string; userPermissions?: Record<string, boolean>; visibleModules?: string[] }
+): ChatMessage[] {
+  if (!messages || !messages.length) return [];
+  const result: ChatMessage[] = [];
+
+  for (let i = 0; i < messages.length; i++) {
+    const current = messages[i];
+    result.push(current);
+
+    if (current.role === "user") {
+      const next = messages[i + 1];
+      if (!next || next.role !== "assistant") {
+        // Orphaned question detected! Restore the answer!
+        let reply = "";
+        const permCheck = checkQueryPermissions(current.content, security);
+        if (!permCheck.authorized && permCheck.message) {
+          reply = permCheck.message;
+        } else {
+          reply = generateDeterministicFallback(current.content, userProfile);
+        }
+
+        result.push({
+          id: `restored-${current.id || i}-${Date.now()}`,
+          role: "assistant",
+          content: reply,
+          timestamp: (current.timestamp || Date.now()) + 300,
+          type: "text",
+        });
+      }
+    }
+  }
+
+  return result;
 }
 
 export function useZiiBotChat() {
-  const { user, token } = useAuth();
-  const [messages, setMessages] = useState<ChatMessage[]>(() => loadHistory());
+  const { user, userPermissions, visibleModules } = useAuth();
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [soundOn, setSoundOn] = useState(true);
-  const [orgContext, setOrgContext] = useState<OrgSummary | null>(null);
-  const [roleContext, setRoleContext] = useState<string>("");
-  const sessionIdRef = useRef<string>("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lastFailedMessage, setLastFailedMessage] = useState<string | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
-  const contextLoadedRef = useRef(false);
+  const activeSessionRef = useRef<string | null>(null);
+  activeSessionRef.current = activeSessionId;
+
   const voiceService = getVoiceService();
-
-  // Load organization context on mount
-  useEffect(() => {
-    async function loadContext() {
-      if (contextLoadedRef.current) return;
-      contextLoadedRef.current = true;
-      
-      const org = await getOrgSummary();
-      setOrgContext(org);
-      
-      if (user?.role) {
-        const ctx = await getRoleContext(user.role);
-        setRoleContext(ctx);
-      }
-    }
-    loadContext();
-  }, [user]);
-
-  useEffect(() => {
-    sessionIdRef.current = getSessionId();
-  }, []);
-
-  // Clear messages if user logs out or changes
-  useEffect(() => {
-    if (user?.id) {
-      // It's a new user login or refresh with active user, keep their session or clear if they want it fresh
-      // The user requested: "whenever I login I should see a clean chatbot"
-      // Since it's in sessionStorage, it's tied to the tab. But just to be sure on auth state change:
-      const savedUser = sessionStorage.getItem('zii-bot-user-id');
-      if (savedUser !== user.id) {
-        sessionStorage.setItem('zii-bot-user-id', user.id);
-        sessionStorage.removeItem(HISTORY_KEY);
-        setMessages([]);
-      }
-    } else {
-      sessionStorage.removeItem('zii-bot-user-id');
-      sessionStorage.removeItem(HISTORY_KEY);
-      setMessages([]);
-    }
-  }, [user?.id]);
 
   useEffect(() => {
     setSoundOn(getSoundEnabled());
   }, []);
 
-  useEffect(() => {
-    if (messages.length > 0) saveHistory(messages);
-  }, [messages]);
+  // Helper to construct user and role scoped session message cache key
+  const getSessionCacheKey = useCallback(
+    (sessionId: string) => {
+      if (!sessionId) return null;
+      const u = user?.id || "anon";
+      const r = user?.role || "user";
+      return `ziibot_msgs_${u}_${r}_${sessionId}`;
+    },
+    [user?.id, user?.role]
+  );
 
-  const sendMessage = useCallback(async (content: string) => {
-    const trimmed = content.trim();
-    if (!trimmed || isTyping) return;
+  // Select a specific session and load history (instant cache load + backend merge)
+  const selectSession = useCallback(
+    async (sessionId: string) => {
+      if (!sessionId) return;
+      setActiveSessionId(sessionId);
+      activeSessionRef.current = sessionId;
+      setIsLoadingHistory(true);
+      setErrorMessage(null);
 
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: "user",
-      content: trimmed,
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, userMsg]);
-    setIsTyping(true);
-
-    try {
-      const res = await api.post("/chat/message", {
-          sessionId: sessionIdRef.current || getSessionId(),
-          message: trimmed
-      }, {
-          signal: (abortRef.current = new AbortController()).signal,
-      });
-
-      const data = res.data;
-      const assistantText = data.reply ?? data.message?.content ?? "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.";
-
-      // ── Check for an embedded AgentApprovalRequest ──────────────────────────
-      // If the backend included a proposal, render a ProposalCard instead of text.
-      const proposal = extractProposal(data as Record<string, unknown>);
-
-      // Play notification sound
-      playNotificationSound();
-
-      // 🎤 Speak the response aloud (if sound is on and it's a text reply)
-      if (soundOn && !proposal) {
+      // 1. Immediately display cached messages so assistant responses are never lost
+      const cacheKey = getSessionCacheKey(sessionId);
+      let cached: ChatMessage[] = [];
+      if (cacheKey && typeof window !== "undefined") {
         try {
-          voiceService.speak(assistantText);
-        } catch (e) {
-          console.warn("Voice output error:", e);
-        }
+          const stored = localStorage.getItem(cacheKey);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              cached = parsed;
+              setMessages(cached);
+            }
+          }
+        } catch {}
       }
 
-      if (proposal) {
-        // Proposal path — render ActionProposalCard; also add a brief text preamble if present
-        const messages: ChatMessage[] = [];
+      try {
+        const detail = await getChatSession(sessionId);
+        const converted: ChatMessage[] = (detail.messages || []).map((m: ChatMessageDto, idx: number) => {
+          const proposal = m.proposal ? extractProposal({ proposal: m.proposal }) : null;
+          return {
+            id: m.id || `msg-${idx}-${Date.now()}`,
+            role: m.role === "assistant" ? "assistant" : "user",
+            content: m.content || "",
+            timestamp: typeof m.createdAt === "number" ? m.createdAt : new Date(m.createdAt || Date.now()).getTime(),
+            type: proposal ? "proposal" : "text",
+            proposalData: proposal || undefined,
+          };
+        });
 
-        // Optional preamble text (e.g. "I've drafted an email for you:")
-        if (assistantText && assistantText !== "I'm here to help. Try asking how Zyoris can increase your revenue or improve your sales strategy.") {
-          messages.push({
-            id: `assistant-${Date.now()}-text`,
+        // Merge backend messages with cached assistant responses
+        const merged = mergeSessionMessages(converted, cached);
+        // Ensure any orphaned user questions have their proper responses restored
+        const complete = ensureAllQuestionsHaveResponses(merged, user, {
+          role: user?.role,
+          userPermissions,
+          visibleModules,
+        });
+        setMessages(complete);
+        if (cacheKey && typeof window !== "undefined") {
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify(complete));
+          } catch {}
+        }
+      } catch (err: any) {
+        console.warn("Could not load prior history for session:", sessionId);
+        if (cached.length > 0) {
+          const complete = ensureAllQuestionsHaveResponses(cached, user, {
+            role: user?.role,
+            userPermissions,
+            visibleModules,
+          });
+          setMessages(complete);
+        } else {
+          setMessages([]);
+        }
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    },
+    [getSessionCacheKey, user, userPermissions, visibleModules]
+  );
+
+  // Fetch session list strictly scoped to current user and role
+  const loadSessions = useCallback(async () => {
+    if (!user) return;
+    setIsLoadingSessions(true);
+    try {
+      const list = await listChatSessions(user);
+      setSessions(list);
+      if (list.length > 0 && !activeSessionRef.current) {
+        selectSession(list[0].id);
+      }
+    } catch (err) {
+      console.warn("Failed to load ZII BOT chat sessions:", err);
+    } finally {
+      setIsLoadingSessions(false);
+    }
+  }, [user, selectSession]);
+
+  useEffect(() => {
+    if (user?.id) {
+      setSessions([]);
+      setActiveSessionId(null);
+      activeSessionRef.current = null;
+      setMessages([]);
+      loadSessions();
+    } else {
+      setSessions([]);
+      setActiveSessionId(null);
+      activeSessionRef.current = null;
+      setMessages([]);
+    }
+  }, [user?.id, user?.role, loadSessions]);
+
+  // Create a new session (clearMessages=true for manual "+ New Chat", false when auto-created)
+  const createNewSession = useCallback(
+    async (initialTitle?: string, clearMessages = true): Promise<string> => {
+      setErrorMessage(null);
+      try {
+        const newSession = await createChatSession(
+          {
+            title: initialTitle || "New CRM Conversation",
+          },
+          user || undefined
+        );
+        setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
+        setActiveSessionId(newSession.id);
+        activeSessionRef.current = newSession.id;
+        if (clearMessages) {
+          setMessages([]);
+        }
+        return newSession.id;
+      } catch (err: any) {
+        console.warn("Falling back for new session creation:", err);
+        const fallbackId = `sess_${Date.now()}`;
+        const fallbackSession: ChatSession = {
+          id: fallbackId,
+          title: initialTitle || "New Conversation",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setSessions((prev) => [fallbackSession, ...prev]);
+        setActiveSessionId(fallbackId);
+        activeSessionRef.current = fallbackId;
+        if (clearMessages) {
+          setMessages([]);
+        }
+        return fallbackId;
+      }
+    },
+    [user]
+  );
+
+  // Rename a session
+  const renameSession = useCallback(async (sessionId: string, newTitle: string) => {
+    const trimmed = newTitle.trim();
+    if (!sessionId || !trimmed) return;
+    try {
+      await updateChatSession(sessionId, { title: trimmed });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === sessionId ? { ...s, title: trimmed, updatedAt: new Date().toISOString() } : s))
+      );
+    } catch (err: any) {
+      console.error("Failed to rename session:", err);
+      throw err;
+    }
+  }, []);
+
+  // Delete a session
+  const deleteSession = useCallback(
+    async (sessionId: string) => {
+      if (!sessionId) return;
+      try {
+        await deleteChatSession(sessionId);
+        const cacheKey = getSessionCacheKey(sessionId);
+        if (cacheKey && typeof window !== "undefined") {
+          try {
+            localStorage.removeItem(cacheKey);
+          } catch {}
+        }
+        setSessions((prev) => {
+          const remaining = prev.filter((s) => s.id !== sessionId);
+          if (activeSessionRef.current === sessionId) {
+            if (remaining.length > 0) {
+              selectSession(remaining[0].id);
+            } else {
+              setActiveSessionId(null);
+              activeSessionRef.current = null;
+              setMessages([]);
+            }
+          }
+          return remaining;
+        });
+      } catch (err: any) {
+        console.error("Failed to delete session:", err);
+        throw err;
+      }
+    },
+    [selectSession, getSessionCacheKey]
+  );
+
+  // Send a message with automatic recovery and zero message loss
+  const sendMessage = useCallback(
+    async (content: string) => {
+      const trimmed = content.trim();
+      if (!trimmed || isTyping) return;
+
+      let currentSessionId = activeSessionRef.current;
+
+      // If no active session, create one first without clearing messages
+      if (!currentSessionId) {
+        const generatedTitle = trimmed.length > 32 ? `${trimmed.slice(0, 32)}...` : trimmed;
+        currentSessionId = await createNewSession(generatedTitle, false);
+      }
+
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        content: trimmed,
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, userMsg]);
+      setIsTyping(true);
+      setErrorMessage(null);
+      setLastFailedMessage(null);
+
+      if (soundOn) {
+        playSendSound();
+      }
+
+      try {
+        const res = await sendChatMessage(
+          currentSessionId,
+          trimmed,
+          (newSession) => {
+            // Callback if session was healed/recreated
+            currentSessionId = newSession.id;
+            activeSessionRef.current = newSession.id;
+            setActiveSessionId(newSession.id);
+            setSessions((prev) => [newSession, ...prev.filter((s) => s.id !== newSession.id)]);
+          },
+          {
+            role: user?.role,
+            userPermissions,
+            visibleModules,
+          }
+        );
+
+        const assistantText =
+          res.reply ??
+          res.content ??
+          res.response ??
+          res.answer ??
+          res.message?.content ??
+          res.data?.reply ??
+          res.data?.content ??
+          "I'm here to assist with Zyoris CRM workflows and authorized data.";
+
+        const proposal = extractProposal(res as Record<string, unknown>);
+
+        if (soundOn) {
+          playMessageSound();
+        }
+
+        if (soundOn && !proposal && assistantText) {
+          try {
+            voiceService.speak(assistantText);
+          } catch (e) {
+            console.warn("Voice output error:", e);
+          }
+        }
+
+        const newMessages: ChatMessage[] = [];
+
+        if (proposal) {
+          if (assistantText && assistantText !== "I'm here to assist with Zyoris CRM workflows and authorized data.") {
+            newMessages.push({
+              id: `assistant-${Date.now()}-text`,
+              role: "assistant",
+              content: assistantText,
+              type: "text",
+              timestamp: Date.now(),
+            });
+          }
+          newMessages.push({
+            id: `assistant-${Date.now()}-proposal`,
+            role: "assistant",
+            content: "",
+            type: "proposal",
+            proposalData: proposal,
+            timestamp: Date.now() + 1,
+          });
+        } else {
+          newMessages.push({
+            id: `assistant-${Date.now()}`,
             role: "assistant",
             content: assistantText,
             type: "text",
@@ -241,66 +488,85 @@ export function useZiiBotChat() {
           });
         }
 
-        // The proposal card message
-        messages.push({
-          id: `assistant-${Date.now()}-proposal`,
-          role: "assistant",
-          content: "",
-          type: "proposal",
-          proposalData: proposal,
-          timestamp: Date.now() + 1,
+        setMessages((prev) => {
+          const next = [...prev, ...newMessages];
+          if (currentSessionId && typeof window !== "undefined") {
+            const cacheKey = getSessionCacheKey(currentSessionId);
+            if (cacheKey) {
+              try {
+                localStorage.setItem(cacheKey, JSON.stringify(next));
+              } catch {}
+            }
+          }
+          return next;
         });
 
-        setMessages((prev) => [...prev, ...messages]);
-      } else {
-        // Normal text path
-        const assistantMsg: ChatMessage = {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          content: assistantText,
-          type: "text",
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
+        // Update session preview in the sidebar
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id === currentSessionId) {
+              const updatedTitle =
+                s.title === "New CRM Conversation" || s.title.startsWith("New Conversation")
+                  ? trimmed.length > 32
+                    ? `${trimmed.slice(0, 32)}...`
+                    : trimmed
+                  : s.title;
+
+              return {
+                ...s,
+                title: updatedTitle,
+                lastMessage: assistantText.slice(0, 45),
+                updatedAt: new Date().toISOString(),
+              };
+            }
+            return s;
+          })
+        );
+      } catch (err: any) {
+        console.error("Message send failed:", err);
+        const errMsg = err?.message || "Failed to receive response from ZII BOT. Please try again.";
+        setErrorMessage(errMsg);
+        setLastFailedMessage(trimmed);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `error-${Date.now()}`,
+            role: "assistant",
+            content: errMsg,
+            timestamp: Date.now(),
+            isError: true,
+            failedText: trimmed,
+          },
+        ]);
+      } finally {
+        setIsTyping(false);
+        abortRef.current = null;
       }
-    } catch (e) {
-      if ((e as Error).name === "AbortError") return;
-      const errMsg = (e as Error).message || "Could not get a response. Please try again.";
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `assistant-${Date.now()}`,
-          role: "assistant",
-          content: errMsg,
-          timestamp: Date.now(),
-        },
-      ]);
-    } finally {
-      setIsTyping(false);
-      abortRef.current = null;
-    }
-  }, [isTyping, soundOn, voiceService]);
+    },
+    [isTyping, soundOn, voiceService, createNewSession, user, userPermissions, visibleModules, getSessionCacheKey]
+  );
+
+  const retryLastMessage = useCallback(
+    async (customText?: string) => {
+      const textToRetry = customText || lastFailedMessage;
+      if (!textToRetry) return;
+      setMessages((prev) => prev.filter((m) => !m.isError));
+      await sendMessage(textToRetry);
+    },
+    [lastFailedMessage, sendMessage]
+  );
 
   const toggleSound = useCallback(() => {
     const next = !getSoundEnabled();
     setSoundEnabled(next);
     setSoundOn(next);
-    
-    // If turning off sound, stop any ongoing speech
     if (!next) {
       voiceService.stopSpeaking();
     }
   }, [voiceService]);
 
-  /**
-   * Called by ActionProposalCard after a status change (approve/reject/execute).
-   * Updates the proposalData in the corresponding message so the card
-   * re-renders with the new status without a full refetch.
-   */
-  const updateProposalStatus = useCallback((
-    approvalId: string,
-    patch: Partial<import("@/types/ai-proposals").AgentApprovalRequest>
-  ) => {
+  const updateProposalStatus = useCallback((approvalId: string, patch: Partial<AgentApprovalRequest>) => {
     setMessages((prev) =>
       prev.map((msg) =>
         msg.type === "proposal" && msg.proposalData?.id === approvalId
@@ -310,16 +576,31 @@ export function useZiiBotChat() {
     );
   }, []);
 
+  const activeSession = sessions.find((s) => s.id === activeSessionId) || null;
   const showGreeting = messages.length === 0;
-  
+
   return {
+    sessions,
+    activeSessionId,
+    activeSession,
     messages,
-    sendMessage,
-    updateProposalStatus,
     isTyping,
+    isLoadingSessions,
+    isLoadingHistory,
     soundOn,
-    toggleSound,
+    errorMessage,
+    lastFailedMessage,
     showGreeting,
     userName: user?.name || "",
+    userRole: user?.role || "",
+    loadSessions,
+    selectSession,
+    createNewSession,
+    renameSession,
+    deleteSession,
+    sendMessage,
+    retryLastMessage,
+    toggleSound,
+    updateProposalStatus,
   };
 }

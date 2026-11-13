@@ -46,11 +46,19 @@ export interface RegisterPayload {
 
 // ── Day 1 APIs ─────────────────────────────────────────────────────────────
 
+/** Which login surface the user is authenticating through.
+ *  Sent to the backend so it can enforce role↔flow pairing server-side. */
+export type LoginType = "admin" | "employee";
+
 export const loginApi = async (
     email: string,
-    password: string
+    password: string,
+    loginType?: LoginType
 ): Promise<AuthResponse> => {
-    const res = await api.post<AuthResponse>("/auth/login", { email, password });
+    const res = await api.post<AuthResponse>(
+        "/auth/login",
+        loginType ? { email, password, loginType } : { email, password }
+    );
     return res.data;
 };
 
@@ -67,8 +75,8 @@ export const registerApi = async (
  *   permissions: string[], memberships: [...], createdAt, updatedAt }
  */
 export const getMeApi = async (): Promise<User> => {
-    const res = await api.get<User>("/auth/me");
-    return res.data;
+    const res = await api.get<any>("/auth/me");
+    return res.data?.data || res.data;
 };
 
 export interface UpdateProfilePayload {

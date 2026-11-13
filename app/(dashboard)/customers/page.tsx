@@ -1,4 +1,5 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import { useState, useEffect } from "react";
 import { CustomersTable } from "@/components/customers/CustomersUI";
@@ -237,27 +238,31 @@ export default function CustomersPage() {
               <GitBranch size={15} />
               Resolve Identity
             </button>
-            <button
-              onClick={() => setMergeModalOpen(true)}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors shadow-sm
-                bg-[var(--color-surface)]
-                border-[var(--color-border)]
-                text-[var(--color-text-secondary)]
-                hover:bg-[var(--color-surface-hover)]"
-            >
-              <GitMerge size={15} />
-              Merge
-            </button>
-            <button
-              onClick={handleNewCustomer}
-              className="flex items-center gap-2 h-9 px-4 rounded-lg text-white text-sm font-semibold transition-all shadow-sm
-                bg-gradient-to-r from-[var(--color-primary-dark)] to-[var(--color-primary)]
-                hover:from-[var(--color-primary)] hover:to-[var(--color-primary-light)]
-                hover:shadow-lg"
-            >
-              <UserPlus size={15} />
-              New Customer
-            </button>
+            <PermissionGuard permission="crm.update">
+              <button
+                onClick={() => setMergeModalOpen(true)}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg border text-sm font-medium transition-colors shadow-sm
+                  bg-[var(--color-surface)]
+                  border-[var(--color-border)]
+                  text-[var(--color-text-secondary)]
+                  hover:bg-[var(--color-surface-hover)]"
+              >
+                <GitMerge size={15} />
+                Merge
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="crm.create">
+              <button
+                onClick={handleNewCustomer}
+                className="flex items-center gap-2 h-9 px-4 rounded-lg text-white text-sm font-semibold transition-all shadow-sm
+                  bg-gradient-to-r from-[var(--color-primary-dark)] to-[var(--color-primary)]
+                  hover:from-[var(--color-primary)] hover:to-[var(--color-primary-light)]
+                  hover:shadow-lg"
+              >
+                <UserPlus size={15} />
+                New Customer
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 

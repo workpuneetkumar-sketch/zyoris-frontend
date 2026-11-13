@@ -4,7 +4,9 @@
 // Mock CONVERSION_DATA (Leads→Qualified 62%, "18.3%", "-2.1% this month") removed entirely.
 
 import { TrendingUp, TrendingDown, RefreshCw, AlertCircle, Target } from "lucide-react";
+import { useEffect } from "react";
 import { useConversionScores } from "@/hooks/useDashboard";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { ConversionScore } from "@/lib/api/dashboardApi";
 
 const STAGE_COLORS: Record<string, string> = {
@@ -20,8 +22,26 @@ function stageColor(stage: string): string {
   return STAGE_COLORS[(stage ?? "").toUpperCase()] ?? "#94a3b8";
 }
 
-export function ConversionRateWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: scores, loading, error, refetch } = useConversionScores();
+export function ConversionRateWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["analytics.view", "deals.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: scores, loading, error, refetch } = useConversionScores(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {

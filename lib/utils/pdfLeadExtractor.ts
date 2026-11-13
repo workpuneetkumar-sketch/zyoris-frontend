@@ -923,6 +923,7 @@ export async function extractLeadsFromPdf(
   }
 
   // ── Tier 2 (Fallback): pdfjs-dist Engine ──
+  if (typeof window === "undefined") return { headers: [], rows: [], totalLeadsFound: 0 };
   try {
     const importedModule = await import("pdfjs-dist" as any);
     const pdfjsLib = importedModule?.default?.getDocument ? importedModule.default : importedModule;

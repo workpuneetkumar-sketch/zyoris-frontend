@@ -1,7 +1,7 @@
 // components/deals/DealsUI.tsx
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
@@ -27,13 +27,19 @@ import {
     Loader2,
     BarChart3,
     Briefcase,
+    Copy,
+    Check,
+    GripVertical,
 } from "lucide-react";
+import { toast } from "react-toastify";
 import { ForecastDashboard } from "./ForecastDashboard";
 import { ManagerInspectionWorkspace } from "./ManagerInspectionWorkspace";
 import { Deal, DealsFilters, DEFAULT_DEAL_STAGES } from "@/types/deals";
 import { OPPORTUNITY_TYPES, OpportunityType } from "@/types/enterpriseDeals";
 import { getStageConfig } from "@/lib/dealConfig";
-import { CreateDealPayload } from "@/lib/api/dealsApi";
+import { CreateDealPayload, deleteDeal } from "@/lib/api/dealsApi";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 import { formatCurrencyWithSnapshot } from "@/utils/currencyFormat";
 import {
     Pipeline,
@@ -510,16 +516,43 @@ function DealCard({
     allStages,
     onStageChange,
     onRequestTransition,
+    onDeleteDeal,
 }: {
     deal: Deal;
     allStages?: string[];
     onStageChange: (dealId: string, newStage: string) => void;
     onRequestTransition?: (deal: Deal, targetStage: string) => void;
+    onDeleteDeal?: (deal: Deal) => void;
 }) {
+    const router = useRouter();
+    const { hasPermission } = useRBAC();
+    const canUpdate = hasPermission("deals.update");
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+
     const cfg = getStageConfig(deal.stage);
     const isWon  = deal.stage.toUpperCase() === "WON";
     const isLost = deal.stage.toUpperCase() === "LOST";
-    const prob = Math.round(deal.conversionProbability * 100);
+    const isDead = deal.stage.toUpperCase() === "DEAD";
+
+    // Determine real probability (0 - 100%)
+    let prob = 50;
+    if (typeof deal.conversionProbability === "number" && !isNaN(deal.conversionProbability)) {
+        prob = Math.round(deal.conversionProbability * 100);
+    } else if (isWon) {
+        prob = 100;
+    } else if (isLost || isDead) {
+        prob = 0;
+    } else if (deal.stage.toUpperCase() === "HOT") {
+        prob = 80;
+    } else if (deal.stage.toUpperCase() === "WARM") {
+        prob = 50;
+    } else if (deal.stage.toUpperCase() === "NEW") {
+        prob = 20;
+    }
+
+    if (isWon) prob = 100;
+    if (isLost || isDead) prob = 0;
 
     // Progress bar colour per stage
     let barColor = "bg-blue-500";
@@ -527,7 +560,7 @@ function DealCard({
     if (isLost) barColor = "bg-red-400";
     if (deal.stage.toUpperCase() === "HOT")  barColor = "bg-red-500";
     if (deal.stage.toUpperCase() === "WARM") barColor = "bg-orange-400";
-    if (deal.stage.toUpperCase() === "DEAD") barColor = "bg-slate-400";
+    if (isDead) barColor = "bg-slate-400";
 
     const handleStageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         e.stopPropagation();
@@ -547,22 +580,151 @@ function DealCard({
         ? new Date(deal.closeDate).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
         : null;
 
+    const [isDragging, setIsDragging] = useState(false);
+    const hasDraggedRef = useRef(false);
+
+    const handleDragStart = (e: React.DragEvent) => {
+        hasDraggedRef.current = true;
+        setIsDragging(true);
+        e.dataTransfer.setData("application/json", JSON.stringify({ dealId: deal.dealId, fromStage: deal.stage }));
+        e.dataTransfer.setData("text/plain", deal.dealId);
+        e.dataTransfer.effectAllowed = "move";
+    };
+
+    const handleDragEnd = () => {
+        setIsDragging(false);
+        setTimeout(() => {
+            hasDraggedRef.current = false;
+        }, 150);
+    };
+
+    const handleClick = (e: React.MouseEvent) => {
+        if (hasDraggedRef.current) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    };
+
+    const handleCopyLink = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsMenuOpen(false);
+        const link = typeof window !== "undefined" ? `${window.location.origin}/deals/${deal.dealId}` : `/deals/${deal.dealId}`;
+        if (navigator?.clipboard?.writeText) {
+            navigator.clipboard.writeText(link).then(() => {
+                setCopied(true);
+                toast.info("Deal link copied to clipboard");
+                setTimeout(() => setCopied(false), 2000);
+            }).catch(() => {
+                toast.info("Deal URL: " + link);
+            });
+        }
+    };
+
     return (
-        <Link href={`/deals/${deal.dealId}`} className="block group">
-            <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md hover:border-gray-200 transition-all">
-                {/* Top row: name + actions */}
-                <div className="flex items-start justify-between gap-2 mb-1.5">
-                    <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
-                        {deal.name}
-                    </p>
-                    {/* stop propagation so click on ⋮ doesn't navigate */}
+        <div
+            draggable={canUpdate}
+            onDragStart={(e) => {
+                if (!canUpdate) {
+                    e.preventDefault();
+                    return;
+                }
+                handleDragStart(e);
+            }}
+            onDragEnd={handleDragEnd}
+            className={`block group cursor-grab active:cursor-grabbing transition-all select-none ${
+                isDragging ? "opacity-35 scale-95 shadow-md ring-2 ring-blue-500 rounded-xl" : ""
+            }`}
+        >
+            <Link href={`/deals/${deal.dealId}`} onClick={handleClick} draggable={false} className="block">
+                <div className="bg-white rounded-xl border border-gray-100 p-3.5 shadow-sm hover:shadow-md hover:border-gray-200 transition-all relative">
+                    {/* Top row: name + actions */}
+                    <div className="flex items-start justify-between gap-2 mb-1.5">
+                        <div className="flex items-start gap-1.5 min-w-0 flex-1">
+                            <GripVertical
+                                size={14}
+                                className="text-gray-300 group-hover:text-gray-500 shrink-0 mt-0.5 transition-colors cursor-grab"
+                            />
+                            <p className="text-[13px] font-semibold text-gray-800 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">
+                                {deal.name}
+                            </p>
+                        </div>
+                        {/* Three dots menu */}
                     <div
-                        onClick={(e) => e.preventDefault()}
-                        className="shrink-0"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                        }}
+                        className="relative shrink-0"
                     >
-                        <button className="w-6 h-6 rounded-md flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors opacity-0 group-hover:opacity-100">
-                            <MoreHorizontal size={14} />
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsMenuOpen((prev) => !prev);
+                            }}
+                            aria-label="Deal actions menu"
+                            className="w-7 h-7 rounded-md flex items-center justify-center text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors opacity-90 sm:opacity-0 group-hover:opacity-100 focus:opacity-100"
+                        >
+                            <MoreHorizontal size={15} />
                         </button>
+
+                        {isMenuOpen && (
+                            <>
+                                <div
+                                    className="fixed inset-0 z-40"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setIsMenuOpen(false);
+                                    }}
+                                />
+                                <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 text-[12px] animate-in fade-in duration-150">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setIsMenuOpen(false);
+                                            router.push(`/deals/${deal.dealId}`);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-gray-700 hover:bg-gray-50 text-left font-medium"
+                                    >
+                                        <Pencil size={13} className="text-gray-400" />
+                                        <span>View & Edit Deal</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleCopyLink}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-gray-700 hover:bg-gray-50 text-left font-medium"
+                                    >
+                                        {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} className="text-gray-400" />}
+                                        <span>{copied ? "Link Copied!" : "Copy Deal Link"}</span>
+                                    </button>
+                                    {onDeleteDeal && (
+                                        <>
+                                            <div className="border-t border-gray-100 my-1" />
+                                            <PermissionGuard permission="deals.delete" action="disable" disabledTooltip="You do not have permission to delete deals.">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.preventDefault();
+                                                        e.stopPropagation();
+                                                        setIsMenuOpen(false);
+                                                        onDeleteDeal(deal);
+                                                    }}
+                                                    className="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 text-left font-medium"
+                                                >
+                                                    <XCircle size={13} className="text-red-500" />
+                                                    <span>Delete Deal</span>
+                                                </button>
+                                            </PermissionGuard>
+                                        </>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -662,6 +824,7 @@ function DealCard({
                 </div>
             </div>
         </Link>
+        </div>
     );
 }
 
@@ -673,6 +836,7 @@ function KanbanColumn({
     stageIndex,
     totalStages,
     deals,
+    allDeals,
     loading,
     allStages,
     onStageChange,
@@ -682,12 +846,16 @@ function KanbanColumn({
     onDeleteStage,
     onMoveStage,
     onRequestTransition,
+    onDeleteDeal,
 }: {
+    // Permission check
+
     stage: string;
     stageObj?: PipelineStage;
     stageIndex: number;
     totalStages: number;
     deals: Deal[];
+    allDeals?: Deal[];
     loading: boolean;
     allStages: string[];
     onStageChange: (dealId: string, newStage: string) => void;
@@ -697,17 +865,84 @@ function KanbanColumn({
     onDeleteStage?: (stageId: string) => void;
     onMoveStage?: (index: number, direction: "left" | "right") => void;
     onRequestTransition?: (deal: Deal, targetStage: string) => void;
+    onDeleteDeal?: (deal: Deal) => void;
 }) {
+    const { hasPermission } = useRBAC();
+    const canUpdate = hasPermission("deals.update");
     const cfg = getStageConfig(stage);
+    const [isDragOver, setIsDragOver] = useState(false);
 
     const columnTotal = useMemo(
         () => deals.reduce((sum, d) => sum + d.amount, 0),
         [deals]
     );
 
+    const handleDragOver = (e: React.DragEvent) => {
+        if (!canUpdate) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        if (!isDragOver) setIsDragOver(true);
+    };
+
+    const handleDragEnter = (e: React.DragEvent) => {
+        e.preventDefault();
+        if (!isDragOver) setIsDragOver(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+        setIsDragOver(false);
+    };
+
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (!canUpdate) {
+            toast.error("You do not have permission to update deals.");
+            return;
+        }
+        try {
+            const raw = e.dataTransfer.getData("application/json");
+            let dealId = "";
+            let fromStage = "";
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                dealId = parsed.dealId;
+                fromStage = parsed.fromStage;
+            } else {
+                dealId = e.dataTransfer.getData("text/plain");
+            }
+            if (!dealId) return;
+            // Ignore if dropped in the same stage
+            if (fromStage && fromStage.toUpperCase() === stage.toUpperCase()) return;
+
+            // Locate deal object to pass to transition modal or direct handler
+            const candidateDeals = allDeals && allDeals.length > 0 ? allDeals : deals;
+            const draggedDeal = candidateDeals.find((d) => d.dealId === dealId);
+
+            if (draggedDeal && onRequestTransition) {
+                onRequestTransition(draggedDeal, stage);
+            } else {
+                onStageChange(dealId, stage);
+            }
+        } catch (err) {
+            console.error("Drop handler error:", err);
+        }
+    };
+
     return (
         <div
-            className={`flex-shrink-0 w-[240px] flex flex-col bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden border-t-[3px] ${cfg.borderColor}`}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`flex-shrink-0 w-[240px] flex flex-col bg-white rounded-2xl border shadow-sm overflow-hidden border-t-[3px] transition-all duration-150 ${
+                cfg.borderColor
+            } ${
+                isDragOver
+                    ? "border-blue-400 ring-2 ring-blue-300/60 bg-blue-50/20 scale-[1.01]"
+                    : "border-gray-100"
+            }`}
         >
             {/* Column header */}
             <div className={`px-4 py-3 ${cfg.headerBg} border-b border-gray-100`}>
@@ -749,7 +984,12 @@ function KanbanColumn({
             </div>
 
             {/* Cards */}
-            <div className="flex-1 flex flex-col gap-2 p-2.5 overflow-y-auto max-h-[560px] scrollbar-thin">
+            <div className="flex-1 flex flex-col gap-2 p-2.5 overflow-y-auto max-h-[560px] scrollbar-thin transition-colors">
+                {isDragOver && (
+                    <div className="p-3 rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/70 text-blue-700 text-center text-xs font-semibold animate-pulse flex items-center justify-center gap-1.5 shrink-0 shadow-xs">
+                        <span>Drop to move to {stageObj?.name || cfg.label || stage}</span>
+                    </div>
+                )}
                 {loading ? (
                     <><SkeletonCard /><SkeletonCard /><SkeletonCard /></>
                 ) : deals.length === 0 ? (
@@ -764,6 +1004,7 @@ function KanbanColumn({
                             allStages={allStages}
                             onStageChange={onStageChange}
                             onRequestTransition={onRequestTransition}
+                            onDeleteDeal={onDeleteDeal}
                         />
                     ))
                 )}
@@ -771,13 +1012,15 @@ function KanbanColumn({
 
             {/* Add deal footer */}
             <div className="px-2.5 pb-2.5 pt-1">
-                <button
-                    onClick={() => onAddDeal(stage)}
-                    className="w-full flex items-center justify-center gap-1.5 h-8 rounded-lg border border-dashed border-gray-200 text-[12px] font-medium text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/60 transition-colors"
-                >
-                    <Plus size={12} />
-                    Add Deal
-                </button>
+                <PermissionGuard permission="deals.create">
+                    <button
+                        onClick={() => onAddDeal(stage)}
+                        className="w-full flex items-center justify-center gap-1.5 h-8 rounded-lg border border-dashed border-gray-200 text-[12px] font-medium text-gray-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50/60 transition-colors"
+                    >
+                        <Plus size={12} />
+                        Add Deal
+                    </button>
+                </PermissionGuard>
             </div>
         </div>
     );
@@ -925,6 +1168,27 @@ export function DealsUI({
         }
     };
 
+    // State for deleting a single deal via card / row actions
+    const [dealToDelete, setDealToDelete] = useState<Deal | null>(null);
+    const [isDeletingDeal, setIsDeletingDeal] = useState(false);
+
+    const handleConfirmDeleteDeal = async () => {
+        if (!dealToDelete) return;
+        setIsDeletingDeal(true);
+        try {
+            await deleteDeal(dealToDelete.dealId);
+            toast.success(`Deal "${dealToDelete.name}" deleted successfully.`);
+            setDealToDelete(null);
+            if (onRefreshWorkspace) {
+                onRefreshWorkspace();
+            }
+        } catch (err: any) {
+            toast.error(err.response?.data?.message || err.message || "Failed to delete deal");
+        } finally {
+            setIsDeletingDeal(false);
+        }
+    };
+
     const allStages = useMemo(() => {
         if (stages && stages.length > 0) {
             return stages.map((s) => s.name);
@@ -937,11 +1201,11 @@ export function DealsUI({
     const stageFilterOptions = useMemo(() => ["All Stages", ...allStages], [allStages]);
 
     return (
-        <div className="flex flex-col min-h-full gap-5">
+        <div className="flex flex-col min-h-full gap-5 w-full min-w-0 max-w-full overflow-x-hidden pb-24 sm:pb-8">
 
             {/* ── Page header ── */}
-            <div className="flex items-start justify-between flex-wrap gap-4">
-                <div className="space-y-1">
+            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 w-full min-w-0">
+                <div className="space-y-1 min-w-0 w-full sm:w-auto">
                     <h1 className="text-2xl font-bold text-gray-900 leading-tight">Deals / Pipeline</h1>
                     <p className="text-[13px] text-gray-400">Track, manage and grow your sales pipeline.</p>
                     
@@ -961,6 +1225,7 @@ export function DealsUI({
                             />
 
                             {onCreateStage && onUpdateStage && onDeleteStage && onReorderStages && (
+                                <PermissionGuard permission="deals.update">
                                 <PipelineStageManager
                                     pipelineId={selectedPipeline?.id}
                                     stages={stages}
@@ -971,20 +1236,28 @@ export function DealsUI({
                                     onReorderStages={onReorderStages}
                                     onRefresh={onRefreshWorkspace ?? (() => {})}
                                 />
+                                </PermissionGuard>
                             )}
                         </div>
                     )}
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
+                <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap w-full sm:w-auto min-w-0">
                     {/* Total pipeline value pill */}
-                    <div className="flex flex-col items-end mr-1">
-                        <p className="text-[10px] font-medium text-gray-400 leading-none">Total Pipeline Value</p>
-                        <div className="flex items-center gap-1.5 mt-0.5">
-                            <p className="text-[20px] font-bold text-blue-600 leading-tight">{formatCurrency(totalPipeline)}</p>
-                            <span className="flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
-                                <TrendingUp size={10} />
+                    <div className="flex flex-col items-start sm:items-end p-2 sm:p-0 bg-blue-50/50 sm:bg-transparent rounded-xl sm:rounded-none mr-1 w-full sm:w-auto">
+                        <div className="flex items-center gap-1.5">
+                            <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider leading-none">
+                                {filters.stage && filters.stage !== "All Stages" ? `${filters.stage} Deals Value` : "Active Pipeline Value"}
+                            </p>
+                            <span className="flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
+                                <TrendingUp size={9} />
                                 Live
+                            </span>
+                        </div>
+                        <div className="flex items-baseline gap-2 mt-0.5">
+                            <p className="text-[20px] font-extrabold text-blue-600 leading-tight">{formatCurrency(totalPipeline)}</p>
+                            <span className="text-[10px] text-gray-400 font-medium">
+                                {filters.stage && filters.stage !== "All Stages" ? "in filtered stage" : "in active pipeline"}
                             </span>
                         </div>
                     </div>
@@ -994,7 +1267,7 @@ export function DealsUI({
                         <select
                             value={filters.stage}
                             onChange={(e) => onFiltersChange({ ...filters, stage: e.target.value })}
-                            className="appearance-none h-9 pl-3 pr-8 rounded-xl border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
+                            className="appearance-none h-9 pl-3 pr-8 rounded-xl border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm w-full sm:w-auto"
                         >
                             {stageFilterOptions.map((o) => (
                                 <option key={o} value={o}>{o}</option>
@@ -1021,7 +1294,7 @@ export function DealsUI({
                                     opportunityType: e.target.value ? (e.target.value as OpportunityType) : undefined,
                                 })
                             }
-                            className="appearance-none h-9 pl-3 pr-8 rounded-xl border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm"
+                            className="appearance-none h-9 pl-3 pr-8 rounded-xl border border-gray-200 bg-white text-[13px] text-gray-700 font-medium focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-sm w-full sm:w-auto"
                             title="Filter by Opportunity Type (Day 5 Enterprise)"
                         >
                             <option value="">All Opportunity Types</option>
@@ -1055,13 +1328,15 @@ export function DealsUI({
                     </button>
 
                     {/* New Deal — primary action */}
-                    <button
-                        onClick={() => onOpenCreate(stages?.[0]?.name || allStages[0] || "NEW")}
-                        className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
-                    >
-                        <Plus size={14} />
-                        New Deal
-                    </button>
+                    <PermissionGuard permission="deals.create">
+                        <button
+                            onClick={() => onOpenCreate(stages?.[0]?.name || allStages[0] || "NEW")}
+                            className="flex items-center gap-1.5 h-9 px-4 rounded-xl bg-blue-600 text-white text-[13px] font-semibold hover:bg-blue-700 transition-colors shadow-sm shadow-blue-200"
+                        >
+                            <Plus size={14} />
+                            New Deal
+                        </button>
+                    </PermissionGuard>
                 </div>
             </div>
 
@@ -1071,12 +1346,12 @@ export function DealsUI({
             )}
 
             {/* ── View tabs + search bar ── */}
-            <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full min-w-0">
                 {/* Tab switcher */}
-                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl">
+                <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl overflow-x-auto max-w-full no-scrollbar whitespace-nowrap scroll-smooth">
                     <button
                         onClick={() => setActiveView("pipeline")}
-                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap ${
                             activeView === "pipeline"
                                 ? "bg-white text-gray-900 shadow-sm"
                                 : "text-gray-500 hover:text-gray-700"
@@ -1087,7 +1362,7 @@ export function DealsUI({
                     </button>
                     <button
                         onClick={() => setActiveView("table")}
-                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap ${
                             activeView === "table"
                                 ? "bg-white text-gray-900 shadow-sm"
                                 : "text-gray-500 hover:text-gray-700"
@@ -1098,7 +1373,7 @@ export function DealsUI({
                     </button>
                     <button
                         onClick={() => setActiveView("forecast")}
-                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap ${
                             activeView === "forecast"
                                 ? "bg-white text-gray-900 shadow-sm"
                                 : "text-gray-500 hover:text-gray-700"
@@ -1109,7 +1384,7 @@ export function DealsUI({
                     </button>
                     <button
                         onClick={() => setActiveView("inspection")}
-                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all ${
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-[13px] font-semibold transition-all shrink-0 whitespace-nowrap ${
                             activeView === "inspection"
                                 ? "bg-white text-gray-900 shadow-sm"
                                 : "text-gray-500 hover:text-gray-700"
@@ -1121,15 +1396,15 @@ export function DealsUI({
                 </div>
 
                 {/* Search */}
-                <div className="flex items-center gap-2">
-                    <div className="relative">
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="relative w-full sm:w-52">
                         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input
                             type="text"
                             placeholder="Search deals..."
                             value={filters.search}
                             onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
-                            className="h-9 pl-9 pr-4 rounded-xl border border-gray-200 bg-white text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-52 shadow-sm transition-all"
+                            className="h-9 pl-9 pr-4 rounded-xl border border-gray-200 bg-white text-[13px] text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 w-full sm:w-52 shadow-sm transition-all"
                         />
                     </div>
                 </div>
@@ -1137,7 +1412,7 @@ export function DealsUI({
 
             {/* ── Pipeline / Kanban board ── */}
             {activeView === "pipeline" && (
-                <div className="flex gap-3 overflow-x-auto pb-4 flex-1">
+                <div className="flex gap-3 overflow-x-auto pb-6 flex-1 min-w-0 max-w-full touch-pan-x">
                     {allStages.map((stageName, idx) => {
                         const stageObj = stages.find(
                             (s) =>
@@ -1156,6 +1431,7 @@ export function DealsUI({
                                     dealsByStage.get(stageName) ??
                                     []
                                 }
+                                allDeals={deals}
                                 loading={loading}
                                 allStages={allStages}
                                 onStageChange={handleStageChange}
@@ -1187,6 +1463,7 @@ export function DealsUI({
                                         targetStageConfig: targetObj,
                                     });
                                 }}
+                                onDeleteDeal={(deal) => setDealToDelete(deal)}
                             />
                         );
                     })}
@@ -1212,6 +1489,7 @@ export function DealsUI({
                             targetStageConfig: targetObj,
                         });
                     }}
+                    onDeleteDeal={(deal) => setDealToDelete(deal)}
                 />
             )}
 
@@ -1426,6 +1704,154 @@ export function DealsUI({
                 isOpen={isDetectorConfigOpen}
                 onClose={() => setIsDetectorConfigOpen(false)}
             />
+
+            {/* ── Delete Deal Confirmation Modal ── */}
+            {dealToDelete && (
+                <div className="fixed inset-0 z-50 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-gray-100 animate-in zoom-in-95 duration-150 p-6 space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
+                                <AlertCircle size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-bold text-gray-900">Delete Deal</h3>
+                                <p className="text-[12px] text-gray-500">This action cannot be undone.</p>
+                            </div>
+                        </div>
+                        <p className="text-[13px] text-gray-600">
+                            Are you sure you want to delete <span className="font-semibold text-gray-800">"{dealToDelete.name}"</span>?
+                        </p>
+                        <div className="flex items-center justify-end gap-2.5 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setDealToDelete(null)}
+                                disabled={isDeletingDeal}
+                                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmDeleteDeal}
+                                disabled={isDeletingDeal}
+                                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-600 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors shadow-sm shadow-red-200"
+                            >
+                                {isDeletingDeal && <Loader2 size={13} className="animate-spin" />}
+                                Delete Deal
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Table row action sub-component ──────────────────────────────────────────
+
+function TableRowActions({
+    deal,
+    onDeleteDeal,
+}: {
+    deal: Deal;
+    onDeleteDeal?: (deal: Deal) => void;
+}) {
+    const router = useRouter();
+    const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [copied, setCopied] = useState(false);
+
+    const handleCopyLink = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsMenuOpen(false);
+        const link = typeof window !== "undefined" ? `${window.location.origin}/deals/${deal.dealId}` : `/deals/${deal.dealId}`;
+        if (navigator?.clipboard?.writeText) {
+            navigator.clipboard.writeText(link).then(() => {
+                setCopied(true);
+                toast.info("Deal link copied to clipboard");
+                setTimeout(() => setCopied(false), 2000);
+            }).catch(() => {
+                toast.info("Deal URL: " + link);
+            });
+        }
+    };
+
+    return (
+        <div
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            }}
+            className="relative inline-flex items-center justify-end"
+        >
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsMenuOpen((prev) => !prev);
+                }}
+                aria-label="Deal actions menu"
+                className="inline-flex items-center justify-center gap-1 h-7 w-7 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors"
+            >
+                <MoreHorizontal size={15} />
+            </button>
+
+            {isMenuOpen && (
+                <>
+                    <div
+                        className="fixed inset-0 z-40"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsMenuOpen(false);
+                        }}
+                    />
+                    <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-50 text-[12px] text-left animate-in fade-in duration-150">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setIsMenuOpen(false);
+                                router.push(`/deals/${deal.dealId}`);
+                            }}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-gray-700 hover:bg-gray-50 text-left font-medium"
+                        >
+                            <Pencil size={13} className="text-gray-400" />
+                            <span>View & Edit Deal</span>
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleCopyLink}
+                            className="w-full flex items-center gap-2 px-3 py-1.5 text-gray-700 hover:bg-gray-50 text-left font-medium"
+                        >
+                            {copied ? <Check size={13} className="text-emerald-500" /> : <Copy size={13} className="text-gray-400" />}
+                            <span>{copied ? "Link Copied!" : "Copy Deal Link"}</span>
+                        </button>
+                        {onDeleteDeal && (
+                            <>
+                                <div className="border-t border-gray-100 my-1" />
+                                <PermissionGuard permission="deals.delete" action="disable" disabledTooltip="You do not have permission to delete deals.">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setIsMenuOpen(false);
+                                            onDeleteDeal(deal);
+                                        }}
+                                        className="w-full flex items-center gap-2 px-3 py-1.5 text-red-600 hover:bg-red-50 text-left font-medium"
+                                    >
+                                        <XCircle size={13} className="text-red-500" />
+                                        <span>Delete Deal</span>
+                                    </button>
+                                </PermissionGuard>
+                            </>
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     );
 }
@@ -1439,6 +1865,7 @@ function DealsTable({
     onStageChange,
     onOpenCreate,
     onRequestTransition,
+    onDeleteDeal,
 }: {
     deals: Deal[];
     loading: boolean;
@@ -1446,6 +1873,7 @@ function DealsTable({
     onStageChange: (dealId: string, newStage: string) => void;
     onOpenCreate: (stage?: string) => void;
     onRequestTransition?: (deal: Deal, targetStage: string) => void;
+    onDeleteDeal?: (deal: Deal) => void;
 }) {
     // Local sort state
     const [sortCol, setSortCol]     = useState<string | null>(null);
@@ -1465,8 +1893,17 @@ function DealsTable({
     };
 
     const sortedDeals = useMemo(() => {
-        if (!sortCol) return deals;
-        return [...deals].sort((a, b) => {
+        const list = [...deals];
+        if (!sortCol) {
+            // Default sort: newest updated/created first with stable tie-breaker
+            return list.sort((a, b) => {
+                const dateA = a.updatedAt || a.createdAt || "";
+                const dateB = b.updatedAt || b.createdAt || "";
+                if (dateA !== dateB) return dateB.localeCompare(dateA);
+                return (a.dealId || "").localeCompare(b.dealId || "");
+            });
+        }
+        return list.sort((a, b) => {
             let av: string | number = "";
             let bv: string | number = "";
             if (sortCol === "name")        { av = a.name.toLowerCase();         bv = b.name.toLowerCase(); }
@@ -1476,7 +1913,8 @@ function DealsTable({
             if (sortCol === "owner")       { av = (a.owner ?? "").toLowerCase(); bv = (b.owner ?? "").toLowerCase(); }
             if (av < bv) return sortDir === "asc" ? -1 : 1;
             if (av > bv) return sortDir === "asc" ? 1 : -1;
-            return 0;
+            // Deterministic tie-breaker
+            return (a.dealId || "").localeCompare(b.dealId || "");
         });
     }, [deals, sortCol, sortDir]);
 
@@ -1586,15 +2024,35 @@ function DealsTable({
                         ) : (
                             pageDeals.map((deal) => {
                                 const cfg = getStageConfig(deal.stage);
-                                const prob = Math.round(deal.conversionProbability * 100);
                                 const isWon  = deal.stage.toUpperCase() === "WON";
                                 const isLost = deal.stage.toUpperCase() === "LOST";
+                                const isDead = deal.stage.toUpperCase() === "DEAD";
+
+                                // Determine real probability (0 - 100%)
+                                let prob = 50;
+                                if (typeof deal.conversionProbability === "number" && !isNaN(deal.conversionProbability)) {
+                                    prob = Math.round(deal.conversionProbability * 100);
+                                } else if (isWon) {
+                                    prob = 100;
+                                } else if (isLost || isDead) {
+                                    prob = 0;
+                                } else if (deal.stage.toUpperCase() === "HOT") {
+                                    prob = 80;
+                                } else if (deal.stage.toUpperCase() === "WARM") {
+                                    prob = 50;
+                                } else if (deal.stage.toUpperCase() === "NEW") {
+                                    prob = 20;
+                                }
+
+                                if (isWon) prob = 100;
+                                if (isLost || isDead) prob = 0;
+
                                 let barColor = "bg-blue-500";
                                 if (isWon)  barColor = "bg-emerald-500";
                                 if (isLost) barColor = "bg-red-400";
                                 if (deal.stage.toUpperCase() === "HOT")  barColor = "bg-red-500";
                                 if (deal.stage.toUpperCase() === "WARM") barColor = "bg-orange-400";
-                                if (deal.stage.toUpperCase() === "DEAD") barColor = "bg-slate-400";
+                                if (isDead) barColor = "bg-slate-400";
 
                                 return (
                                     <tr
@@ -1676,11 +2134,7 @@ function DealsTable({
 
                                         {/* Actions */}
                                         <td className="px-5 py-3.5 text-right">
-                                            <Link href={`/deals/${deal.dealId}`}>
-                                                <button className="inline-flex items-center justify-center gap-1 h-7 px-2.5 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors">
-                                                    <MoreHorizontal size={15} />
-                                                </button>
-                                            </Link>
+                                            <TableRowActions deal={deal} onDeleteDeal={onDeleteDeal} />
                                         </td>
                                     </tr>
                                 );

@@ -254,10 +254,19 @@ export default function RegisterForm() {
             await createOrganization({ name: companyName.trim(), userId, companyAbout, businessType });
 
             localStorage.removeItem("zyoris-register-userId");
+            // Clear auth tokens so the user is NOT seen as authenticated when
+            // they land on /verify-email (the page auto-redirects authenticated
+            // users to /dashboard, which would skip verification entirely).
+            localStorage.removeItem("zyoris-auth");
+
             setSuccess(true);
 
-            // Registration complete → go to login
-            setTimeout(() => router.replace("/login"), 1500);
+            // Store email in sessionStorage as a backup — /verify-email reads
+            // both the ?email= query param and sessionStorage["zyoris-pending-email"].
+            try { sessionStorage.setItem("zyoris-pending-email", email.trim()); } catch {}
+
+            // Redirect to OTP verification instead of login.
+            setTimeout(() => router.replace(`/verify-email?email=${encodeURIComponent(email.trim())}`), 1200);
         } catch (err: unknown) {
             const { message } = normaliseAuthError(err);
             setApiError(message);
@@ -349,7 +358,7 @@ export default function RegisterForm() {
                             className="mb-4 px-4 py-3 rounded-lg bg-emerald-50 border border-emerald-200 text-[13px] text-emerald-600 flex items-center gap-2"
                         >
                             <CheckCircle className="w-4 h-4 shrink-0" aria-hidden="true" />
-                            Organization created! Redirecting to sign in…
+                            Account created! Redirecting to email verification…
                         </div>
                     )}
 

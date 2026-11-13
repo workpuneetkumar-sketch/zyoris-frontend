@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
+import { getSharedSocket } from "@/lib/socketClient";
 import { useAuth } from "@/context/AuthContext";
 import { getEffectiveAuthToken } from "@/lib/api/api";
 import { fetchUnreadCounts, type NotificationDto } from "@/lib/api/notificationsApi";
@@ -60,6 +60,7 @@ interface NotificationContextValue {
 }
 
 const EMPTY_COUNTS: Counts = { all: 0, unread: 0, leads: 0, messages: 0, deals: 0, tasks: 0, system: 0 };
+
 const NotificationContext = createContext<NotificationContextValue | undefined>(undefined);
 
 function countsFromServer(total: number, byCategory: Record<string, number>): Counts {
@@ -239,32 +240,37 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (!isAuthenticated || !userId || typeof window === "undefined") return;
-    const url = (process.env.NEXT_PUBLIC_BACKEND_URL || "").replace(/\/+$/, "");
-    if (!url) return;
+    const socket = getSharedSocket();
+    if (!socket) return;
 
-    setRealtimeStatus("connecting");
-    const socket = io(url, { auth: (callback) => callback({ token: getEffectiveAuthToken() }), reconnection: true, transports: ["websocket", "polling"] });
+    setRealtimeStatus(socket.connected ? "connected" : "connecting");
+
     const isMine = (notification: Notification) => notification.userId === userId;
 
-    socket.on("connect", () => {
+    if (socket.connected) {
       setRealtimeStatus("connected");
       void loadFirstPage();
       void refreshUnreadCounts();
-    });
-    socket.on("disconnect", () => setRealtimeStatus("offline"));
-    socket.on("connect_error", () => setRealtimeStatus("offline"));
-    socket.on("notification.created", (payload: unknown) => {
+    }
+
+    const handleConnect = () => {
+      setRealtimeStatus("connected");
+      void loadFirstPage();
+      void refreshUnreadCounts();
+    };
+    const handleDisconnect = () => setRealtimeStatus("offline");
+    const handleConnectError = () => setRealtimeStatus("offline");
+
+    const handleNotificationCreated = (payload: unknown) => {
       const notification = getEventNotification(payload);
       if (!notification || !isMine(notification)) return;
 
       const normId = normalizeNotificationId(notification.id);
       if (!normId || knownIds.current.has(normId)) return;
 
-      // Synchronously record ID before inserting to guard against concurrent socket bursts
       knownIds.current.add(normId);
 
       setNotifications((current) => {
-        // Also check current React state before inserting
         if (current.some((item) => normalizeNotificationId(item.id) === normId)) {
           return current;
         }
@@ -273,27 +279,38 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
       if (!notification.read) listeners.current.forEach((listener) => listener(notification));
       scheduleCountRefresh();
-    });
-    socket.on("notification.read", (payload: unknown) => {
+    };
+
+    const handleNotificationRead = (payload: unknown) => {
       const notification = getEventNotification(payload);
       if (!notification || !isMine(notification)) return;
       const normId = normalizeNotificationId(notification.id);
       setNotifications((current) => current.map((item) => normalizeNotificationId(item.id) === normId ? notification : item));
       scheduleCountRefresh();
-    });
-    socket.on("notification.archived", (payload: unknown) => {
+    };
+
+    const handleNotificationArchived = (payload: unknown) => {
       const notification = getEventNotification(payload);
       if (!notification || !isMine(notification)) return;
       const normId = normalizeNotificationId(notification.id);
       setNotifications((current) => current.filter((item) => normalizeNotificationId(item.id) !== normId));
       knownIds.current.delete(normId);
       scheduleCountRefresh();
-    });
-    socket.on("notification.count.updated", (payload: unknown) => {
+    };
+
+    const handleCountUpdated = (payload: unknown) => {
       if (payload && typeof payload === "object" && (payload as { userId?: unknown }).userId === userId) {
         scheduleCountRefresh();
       }
-    });
+    };
+
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+    socket.on("notification.created", handleNotificationCreated);
+    socket.on("notification.read", handleNotificationRead);
+    socket.on("notification.archived", handleNotificationArchived);
+    socket.on("notification.count.updated", handleCountUpdated);
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -304,8 +321,13 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     document.addEventListener("visibilitychange", handleVisibility);
     return () => {
       document.removeEventListener("visibilitychange", handleVisibility);
-      socket.disconnect();
-      setRealtimeStatus("offline");
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+      socket.off("notification.created", handleNotificationCreated);
+      socket.off("notification.read", handleNotificationRead);
+      socket.off("notification.archived", handleNotificationArchived);
+      socket.off("notification.count.updated", handleCountUpdated);
     };
   }, [isAuthenticated, userId, loadFirstPage, refreshUnreadCounts, scheduleCountRefresh]);
 
@@ -323,8 +345,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!target || target.read) return;
     setNotifications((current) => current.map((notification) => normalizeNotificationId(notification.id) === normId ? { ...notification, read: true } : notification));
     updateUnreadLocally(target, -1);
-    try { await markAsRead(id); void refreshUnreadCounts(); }
-    catch (cause: unknown) {
+    if (String(id).startsWith("notif-")) {
+      return;
+    }
+    try {
+      await markAsRead(id);
+      void refreshUnreadCounts();
+    } catch (cause: any) {
+      if (cause?.response?.status === 404 || cause?.status === 404 || String(cause?.message).includes("404")) {
+        return;
+      }
       setNotifications((current) => current.map((notification) => normalizeNotificationId(notification.id) === normId ? target : notification));
       updateUnreadLocally(target, 1);
       throw cause;
@@ -354,8 +384,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     setNotifications((current) => current.filter((notification) => normalizeNotificationId(notification.id) !== normId));
     knownIds.current.delete(normId);
     updateUnreadLocally(target, -1);
-    try { await archiveNotification(id); void refreshUnreadCounts(); }
-    catch (cause: unknown) {
+    if (String(id).startsWith("notif-")) {
+      return;
+    }
+    try {
+      await archiveNotification(id);
+      void refreshUnreadCounts();
+    } catch (cause: any) {
+      if (cause?.response?.status === 404 || cause?.status === 404 || String(cause?.message).includes("404")) {
+        return;
+      }
       setNotifications((current) => [target, ...current]);
       knownIds.current.add(normId);
       updateUnreadLocally(target, 1);
@@ -419,7 +457,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const value: NotificationContextValue = {
     notifications, archivedNotifications, archivedLoading, archivedLoadingMore, archivedError, archivedHasMore, archivedUnavailable,
     loading, loadingMore, hasMore, error,
-    unreadCount: categoryUnreadCounts.all, categoryUnreadCounts, realtimeStatus,
+    unreadCount: categoryUnreadCounts.all || notifications.filter(n => !n.read).length, categoryUnreadCounts, realtimeStatus,
     markRead, markAllRead, removeNotification, hardDeleteNotification: hardDelete,
     createNotification, bulkArchiveByIds, bulkArchiveAllRead,
     refresh: () => loadFirstPage(true), fetchNextPage, loadArchived, fetchNextArchivedPage, refreshUnreadCounts, subscribeToNewNotifications,

@@ -1,74 +1,138 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useAuth } from '@/context/AuthContext';
+import { useMemo } from "react";
+import { useAuth } from "@/context/AuthContext";
 
-interface Suggestion {
-  text: string;
-  icon: string;
+interface ContextualSuggestionsProps {
+  pathname?: string | null;
+  onSelect: (text: string) => void;
+  isDark?: boolean;
 }
 
-const roleSuggestions: Record<string, Suggestion[]> = {
-  'CEO': [
-    { text: 'Show me revenue forecast for next quarter', icon: '📊' },
-    { text: 'What are our top growth opportunities?', icon: '🚀' },
-    { text: 'How is our pipeline performing?', icon: '📈' },
-    { text: 'Recommend cost optimization strategies', icon: '💰' },
-    { text: 'What are the key metrics I should track?', icon: '🎯' },
-  ],
-  'CFO': [
-    { text: 'Show me expense breakdown by category', icon: '📊' },
-    { text: 'What is our current burn rate?', icon: '🔥' },
-    { text: 'Revenue vs expense trend analysis', icon: '📈' },
-    { text: 'Investment recommendations for growth', icon: '💡' },
-    { text: 'Cash flow forecast for next quarter', icon: '💵' },
-  ],
-  'SALES_HEAD': [
-    { text: 'Show me deal pipeline velocity', icon: '⚡' },
-    { text: 'What are our win rates by segment?', icon: '🏆' },
-    { text: 'Which leads are most likely to convert?', icon: '🎯' },
-    { text: 'Sales team performance overview', icon: '👥' },
-    { text: 'How can we improve conversion rates?', icon: '📈' },
-  ],
-  'OPERATIONS_HEAD': [
-    { text: 'Show me resource utilization', icon: '📊' },
-    { text: 'Project delivery status overview', icon: '📋' },
-    { text: 'Operational efficiency metrics', icon: '⚙️' },
-    { text: 'Process improvement suggestions', icon: '🔄' },
-    { text: 'What are the bottlenecks in operations?', icon: '🔍' },
-  ],
-  'ADMIN': [
-    { text: 'System health and performance metrics', icon: '🖥️' },
-    { text: 'User activity and engagement overview', icon: '👤' },
-    { text: 'Data integration status', icon: '🔗' },
-    { text: 'Platform security recommendations', icon: '🔒' },
-  ],
-};
-
-export function ContextualSuggestions({ onSelect }: { onSelect: (text: string) => void }) {
+export function ContextualSuggestions({
+  pathname,
+  onSelect,
+  isDark = false,
+}: ContextualSuggestionsProps) {
   const { user } = useAuth();
-  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
-  useEffect(() => {
-    if (user?.role) {
-      const roleSuggest = roleSuggestions[user.role] || roleSuggestions['CEO'];
-      setSuggestions(roleSuggest);
-    } else {
-      setSuggestions(roleSuggestions['CEO']);
+  const suggestions = useMemo(() => {
+    const path = (pathname || "").toLowerCase();
+
+    if (path.includes("/domains")) {
+      return [
+        "Why won't my domain verify?",
+        "My domain is on another account",
+        "Use Zii with any AI agent, like Codex",
+      ];
     }
-  }, [user]);
 
-  if (suggestions.length === 0) return null;
+    if (path.includes("/leads")) {
+      return [
+        "What are our newest high-priority leads?",
+        "Summarize conversion rates and lead stages",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/deals")) {
+      return [
+        "Which deals are at health risk and need attention?",
+        "What is our total projected pipeline value?",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/customers") || path.includes("/contacts")) {
+      return [
+        "Who are our top accounts by lifetime revenue?",
+        "Identify accounts with declining engagement",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/workspace") || path.includes("/documents") || path.includes("/notes")) {
+      return [
+        "Summarize document contents and action items",
+        "Draft a project specification in workspace",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/analytics") || path.includes("/reports")) {
+      return [
+        "Analyze revenue trends and conversion velocity",
+        "Highlight anomalies in this quarter's metrics",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/finance") || path.includes("/cfo") || path.includes("/payment")) {
+      return [
+        "What is our projected revenue this quarter?",
+        "Show invoice aging and pending disbursements",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/automation") || path.includes("/workflows") || path.includes("/agents")) {
+      return [
+        "What automated workflows are currently active?",
+        "Show execution status and diagnostics",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    if (path.includes("/tasks") || path.includes("/calendar")) {
+      return [
+        "Which tasks require immediate attention today?",
+        "What upcoming meetings and deadlines are scheduled?",
+        "Use Zii with any autonomous agent or workflow",
+      ];
+    }
+
+    // Role-based defaults for general OS / dashboard
+    const role = user?.role?.toUpperCase();
+    if (role === "CEO" || role === "ADMIN") {
+      return [
+        "How is our overall business pipeline performing?",
+        "Summarize today's urgent operational priorities",
+        "Use Zii with any AI agent, like Codex",
+      ];
+    }
+
+    return [
+      "What can you do for me across the OS?",
+      "Summarize today's urgent tasks and priorities",
+      "Use Zii with any AI agent, like Codex",
+    ];
+  }, [pathname, user?.role]);
 
   return (
-    <div className="flex flex-col items-end gap-2 mt-4 pr-2">
-      {suggestions.map((sug, idx) => (
+    <div className="w-full space-y-1.5 my-2">
+      {suggestions.map((text, idx) => (
         <button
           key={idx}
-          onClick={() => onSelect(sug.text)}
-          className="text-[13px] font-medium text-blue-600 bg-white border border-blue-600 hover:bg-blue-600 hover:text-white px-4 py-2 rounded-full transition-colors shadow-sm"
+          type="button"
+          onClick={() => onSelect(text)}
+          className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-150 group ${
+            isDark
+              ? "hover:bg-zinc-900/80 text-zinc-300 hover:text-white"
+              : "hover:bg-zinc-100 text-zinc-700 hover:text-zinc-950"
+          }`}
         >
-          {sug.text}
+          <span
+            className={`w-4 h-4 flex-shrink-0 flex items-center justify-center rounded text-[11px] font-mono font-medium select-none transition-colors ${
+              isDark
+                ? "bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-200"
+                : "bg-zinc-200 text-zinc-600 group-hover:bg-zinc-300 group-hover:text-zinc-900"
+            }`}
+          >
+            {idx + 1}
+          </span>
+          <span className="text-xs sm:text-[13px] leading-relaxed truncate">
+            {text}
+          </span>
         </button>
       ))}
     </div>

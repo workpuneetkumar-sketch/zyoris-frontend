@@ -4,9 +4,11 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "react-toastify";
 import { WidgetDefinition, WidgetInstance, SavedDashboardLayout } from "@/types/dashboard-builder";
 import { getWidgetCatalog, getWidgetCatalogGrouped } from "@/lib/api/dashboardWidgetService";
+import { isWidgetPermitted, compactLayout } from "@/components/dashboard-builder/WidgetRegistry";
 import {
   listLayouts,
   createLayout,
@@ -18,6 +20,16 @@ import {
 
 const DEFAULT_LAYOUT_NAME = "My Dashboard";
 const ADMIN_ROLES = ["ADMIN", "CEO", "OWNER", "SUPER_ADMIN"];
+
+const DEFAULT_STANDARD_WIDGETS: WidgetInstance[] = [
+  { widgetId: "pipeline", instanceId: "inst-pipeline-default", x: 0, y: 0, w: 6, h: 4 },
+  { widgetId: "revenue", instanceId: "inst-revenue-default", x: 6, y: 0, w: 3, h: 4 },
+  { widgetId: "conversion-rate", instanceId: "inst-conversion-default", x: 9, y: 0, w: 3, h: 4 },
+  { widgetId: "activities", instanceId: "inst-activities-default", x: 0, y: 4, w: 6, h: 4 },
+  { widgetId: "tasks", instanceId: "inst-tasks-default", x: 6, y: 4, w: 6, h: 4 },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Debounce utility ────────────────────────────────────────────────────────
 function useDebounce<T>(value: T, delay: number): T {
@@ -32,6 +44,7 @@ function useDebounce<T>(value: T, delay: number): T {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useDashboardBuilder(userRole?: string) {
+  const { sessionStatus, token, userPermissions, isAdmin, permissionsLoaded } = useAuth();
   // ── Widget catalog ────────────────────────────────────────────────────────
   const [catalog, setCatalog] = useState<WidgetDefinition[]>([]);
 
@@ -72,7 +85,24 @@ export function useDashboardBuilder(userRole?: string) {
     return JSON.stringify(sortedA) !== JSON.stringify(sortedB);
   }, [widgets, initialWidgets]);
 
-  const isEmpty = !isLoading && widgets.length === 0;
+  const permittedWidgets = useMemo(() => {
+    if (isAdmin) return widgets;
+    if (!permissionsLoaded) return [];
+    const filtered = widgets.filter((w) =>
+      isWidgetPermitted(w.widgetId, userPermissions, isAdmin)
+    );
+    return compactLayout(filtered);
+  }, [widgets, userPermissions, isAdmin, permissionsLoaded]);
+
+  const permittedCatalog = useMemo(() => {
+    if (isAdmin) return catalog;
+    if (!permissionsLoaded) return [];
+    return catalog.filter((c) =>
+      isWidgetPermitted(c.id, userPermissions, isAdmin)
+    );
+  }, [catalog, userPermissions, isAdmin, permissionsLoaded]);
+
+  const isEmpty = !isLoading && permittedWidgets.length === 0;
 
   const activeLayout = useMemo(
     () => layouts.find((l) => l.id === activeLayoutId) ?? null,
@@ -99,6 +129,15 @@ export function useDashboardBuilder(userRole?: string) {
   // ── Load catalog + layouts ────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
+    if (sessionStatus === "checking") return;
+    if (sessionStatus === "unauthenticated" || !token) {
+      try {
+        const fetchedCatalog = await getWidgetCatalog();
+        setCatalog(fetchedCatalog);
+      } catch (_) {}
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {
@@ -108,28 +147,34 @@ export function useDashboardBuilder(userRole?: string) {
       ]);
 
       setCatalog(fetchedCatalog);
-      setLayouts(layoutsRes.data);
+      setLayouts(layoutsRes?.data || []);
 
-      // Pick the default layout to display
       const target =
-        layoutsRes.data.find((l) => l.isOrgDefault) ??
-        layoutsRes.data.find((l) => l.isDefault) ??
-        layoutsRes.data[0];
+        layoutsRes?.data?.find((l) => l.isOrgDefault) ??
+        layoutsRes?.data?.find((l) => l.isDefault) ??
+        layoutsRes?.data?.[0];
 
-      if (target) {
+      if (target && target.layout && target.layout.length > 0) {
         setActiveLayoutId(target.id);
-        const instances = toWidgetInstances(target.layout ?? []);
+        const instances = toWidgetInstances(target.layout);
         setWidgets(instances);
         setInitialWidgets(instances);
+      } else {
+        setWidgets(DEFAULT_STANDARD_WIDGETS);
+        setInitialWidgets(DEFAULT_STANDARD_WIDGETS);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to load dashboard data";
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || "Failed to load dashboard data";
       setError(message);
-      toast.error(message);
+      if (err?.response?.status !== 401 && !message.toLowerCase().includes("authentication")) {
+        toast.error(message);
+      }
+      setWidgets(DEFAULT_STANDARD_WIDGETS);
+      setInitialWidgets(DEFAULT_STANDARD_WIDGETS);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [sessionStatus, token]);
 
   useEffect(() => {
     loadData();
@@ -153,19 +198,39 @@ export function useDashboardBuilder(userRole?: string) {
 
   const addWidget = useCallback(
     (def: WidgetDefinition) => {
-      const maxY = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
-      const newInstance: WidgetInstance = {
-        widgetId: def.id,
-        instanceId: `inst-${def.id}-${Date.now()}`,
-        x: 0,
-        y: maxY,
-        w: def.defaultW,
-        h: def.defaultH,
-      };
-      setWidgets((prev) => [...prev, newInstance]);
+      if (widgets.some((widget) => widget.widgetId === def.id)) {
+        toast.info(`${def.title} is already on your dashboard.`);
+        return;
+      }
+
+      const newInstanceId = `inst-${def.id}-${Date.now()}`;
+      setWidgets((prev) => {
+        if (prev.some((widget) => widget.widgetId === def.id)) return prev;
+        const maxY = prev.reduce((max, widget) => Math.max(max, widget.y + widget.h), 0);
+        const newInstance: WidgetInstance = {
+          widgetId: def.id,
+          instanceId: newInstanceId,
+          x: 0,
+          y: maxY,
+          w: def.defaultW,
+          h: def.defaultH,
+        };
+        return [...prev, newInstance];
+      });
     },
     [widgets]
   );
+
+  const undoRemove = useCallback(() => {
+    if (!removedWidget) return;
+    setWidgets((prev) =>
+      prev.some((widget) => widget.widgetId === removedWidget.instance.widgetId)
+        ? prev
+        : [...prev, removedWidget.instance]
+    );
+    setRemovedWidget(null);
+    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+  }, [removedWidget]);
 
   const removeWidget = useCallback(
     (instanceId: string) => {
@@ -204,15 +269,8 @@ export function useDashboardBuilder(userRole?: string) {
         undoTimeoutRef.current = setTimeout(() => setRemovedWidget(null), 5000);
       }
     },
-    [widgets, catalog]
+    [widgets, catalog, undoRemove]
   );
-
-  const undoRemove = useCallback(() => {
-    if (!removedWidget) return;
-    setWidgets((prev) => [...prev, removedWidget.instance]);
-    setRemovedWidget(null);
-    if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
-  }, [removedWidget]);
 
   const updateLayoutWidgets = useCallback((newWidgets: WidgetInstance[]) => {
     setWidgets(newWidgets);
@@ -393,8 +451,8 @@ export function useDashboardBuilder(userRole?: string) {
 
   return {
     // State
-    catalog,
-    widgets,
+    catalog: permittedCatalog,
+    widgets: permittedWidgets,
     layouts,
     activeLayout,
     activeLayoutId,

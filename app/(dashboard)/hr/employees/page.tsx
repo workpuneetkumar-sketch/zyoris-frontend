@@ -1,4 +1,6 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
@@ -66,6 +68,7 @@ const INITIAL_FORM_DATA: CreateEmployeeData = {
 };
 
 export default function EmployeesPage() {
+  const { hasPermission } = useRBAC();
   // ─── State Management ───
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -133,7 +136,11 @@ export default function EmployeesPage() {
       setLoadingRoles(true);
       setRolesError(null);
       const data = await getRoles();
-      setRoles(Array.isArray(data) ? data : []);
+      const roleList = Array.isArray(data) ? [...data] : [];
+      roleList.sort((a, b) =>
+        formatRoleName(a.name || a.id).localeCompare(formatRoleName(b.name || b.id))
+      );
+      setRoles(roleList);
     } catch (err: any) {
       console.error('Error fetching roles:', err);
       setRolesError(err.message || 'Failed to load roles. Please try again.');
@@ -175,6 +182,7 @@ export default function EmployeesPage() {
 
   // ─── Create Employee Handler ───
   const handleCreateEmployee = async () => {
+    if (!hasPermission("employees.create")) return;
     // Validation
     if (!formData.name.trim()) {
       setCreateError('Name is required');
@@ -245,6 +253,7 @@ export default function EmployeesPage() {
   };
 
   const handleUpdateEmployee = async () => {
+    if (!hasPermission("employees.update")) return;
     if (!editingEmployee) return;
 
     try {
@@ -283,6 +292,7 @@ export default function EmployeesPage() {
 
   // ─── Delete Employee Handler ───
   const handleDeleteEmployee = async (id: string, name: string) => {
+    if (!hasPermission("employees.delete")) return;
     setConfirmModal({
       isOpen: true,
       title: "Delete Employee",
@@ -400,6 +410,7 @@ export default function EmployeesPage() {
             <p className="text-sm text-gray-500 mt-1">Manage your team members and their details.</p>
           </div>
           
+          <PermissionGuard permission="employees.create">
           <button 
             onClick={() => {
               setIsAddModalOpen(true);
@@ -411,6 +422,7 @@ export default function EmployeesPage() {
             <Plus className="w-4 h-4" />
             Add Employee
           </button>
+          </PermissionGuard>
         </div>
 
         {/* ─── Stats Cards ─── */}
@@ -600,16 +612,18 @@ export default function EmployeesPage() {
                             
                             {openActionMenu === employee.id && (
                               <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 z-30 animate-in fade-in slide-in-from-top-1">
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleEditClick(employee);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
-                                >
-                                  <Pencil className="w-4 h-4" />
-                                  Edit Details
-                                </button>
+                                <PermissionGuard permission="employees.update" action="disable" disabledTooltip="You do not have permission to edit employees.">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEditClick(employee);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
+                                  >
+                                    <Pencil className="w-4 h-4" />
+                                    Edit Details
+                                  </button>
+                                </PermissionGuard>
                                 <Link
                                   href={`/hr/employees/${employee.id}`}
                                   className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors"
@@ -618,16 +632,18 @@ export default function EmployeesPage() {
                                   View Profile
                                 </Link>
                                 <div className="h-px bg-gray-100 my-1"></div>
-                                <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteEmployee(employee.id, employee.name);
-                                  }}
-                                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  Delete Employee
-                                </button>
+                                <PermissionGuard permission="employees.delete" action="disable" disabledTooltip="You do not have permission to delete employees.">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteEmployee(employee.id, employee.name);
+                                    }}
+                                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                    Delete Employee
+                                  </button>
+                                </PermissionGuard>
                               </div>
                             )}
                           </div>

@@ -4,7 +4,9 @@
 // Mock const PROJECTS removed entirely.
 
 import { RefreshCw, AlertCircle, FolderOpen } from "lucide-react";
+import { useEffect } from "react";
 import { useProjects } from "@/hooks/useDashboard";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { Project } from "@/lib/api/projectsApi";
 
 // ── Map backend status → display label + colour ────────────────────────────
@@ -45,8 +47,26 @@ function dueLabel(project: Project): string {
   return new Date(d).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-export function ProjectsWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: projects, loading, error, refetch } = useProjects();
+export function ProjectsWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("projects.view");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: projects, loading, error, refetch } = useProjects(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {

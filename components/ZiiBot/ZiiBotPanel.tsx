@@ -1,387 +1,811 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ZiiBotAvatar, ZII_GREETING } from "./ZiiBotAvatar";
-import type { ChatMessage } from "./useZiiBotChat";
+import { usePathname } from "next/navigation";
+import { ZiiBotSidebar } from "./ZiiBotSidebar";
+import { MarkdownContent } from "./MarkdownContent";
+import type { ChatMessage, useZiiBotChat } from "./useZiiBotChat";
 import { ContextualSuggestions } from "./ContextualSuggestions";
-import { Send, Bot, Paperclip, Smile, Minimize2, Maximize2, X, Volume2, VolumeX, ThumbsUp, ThumbsDown, MoreVertical, ChevronDown } from "lucide-react";
+import {
+  ArrowUp,
+  X,
+  Volume2,
+  VolumeX,
+  ThumbsUp,
+  ThumbsDown,
+  Copy,
+  Check,
+  RotateCcw,
+  AlertCircle,
+  Mic,
+  MicOff,
+  Paperclip,
+  Scan,
+  Sun,
+  Moon,
+  MessageSquare,
+  Plus,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
 import { getVoiceService } from "./voiceService";
 import { toast } from "react-toastify";
 import { ActionProposalCard } from "@/components/ai/ActionProposalCard";
-import type { AgentApprovalRequest } from "@/types/ai-proposals";
 
 interface ZiiBotPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
-  messages: ChatMessage[];
-  isTyping: boolean;
-  onSend: (text: string) => void;
-  soundOn: boolean;
-  onToggleSound: () => void;
-  showGreeting: boolean;
-  darkMode: boolean;
-  userName?: string;
-  /** Called when an ActionProposalCard updates its status */
-  onUpdateProposal?: (approvalId: string, patch: Partial<AgentApprovalRequest>) => void;
+  dockMode: "side" | "bottom";
+  onToggleDock: () => void;
+  isDark: boolean;
+  onToggleTheme: () => void;
+  chat: ReturnType<typeof useZiiBotChat>;
 }
 
-// ─── Helper: Format message with HTML ─────────────────────────
-
-function formatMessageContent(content: string): string {
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-blue-700">$1</strong>')
-    .replace(/\n/g, '<br/>')
-    .replace(/• /g, '<span class="text-blue-500 font-bold mr-1">•</span> ')
-    .replace(/\d\. /g, (match) => `<span class="font-bold text-blue-600">${match}</span>`);
+function DockToBottomIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <line x1="3" x2="21" y1="15" y2="15" />
+    </svg>
+  );
 }
 
-// ─── Message bubble ─────────────────────────────────────────────
+function DockToSideIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <line x1="15" x2="15" y1="3" y2="21" />
+    </svg>
+  );
+}
 
-function MessageBubble({ message, isUser }: { message: ChatMessage; isUser: boolean; darkMode: boolean }) {
-  const [rating, setRating] = useState<'up' | 'down' | null>(null);
+function getRouteScope(pathname: string | null): string {
+  if (!pathname || pathname === "/" || pathname === "/dashboard") return "Dashboard";
+  const segment = pathname.split("/").filter(Boolean)[0] || "";
+  const map: Record<string, string> = {
+    domains: "Domains",
+    leads: "Leads",
+    deals: "Deals",
+    customers: "Customers",
+    contacts: "Contacts",
+    companies: "Companies",
+    workspace: "Workspace",
+    documents: "Documents",
+    analytics: "Analytics",
+    reports: "Reports",
+    finance: "Finance",
+    tasks: "Tasks",
+    calendar: "Calendar",
+    automation: "Automation",
+    workflows: "Workflows",
+    agents: "Agents",
+    tools: "Tools",
+    settings: "Settings",
+    whatsapp: "WhatsApp",
+    email: "Email",
+    messages: "Messages",
+    support: "Support",
+    integrations: "Integrations",
+    connect: "Connect",
+    ceo: "Executive",
+    cfo: "Financial",
+    team: "Team",
+    hr: "HR",
+    knowledge: "Knowledge",
+    "knowledge-base": "Knowledge",
+  };
+  if (map[segment.toLowerCase()]) return map[segment.toLowerCase()];
+  return segment.charAt(0).toUpperCase() + segment.slice(1);
+}
 
-  const handleRating = (type: 'up' | 'down') => {
-    if (rating) return; // Prevent multiple ratings
+// ─── Minimal Resend Message Bubble ──────────────────────────────
+
+function MessageBubble({
+  message,
+  onRetry,
+  isDark,
+}: {
+  message: ChatMessage;
+  onRetry?: (text?: string) => void;
+  isDark: boolean;
+}) {
+  const isUser = message.role === "user";
+  const [copied, setCopied] = useState(false);
+  const [rating, setRating] = useState<"up" | "down" | null>(null);
+
+  const handleCopy = () => {
+    if (!message.content) return;
+    navigator.clipboard.writeText(message.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleRating = (type: "up" | "down") => {
+    if (rating) return;
     setRating(type);
-    if (type === 'up') {
+    if (type === "up") {
       toast.success("Thanks for your feedback!");
     } else {
-      toast.info("Thanks, we'll try to improve.");
+      toast.info("Thanks! We'll refine system responses.");
     }
   };
 
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 15, scale: 0.95 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      className={`flex items-end gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
-    >
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} max-w-[85%]`}>
+  if (message.isError) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="my-2 max-w-[95%]"
+      >
         <div
-          className={`px-[18px] py-[12px] text-[14px] leading-relaxed shadow-sm ${
-            isUser
-              ? 'bg-gradient-to-r from-blue-600 to-cyan-500 text-white rounded-3xl rounded-br-sm'
-              : 'bg-[#F2F2F2] text-gray-800 rounded-3xl rounded-bl-sm'
+          className={`p-3 rounded-xl border text-xs ${
+            isDark
+              ? "bg-rose-950/30 border-rose-900/60 text-rose-300"
+              : "bg-rose-50 border-rose-200 text-rose-900"
           }`}
         >
-          <div 
-            className="prose prose-sm max-w-none 
-              [&_strong]:font-bold [&_strong]:text-blue-700
-              [&_ul]:list-none [&_ul]:p-0 [&_ul]:m-0
-              [&_li]:flex [&_li]:items-start [&_li]:gap-1.5 [&_li]:my-1
-              [&_.bullet]:text-blue-500 [&_.bullet]:font-bold
-              [&_br]:block [&_br]:my-0.5
-              [&_p]:m-0
-              [&_p]:text-gray-800"
-            dangerouslySetInnerHTML={{ __html: formatMessageContent(message.content) }} 
-          />
+          <div className="flex items-center gap-1.5 font-semibold text-rose-500 mb-1">
+            <AlertCircle size={14} className="flex-shrink-0" />
+            <span>System Notice</span>
+          </div>
+          <p className="leading-relaxed mb-2 opacity-90">{message.content}</p>
+          {onRetry && message.failedText && (
+            <button
+              onClick={() => onRetry(message.failedText)}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-medium text-xs transition-colors"
+            >
+              <RotateCcw size={11} />
+              <span>Retry question</span>
+            </button>
+          )}
         </div>
-        {!isUser && (
-          <div className="flex items-center gap-2 mt-2 ml-2">
+      </motion.div>
+    );
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.18, ease: "easeOut" }}
+      className={`my-2 flex flex-col ${isUser ? "items-end" : "items-start"}`}
+    >
+      {isUser ? (
+        <div
+          className={`px-3.5 py-2 rounded-2xl max-w-[85%] text-xs sm:text-sm leading-relaxed ${
+            isDark
+              ? "bg-zinc-800 text-zinc-100 border border-zinc-700/60"
+              : "bg-zinc-900 text-white"
+          }`}
+        >
+          <p className="whitespace-pre-wrap select-text">{message.content}</p>
+        </div>
+      ) : (
+        <div className="w-full text-xs sm:text-sm leading-relaxed px-1">
+          <MarkdownContent content={message.content} isDark={isDark} />
+
+          {/* Minimal actions bar */}
+          <div
+            className={`flex items-center gap-2 mt-1.5 text-[11px] ${
+              isDark ? "text-zinc-500" : "text-zinc-400"
+            }`}
+          >
+            <button
+              onClick={handleCopy}
+              className={`p-1 rounded transition-colors ${
+                isDark ? "hover:text-zinc-200 hover:bg-zinc-800" : "hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title="Copy message"
+            >
+              {copied ? <Check size={12} className="text-emerald-500" /> : <Copy size={12} />}
+            </button>
+
             {rating ? (
-              <span className="text-[11px] text-gray-400 font-medium italic">Feedback recorded</span>
+              <span className="text-[10px] italic">Feedback noted</span>
             ) : (
-              <>
-                <span className="text-[11px] text-gray-500 font-medium">Was this helpful?</span>
-                <button onClick={() => handleRating('up')} className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsUp size={14} /></button>
-                <button onClick={() => handleRating('down')} className="p-1 text-blue-500 hover:bg-blue-50 rounded-full transition-colors"><ThumbsDown size={14} /></button>
-              </>
+              <div className="flex items-center gap-0.5">
+                <button
+                  onClick={() => handleRating("up")}
+                  className={`p-1 rounded transition-colors ${
+                    isDark ? "hover:text-emerald-400 hover:bg-zinc-800" : "hover:text-emerald-600 hover:bg-zinc-100"
+                  }`}
+                  title="Helpful"
+                >
+                  <ThumbsUp size={12} />
+                </button>
+                <button
+                  onClick={() => handleRating("down")}
+                  className={`p-1 rounded transition-colors ${
+                    isDark ? "hover:text-rose-400 hover:bg-zinc-800" : "hover:text-rose-600 hover:bg-zinc-100"
+                  }`}
+                  title="Not helpful"
+                >
+                  <ThumbsDown size={12} />
+                </button>
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </motion.div>
   );
 }
 
+// ─── Main Panel Component ────────────────────────────────────────
+
 export function ZiiBotPanel({
   isOpen,
   onClose,
-  isFullscreen,
-  onToggleFullscreen,
-  messages,
-  isTyping,
-  onSend,
-  soundOn,
-  onToggleSound,
-  showGreeting,
-  darkMode,
-  userName,
-  onUpdateProposal,
+  dockMode,
+  onToggleDock,
+  isDark,
+  onToggleTheme,
+  chat,
 }: ZiiBotPanelProps) {
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const [inputValue, setInputValue] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingText, setRecordingText] = useState("");
+  const [attachedFileName, setAttachedFileName] = useState<string | null>(null);
+
   const voiceService = getVoiceService();
+  const currentScope = useMemo(() => getRouteScope(pathname), [pathname]);
+
+  // Reset fullscreen when dockMode changes
+  useEffect(() => {
+    setIsFullscreen(false);
+  }, [dockMode]);
 
   useEffect(() => {
-    if (isOpen) inputRef.current?.focus();
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 120);
+    }
   }, [isOpen]);
 
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     }
-  }, [messages, isTyping]);
+  }, [chat.messages, chat.isTyping]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const text = inputValue.trim();
-    if (text) {
-      onSend(text);
-      setInputValue("");
+  /**
+   * Requirement: When conversations part gets opened, automatically enter full screen
+   */
+  const handleToggleSidebar = () => {
+    setSidebarOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        setIsFullscreen(true);
+      } else {
+        if (dockMode === "side") {
+          setIsFullscreen(false);
+        }
+      }
+      return next;
+    });
+  };
+
+  const handleCloseSidebar = () => {
+    setSidebarOpen(false);
+    if (dockMode === "side") {
+      setIsFullscreen(false);
     }
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const rawText = inputValue.trim();
+    if (!rawText && !attachedFileName) return;
+    if (chat.isTyping) return;
+
+    let fullText = rawText;
+    if (attachedFileName) {
+      fullText = `[Context Attachment: ${attachedFileName}]\n${rawText}`;
+      setAttachedFileName(null);
+    }
+
+    chat.sendMessage(fullText);
+    setInputValue("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSubmit(e);
+      handleSubmit();
     }
   };
 
-  const startRecording = () => {
+  const handleToggleVoice = () => {
     if (isRecording) {
-      stopRecording();
+      voiceService.stopListening();
+      setIsRecording(false);
       return;
     }
-    
+
     setIsRecording(true);
-    setRecordingText("🎤 Listening...");
-    
     const success = voiceService.startListening(
       (text) => {
-        setRecordingText(text);
         setInputValue(text);
-        if (text && !text.endsWith('...')) {
+        if (text && !text.endsWith("...")) {
           setTimeout(() => {
             if (inputRef.current?.value) {
-              handleSubmit(new Event('submit') as any);
+              handleSubmit();
+              setIsRecording(false);
             }
-          }, 500);
+          }, 600);
         }
       },
-      (error) => {
-        console.error('Voice error:', error);
+      (err) => {
+        console.error("Voice recognition error:", err);
         setIsRecording(false);
-        setRecordingText("");
-        if (error === 'not-allowed') {
-          alert('Please allow microphone access to use voice input.');
+        if (err === "not-allowed") {
+          toast.warn("Microphone access denied.");
         }
       }
     );
-    
+
     if (!success) {
       setIsRecording(false);
-      setRecordingText("");
-      alert('Voice input is not supported in this browser.');
+      toast.warn("Voice speech-to-text is not supported in this browser.");
     }
   };
 
-  const stopRecording = () => {
-    voiceService.stopListening();
-    setIsRecording(false);
-    setRecordingText("");
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAttachedFileName(file.name);
+      toast.info(`Attached context: ${file.name}`);
+    }
   };
 
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence mode="wait">
-      {isOpen && (
-        <motion.div
-          initial={{ opacity: 0, y: 30, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: 30, scale: 0.95 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
-          className={`fixed bottom-24 right-6 z-50 w-[440px] max-w-[calc(100vw-2rem)] h-[640px] max-h-[calc(100vh-8rem)] rounded-2xl shadow-2xl flex flex-col overflow-hidden bg-white ${isFullscreen ? "fullscreen-mode" : ""}`}
-        >
-          {/* ── Header: Solid Blue Gradient with Wavy Border ── */}
-          <div className="relative bg-gradient-to-br from-blue-600 to-cyan-500 pt-5 pb-8 px-5">
-            <div className="flex items-center justify-between text-white relative z-10">
-              <div className="flex items-center gap-3">
-                <div className="relative">
-                  <ZiiBotAvatar isIdle={!isTyping} isTyping={isTyping} size="button" />
-                  <span className="absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-white bg-green-500" />
-                </div>
-                <div>
-                  <p className="text-xs text-blue-100 opacity-90 font-medium mb-0.5">Chat with</p>
-                  <h3 className="font-bold text-[17px] leading-tight flex items-center gap-1.5">
-                    ZY BOT
-                  </h3>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={onToggleSound}
-                  className="p-1.5 rounded-full hover:bg-white/20 transition-all text-white"
-                  aria-label={soundOn ? "Mute sound" : "Unmute sound"}
-                >
-                  {soundOn ? <Volume2 size={18} /> : <VolumeX size={18} />}
-                </button>
-                <button className="p-1.5 rounded-full hover:bg-white/20 transition-all text-white">
-                  <MoreVertical size={18} />
-                </button>
-                <button
-                  onClick={onClose}
-                  className="p-1.5 rounded-full hover:bg-white/20 transition-all text-white"
-                  aria-label="Close chat"
-                >
-                  <ChevronDown size={22} />
-                </button>
-              </div>
-            </div>
-            
-            <div className="mt-4 relative z-10">
-              <p className="text-[13px] text-white/90">We typically reply in few minutes.</p>
-            </div>
-
-            {/* Wavy bottom SVG */}
-            <div className="absolute -bottom-[1px] left-0 right-0 w-full overflow-hidden leading-none z-0">
-              <svg viewBox="0 0 1200 120" preserveAspectRatio="none" className="relative block w-full h-[25px]">
-                <path d="M321.39,56.44c58-10.79,114.16-30.13,172-41.86,82.39-16.72,168.19-17.73,250.45-.39C823.78,31,906.67,72,985.66,92.83c70.05,18.48,146.53,26.09,214.34,3V120H0V95.8C89.71,117.43,205.85,78.29,321.39,56.44Z" fill="#ffffff"></path>
-              </svg>
-            </div>
-          </div>
-
-          {/* ── Messages: Light Gray Background ── */}
-          <div
-            ref={scrollRef}
-            className="flex-1 overflow-y-auto px-5 py-4 space-y-4 bg-gray-50/80"
+    <motion.div
+      initial={
+        isFullscreen
+          ? { opacity: 0, scale: 0.98 }
+          : dockMode === "side"
+          ? { opacity: 0, x: 40 }
+          : { opacity: 0, y: 40 }
+      }
+      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+      exit={
+        isFullscreen
+          ? { opacity: 0, scale: 0.98 }
+          : dockMode === "side"
+          ? { opacity: 0, x: 40 }
+          : { opacity: 0, y: 40 }
+      }
+      transition={{ duration: 0.22, ease: "easeOut" }}
+      className={`fixed z-50 flex overflow-hidden shadow-2xl transition-all duration-200 ${
+        isDark ? "bg-[#09090b] text-zinc-100" : "bg-white text-zinc-900"
+      } ${
+        isFullscreen
+          ? "inset-0 w-screen h-screen max-w-none max-h-none border-none rounded-none"
+          : dockMode === "side"
+          ? "top-0 right-0 bottom-8 w-[480px] max-w-full border-l " +
+            (isDark ? "border-zinc-800" : "border-zinc-200")
+          : "bottom-8 left-0 right-0 h-[400px] max-h-[75vh] w-full border-t " +
+            (isDark ? "border-zinc-800" : "border-zinc-200")
+      }`}
+    >
+      {/* ── Left Sidebar (History & Conversations Drawer) ── */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ width: 0, opacity: 0 }}
+            animate={{ width: 280, opacity: 1 }}
+            exit={{ width: 0, opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            className={`flex-shrink-0 h-full overflow-hidden z-20 border-r ${
+              isDark ? "border-zinc-800/80" : "border-zinc-200/80"
+            }`}
           >
-            {/* Greeting */}
-            {showGreeting && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col h-full items-start pt-8 pb-4 px-2"
-              >
-                <div className="flex items-end gap-3 w-full">
-                  <div className={`px-[18px] py-[12px] text-[14px] leading-relaxed shadow-sm bg-[#F2F2F2] text-gray-800 rounded-3xl rounded-bl-sm`}>
-                    <div className="font-medium">
-                      Hey{userName ? ` ${userName.split(' ')[0]}` : ''} 👋 I'm ZY BOT. How can I help you today?
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            <ZiiBotSidebar
+              sessions={chat.sessions}
+              activeSessionId={chat.activeSessionId}
+              onSelectSession={(id) => {
+                chat.selectSession(id);
+                // When in full screen, user can keep reading or close
+              }}
+              onNewChat={() => chat.createNewSession()}
+              onRenameSession={chat.renameSession}
+              onDeleteSession={chat.deleteSession}
+              isLoading={chat.isLoadingSessions}
+              onCloseMobile={handleCloseSidebar}
+              className="w-full h-full"
+              isDark={isDark}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-            {/* Messages */}
-            {messages.map((msg) => (
-              msg.type === "proposal" && msg.proposalData ? (
-                <motion.div
-                  key={msg.id}
-                  initial={{ opacity: 0, y: 15, scale: 0.95 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  transition={{ duration: 0.28, ease: "easeOut" }}
+      {/* ── Main Chat Area ── */}
+      <div className="flex-1 flex flex-col h-full min-w-0">
+        {/* Top Header */}
+        <div
+          className={`flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0 gap-3 ${
+            isDark ? "border-zinc-800/80 bg-[#09090b]" : "border-zinc-200/80 bg-white"
+          }`}
+        >
+          {/* Header Left: Title + Conversations button + Compact New button */}
+          <div className="flex items-center gap-2 min-w-0 overflow-hidden">
+            <h2 className="text-sm font-semibold tracking-tight whitespace-nowrap">Ask anything</h2>
+
+            {/* View All Conversations toggle (auto fullscreens) */}
+            <button
+              type="button"
+              onClick={handleToggleSidebar}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all whitespace-nowrap ${
+                sidebarOpen
+                  ? isDark
+                    ? "bg-zinc-800 text-white border-zinc-700 shadow-xs"
+                    : "bg-zinc-100 text-zinc-950 border-zinc-300 shadow-xs"
+                  : isDark
+                  ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800"
+                  : "bg-zinc-100/80 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border-zinc-200"
+              }`}
+              title={sidebarOpen ? "Hide conversations" : "View all conversations (opens fullscreen)"}
+            >
+              <MessageSquare size={13} />
+              <span className="truncate">Conversations</span>
+              {chat.sessions.length > 0 && (
+                <span
+                  className={`px-1.5 py-0.2 rounded text-[10px] font-mono leading-none ${
+                    isDark ? "bg-zinc-800 text-zinc-300" : "bg-zinc-200 text-zinc-700"
+                  }`}
                 >
-                  <ActionProposalCard
-                    proposal={msg.proposalData}
-                    onStatusChange={(id, _status, patch) =>
-                      onUpdateProposal?.(id, patch)
-                    }
-                  />
-                </motion.div>
-              ) : (
-                <MessageBubble key={msg.id} message={msg} isUser={msg.role === "user"} darkMode={false} />
-              )
-            ))}
+                  {chat.sessions.length}
+                </span>
+              )}
+            </button>
 
-            {/* Typing Indicator */}
-            {isTyping && (
-              <motion.div
-                initial={{ opacity: 0, y: 5 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex items-center gap-3"
-              >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-blue-500/30">
-                  Z
-                </div>
-                <div className="px-4 py-3 rounded-2xl bg-white shadow-sm border border-gray-100">
-                  <div className="flex gap-1.5">
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
-                    <span className="w-2 h-2 bg-blue-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            {/* Compact New Chat icon button */}
+            <button
+              type="button"
+              onClick={() => {
+                chat.createNewSession();
+                toast.success("Started new chat");
+              }}
+              className={`p-1.5 rounded-lg border transition-all active:scale-95 flex-shrink-0 ${
+                isDark
+                  ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800"
+                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950 border-zinc-200"
+              }`}
+              title="Start a new chat session"
+            >
+              <Plus size={13} />
+            </button>
           </div>
 
-          {/* ── Contextual Suggestions ── */}
-          {showGreeting && (
-            <div className="px-4 pb-2 bg-white">
-              <ContextualSuggestions onSelect={onSend} />
+          {/* Action Icons Right (fixed size, never collapses into left buttons) */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            {/* Theme Toggle (Changes ONLY Chatbot Theme) */}
+            <button
+              onClick={onToggleTheme}
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title={isDark ? "Switch chatbot to light mode" : "Switch chatbot to dark mode"}
+            >
+              {isDark ? <Sun size={15} /> : <Moon size={15} />}
+            </button>
+
+            {/* Audio Toggle */}
+            <button
+              onClick={chat.toggleSound}
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title={chat.soundOn ? "Mute audio" : "Enable audio"}
+            >
+              {chat.soundOn ? <Volume2 size={15} /> : <VolumeX size={15} />}
+            </button>
+
+            {/* Enlarge / Fullscreen Button */}
+            {dockMode === "side" && (
+              <button
+                onClick={() => setIsFullscreen((prev) => !prev)}
+                className={`p-1.5 rounded-md transition-colors ${
+                  isFullscreen
+                    ? isDark
+                      ? "text-white bg-zinc-800"
+                      : "text-zinc-950 bg-zinc-100"
+                    : isDark
+                    ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                    : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                }`}
+                title={isFullscreen ? "Restore side view" : "Enlarge to full screen"}
+              >
+                {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              </button>
+            )}
+
+            {/* Dock Toggle with Tooltip */}
+            <button
+              onClick={() => {
+                setIsFullscreen(false);
+                onToggleDock();
+              }}
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title={dockMode === "side" ? "Dock to bottom" : "Dock to side"}
+            >
+              {dockMode === "side" ? <DockToBottomIcon /> : <DockToSideIcon />}
+            </button>
+
+            {/* Close */}
+            <button
+              onClick={() => {
+                setIsFullscreen(false);
+                setSidebarOpen(false);
+                onClose();
+              }}
+              className={`p-1.5 rounded-md transition-colors ${
+                isDark
+                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+              }`}
+              title="Close"
+            >
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Conversation Message List ── */}
+        <div
+          ref={scrollRef}
+          className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 zii-chat-scroll ${
+            isDark ? "bg-[#09090b]" : "bg-white"
+          } ${dockMode === "bottom" || isFullscreen ? "max-w-4xl mx-auto w-full" : ""}`}
+        >
+          {/* Welcome / Suggestions State */}
+          {chat.showGreeting && (
+            <div className="flex flex-col justify-end h-full py-2">
+              <ContextualSuggestions
+                pathname={pathname}
+                onSelect={(prompt) => chat.sendMessage(prompt)}
+                isDark={isDark}
+              />
             </div>
           )}
 
-          {/* ── Input Area: Minimal with Blue Send Button ── */}
-          <form
-            onSubmit={handleSubmit}
-            className="flex flex-col px-4 pt-2 pb-3 bg-white"
-          >
-            <div className="flex items-center border-t border-gray-100 pt-3">
-              <button 
-                type="button" 
-                onClick={() => toast.info("Bot triggers coming soon!")}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+          {/* Render Messages */}
+          {chat.messages.map((msg) =>
+            msg.type === "proposal" && msg.proposalData ? (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="my-3"
               >
-                <Bot size={18} />
-              </button>
-              <button 
-                type="button" 
-                onClick={() => toast.info("File attachments coming soon!")}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Paperclip size={18} />
-              </button>
-              <button 
-                type="button" 
-                onClick={() => toast.info("Emoji picker coming soon!")}
-                className="p-2 text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <Smile size={18} />
-              </button>
-              
-              <div className="flex-1 px-2">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Enter your message..."
-                  className="w-full text-[14px] bg-transparent outline-none text-gray-800 placeholder-gray-400"
-                  disabled={isTyping}
+                <ActionProposalCard
+                  proposal={msg.proposalData}
+                  onStatusChange={(id, _status, patch) => chat.updateProposalStatus(id, patch)}
+                />
+              </motion.div>
+            ) : (
+              <MessageBubble
+                key={msg.id}
+                message={msg}
+                onRetry={(text) => chat.retryLastMessage(text)}
+                isDark={isDark}
+              />
+            )
+          )}
+
+          {/* Typing Indicator */}
+          {chat.isTyping && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-2 py-1 text-xs"
+            >
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+              <span className={isDark ? "text-zinc-400" : "text-zinc-500"}>
+                Analyzing system intelligence
+              </span>
+              <div className="flex gap-1 items-center">
+                <span
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  style={{ animationDelay: "0ms" }}
+                />
+                <span
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  style={{ animationDelay: "150ms" }}
+                />
+                <span
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  style={{ animationDelay: "300ms" }}
                 />
               </div>
+            </motion.div>
+          )}
+        </div>
 
+        {/* ── Input Box (Resend Style) ── */}
+        <div
+          className={`p-3 pt-2 flex-shrink-0 ${
+            dockMode === "bottom" || isFullscreen ? "max-w-4xl mx-auto w-full" : ""
+          }`}
+        >
+          {attachedFileName && (
+            <div
+              className={`flex items-center justify-between px-3 py-1 mb-2 rounded-lg text-xs border ${
+                isDark
+                  ? "bg-zinc-900 border-zinc-800 text-zinc-300"
+                  : "bg-zinc-100 border-zinc-200 text-zinc-700"
+              }`}
+            >
+              <span className="truncate flex items-center gap-1.5">
+                <Paperclip size={12} className="opacity-70" />
+                <span>{attachedFileName}</span>
+              </span>
               <button
-                type="submit"
-                disabled={isTyping || !inputValue.trim()}
-                className={`w-[42px] h-[42px] rounded-full flex items-center justify-center transition-all flex-shrink-0 ml-2 ${
-                  isTyping || !inputValue.trim()
-                    ? "bg-gray-200 cursor-not-allowed text-gray-400"
-                    : "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-500/20"
-                }`}
-                aria-label="Send message"
+                onClick={() => setAttachedFileName(null)}
+                className="hover:opacity-75 p-0.5"
+                title="Remove attachment"
               >
-                <Send size={18} className="ml-0.5" />
+                <X size={12} />
               </button>
             </div>
-            
-            {/* ── Footer ── */}
-            <div className="flex justify-center items-center gap-1 mt-3">
-              <span className="text-[9px] font-semibold text-gray-400 tracking-wide uppercase">Powered by</span>
-              <span className="text-[11px] font-bold text-blue-500 tracking-tight">ZYORIS</span>
+          )}
+
+          <div
+            className={`rounded-2xl border transition-all duration-150 p-2.5 ${
+              isDark
+                ? "bg-[#121214] border-zinc-800/90 focus-within:border-zinc-700 shadow-lg"
+                : "bg-white border-zinc-200/90 focus-within:border-zinc-400 shadow-sm"
+            }`}
+          >
+            {/* Top row: > prompt symbol + text input */}
+            <form onSubmit={handleSubmit} className="flex items-center gap-2">
+              <span
+                className={`font-mono text-sm font-medium select-none pl-1 ${
+                  isDark ? "text-zinc-500" : "text-zinc-400"
+                }`}
+              >
+                &gt;
+              </span>
+
+              <input
+                ref={inputRef}
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isRecording ? "Listening to voice..." : "What can I do for you today?"
+                }
+                disabled={chat.isTyping}
+                className={`flex-1 bg-transparent text-xs sm:text-sm outline-none ${
+                  isDark
+                    ? "text-zinc-100 placeholder-zinc-500"
+                    : "text-zinc-900 placeholder-zinc-400"
+                }`}
+              />
+            </form>
+
+            {/* Bottom row: Green dot, Scope badge, Attachments, Send */}
+            <div className="flex items-center justify-between mt-2.5 pt-1">
+              {/* Left: Green status dot + Scope pill */}
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] flex-shrink-0" />
+
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border truncate select-none ${
+                    isDark
+                      ? "bg-zinc-800/80 border-zinc-700/60 text-zinc-300"
+                      : "bg-zinc-100 border-zinc-200 text-zinc-700"
+                  }`}
+                  title={`Context scoped to ${currentScope}`}
+                >
+                  <Scan size={11} className={isDark ? "text-zinc-400" : "text-zinc-500"} />
+                  <span className="truncate">{currentScope}</span>
+                </div>
+              </div>
+
+              {/* Right: Hidden file input, Paperclip, Mic, Send */}
+              <div className="flex items-center gap-1">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
+
+                {/* Paperclip */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    isDark
+                      ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  }`}
+                  title="Attach file or context"
+                >
+                  <Paperclip size={14} />
+                </button>
+
+                {/* Mic */}
+                <button
+                  type="button"
+                  onClick={handleToggleVoice}
+                  className={`p-1.5 rounded-md transition-colors ${
+                    isRecording
+                      ? "text-rose-500 bg-rose-500/10 animate-pulse"
+                      : isDark
+                      ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
+                      : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  }`}
+                  title={isRecording ? "Stop listening" : "Voice input"}
+                >
+                  {isRecording ? <MicOff size={14} /> : <Mic size={14} />}
+                </button>
+
+                {/* Send button (Up Arrow) */}
+                <button
+                  type="button"
+                  onClick={() => handleSubmit()}
+                  disabled={chat.isTyping || (!inputValue.trim() && !attachedFileName)}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all ${
+                    !chat.isTyping && (inputValue.trim() || attachedFileName)
+                      ? isDark
+                        ? "bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm active:scale-95 cursor-pointer"
+                        : "bg-zinc-900 text-white hover:bg-black shadow-sm active:scale-95 cursor-pointer"
+                      : isDark
+                      ? "bg-zinc-800/60 text-zinc-600 cursor-not-allowed"
+                      : "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                  }`}
+                  title="Send"
+                >
+                  <ArrowUp size={14} strokeWidth={2.4} />
+                </button>
+              </div>
             </div>
-          </form>
-        </motion.div>
-      )}
-    </AnimatePresence>
+          </div>
+        </div>
+      </div>
+    </motion.div>
   );
 }

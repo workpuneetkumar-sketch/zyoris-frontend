@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
 import { Project } from "@/lib/api/projectsApi";
+import { useRBAC } from "@/hooks/useRBAC";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 interface ProjectFormModalProps {
   isOpen: boolean;
@@ -17,6 +19,10 @@ export default function ProjectFormModal({
   initialData,
   loading,
 }: ProjectFormModalProps) {
+  const { hasPermission } = useRBAC();
+  const isEdit = Boolean(initialData);
+  const canSubmit = isEdit ? hasPermission("projects.update") : hasPermission("projects.create");
+
   const [form, setForm] = useState({
     name: initialData?.name || "",
     description: initialData?.description || "",
@@ -63,9 +69,10 @@ export default function ProjectFormModal({
             <input
               name="name"
               required
+              disabled={!canSubmit}
               value={form.name}
               onChange={handleChange}
-              className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
+              className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm disabled:bg-gray-100 disabled:text-gray-500"
             />
           </div>
           <div>
@@ -73,9 +80,10 @@ export default function ProjectFormModal({
             <textarea
               name="description"
               rows={3}
+              disabled={!canSubmit}
               value={form.description}
               onChange={handleChange}
-              className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
+              className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm disabled:bg-gray-100 disabled:text-gray-500"
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -83,19 +91,21 @@ export default function ProjectFormModal({
               <label className="block text-sm font-medium text-gray-700">Client ID</label>
               <input
                 name="clientId"
+                disabled={!canSubmit}
                 value={form.clientId}
                 onChange={handleChange}
                 placeholder="Optional client ID"
-                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
+                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm disabled:bg-gray-100 disabled:text-gray-500"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Status</label>
               <select
                 name="status"
+                disabled={!canSubmit}
                 value={form.status}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white"
+                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white disabled:bg-gray-100 disabled:text-gray-500"
               >
                 <option value="PLANNING">Planning</option>
                 <option value="ACTIVE">Active</option>
@@ -110,9 +120,10 @@ export default function ProjectFormModal({
               <input
                 type="date"
                 name="startDate"
+                disabled={!canSubmit}
                 value={form.startDate}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
+                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm disabled:bg-gray-100 disabled:text-gray-500"
               />
             </div>
             <div>
@@ -120,9 +131,10 @@ export default function ProjectFormModal({
               <input
                 type="date"
                 name="endDate"
+                disabled={!canSubmit}
                 value={form.endDate}
                 onChange={handleChange}
-                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm"
+                className="mt-1 w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm disabled:bg-gray-100 disabled:text-gray-500"
               />
             </div>
           </div>
@@ -134,13 +146,15 @@ export default function ProjectFormModal({
             >
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {initialData ? "Update" : "Create"}
-            </button>
+            <PermissionGuard permission={isEdit ? "projects.update" : "projects.create"}>
+              <button
+                type="submit"
+                disabled={loading || !canSubmit}
+                className="px-5 py-2.5 text-sm font-semibold text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {initialData ? "Update" : "Create"}
+              </button>
+            </PermissionGuard>
           </div>
         </form>
       </div>

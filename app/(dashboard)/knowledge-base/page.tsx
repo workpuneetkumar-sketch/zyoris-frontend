@@ -1,4 +1,5 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import React, { useEffect, useState, useCallback } from "react";
 import {
@@ -292,16 +293,18 @@ export default function KnowledgeBasePage() {
           </h1>
           <p className="text-sm text-gray-500 mt-1 ml-12">Documentation, guides, and internal resources</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingArticle(null);
-            setShowArticleModal(true);
-          }}
-          className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition transform hover:-translate-y-0.5"
-        >
-          <Plus size={18} />
-          New Article
-        </button>
+        <PermissionGuard permission="knowledge.create">
+          <button
+            onClick={() => {
+              setEditingArticle(null);
+              setShowArticleModal(true);
+            }}
+            className="inline-flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl font-semibold shadow-lg shadow-indigo-200 hover:bg-indigo-700 transition transform hover:-translate-y-0.5"
+          >
+            <Plus size={18} />
+            New Article
+          </button>
+        </PermissionGuard>
       </div>
 
       {/* Stats Cards */}
@@ -357,15 +360,17 @@ export default function KnowledgeBasePage() {
                 <Folder size={18} className="text-indigo-500" />
                 Categories
               </h2>
-              <button
-                onClick={() => {
-                  setEditingCategory(null);
-                  setShowCategoryModal(true);
-                }}
-                className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <Plus size={18} className="text-gray-500 hover:text-indigo-600" />
-              </button>
+              <PermissionGuard permission="knowledge.create">
+                <button
+                  onClick={() => {
+                    setEditingCategory(null);
+                    setShowCategoryModal(true);
+                  }}
+                  className="p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  <Plus size={18} className="text-gray-500 hover:text-indigo-600" />
+                </button>
+              </PermissionGuard>
             </div>
             <ul className="space-y-1">
               <li>
@@ -393,27 +398,31 @@ export default function KnowledgeBasePage() {
                     {cat.name}
                   </button>
                   <div className="hidden group-hover:flex items-center gap-1 mr-1">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setEditingCategory(cat);
-                        setShowCategoryModal(true);
-                      }}
-                      className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
-                    >
-                      <Edit size={14} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm(`Delete category "${cat.name}"?`)) {
-                          handleDeleteCategory(cat.id);
-                        }
-                      }}
-                      className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <PermissionGuard permission="knowledge.update">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingCategory(cat);
+                          setShowCategoryModal(true);
+                        }}
+                        className="p-1 text-gray-400 hover:text-indigo-600 transition-colors"
+                      >
+                        <Edit size={14} />
+                      </button>
+                    </PermissionGuard>
+                    <PermissionGuard permission="knowledge.delete">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm(`Delete category "${cat.name}"?`)) {
+                            handleDeleteCategory(cat.id);
+                          }
+                        }}
+                        className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </PermissionGuard>
                   </div>
                 </li>
               ))}
@@ -514,26 +523,30 @@ export default function KnowledgeBasePage() {
                       >
                         <ChevronRight size={18} />
                       </button>
-                      <button
-                        onClick={() => {
-                          setEditingArticle(article);
-                          setShowArticleModal(true);
-                        }}
-                        className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <Edit size={18} />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDeletingArticleId(article.id);
-                          setShowDeleteModal(true);
-                        }}
-                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      <PermissionGuard permission="knowledge.update" action="disable" disabledTooltip="You do not have permission to edit articles.">
+                        <button
+                          onClick={() => {
+                            setEditingArticle(article);
+                            setShowArticleModal(true);
+                          }}
+                          className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                          title="Edit"
+                        >
+                          <Edit size={18} />
+                        </button>
+                      </PermissionGuard>
+                      <PermissionGuard permission="knowledge.delete" action="disable" disabledTooltip="You do not have permission to delete articles.">
+                        <button
+                          onClick={() => {
+                            setDeletingArticleId(article.id);
+                            setShowDeleteModal(true);
+                          }}
+                          className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          title="Delete"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </PermissionGuard>
                     </div>
                   </div>
                 </div>

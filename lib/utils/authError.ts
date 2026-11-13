@@ -62,7 +62,8 @@ export type AuthErrorKind =
   // ── Day 3 ──────────────────────────────────────────────────────────────────
   | "account_disabled"     // admin disabled this account
   | "account_inactive"     // account not yet activated
-  | "email_not_verified";  // login blocked — email must be verified first
+  | "email_not_verified"  // login blocked — email must be verified first
+  | "forbidden";          // role/login-type mismatch (wrong login flow for this account)
 
 export interface NormalisedAuthError {
   /** Stable machine-readable kind — safe to switch on in UI logic. */
@@ -95,25 +96,36 @@ export function normaliseAuthError(error: unknown): NormalisedAuthError {
   if (errorCode === "OTP_INVALID") {
     return {
       kind: "otp_invalid",
-      message: "The code you entered is incorrect. Please check and try again.",
+      message: "The code you entered is incorrect.",
     };
   }
 
   if (errorCode === "OTP_EXPIRED") {
     return {
       kind: "otp_expired",
-      message: "This code has expired. Please request a new one.",
+      message: "Your code has expired. Please request a new code.",
     };
   }
 
   if (
     errorCode === "TOO_MANY_ATTEMPTS" ||
-    errorCode === "MAX_ATTEMPTS_EXCEEDED"
+    errorCode === "MAX_ATTEMPTS_EXCEEDED" ||
+    errorCode === "OTP_TOO_MANY_ATTEMPTS"
   ) {
     return {
       kind: "too_many_attempts",
       message:
-        "Too many failed attempts. Please wait a few minutes before trying again.",
+        "Too many failed attempts. Please request a new code.",
+    };
+  }
+
+  if (
+    errorCode === "PASSWORD_REUSED" ||
+    (typeof data?.message === "string" && data.message.includes("cannot be the same as your current password"))
+  ) {
+    return {
+      kind: "password_too_weak",
+      message: "Your new password cannot be the same as your current password. Please choose a different password.",
     };
   }
 
@@ -217,6 +229,29 @@ export function normaliseAuthError(error: unknown): NormalisedAuthError {
     };
   }
 
+  // ── Role / login-type mismatch (admin↔employee enforcement) ────────────────
+  if (errorCode === "FORBIDDEN") {
+    const forbiddenMsg = String(data?.message ?? "").toLowerCase();
+    // Admin account reached via the Employee sign-in flow.
+    if (forbiddenMsg.includes("continue as admin")) {
+      return {
+        kind: "forbidden",
+        message: "Administrator accounts must sign in through 'Continue as Admin'.",
+      };
+    }
+    // Non-admin account reached via the Admin login flow.
+    if (forbiddenMsg.includes("administrator access") || forbiddenMsg.includes("does not have")) {
+      return {
+        kind: "forbidden",
+        message: "This account does not have administrator access. Please use the Employee sign-in instead.",
+      };
+    }
+    return {
+      kind: "forbidden",
+      message: "You do not have permission to perform this action.",
+    };
+  }
+
   // ── Status-code fallbacks ────────────────────────────────────────────────────
   const rawMessage = String(
     data?.message ?? data?.msg ?? ""
@@ -287,6 +322,13 @@ export function normaliseAuthError(error: unknown): NormalisedAuthError {
     return {
       kind: "validation",
       message: "Please check your details and try again.",
+    };
+  }
+
+  if (status === 403) {
+    return {
+      kind: "forbidden",
+      message: "You do not have permission to perform this action.",
     };
   }
 

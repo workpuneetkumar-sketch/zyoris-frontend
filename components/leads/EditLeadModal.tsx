@@ -4,6 +4,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AlertTriangle, CheckCircle2, X, Save, Loader2 } from "lucide-react";
 import LeadForm, { LeadFormValues } from "./LeadForm";
+import { getLeadEstimatedValueError } from "./leadEditPayload";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 
 interface EditLeadModalProps {
     lead: LeadFormValues & { leadId: string };
@@ -98,7 +101,8 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
 
     const [form, setForm] = useState<LeadFormValues>(initialForm);
     const [loading, setLoading] = useState(false);
-    const [errors, setErrors] = useState<{ name?: string; email?: string }>({});
+    const { hasPermission } = useRBAC();
+    const [errors, setErrors] = useState<{ name?: string; email?: string; estimatedValue?: string }>({});
     const [showUnsavedPopup, setShowUnsavedPopup] = useState(false);
 
     const isDirty = !deepEqual(form, initialForm);
@@ -113,15 +117,19 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
     }, [isDirty, onClose]);
 
     const handleSave = useCallback(async () => {
-        const newErrors: { name?: string; email?: string } = {};
+        if (!hasPermission("leads.update")) return;
+        const newErrors: { name?: string; email?: string; estimatedValue?: string } = {};
         if (!form.name.trim()) newErrors.name = "Name is required";
         if (!form.email.trim()) newErrors.email = "Email is required";
+        const estimatedValueError = getLeadEstimatedValueError(form.estimatedValue);
+        if (estimatedValueError) newErrors.estimatedValue = estimatedValueError;
 
         if (Object.keys(newErrors).length > 0) {
             setErrors(newErrors);
             setShowUnsavedPopup(false);
             return;
         }
+        setErrors({});
 
         try {
             setLoading(true);
@@ -134,7 +142,7 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
         } finally {
             setLoading(false);
         }
-    }, [form, onSave, onClose]);
+    }, [form, onSave, onClose, hasPermission]);
 
     const handleDiscard = useCallback(() => {
         setShowUnsavedPopup(false);
@@ -178,7 +186,7 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
 
                     {/* Body */}
                     <div className="p-6 overflow-y-auto flex-1">
-                        <LeadForm form={form} setForm={setForm} errors={errors} />
+                        <LeadForm form={form} setForm={setForm} disabled={!hasPermission("leads.update")} errors={errors} />
                     </div>
 
                     {/* Footer */}
@@ -197,18 +205,20 @@ export default function EditLeadModal({ lead, onClose, onSave }: EditLeadModalPr
                             >
                                 Cancel
                             </button>
-                            <button
-                                type="button"
-                                onClick={handleSave}
-                                disabled={loading}
-                                className="flex items-center justify-center gap-2 h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-70 shadow-sm transition-all"
-                            >
-                                {loading ? (
-                                    <><Loader2 size={16} className="animate-spin" /> Saving…</>
-                                ) : (
-                                    <><Save size={16} /> Save Changes</>
-                                )}
-                            </button>
+                            <PermissionGuard permission="leads.update" action="disable" disabledTooltip="You do not have permission to edit leads.">
+                                <button
+                                    type="button"
+                                    onClick={handleSave}
+                                    disabled={loading}
+                                    className="flex items-center justify-center gap-2 h-10 px-5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-70 shadow-sm transition-all"
+                                >
+                                    {loading ? (
+                                        <><Loader2 size={16} className="animate-spin" /> Saving…</>
+                                    ) : (
+                                        <><Save size={16} /> Save Changes</>
+                                    )}
+                                </button>
+                            </PermissionGuard>
                         </div>
                     </div>
                 </div>

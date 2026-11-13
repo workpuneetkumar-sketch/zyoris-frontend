@@ -14,18 +14,16 @@ import {
   ShieldAlert,
   Loader2,
   Archive,
-  X,
-  ExternalLink,
-  UserRound,
 } from "lucide-react";
 import classNames from "classnames";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import type { Notification, NotificationCategory } from "@/types/notifications";
 import { getNotificationPath } from "@/utils/notificationNavigation";
 import { toast } from "sonner";
+import { SuccessStatusIcon, InfoStatusIcon, WarningStatusIcon, ErrorStatusIcon, MinimalCloseIcon, type ToastType } from "@/components/ui/Toast";
 
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
@@ -99,102 +97,122 @@ function NotificationPageItem({
   onOpen: (notification: Notification) => void;
   archived?: boolean;
 }) {
+  const normType = (notification.type || "").toLowerCase();
+  const type: ToastType =
+    normType === "success"
+      ? "success"
+      : normType === "error" || normType === "danger"
+      ? "error"
+      : normType === "warning"
+      ? "warning"
+      : "info";
+
+  const variantStyles = {
+    success: {
+      bg: "bg-[#EDFAF3]",
+      border: "border-[#7FE2BA]",
+      icon: <SuccessStatusIcon />,
+    },
+    info: {
+      bg: "bg-[#EEF6FF]",
+      border: "border-[#99CCF9]",
+      icon: <InfoStatusIcon />,
+    },
+    warning: {
+      bg: "bg-[#FFF9EE]",
+      border: "border-[#FCD38D]",
+      icon: <WarningStatusIcon />,
+    },
+    error: {
+      bg: "bg-[#FDF2F1]",
+      border: "border-[#F8B4AF]",
+      icon: <ErrorStatusIcon />,
+    },
+  }[type];
+
+  const title =
+    notification.title?.trim() ||
+    (notification.action && notification.action.includes("WHATSAPP")
+      ? "WhatsApp Message Received"
+      : "Notification");
+
   return (
     <div
       className={classNames(
-        "group relative flex flex-col sm:flex-row items-start gap-4 p-5 transition-all duration-200 rounded-xl cursor-pointer",
-        notification.priority.toLowerCase() === "critical" && "border-l-4 border-error",
-        !notification.read
-          ? "bg-primary/5 dark:bg-primary/10"
-          : "hover:bg-surface-hover dark:hover:bg-surface-hover"
+        "group relative flex items-start gap-4 p-5 rounded-2xl border shadow-[0_4px_16px_-2px_rgba(0,0,0,0.05),_0_2px_6px_-1px_rgba(0,0,0,0.03)] transition-all font-sans text-left cursor-pointer",
+        variantStyles.bg,
+        variantStyles.border,
+        !notification.read ? "ring-1 ring-black/5" : "opacity-95"
       )}
       onClick={() => onOpen(notification)}
     >
-      {/* Unread indicator */}
-      {!archived && !notification.read && (
-        <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-primary rounded-r-full" />
-      )}
+      {/* Status squircle icon */}
+      {variantStyles.icon}
 
-      {/* Entity Category Icon / Avatar */}
-      <div className="shrink-0">
-        {notification.actor ? (
-          <Avatar
-            src={notification.actor.avatarUrl ?? undefined}
-            alt={notification.actor.name}
-            fallback={notification.actor.name.charAt(0).toUpperCase()}
-            size="lg"
-          />
-        ) : (
-          <div
-            className={classNames(
-              "w-12 h-12 rounded-full flex items-center justify-center",
-              getCategoryStyles(notification.category)
-            )}
-          >
-            {getCategoryIcon(notification.category)}
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-3">
+      <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <h3
-              className={classNames(
-                "font-bold text-base truncate",
-                notification.read ? "text-text-secondary" : "text-text"
-              )}
-            >
-              {notification.title}
+            <h3 className="text-base font-semibold text-[#1E293B] leading-snug truncate">
+              {title}
             </h3>
             {!archived && !notification.read && (
               <span className="w-2.5 h-2.5 rounded-full bg-primary shrink-0 animate-pulse" />
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              {!notification.read && (
-                <button
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onMarkRead(notification.id);
-                  }}
-                  className="p-2 rounded-lg hover:bg-primary/10 text-text-muted hover:text-primary transition-colors"
-                  title="Mark as read"
-                >
-                  <Check size={16} />
-                </button>
-              )}
-              {!archived && <button
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onDelete(notification.id);
-                }}
-                className="p-2 rounded-lg hover:bg-surface-hover text-text-muted hover:text-text-secondary transition-colors"
-                title="Archive"
-              >
-                <Archive size={16} />
-              </button>}
-            </div>
-          </div>
-        </div>
-        <p
-          className={classNames(
-            "text-base mt-2 leading-relaxed",
-            notification.read ? "text-text-muted" : "text-text-secondary"
-          )}
-        >
-          {notification.message}
-        </p>
-        {notification.actorName && (
-          <p className="text-xs text-text-muted mt-2">From {notification.actorName}</p>
-        )}
-        <div className="flex items-center mt-3">
-          <span className="text-sm text-text-muted">
+          <span className="text-xs text-[#64748B] font-medium shrink-0">
             {formatRelativeTime(notification.createdAt)}
           </span>
         </div>
+        {notification.message && (
+          <p className="text-[14px] font-normal text-[#475569] leading-relaxed mt-1 whitespace-pre-line">
+            {notification.message}
+          </p>
+        )}
+        {notification.actorName && (
+          <p className="text-xs text-[#64748B] mt-2">From {notification.actorName}</p>
+        )}
+      </div>
+
+      {notification.action && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen(notification);
+          }}
+          className="shrink-0 ml-2 px-4 py-2 rounded-lg border border-[#94A3B8] bg-white text-[13px] font-medium text-[#334155] hover:bg-slate-50 hover:border-slate-400 transition-colors cursor-pointer self-center shadow-none"
+        >
+          {notification.action.includes(".") ? "View" : notification.action}
+        </button>
+      )}
+
+      <div className="flex items-center gap-1 shrink-0 ml-auto self-start">
+        {!archived && !notification.read && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarkRead(notification.id);
+            }}
+            className="p-1.5 rounded-md text-[#94A3B8] hover:text-[#475569] hover:bg-black/5 transition-colors"
+            title="Mark as read"
+          >
+            <Check size={16} />
+          </button>
+        )}
+        {!archived && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete(notification.id);
+            }}
+            className="p-1.5 rounded-md text-[#94A3B8] hover:text-[#475569] hover:bg-black/5 transition-colors"
+            title="Archive / Dismiss"
+          >
+            <MinimalCloseIcon />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -204,12 +222,6 @@ export default function NotificationsPage() {
   const router = useRouter();
   const {
     notifications,
-    archivedNotifications,
-    archivedLoading,
-    archivedLoadingMore,
-    archivedError,
-    archivedHasMore,
-    archivedUnavailable,
     loading,
     loadingMore,
     hasMore,
@@ -221,8 +233,6 @@ export default function NotificationsPage() {
     removeNotification,
     bulkArchiveAllRead,
     fetchNextPage,
-    loadArchived,
-    fetchNextArchivedPage,
     realtimeStatus,
     refresh,
   } = useNotifications();
@@ -232,16 +242,10 @@ export default function NotificationsPage() {
   const [isMarkingAllRead, setIsMarkingAllRead] = useState(false);
   const [isArchivingAllRead, setIsArchivingAllRead] = useState(false);
   const [priority, setPriority] = useState("all");
-  const [view, setView] = useState<"active" | "archived">("active");
-  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
-
-  useEffect(() => {
-    if (view === "archived") void loadArchived();
-  }, [loadArchived, view]);
 
   // Filter and search notifications (Smart Grouping)
   const filteredNotifications = useMemo(() => {
-    const result = notifications.filter((n) => {
+    const result = (notifications || []).filter((n) => {
       const matchesSearch =
         n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         n.message.toLowerCase().includes(searchQuery.toLowerCase());
@@ -268,11 +272,6 @@ export default function NotificationsPage() {
 
     return result;
   }, [notifications, searchQuery, filter, priority]);
-
-  const filteredArchivedNotifications = useMemo(() => archivedNotifications.filter((notification) =>
-    notification.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    notification.message.toLowerCase().includes(searchQuery.toLowerCase())
-  ), [archivedNotifications, searchQuery]);
 
   // Group by date
   const groupedNotifications = useMemo(() => {
@@ -340,8 +339,10 @@ export default function NotificationsPage() {
   const handleMarkRead = async (id: string) => {
     try {
       await markRead(id);
-    } catch (cause: unknown) {
-      toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+    } catch (cause: any) {
+      if (!cause?.message?.includes("404") && cause?.response?.status !== 404) {
+        toast.error(cause instanceof Error ? cause.message : "Failed to mark notification as read");
+      }
     }
   };
 
@@ -354,13 +355,8 @@ export default function NotificationsPage() {
   };
 
   const handleNotificationOpen = async (notification: Notification) => {
-    setSelectedNotification(notification);
     if (!notification.read) await handleMarkRead(notification.id);
-  };
-
-  const handleOpenLinkedRecord = () => {
-    if (!selectedNotification) return;
-    const path = getNotificationPath(selectedNotification);
+    const path = getNotificationPath(notification);
     if (path) router.push(path);
   };
 
@@ -435,16 +431,6 @@ export default function NotificationsPage() {
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setView("active")}
-            className={classNames("px-4 py-2 rounded-full text-sm font-medium transition-all", view === "active" ? "bg-primary text-primary-foreground font-semibold" : "bg-background-secondary text-text-muted hover:bg-surface-hover")}
-          >All notifications</button>
-          <button
-            onClick={() => setView("archived")}
-            className={classNames("px-4 py-2 rounded-full text-sm font-medium transition-all", view === "archived" ? "bg-primary text-primary-foreground font-semibold" : "bg-background-secondary text-text-muted hover:bg-surface-hover")}
-          >Archived</button>
-        </div>
-        {view === "active" && <div className="flex flex-wrap gap-2">
           {CATEGORY_TABS.map((tab) => {
             const count = categoryUnreadCounts[tab.id] || 0;
             return (
@@ -474,8 +460,8 @@ export default function NotificationsPage() {
               </button>
             );
           })}
-        </div>}
-        {view === "active" && <select
+        </div>
+        <select
           value={priority}
           onChange={(event) => setPriority(event.target.value)}
           className="rounded-xl bg-background-secondary border border-border px-3 py-2 text-sm text-text"
@@ -486,26 +472,18 @@ export default function NotificationsPage() {
           <option value="reminder">Reminder</option>
           <option value="high">High</option>
           <option value="critical">Critical</option>
-        </select>}
+        </select>
       </div>
 
       {/* Notifications List */}
       <div className="bg-surface border border-border rounded-2xl overflow-hidden">
-        {view === "archived" && archivedUnavailable ? (
-          <div className="p-8 text-center text-text-secondary">Archived notifications aren&apos;t retrievable yet &mdash; ask backend to add an <code className="text-sm">archived</code> filter to GET /api/notifications</div>
-        ) : view === "archived" && archivedLoading && archivedNotifications.length === 0 ? (
-          <div className="p-6 space-y-4"><Skeleton variant="notification" count={4} /></div>
-        ) : view === "archived" && archivedError ? (
-          <div className="p-8 text-center"><p className="text-error">{archivedError}</p><button onClick={() => void loadArchived()} className="mt-2 text-primary font-semibold hover:underline">Retry</button></div>
-        ) : view === "active" && loading && notifications.length === 0 ? (
+        {loading && notifications.length === 0 ? (
           <div className="p-6 space-y-4">
             <Skeleton variant="notification" count={4} />
           </div>
-        ) : view === "active" && error ? (
+        ) : error ? (
           <div className="p-8 text-center"><p className="text-error">{error}</p><button onClick={() => void refresh()} className="mt-2 text-primary font-semibold hover:underline">Retry</button></div>
-        ) : view === "archived" && filteredArchivedNotifications.length === 0 ? (
-          <EmptyState icon={Archive} title="No archived notifications" description="Archived notifications will appear here when the backend supports retrieving them." />
-        ) : view === "active" && groupedNotifications.length === 0 ? (
+        ) : groupedNotifications.length === 0 ? (
           <EmptyState
             icon={Bell}
             title="All caught up!"
@@ -516,11 +494,8 @@ export default function NotificationsPage() {
             }
           />
         ) : (
-          <div className="divide-y divide-border">
-            {view === "archived" && filteredArchivedNotifications.map((notification) => (
-              <NotificationPageItem key={notification.id} notification={notification} archived onMarkRead={handleMarkRead} onDelete={handleArchive} onOpen={handleNotificationOpen} />
-            ))}
-            {view === "active" && groupedNotifications.map((group) => (
+          <div className="p-4 space-y-3">
+            {groupedNotifications.map((group) => (
               <div key={group.label}>
                 <div className="px-6 py-3 bg-background-secondary border-b border-border">
                   <h2 className="text-sm font-bold text-text-muted uppercase tracking-wider">
@@ -539,7 +514,7 @@ export default function NotificationsPage() {
               </div>
             ))}
 
-            {view === "active" && hasMore && (
+            {hasMore && (
               <div className="p-4 text-center">
                 <button
                   onClick={() => fetchNextPage()}
@@ -551,39 +526,9 @@ export default function NotificationsPage() {
                 </button>
               </div>
             )}
-            {view === "archived" && archivedHasMore && (
-              <div className="p-4 text-center"><button onClick={() => void fetchNextArchivedPage()} disabled={archivedLoadingMore} className="px-4 py-2 text-sm text-primary font-semibold hover:underline">{archivedLoadingMore ? "Loading more..." : "Load more"}</button></div>
-            )}
           </div>
         )}
       </div>
-
-      {selectedNotification && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/30" onClick={() => setSelectedNotification(null)}>
-          <aside className="h-full w-full max-w-xl overflow-y-auto bg-surface shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="sticky top-0 flex items-center justify-between border-b border-border bg-surface p-5">
-              <h2 className="text-lg font-bold text-text">Notification details</h2>
-              <button onClick={() => setSelectedNotification(null)} className="rounded-lg p-2 text-text-muted hover:bg-surface-hover" title="Close"><X size={20} /></button>
-            </div>
-            <div className="space-y-6 p-6">
-              <div><h3 className="text-xl font-bold text-text">{selectedNotification.title}</h3><p className="mt-3 whitespace-pre-wrap text-text-secondary">{selectedNotification.message}</p></div>
-              <dl className="grid grid-cols-2 gap-4 text-sm">
-                <div><dt className="text-text-muted">Actor</dt><dd className="mt-1 flex items-center gap-2 text-text"> <UserRound size={15} />{selectedNotification.actorName || selectedNotification.actor?.name || "System"}</dd></div>
-                <div><dt className="text-text-muted">Category</dt><dd className="mt-1 text-text">{selectedNotification.category || "Uncategorized"}</dd></div>
-                <div><dt className="text-text-muted">Priority</dt><dd className="mt-1 text-text">{selectedNotification.priority}</dd></div>
-                <div><dt className="text-text-muted">Created</dt><dd className="mt-1 text-text">{new Date(selectedNotification.createdAt).toLocaleString()}</dd></div>
-                <div><dt className="text-text-muted">Read</dt><dd className="mt-1 text-text">{selectedNotification.readAt ? new Date(selectedNotification.readAt).toLocaleString() : "Unread"}</dd></div>
-              </dl>
-              <div className="flex flex-wrap gap-2">
-                {!selectedNotification.read && <button onClick={() => void handleMarkRead(selectedNotification.id)} className="rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-primary-foreground">Mark as read</button>}
-                <button onClick={() => void handleArchive(selectedNotification.id)} className="rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">Archive</button>
-                {getNotificationPath(selectedNotification) && <button onClick={handleOpenLinkedRecord} className="flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover">Open linked record <ExternalLink size={15} /></button>}
-              </div>
-              <p className="text-xs text-text-muted">Mark as unread, dismiss, snooze, and unarchive are unavailable until the backend exposes those notification routes.</p>
-            </div>
-          </aside>
-        </div>
-      )}
     </div>
   );
 }

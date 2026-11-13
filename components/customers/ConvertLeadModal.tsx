@@ -5,6 +5,7 @@ import { X, Loader2 as SpinnerIcon, ArrowRightLeft, CheckCircle2, Briefcase, Use
 import { useRouter } from "next/navigation";
 import { ConvertLeadPayload, ConvertLeadResult } from "@/types/customers";
 import { convertLeadToCustomer, fetchCustomerOwners } from "@/lib/api/customersApi";
+import { buildLeadConversionRequestPayload, getConversionDealAmountError, getUsableSavedLeadBudget } from "./leadConversionPayload";
 import { fetchLeads } from "@/lib/api/leadsApi";
 import { fetchCompanies } from "@/lib/api/companiesApi";
 import { toast } from "react-toastify";
@@ -34,7 +35,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
     ownerId: "",
     createDeal: true,
     dealName: "",
-    dealAmount: 0,
+    dealAmount: undefined,
   });
   const [leads, setLeads] = useState<Lead[]>([]);
   const [companies, setCompanies] = useState<Array<{ id: string; name: string }>>([]);
@@ -77,7 +78,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
           ...prev,
           leadId: targetLeadId,
           dealName: prev.dealName || (l ? `${l.name} - New Deal` : ""),
-          dealAmount: prev.dealAmount || (l && typeof l.estimatedValue === "number" ? l.estimatedValue : 0),
+          dealAmount: prev.dealAmount ?? getUsableSavedLeadBudget(l),
         }));
       }
     }).finally(() => setLoadingLists(false));
@@ -96,9 +97,10 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
       ...prev,
       leadId: id,
       dealName: prev.dealName || (l ? `${l.name} - New Deal` : ""),
-      dealAmount: prev.dealAmount || (l && typeof l.estimatedValue === "number" ? l.estimatedValue : 0),
+      dealAmount: prev.dealAmount ?? getUsableSavedLeadBudget(l),
     }));
     if (errors.leadId) setErrors((p) => ({ ...p, leadId: "" }));
+    if (errors.dealAmount) setErrors((p) => ({ ...p, dealAmount: "" }));
   };
 
   const validate = (): boolean => {
@@ -110,10 +112,14 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
       if (!payload.dealName?.trim()) {
         newErrors.dealName = "Deal name is required when creating a deal";
       }
-      if (payload.dealAmount === undefined || payload.dealAmount === null || payload.dealAmount < 0) {
-        newErrors.dealAmount = "Deal amount must be 0 or greater";
-      }
     }
+    const selectedLead = leads.find((lead) => lead.id === payload.leadId);
+    const amountError = getConversionDealAmountError(
+      payload.createDeal === true,
+      payload.dealAmount,
+      getUsableSavedLeadBudget(selectedLead),
+    );
+    if (amountError) newErrors.dealAmount = amountError;
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -123,16 +129,7 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
     if (!validate()) return;
     setConverting(true);
     try {
-      const finalPayload: ConvertLeadPayload = { ...payload };
-      if (!finalPayload.companyId?.trim()) delete (finalPayload as any).companyId;
-      if (!finalPayload.ownerId?.trim()) delete (finalPayload as any).ownerId;
-      if (!finalPayload.createDeal) {
-        delete (finalPayload as any).dealName;
-        delete (finalPayload as any).dealAmount;
-      } else {
-        if (!finalPayload.dealName?.trim()) delete (finalPayload as any).dealName;
-        if (!finalPayload.dealAmount) delete (finalPayload as any).dealAmount;
-      }
+      const finalPayload = buildLeadConversionRequestPayload(payload);
 
       const r = await convertLeadToCustomer(finalPayload);
       setResult(r);
@@ -352,15 +349,15 @@ export function ConvertLeadModal({ isOpen, onClose, onSuccess, prefillLeadId }: 
                     </div>
                     <div>
                       <label className="text-[11px] font-medium mb-1 flex items-center gap-1" style={{ color: "var(--color-text-secondary)" }}>
-                        <DollarSign size={12} /> Deal Amount <span style={{ color: "var(--color-error)" }}>*</span>
+                        <DollarSign size={12} /> Deal Amount
                       </label>
                       <input
                         type="number"
                         min="0"
                         step="any"
-                        value={payload.dealAmount ?? 0}
-                        onChange={(e) => setField("dealAmount", Number(e.target.value) || 0)}
-                        placeholder="0"
+                        value={payload.dealAmount ?? ""}
+                        onChange={(e) => setField("dealAmount", e.target.value === "" ? undefined : Number(e.target.value))}
+                        placeholder="Leave blank to use the Lead's saved budget"
                         className={INPUT_CLASS + (errors.dealAmount ? " border-[var(--color-error)] focus:ring-[var(--color-error)]/25" : "")}
                       />
                       {errors.dealAmount && <p className="text-xs mt-1" style={{ color: "var(--color-error)" }}>{errors.dealAmount}</p>}

@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import {
-  Sparkles,
-  Brain,
+  FileText,
   MessageSquare,
   RefreshCw,
   Zap,
@@ -91,13 +90,13 @@ export function DealAISummaryCard({ dealId, className = "" }: DealAISummaryCardP
       <div className="px-5 py-3.5 border-b border-gray-100 bg-gradient-to-r from-blue-50/60 via-indigo-50/40 to-white flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-xs">
-            <Sparkles size={16} />
+            <FileText size={16} />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-bold text-gray-900 text-sm tracking-tight">CRM Deal AI Summary & Next Action</h3>
+              <h3 className="font-bold text-gray-900 text-sm tracking-tight">Deal Summary & Next Actions</h3>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-200">
-                <ShieldCheck size={11} className="text-blue-700" /> WhatsApp AI Context
+                <ShieldCheck size={11} className="text-blue-700" /> WhatsApp Context
               </span>
             </div>
             <p className="text-[11px] text-gray-500 font-medium">ActivityCapture Pipeline & CRM Intelligence</p>
@@ -108,7 +107,7 @@ export function DealAISummaryCard({ dealId, className = "" }: DealAISummaryCardP
           onClick={loadData}
           disabled={loading}
           className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-          title="Refresh Deal AI Insights"
+          title="Refresh Insights"
         >
           <RefreshCw size={14} className={loading ? "animate-spin text-blue-600" : ""} />
         </button>
@@ -137,7 +136,7 @@ export function DealAISummaryCard({ dealId, className = "" }: DealAISummaryCardP
             <div className="bg-gray-50/70 p-4 rounded-xl border border-gray-100 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-gray-800 flex items-center gap-1.5">
-                  <Brain size={14} className="text-blue-600" /> Deal Executive Summary
+                  <FileText size={14} className="text-blue-600" /> Executive Summary
                 </span>
                 {summaryData?.whatsAppIncluded && (
                   <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded border border-blue-200">

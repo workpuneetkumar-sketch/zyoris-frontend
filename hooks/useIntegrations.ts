@@ -155,6 +155,17 @@ export function useIntegrations() {
             statusUpper === "PAUSED" ||
             statusUpper === "ERROR";
 
+          const mergedConfig =
+            matchingInstance.config ??
+            c.integration?.config ??
+            c.connectionState?.config ??
+            null;
+          const syncedAt =
+            matchingInstance.lastSyncedAt ??
+            matchingInstance.lastSyncAt ??
+            c.integration?.lastSyncedAt ??
+            null;
+
           return {
             ...c,
             isConnected,
@@ -163,21 +174,44 @@ export function useIntegrations() {
             connectionState: {
               id: matchingInstance.id,
               status: matchingInstance.status,
-              lastSyncAt: matchingInstance.lastSyncAt,
+              isEnabled: matchingInstance.isEnabled ?? c.integration?.isEnabled,
+              lastSyncAt: syncedAt || undefined,
+              lastSyncedAt: syncedAt,
               errorCount: matchingInstance.errorCount,
               lastError: matchingInstance.lastError,
               displayName:
-                matchingInstance.displayName || matchingInstance.name,
+                matchingInstance.displayName || matchingInstance.name || c.integration?.name,
+              config: mergedConfig,
             },
           };
         }
 
-        // If connector returned its own individual connectionId from backend
-        if (c.connectionId || c.connectionState?.id) {
+        // If connector returned its own embedded integration record or connectionId from backend
+        if (c.integration?.id || c.connectionId || c.connectionState?.id) {
+          const emb = c.integration;
+          const statusUpper = ((emb?.status || c.status || "ACTIVE") + "").toUpperCase();
+          const isConnected =
+            statusUpper === "ACTIVE" ||
+            statusUpper === "CONNECTED" ||
+            statusUpper === "PAUSED" ||
+            statusUpper === "ERROR";
+
           return {
             ...c,
-            isConnected: c.isConnected ?? true,
-            status: c.status || "ACTIVE",
+            isConnected: c.isConnected ?? isConnected,
+            connectionId: emb?.id || c.connectionId || c.connectionState?.id,
+            status: emb?.status || c.status || "ACTIVE",
+            connectionState: emb
+              ? {
+                  id: emb.id,
+                  status: emb.status,
+                  isEnabled: emb.isEnabled,
+                  lastSyncAt: emb.lastSyncedAt || undefined,
+                  lastSyncedAt: emb.lastSyncedAt ?? null,
+                  displayName: emb.name || c.name,
+                  config: emb.config ?? null,
+                }
+              : c.connectionState,
           };
         }
 
@@ -296,8 +330,11 @@ export function useIntegrations() {
             connectionState: c.connectionState
               ? {
                   ...c.connectionState,
-                  displayName: payload.displayName || c.connectionState.displayName,
+                  displayName: payload.name || payload.displayName || c.connectionState.displayName,
                   status: payload.status || c.connectionState.status,
+                  config: payload.config
+                    ? { ...(c.connectionState.config || {}), ...payload.config }
+                    : c.connectionState.config,
                 }
               : undefined,
           };
@@ -371,8 +408,11 @@ export function useIntegrations() {
     return res;
   };
 
-  const triggerSync = async (id: string) => {
-    const res = await triggerSyncApi(id);
+  const triggerSync = async (
+    id: string,
+    options?: { entityType?: string; entities?: string[]; direction?: string; fullSync?: boolean }
+  ) => {
+    const res = await triggerSyncApi(id, options);
     await fetchData();
     return res;
   };

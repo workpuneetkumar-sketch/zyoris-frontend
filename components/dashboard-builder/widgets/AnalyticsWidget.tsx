@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/AnalyticsWidget.tsx
 // Real data: GET /analytics/demand/trends via useDemandTrends hook.
 // Mock const data (27,100 visitors / 5,420 conversions / +18.4% MoM / Feb-Jul bars) removed entirely.
@@ -26,8 +29,26 @@ function fmtK(v: number): string {
   return v >= 1000 ? `${(v / 1000).toFixed(1)}K` : String(v);
 }
 
-export function AnalyticsWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: trends, loading, error, refetch } = useDemandTrends();
+export function AnalyticsWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("analytics.view");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: trends, loading, error, refetch } = useDemandTrends(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
@@ -50,6 +71,11 @@ export function AnalyticsWidget({ isPreview }: { isPreview?: boolean }) {
   }
 
   // ── Error ────────────────────────────────────────────────────────────────────
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
+  }
+
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 p-3 text-center">

@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/HRWidget.tsx
 // Real data: GET /hr/employees/get-employees via useHREmployees hook.
 // Mock STATS (248/12/7) and DEPT_DATA (Engineering 35% etc.) removed entirely.
@@ -20,8 +23,26 @@ function deptColor(dept: string): string {
   return DEPT_COLORS[dept] ?? "#94a3b8";
 }
 
-export function HRWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: employees, loading, error, refetch } = useHREmployees();
+export function HRWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["employees.view", "hr.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: employees, loading, error, refetch } = useHREmployees(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   // ── Loading ──────────────────────────────────────────────────────────────────
   if (loading) {
@@ -50,6 +71,11 @@ export function HRWidget({ isPreview }: { isPreview?: boolean }) {
   }
 
   // ── Error ────────────────────────────────────────────────────────────────────
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
+  }
+
   if (error) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-2 p-3 text-center">

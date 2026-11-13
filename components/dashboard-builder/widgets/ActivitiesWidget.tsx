@@ -4,7 +4,9 @@
 // Mock const ACTIVITIES removed entirely.
 
 import { Phone, Mail, MessageSquare, Calendar, FileText, Clock, RefreshCw, AlertCircle } from "lucide-react";
+import { useEffect } from "react";
 import { useActivityFeed } from "@/hooks/useDashboard";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { TimelineActivity } from "@/lib/api/dashboardApi";
 
 const TYPE_META: Record<string, { icon: React.ElementType; color: string }> = {
@@ -32,8 +34,26 @@ function relativeTime(iso?: string): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-export function ActivitiesWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: items, loading, error, refetch } = useActivityFeed(5);
+export function ActivitiesWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasAnyPermission, permissionsLoaded } = useRBAC();
+  const canView = hasAnyPermission(["crm.view", "leads.view", "activities.view"]);
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: items, loading, error, refetch } = useActivityFeed(5, canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (

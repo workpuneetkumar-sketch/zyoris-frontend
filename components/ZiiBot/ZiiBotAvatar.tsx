@@ -1,149 +1,109 @@
 "use client";
 
+import { useState } from "react";
 import { motion } from "framer-motion";
+import Image from "next/image";
 
-const GREETING = "Hi 👋 I'm ZY BOT. Want to see how we can increase your revenue?";
+export const ZII_GREETING =
+  "Hi 👋 I'm ZII BOT, your Zyoris CRM Intelligence Assistant. Ask me about your leads, deals, tasks, pipelines, or CRM workflows!";
 
 interface ZiiBotAvatarProps {
   isIdle?: boolean;
   isTyping?: boolean;
-  size?: "button" | "panel" | "fullscreen";
+  size?: "button" | "panel" | "message" | "large" | "hero";
   className?: string;
+  showStatus?: boolean;
 }
 
-export function ZiiBotAvatar({ isIdle = true, isTyping = false, size = "button", className = "" }: ZiiBotAvatarProps) {
-  const scale = size === "button" ? 1 : size === "panel" ? 1.2 : 1.5;
-  const s = (n: number) => n * scale;
+const sizeConfig = {
+  message: { px: 36, rounded: "rounded-xl", ring: "ring-2 ring-blue-500/20 border border-blue-400/50" },
+  panel: { px: 44, rounded: "rounded-2xl", ring: "ring-2 ring-blue-500/30 border-2 border-blue-500/60" },
+  button: { px: 58, rounded: "rounded-full", ring: "ring-4 ring-blue-500/30 border-2 border-blue-600 shadow-[0_8px_25px_rgba(37,99,235,0.35)]" },
+  large: { px: 80, rounded: "rounded-3xl", ring: "ring-4 ring-blue-500/25 border-2 border-blue-500/60" },
+  hero: { px: 96, rounded: "rounded-3xl", ring: "ring-4 ring-blue-500/30 border-2 border-blue-600 shadow-[0_12px_32px_rgba(37,99,235,0.25)]" },
+};
+
+export function ZiiBotAvatar({
+  isIdle = true,
+  isTyping = false,
+  size = "button",
+  className = "",
+  showStatus = false,
+}: ZiiBotAvatarProps) {
+  const [imageError, setImageError] = useState(false);
+  const cfg = sizeConfig[size] || sizeConfig.button;
 
   return (
-    <motion.div
-      className={`zii-avatar-wrap ${className}`}
-      style={{ width: s(48), height: s(48), position: "relative" }}
-      animate={
-        isTyping
-          ? { scale: [1, 1.05, 1], transition: { repeat: Infinity, duration: 0.8 } }
-          : isIdle
-          ? { scale: [1, 1.03, 1], transition: { repeat: Infinity, duration: 2.5, ease: "easeInOut" } }
-          : {}
-      }
+    <div
+      className={`relative inline-flex items-center justify-center flex-shrink-0 ${className}`}
+      style={{ width: cfg.px, height: cfg.px }}
     >
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 64 64"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ overflow: "visible" }}
+      <motion.div
+        className={`relative w-full h-full ${cfg.rounded} overflow-hidden bg-gradient-to-b from-blue-50/90 via-white to-sky-50/90 ${cfg.ring} transition-all duration-300 ${
+          isTyping
+            ? "shadow-blue-500/40 ring-4 ring-blue-500/60 scale-105"
+            : "hover:shadow-lg"
+        }`}
+        animate={
+          isTyping
+            ? {
+                scale: [1, 1.06, 1],
+                boxShadow: [
+                  "0 0 12px rgba(37, 99, 235, 0.35)",
+                  "0 0 24px rgba(37, 99, 235, 0.6)",
+                  "0 0 12px rgba(37, 99, 235, 0.35)",
+                ],
+              }
+            : isIdle
+            ? {
+                y: [0, -2, 0],
+                transition: { repeat: Infinity, duration: 3.2, ease: "easeInOut" },
+              }
+            : {}
+        }
+        transition={
+          isTyping
+            ? { repeat: Infinity, duration: 1.1, ease: "easeInOut" }
+            : undefined
+        }
       >
-        {/* Soft glow behind head */}
-        <defs>
-          <linearGradient id="zii-head-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#a78bfa" />
-            <stop offset="50%" stopColor="#6366f1" />
-            <stop offset="100%" stopColor="#38bdf8" />
-          </linearGradient>
-          <linearGradient id="zii-cheek" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#c4b5fd" stopOpacity="0.6" />
-            <stop offset="100%" stopColor="#818cf8" stopOpacity="0.2" />
-          </linearGradient>
-          <filter id="zii-glow">
-            <feGaussianBlur stdDeviation="2" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        {/* Head / body blob - rounded mascot shape */}
-        <motion.ellipse
-          cx={32}
-          cy={36}
-          rx={26}
-          ry={24}
-          fill="url(#zii-head-grad)"
-          filter="url(#zii-glow)"
-          animate={
-            isTyping
-              ? { rx: [26, 28, 26], ry: [24, 22, 24] }
-              : isIdle
-              ? { rx: [26, 27, 26], ry: [24, 25, 24] }
-              : { rx: 26, ry: 24 }
-          }
-          transition={
-            isTyping
-              ? { repeat: Infinity, duration: 0.5 }
-              : isIdle
-              ? { repeat: Infinity, duration: 2.2, ease: "easeInOut" }
-              : { duration: 0.2 }
-          }
-        />
-        {/* Left cheek */}
-        <ellipse cx="22" cy="38" rx="6" ry="5" fill="url(#zii-cheek)" opacity="0.9" />
-        {/* Right cheek */}
-        <ellipse cx="42" cy="38" rx="6" ry="5" fill="url(#zii-cheek)" opacity="0.9" />
-        {/* Eyes */}
-        <motion.g>
-          <motion.ellipse
-            cx={26}
-            cy={32}
-            rx={4}
-            ry={5}
-            fill="#1e1b4b"
-            animate={
-              isTyping
-                ? { ry: [5, 2, 5] }
-                : isIdle
-                ? { ry: [5, 0.8, 5] }
-                : { ry: 5 }
-            }
-            transition={
-              isTyping
-                ? { repeat: Infinity, duration: 0.25 }
-                : isIdle
-                ? { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 }
-                : { duration: 0.1 }
-            }
+        {!imageError ? (
+          <Image
+            src="/zii-bot-avatar.png?v=2"
+            alt="ZII BOT CRM Assistant"
+            width={cfg.px * 2}
+            height={cfg.px * 2}
+            priority={size === "button" || size === "hero"}
+            onError={() => setImageError(true)}
+            className="w-full h-full object-contain select-none pointer-events-none p-0.5 filter drop-shadow-xs"
           />
-          <motion.ellipse
-            cx={38}
-            cy={32}
-            rx={4}
-            ry={5}
-            fill="#1e1b4b"
-            animate={
-              isTyping
-                ? { ry: [5, 2, 5] }
-                : isIdle
-                ? { ry: [5, 0.8, 5] }
-                : { ry: 5 }
-            }
-            transition={
-              isTyping
-                ? { repeat: Infinity, duration: 0.25 }
-                : isIdle
-                ? { repeat: Infinity, repeatDelay: 2.5, duration: 0.12 }
-                : { duration: 0.1 }
-            }
+        ) : (
+          /* High-fidelity fallback if image is missing */
+          <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-600 via-indigo-600 to-cyan-500 text-white font-extrabold shadow-inner">
+            <span className="text-xs tracking-wider">ZII</span>
+          </div>
+        )}
+
+        {/* Soft luminous pulse overlay while typing */}
+        {isTyping && (
+          <motion.div
+            className="absolute inset-0 bg-blue-500/15 pointer-events-none"
+            animate={{ opacity: [0.15, 0.4, 0.15] }}
+            transition={{ repeat: Infinity, duration: 1.2 }}
           />
-        </motion.g>
-        {/* Mouth - subtle smile / talk */}
-        <motion.path
-          d={isTyping ? "M 24 42 Q 32 46 40 42" : "M 24 42 Q 32 44 40 42"}
-          stroke="#1e1b4b"
-          strokeWidth="2"
-          strokeLinecap="round"
-          fill="none"
-          animate={
-            isTyping
-              ? { d: ["M 24 42 Q 32 46 40 42", "M 24 43 Q 32 41 40 43", "M 24 42 Q 32 46 40 42"], transition: { repeat: Infinity, duration: 0.4 } }
-              : { d: "M 24 42 Q 32 44 40 42" }
-          }
-        />
-        {/* Small highlight on head for 3D feel */}
-        <ellipse cx="28" cy="26" rx="6" ry="4" fill="white" opacity="0.35" />
-      </svg>
-    </motion.div>
+        )}
+      </motion.div>
+
+      {/* Online indicator badge */}
+      {showStatus && (
+        <span
+          className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-white shadow-sm z-10 flex items-center justify-center"
+          title="ZII BOT is Online"
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+          <span className="absolute inset-0 rounded-full bg-emerald-400 animate-ping opacity-75" />
+        </span>
+      )}
+    </div>
   );
 }
-
-export const ZII_GREETING = GREETING;

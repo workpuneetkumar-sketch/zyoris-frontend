@@ -2,7 +2,8 @@
 // Central registry of all dashboard widget definitions.
 // Add new widgets here — the builder auto-discovers them.
 
-import { WidgetDefinition } from "@/types/dashboard-builder";
+import React from "react";
+import { WidgetDefinition, WidgetInstance } from "@/types/dashboard-builder";
 
 // ── Widget component imports ───────────────────────────────────────────────
 import { PipelineWidget } from "./widgets/PipelineWidget";
@@ -35,7 +36,8 @@ export interface WidgetRegistryEntry {
   minH: number;
   defaultW: number;
   defaultH: number;
-  component: React.ComponentType<{ isPreview?: boolean }>;
+  requiredPermissions: string[];
+  component: React.ComponentType<{ isPreview?: boolean; onForbidden?: () => void }>;
 }
 
 // ── Full widget registry ───────────────────────────────────────────────────
@@ -53,6 +55,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 4,
     defaultW: 6,
     defaultH: 5,
+    requiredPermissions: ["dashboard.view"],
     component: ExecutiveDashboardWidget,
   },
 
@@ -68,6 +71,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 5,
     defaultH: 4,
+    requiredPermissions: ["analytics.view"],
     component: AnalyticsWidget,
   },
 
@@ -83,6 +87,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 4,
     defaultH: 4,
+    requiredPermissions: ["crm.view", "leads.view"],
     component: CRMWidget,
   },
   {
@@ -96,6 +101,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 2,
     defaultW: 4,
     defaultH: 3,
+    requiredPermissions: ["deals.view", "crm.view"],
     component: PipelineWidget,
   },
   {
@@ -109,6 +115,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 2,
     defaultW: 3,
     defaultH: 3,
+    requiredPermissions: ["analytics.view", "deals.view"],
     component: ConversionRateWidget,
   },
 
@@ -124,6 +131,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 2,
     defaultW: 4,
     defaultH: 3,
+    requiredPermissions: ["finance.view"],
     component: RevenueWidget,
   },
   {
@@ -137,6 +145,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 2,
     defaultW: 4,
     defaultH: 3,
+    requiredPermissions: ["finance.view"],
     component: CashFlowWidget,
   },
 
@@ -152,6 +161,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 4,
     defaultH: 4,
+    requiredPermissions: ["employees.view", "hr.view"],
     component: HRWidget,
   },
   {
@@ -165,6 +175,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 2,
     defaultW: 3,
     defaultH: 3,
+    requiredPermissions: ["attendance.view", "hr.view"],
     component: AttendanceWidget,
   },
 
@@ -180,6 +191,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 4,
     defaultH: 4,
+    requiredPermissions: ["projects.view"],
     component: ProjectsWidget,
   },
 
@@ -195,6 +207,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 3,
     defaultH: 4,
+    requiredPermissions: ["tasks.view"],
     component: TasksWidget,
   },
 
@@ -210,6 +223,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 3,
     defaultH: 4,
+    requiredPermissions: ["crm.view", "leads.view", "activities.view"],
     component: ActivitiesWidget,
   },
 
@@ -225,6 +239,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 2,
     defaultW: 3,
     defaultH: 3,
+    requiredPermissions: ["analytics.view"],
     component: InventoryRiskWidget,
   },
 
@@ -240,6 +255,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 4,
     defaultH: 4,
+    requiredPermissions: ["communication.access"],
     component: CommunicationsWidget,
   },
 
@@ -255,6 +271,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 4,
     defaultH: 4,
+    requiredPermissions: ["marketing.view", "campaigns.view"],
     component: MarketingWidget,
   },
 
@@ -270,6 +287,7 @@ const REGISTRY: WidgetRegistryEntry[] = [
     minH: 3,
     defaultW: 4,
     defaultH: 5,
+    requiredPermissions: ["ai_copilot.access", "crm.view"],
     component: AIInsightsWidget,
   },
 ];
@@ -283,9 +301,32 @@ export function getWidgetEntry(id: string): WidgetRegistryEntry | undefined {
   return REGISTRY_MAP.get(id);
 }
 
-/** Get all widget definitions (for the catalog) */
-export function getAllWidgetDefinitions(): WidgetDefinition[] {
-  return REGISTRY.map((e) => ({
+import {
+  isWidgetPermitted,
+  compactLayout,
+  WIDGET_PERMISSION_MAP,
+  KPI_PERMISSION_MAP,
+  isKpiPermitted,
+} from "./widgetRbac";
+
+export {
+  isWidgetPermitted,
+  compactLayout,
+  WIDGET_PERMISSION_MAP,
+  KPI_PERMISSION_MAP,
+  isKpiPermitted,
+};
+
+/** Get all widget definitions (for the catalog), optionally filtered by user permissions */
+export function getAllWidgetDefinitions(
+  userPermissions?: Record<string, boolean>,
+  isAdmin?: boolean
+): WidgetDefinition[] {
+  const entries = userPermissions
+    ? REGISTRY.filter((e) => isWidgetPermitted(e.id, userPermissions, isAdmin))
+    : REGISTRY;
+
+  return entries.map((e) => ({
     id: e.id,
     title: e.title,
     module: e.module,
@@ -298,10 +339,17 @@ export function getAllWidgetDefinitions(): WidgetDefinition[] {
   }));
 }
 
-/** Group widget definitions by module */
-export function getWidgetCatalogGroups(): Array<{ module: string; widgets: WidgetDefinition[] }> {
+/** Group widget definitions by module, optionally filtered by user permissions */
+export function getWidgetCatalogGroups(
+  userPermissions?: Record<string, boolean>,
+  isAdmin?: boolean
+): Array<{ module: string; widgets: WidgetDefinition[] }> {
   const groups = new Map<string, WidgetDefinition[]>();
-  for (const entry of REGISTRY) {
+  const entries = userPermissions
+    ? REGISTRY.filter((e) => isWidgetPermitted(e.id, userPermissions, isAdmin))
+    : REGISTRY;
+
+  for (const entry of entries) {
     const def: WidgetDefinition = {
       id: entry.id,
       title: entry.title,

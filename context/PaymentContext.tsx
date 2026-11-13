@@ -24,9 +24,16 @@ export const PaymentProvider = ({ children }: { children: ReactNode }) => {
 
   // optional persistence to localStorage
   useEffect(() => {
-    const data = typeof window !== "undefined" ? localStorage.getItem("paymentStore") : null;
-    if (data) {
-      setStore(JSON.parse(data));
+    try {
+      const data = typeof window !== "undefined" ? localStorage.getItem("paymentStore") : null;
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed && typeof parsed === "object") {
+          setStore(parsed);
+        }
+      }
+    } catch (e) {
+      console.warn("[PaymentContext] Failed to load paymentStore from localStorage", e);
     }
   }, []);
 

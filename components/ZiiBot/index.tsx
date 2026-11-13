@@ -2,34 +2,64 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { ZiiBotAvatar } from "./ZiiBotAvatar";
+import Link from "next/link";
+import { AnimatePresence } from "framer-motion";
+import { Plus } from "lucide-react";
 import { ZiiBotPanel } from "./ZiiBotPanel";
 import { useZiiBotChat } from "./useZiiBotChat";
+import { useAuth } from "@/context/AuthContext";
 
-function useDarkMode(): boolean {
-  const [dark, setDark] = useState(true);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    setDark(mq.matches);
-    const fn = () => setDark(mq.matches);
-    mq.addEventListener("change", fn);
-    return () => mq.removeEventListener("change", fn);
-  }, []);
-  return dark;
-}
+const DOCK_STORAGE_KEY = "ziibot-dock-mode";
+const THEME_STORAGE_KEY = "ziibot-theme-dark";
 
 export function ZiiBot() {
   const pathname = usePathname();
+  const { isAuthenticated, sessionStatus } = useAuth();
+
   const [panelOpen, setPanelOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const darkMode = useDarkMode();
+  const [dockMode, setDockMode] = useState<"side" | "bottom">("side");
+  // Chatbot-only independent theme (default to dark mode like Resend)
+  const [isDark, setIsDark] = useState<boolean>(true);
+
   const chat = useZiiBotChat();
 
-  // FE2-02 — Listen for page "Use with AI" trigger
-  // Dispatched by UseWithAIButton after fetching /workspace/pages/:id/ai-context
+  // Load persisted chatbot-only settings
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const savedDock = localStorage.getItem(DOCK_STORAGE_KEY);
+      if (savedDock === "side" || savedDock === "bottom") {
+        setDockMode(savedDock);
+      }
+      const savedDark = localStorage.getItem(THEME_STORAGE_KEY);
+      if (savedDark !== null) {
+        setIsDark(savedDark === "true");
+      }
+    } catch {}
+  }, []);
+
+  // Toggle ONLY chatbot dark/light mode (never touches the website's global theme)
+  const toggleTheme = useCallback(() => {
+    setIsDark((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(THEME_STORAGE_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const toggleDock = useCallback(() => {
+    setDockMode((prev) => {
+      const next = prev === "side" ? "bottom" : "side";
+      try {
+        localStorage.setItem(DOCK_STORAGE_KEY, next);
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  // Listen for page "Use with AI" trigger
   useEffect(() => {
     const handleOpenWithContext = (e: Event) => {
       const detail = (e as CustomEvent<{
@@ -38,12 +68,8 @@ export function ZiiBot() {
         contextMarkdown: string;
         seedMessage: string;
       }>).detail;
-      // Open the panel first, then seed the message so the user sees context land
-      setClosing(false);
       setPanelOpen(true);
-      setFullscreen(false);
       if (detail?.seedMessage) {
-        // Small delay so the panel animation starts before the message appears
         setTimeout(() => {
           chat.sendMessage(detail.seedMessage);
         }, 150);
@@ -53,133 +79,122 @@ export function ZiiBot() {
     return () => window.removeEventListener("zii:open-with-context", handleOpenWithContext);
   }, [chat]);
 
+  // Keyboard shortcut (Escape to close)
   useEffect(() => {
-    if (fullscreen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && panelOpen) {
+        setPanelOpen(false);
+      }
     };
-  }, [fullscreen]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [panelOpen]);
 
-  const openPanel = useCallback(() => {
-    setClosing(false);
-    setPanelOpen(true);
-    setFullscreen(false);
-  }, []);
+  const openWithPrompt = useCallback(
+    (promptText: string) => {
+      setPanelOpen(true);
+      setTimeout(() => {
+        chat.sendMessage(promptText);
+      }, 150);
+    },
+    [chat]
+  );
 
-  const closePanel = useCallback(() => {
-    if (fullscreen) {
-      setFullscreen(false);
-      setPanelOpen(false);
-      setClosing(false);
-      return;
-    }
-    setPanelOpen(false);
-    setClosing(true);
-    const t = setTimeout(() => setClosing(false), 320);
-    return () => clearTimeout(t);
-  }, [fullscreen]);
+  // Requirement: "the ask anything should be after login n from the dashboard it should be visible"
+  if (sessionStatus === "checking" || !isAuthenticated) {
+    return null;
+  }
 
-  const toggleFullscreen = useCallback(() => setFullscreen((f) => !f), []);
-
-  // Hide chatbot on login and register routes for privacy
+  // Also hide on explicit unauthenticated auth routes
   if (
     pathname === "/login" ||
     pathname?.startsWith("/login") ||
+    pathname === "/admin/login" ||
+    pathname?.startsWith("/admin/login") ||
     pathname === "/register" ||
-    pathname?.startsWith("/register")
+    pathname?.startsWith("/register") ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password"
   ) {
     return null;
   }
 
-  const showPanel = panelOpen || fullscreen || closing;
-
   return (
     <>
-      <AnimatePresence mode="wait">
-        {fullscreen ? (
+      {/* ── Main Resend-Style Assistant Panel ── */}
+      <AnimatePresence>
+        {panelOpen && (
           <ZiiBotPanel
-            key="fullscreen"
-            isOpen
-            onClose={closePanel}
-            isFullscreen
-            onToggleFullscreen={toggleFullscreen}
-            messages={chat.messages}
-            isTyping={chat.isTyping}
-            onSend={chat.sendMessage}
-            soundOn={chat.soundOn}
-            onToggleSound={chat.toggleSound}
-            showGreeting={chat.showGreeting}
-            darkMode={darkMode}
-            userName={chat.userName}
-            onUpdateProposal={chat.updateProposalStatus}
-          />
-        ) : showPanel ? (
-          <ZiiBotPanel
-            key="slide"
             isOpen={panelOpen}
-            onClose={closePanel}
-            isFullscreen={false}
-            onToggleFullscreen={toggleFullscreen}
-            messages={chat.messages}
-            isTyping={chat.isTyping}
-            onSend={chat.sendMessage}
-            soundOn={chat.soundOn}
-            onToggleSound={chat.toggleSound}
-            showGreeting={chat.showGreeting}
-            darkMode={darkMode}
-            userName={chat.userName}
-            onUpdateProposal={chat.updateProposalStatus}
+            onClose={() => setPanelOpen(false)}
+            dockMode={dockMode}
+            onToggleDock={toggleDock}
+            isDark={isDark}
+            onToggleTheme={toggleTheme}
+            chat={chat}
           />
-        ) : null}
+        )}
       </AnimatePresence>
 
-      {/* ── UPDATED FAB BUTTON ── */}
-      {!fullscreen && (
-        <motion.button
-          type="button"
-          data-tour="ziibot-button"
-          className={`zii-fab${pathname === "/whatsapp" || pathname?.startsWith("/whatsapp") ? " zii-fab--whatsapp" : ""}`}
-          onClick={panelOpen || closing ? closePanel : openPanel}
-          aria-label={panelOpen || closing ? "Close chat" : "Open ZY BOT"}
-          initial={false}
-          animate={{
-            scale: 1,
-            boxShadow: [
-              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
-              "0 8px 40px rgba(99, 102, 241, 0.5), 0 0 0 12px rgba(99, 102, 241, 0)",
-              "0 8px 32px rgba(99, 102, 241, 0.4), 0 0 0 0 rgba(99, 102, 241, 0.3)",
-            ],
-          }}
-          transition={{
-            boxShadow: { repeat: Infinity, duration: 2.5, ease: "easeInOut" },
-          }}
-          whileHover={{ scale: 1.08 }}
-          whileTap={{ scale: 0.92 }}
-        >
-          <ZiiBotAvatar isIdle={!chat.isTyping} isTyping={chat.isTyping} size="button" />
-        </motion.button>
-      )}
+      {/* ── Resend Exact Bottom Bar (Non-Floating, Full Width, Responsive to Dark/Light) ── */}
+      <footer
+        className={`fixed bottom-0 left-0 right-0 h-8 z-40 border-t flex items-center justify-between px-4 text-xs font-mono select-none transition-colors duration-150 ${
+          isDark
+            ? "bg-[#000000] border-zinc-800 text-zinc-400"
+            : "bg-[#ffffff] border-zinc-200 text-zinc-600"
+        }`}
+      >
+        {/* Left: /docs */}
+        <div className="flex items-center gap-1">
+          <Link
+            href="/documents"
+            className={`transition-colors text-xs ${
+              isDark ? "hover:text-white" : "hover:text-zinc-950"
+            }`}
+            title="Documentation & Workspace Documents"
+          >
+            /docs
+          </Link>
+        </div>
 
-      {fullscreen && (
-        <motion.button
-          type="button"
-          className="zii-fab zii-fab-close-fullscreen"
-          onClick={closePanel}
-          aria-label="Close chat"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </motion.button>
-      )}
+        {/* Right: what can you do for me + Ask anything */}
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => openWithPrompt("What can you do for me across the OS?")}
+            className={`transition-colors font-sans text-xs ${
+              isDark
+                ? "text-zinc-400 hover:text-white"
+                : "text-zinc-500 hover:text-zinc-950"
+            }`}
+          >
+            what can you do for me
+          </button>
+
+          <button
+            type="button"
+            data-tour="ziibot-button"
+            onClick={() => setPanelOpen((prev) => !prev)}
+            aria-label={panelOpen ? "Close Ask anything" : "Ask anything"}
+            title="Ask anything"
+            className={`flex items-center gap-1 font-sans text-xs font-medium transition-colors ${
+              panelOpen
+                ? isDark
+                  ? "text-white"
+                  : "text-zinc-950"
+                : isDark
+                ? "text-zinc-300 hover:text-white"
+                : "text-zinc-700 hover:text-zinc-950"
+            }`}
+          >
+            <Plus
+              size={13}
+              className={panelOpen ? "rotate-45 transition-transform" : "transition-transform"}
+            />
+            <span>Ask anything</span>
+          </button>
+        </div>
+      </footer>
     </>
   );
 }

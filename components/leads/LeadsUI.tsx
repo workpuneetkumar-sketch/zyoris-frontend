@@ -1,8 +1,10 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import EditLeadModal from "./EditLeadModal";
+import { buildLeadEditPayload } from "./leadEditPayload";
 import ViewLeadModal from "./ViewLeadModal";
 import { updateLead, deleteLead, addLeadNote, getLeadSharePayload, exportLeadAsPdf, buildWhatsAppShareUrl, LeadSharePayload } from "@/lib/api/leadsApi";
 
@@ -888,34 +890,40 @@ export function LeadsTable({
                             >
                                 <Eye size={14} /> View
                             </button>
-                            <button
-                                onClick={() => {
-                                    const lead = safeLeads.find((l) => l.id === openMenu);
-                                    if (lead) { setEditingLead(lead); setIsEditOpen(true); setOpenMenu(null); setMenuPos(null); }
-                                }}
-                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
-                            >
-                                <Edit size={14} /> Edit
-                            </button>
-                            <button
-                                onClick={() => {
-                                    const lead = safeLeads.find((l) => l.id === openMenu);
-                                    if (lead) { onAction("Convert", lead); setOpenMenu(null); setMenuPos(null); }
-                                }}
-                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
-                            >
-                                <Briefcase size={14} /> Convert to Deal
-                            </button>
-                            {onPromoteToCustomer && (
+                            <PermissionGuard permission="leads.update" action="disable" disabledTooltip="You do not have permission to edit leads.">
                                 <button
                                     onClick={() => {
                                         const lead = safeLeads.find((l) => l.id === openMenu);
-                                        if (lead) { onPromoteToCustomer(lead); setOpenMenu(null); setMenuPos(null); }
+                                        if (lead) { setEditingLead(lead); setIsEditOpen(true); setOpenMenu(null); setMenuPos(null); }
                                     }}
-                                    className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-blue-600"
+                                    className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
                                 >
-                                    <UserPlus size={14} /> Promote to Customer
+                                    <Edit size={14} /> Edit
                                 </button>
+                            </PermissionGuard>
+                            <PermissionGuard permissions={["leads.update", "deals.create"]} requireAll action="disable" disabledTooltip="Requires lead update and deal create permissions.">
+                                <button
+                                    onClick={() => {
+                                        const lead = safeLeads.find((l) => l.id === openMenu);
+                                        if (lead) { onAction("Convert", lead); setOpenMenu(null); setMenuPos(null); }
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-gray-700"
+                                >
+                                    <Briefcase size={14} /> Convert to Deal
+                                </button>
+                            </PermissionGuard>
+                            {onPromoteToCustomer && (
+                                <PermissionGuard permission="leads.update" action="disable" disabledTooltip="Requires lead update permission.">
+                                    <button
+                                        onClick={() => {
+                                            const lead = safeLeads.find((l) => l.id === openMenu);
+                                            if (lead) { onPromoteToCustomer(lead); setOpenMenu(null); setMenuPos(null); }
+                                        }}
+                                        className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-blue-600"
+                                    >
+                                        <UserPlus size={14} /> Promote to Customer
+                                    </button>
+                                </PermissionGuard>
                             )}
                             <button
                                 onClick={() => {
@@ -926,15 +934,17 @@ export function LeadsTable({
                             >
                                 <Share2 size={14} /> Share
                             </button>
-                            <button
-                                onClick={() => {
-                                    const lead = safeLeads.find((l) => l.id === openMenu);
-                                    if (lead) { setConfirmDeleteId(lead.id); setOpenMenu(null); setMenuPos(null); }
-                                }}
-                                className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-red-500 border-t border-gray-100 mt-1 pt-1"
-                            >
-                                <Trash2 size={14} /> Delete
-                            </button>
+                            <PermissionGuard permission="leads.delete" action="disable" disabledTooltip="You do not have permission to delete leads.">
+                                <button
+                                    onClick={() => {
+                                        const lead = safeLeads.find((l) => l.id === openMenu);
+                                        if (lead) { setConfirmDeleteId(lead.id); setOpenMenu(null); setMenuPos(null); }
+                                    }}
+                                    className="w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors flex items-center gap-2 text-red-500 border-t border-gray-100 mt-1 pt-1"
+                                >
+                                    <Trash2 size={14} /> Delete
+                                </button>
+                            </PermissionGuard>
                         </div>
                     )}
                 </>
@@ -960,19 +970,7 @@ export function LeadsTable({
                     onClose={() => { setIsEditOpen(false); setEditingLead(null); }}
                     onSave={async (updatedData) => {
                         try {
-                            const payload: Partial<Lead> = {
-                                name: updatedData.name.trim(),
-                                email: updatedData.email.trim() || undefined,
-                                phone: updatedData.phone.trim() || undefined,
-                                company: updatedData.company.trim() || undefined,
-                                city: updatedData.city.trim() || undefined,
-                                source: updatedData.source.trim() || undefined,
-                                status: updatedData.status,
-                                assignedToId: updatedData.assignedToId?.trim() || null,
-                                tags: Array.isArray(updatedData.tags)
-                                    ? updatedData.tags.map((tag: any) => typeof tag === "string" ? tag : tag.label)
-                                    : [],
-                            };
+                            const payload = buildLeadEditPayload(updatedData);
                             await updateLead(editingLead.id, payload);
 
                             // If note was entered and changed, save it via the dedicated note endpoint

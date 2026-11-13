@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Connector,
   UpdateIntegrationPayload,
@@ -6,6 +6,12 @@ import {
   SyncFrequency,
   HttpMethod,
 } from "@/types/integrations";
+import { getIntegrationByIdApi } from "@/lib/api/integrationsApi";
+import {
+  extractConnectorConfigFields,
+  isSecretConfigField,
+  buildEditIntegrationPayload,
+} from "@/lib/utils/integrationContracts";
 import {
   X,
   Settings,
@@ -19,6 +25,7 @@ import {
   Plus,
   Trash2,
   KeyRound,
+  Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +51,7 @@ export function EditIntegrationModal({
   const [apiUrl, setApiUrl] = useState("");
   const [httpMethod, setHttpMethod] = useState<HttpMethod>("POST");
   const [headers, setHeaders] = useState<Array<{ key: string; value: string }>>([]);
+  const [dynamicFields, setDynamicFields] = useState<Record<string, any>>({});
 
   // Sensitive credential update state - strictly in-memory
   const [isUpdatingCredentials, setIsUpdatingCredentials] = useState(false);
@@ -53,44 +61,155 @@ export function EditIntegrationModal({
   const [basicUsername, setBasicUsername] = useState("");
   const [basicPassword, setBasicPassword] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
+  const [dynamicSecrets, setDynamicSecrets] = useState<Record<string, string>>({});
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
 
   // Loading state
   const [isSaving, setIsSaving] = useState(false);
 
+  const connectorConfigFields = useMemo(
+    () => extractConnectorConfigFields(connector),
+    [connector]
+  );
+
+  const nonSecretConfigFields = useMemo(
+    () =>
+      connectorConfigFields.filter(
+        (field) => !isSecretConfigField(field) && field.name !== "baseUrl"
+      ),
+    [connectorConfigFields]
+  );
+
+  const authType = (connector?.authType || "API_KEY").toUpperCase();
+
+  const extraSecretConfigFields = useMemo(
+    () =>
+      connectorConfigFields.filter((field) => {
+        if (!isSecretConfigField(field)) return false;
+        if ((authType === "API_KEY" || authType === "NONE") && field.name === "apiKey") {
+          return false;
+        }
+        if (
+          (authType === "BEARER_TOKEN" || authType === "OAUTH2") &&
+          field.name === "accessToken"
+        ) {
+          return false;
+        }
+        if (authType === "BASIC_AUTH" && field.name === "password") {
+          return false;
+        }
+        if (authType === "WEBHOOK_SECRET" && field.name === "webhookSecret") {
+          return false;
+        }
+        return true;
+      }),
+    [connectorConfigFields, authType]
+  );
+
   useEffect(() => {
-    if (connector) {
+    if (!connector || !isOpen) return;
+    let isCancelled = false;
+
+    const applySavedState = (
+      savedName?: string,
+      savedConfig?: Record<string, any> | null
+    ) => {
+      const cfg = savedConfig && typeof savedConfig === "object" ? savedConfig : {};
       setDisplayName(
-        connector.connectionState?.displayName || connector.name || ""
+        savedName ||
+          connector.connectionState?.name ||
+          connector.connectionState?.displayName ||
+          (typeof cfg.displayName === "string" ? cfg.displayName : "") ||
+          connector.name ||
+          ""
       );
-      setSyncFrequency("HOURLY");
-      setSyncDirection("BIDIRECTIONAL");
-      setApiUrl(connector.configSchema?.endpoint?.defaultUrl || "");
+      setSyncFrequency(
+        (cfg.syncFrequency as SyncFrequency) || "HOURLY"
+      );
+      setSyncDirection(
+        (cfg.syncDirection as SyncDirection) || "BIDIRECTIONAL"
+      );
+      setApiUrl(
+        (typeof cfg.baseUrl === "string" && cfg.baseUrl) ||
+          (typeof cfg.apiUrl === "string" && cfg.apiUrl) ||
+          connector.configSchema?.endpoint?.defaultUrl ||
+          ""
+      );
       setHttpMethod(
-        (connector.configSchema?.endpoint?.defaultMethod as HttpMethod) || "POST"
+        (cfg.httpMethod as HttpMethod) ||
+          (connector.configSchema?.endpoint?.defaultMethod as HttpMethod) ||
+          "POST"
       );
 
-      // Initialize default headers from schema if available
-      if (connector.configSchema?.endpoint?.headers) {
-        const schemaHeaders = Object.entries(
-          connector.configSchema.endpoint.headers
-        ).map(([k, v]) => ({ key: k, value: String(v) }));
-        setHeaders(schemaHeaders);
+      if (cfg.headers && typeof cfg.headers === "object" && !Array.isArray(cfg.headers)) {
+        setHeaders(
+          Object.entries(cfg.headers).map(([k, v]) => ({ key: k, value: String(v) }))
+        );
+      } else if (connector.configSchema?.endpoint?.headers) {
+        setHeaders(
+          Object.entries(connector.configSchema.endpoint.headers).map(([k, v]) => ({
+            key: k,
+            value: String(v),
+          }))
+        );
       } else {
         setHeaders([]);
       }
 
-      // Reset sensitive fields
-      setIsUpdatingCredentials(false);
-      setApiKeyName("X-API-Key");
-      setApiKeyValue("");
-      setBearerToken("");
-      setBasicUsername("");
-      setBasicPassword("");
-      setWebhookSecret("");
-      setShowSecrets({});
+      const seededDyn: Record<string, any> = {};
+      for (const field of connectorConfigFields) {
+        if (isSecretConfigField(field)) continue;
+        const val = cfg[field.name];
+        if (val !== undefined && val !== null && val !== "") {
+          seededDyn[field.name] = val;
+        } else if (field.defaultValue !== undefined) {
+          seededDyn[field.name] = field.defaultValue;
+        }
+      }
+      setDynamicFields(seededDyn);
+      if (typeof cfg.authHeaderName === "string" && cfg.authHeaderName.trim()) {
+        setApiKeyName(cfg.authHeaderName.trim());
+      } else {
+        setApiKeyName("X-API-Key");
+      }
+    };
+
+    const existingConfig = connector.connectionState?.config || null;
+    applySavedState(connector.connectionState?.name, existingConfig);
+
+    // Reset sensitive fields
+    setIsUpdatingCredentials(false);
+    setApiKeyValue("");
+    setBearerToken("");
+    setBasicUsername("");
+    setBasicPassword("");
+    setWebhookSecret("");
+    setDynamicSecrets({});
+    setShowSecrets({});
+
+    const existingId =
+      connector.connectionId ||
+      connector.connectionState?.id ||
+      (connector.isConnected ? connector.id : null);
+
+    if (!existingConfig && existingId) {
+      getIntegrationByIdApi(existingId)
+        .then((res) => {
+          if (isCancelled) return;
+          const record = (res as any)?.integration || res;
+          if (record && (record.config || record.name)) {
+            applySavedState(record.name, record.config || null);
+          }
+        })
+        .catch(() => {
+          // Non-fatal: keep catalog/defaults when detail hydration is unavailable
+        });
     }
-  }, [connector, isOpen]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [connector, isOpen, connectorConfigFields]);
 
   const handleClose = () => {
     // Clear sensitive state from memory immediately
@@ -99,6 +218,7 @@ export function EditIntegrationModal({
     setBasicUsername("");
     setBasicPassword("");
     setWebhookSecret("");
+    setDynamicSecrets({});
     setShowSecrets({});
     setIsUpdatingCredentials(false);
     onClose();
@@ -108,7 +228,6 @@ export function EditIntegrationModal({
 
   const targetId =
     connector.connectionId || connector.connectionState?.id || connector.id;
-  const authType = (connector.authType || "API_KEY").toUpperCase();
 
   const toggleSecretVisibility = (key: string) => {
     setShowSecrets((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -145,46 +264,34 @@ export function EditIntegrationModal({
       return;
     }
 
-    // Assemble headers
-    const headerObject: Record<string, string> = {};
-    headers.forEach((h) => {
-      if (h.key.trim() && h.value.trim()) {
-        headerObject[h.key.trim()] = h.value.trim();
-      }
-    });
-
-    // Construct PATCH payload safely
-    const payload: UpdateIntegrationPayload = {
-      displayName: displayName.trim(),
-      syncFrequency,
-      syncDirection,
-      ...(apiUrl.trim() ? { apiUrl: apiUrl.trim() } : {}),
-      ...(httpMethod ? { httpMethod } : {}),
-      ...(Object.keys(headerObject).length > 0 ? { headers: headerObject } : {}),
-    };
-
-    // ONLY send credentials if the user intentionally checked "Update Stored Credentials"
-    // and provided non-empty secret values. This guarantees we NEVER overwrite existing
-    // vault credentials with blank values!
-    if (isUpdatingCredentials) {
-      const credentialsObj: Record<string, any> = {};
-
-      if (authType === "API_KEY" && apiKeyValue.trim()) {
-        credentialsObj.headerName = apiKeyName.trim() || "X-API-Key";
-        credentialsObj.apiKey = apiKeyValue.trim();
-      } else if (authType === "BEARER_TOKEN" && bearerToken.trim()) {
-        credentialsObj.token = bearerToken.trim();
-      } else if (authType === "BASIC_AUTH") {
-        if (basicUsername.trim()) credentialsObj.username = basicUsername.trim();
-        if (basicPassword.trim()) credentialsObj.password = basicPassword.trim();
-      } else if (authType === "WEBHOOK_SECRET" && webhookSecret.trim()) {
-        credentialsObj.secret = webhookSecret.trim();
-      }
-
-      if (Object.keys(credentialsObj).length > 0) {
-        payload.credentials = credentialsObj;
+    for (const field of nonSecretConfigFields) {
+      if (!field.required) continue;
+      const val = dynamicFields[field.name];
+      if (val === undefined || val === null || String(val).trim() === "") {
+        toast.error(`Please complete required field: ${field.label || field.name}`);
+        return;
       }
     }
+
+    const payload = buildEditIntegrationPayload({
+      provider: connector.provider,
+      displayName,
+      syncFrequency,
+      syncDirection,
+      apiUrl,
+      httpMethod,
+      headers,
+      dynamicFields,
+      isUpdatingCredentials,
+      authType,
+      apiKeyName,
+      apiKeyValue,
+      bearerToken,
+      basicUsername,
+      basicPassword,
+      webhookSecret,
+      dynamicSecrets,
+    });
 
     setIsSaving(true);
     try {
@@ -378,6 +485,113 @@ export function EditIntegrationModal({
             )}
           </div>
 
+          {/* Provider-Specific Configuration Fields */}
+          {nonSecretConfigFields.length > 0 && (
+            <div className="pt-3 border-t border-border space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-text">
+                <Sliders className="w-4 h-4 text-primary" />
+                <span>{connector.name} Configuration</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {nonSecretConfigFields.map((field) => {
+                  const val =
+                    dynamicFields[field.name] ?? field.defaultValue ?? "";
+                  const inputId = `edit-dyn-${field.name}`;
+                  return (
+                    <div key={field.name} className="space-y-1">
+                      <label
+                        htmlFor={inputId}
+                        className="block text-xs text-text-muted"
+                      >
+                        {field.label || field.name}
+                        {field.required && (
+                          <span className="text-error ml-0.5">*</span>
+                        )}
+                      </label>
+                      {field.type === "select" && Array.isArray(field.options) ? (
+                        <select
+                          id={inputId}
+                          value={String(val)}
+                          onChange={(e) =>
+                            setDynamicFields((prev) => ({
+                              ...prev,
+                              [field.name]: e.target.value,
+                            }))
+                          }
+                          className="w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                        >
+                          {!field.required && (
+                            <option value="">Select an option...</option>
+                          )}
+                          {field.options.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : field.type === "boolean" ? (
+                        <label
+                          htmlFor={inputId}
+                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface text-xs text-text cursor-pointer"
+                        >
+                          <input
+                            id={inputId}
+                            type="checkbox"
+                            checked={Boolean(val)}
+                            onChange={(e) =>
+                              setDynamicFields((prev) => ({
+                                ...prev,
+                                [field.name]: e.target.checked,
+                              }))
+                            }
+                            className="rounded border-border text-primary focus:ring-primary"
+                          />
+                          <span>{field.helpText || "Enabled"}</span>
+                        </label>
+                      ) : (
+                        <input
+                          id={inputId}
+                          type={
+                            field.type === "number"
+                              ? "number"
+                              : field.type === "url"
+                                ? "url"
+                                : "text"
+                          }
+                          value={String(val)}
+                          onChange={(e) =>
+                            setDynamicFields((prev) => ({
+                              ...prev,
+                              [field.name]:
+                                field.type === "number"
+                                  ? e.target.value === ""
+                                    ? ""
+                                    : Number(e.target.value)
+                                  : e.target.value,
+                            }))
+                          }
+                          placeholder={
+                            field.placeholder ||
+                            (field.defaultValue !== undefined
+                              ? String(field.defaultValue)
+                              : `Enter ${field.label || field.name}`)
+                          }
+                          className="w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                        />
+                      )}
+                      {(field.helpText || field.description) &&
+                        field.type !== "boolean" && (
+                          <p className="text-[11px] text-text-muted">
+                            {field.helpText || field.description}
+                          </p>
+                        )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Optional Credential Update Section */}
           <div className="pt-3 border-t border-border space-y-3">
             <div className="p-3.5 rounded-xl border border-border bg-surface-secondary/40 flex items-center justify-between">
@@ -552,6 +766,52 @@ export function EditIntegrationModal({
                           <Eye className="w-3.5 h-3.5" />
                         )}
                       </button>
+                    </div>
+                  </div>
+                )}
+
+                {extraSecretConfigFields.length > 0 && (
+                  <div className="pt-2 border-t border-border/60 space-y-2.5">
+                    <div className="text-[11px] font-semibold text-text-secondary">
+                      Additional Secrets (leave blank to keep existing)
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {extraSecretConfigFields.map((field) => {
+                        const toggleKey = `edit_${field.name}`;
+                        return (
+                          <div key={field.name}>
+                            <label className="block text-xs text-text-muted mb-1">
+                              {field.label || field.name}
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showSecrets[toggleKey] ? "text" : "password"}
+                                value={dynamicSecrets[field.name] || ""}
+                                onChange={(e) =>
+                                  setDynamicSecrets((prev) => ({
+                                    ...prev,
+                                    [field.name]: e.target.value,
+                                  }))
+                                }
+                                placeholder="Leave blank to preserve existing..."
+                                className="w-full pr-9 pl-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => toggleSecretVisibility(toggleKey)}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                                aria-label={`Toggle ${field.label || field.name} visibility`}
+                              >
+                                {showSecrets[toggleKey] ? (
+                                  <EyeOff className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Eye className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

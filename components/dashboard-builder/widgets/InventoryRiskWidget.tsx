@@ -1,4 +1,7 @@
 "use client";
+
+import { useEffect } from "react";
+import { useRBAC } from "@/hooks/useRBAC";
 // components/dashboard-builder/widgets/InventoryRiskWidget.tsx
 // Real data: GET /dashboard/operations via useDashboardOperations hook.
 // Mock RISK_ITEMS (Product A-D with hardcoded SKU/stock/threshold) removed entirely.
@@ -20,8 +23,26 @@ function getStyle(level?: string) {
   return LEVEL_STYLES[(level ?? "").toUpperCase()] ?? DEFAULT_STYLE;
 }
 
-export function InventoryRiskWidget({ isPreview }: { isPreview?: boolean }) {
-  const { data: ops, loading, error, refetch } = useDashboardOperations();
+export function InventoryRiskWidget({ isPreview, onForbidden }: { isPreview?: boolean; onForbidden?: () => void }) {
+  const { hasPermission, permissionsLoaded } = useRBAC();
+  const canView = hasPermission("analytics.view");
+
+  useEffect(() => {
+    if (permissionsLoaded && !canView) {
+      onForbidden?.();
+    }
+  }, [permissionsLoaded, canView, onForbidden]);
+
+  const { data: ops, loading, error, refetch } = useDashboardOperations(canView);
+
+  useEffect(() => {
+    if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+      onForbidden?.();
+    }
+  }, [error, onForbidden]);
+
+  if (!canView) return null;
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) return null;
 
   if (loading) {
     return (
@@ -38,6 +59,11 @@ export function InventoryRiskWidget({ isPreview }: { isPreview?: boolean }) {
         ))}
       </div>
     );
+  }
+
+  if (error && (error.includes("403") || error.toLowerCase().includes("forbidden"))) {
+    onForbidden?.();
+    return null;
   }
 
   if (error) {

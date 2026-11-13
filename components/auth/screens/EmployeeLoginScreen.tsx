@@ -27,13 +27,15 @@ function validatePassword(value: string): string {
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface EmployeeLoginScreenProps {
-  onBack: () => void;
+  onBack?: () => void;
   onLogin: (email: string, password: string) => Promise<void>;
   isLoading?: boolean;
   /** Auth error from context (set after a failed login attempt). */
   authError?: string | null;
   /** When true the session-expired banner is shown above the form. */
   sessionExpired?: boolean;
+  /** Clear the context auth error when the user edits a field. */
+  onClearError?: () => void;
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -44,6 +46,7 @@ export default function EmployeeLoginScreen({
   isLoading = false,
   authError,
   sessionExpired = false,
+  onClearError,
 }: EmployeeLoginScreenProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -88,7 +91,7 @@ export default function EmployeeLoginScreen({
       <div className="flex-1 flex flex-col p-5 sm:p-8 md:p-12">
         {/* ── Header row ── */}
         <div className="flex items-center justify-between mb-6">
-          <BackButton onClick={onBack} />
+          {onBack ? <BackButton onClick={onBack} /> : <span />}
           {/* Mobile-only logo mark */}
           <div className="md:hidden flex items-center gap-2">
             <img src="/logo.jpeg" alt="Zyoris Logo" className="w-6 h-6 object-contain rounded" />
@@ -127,6 +130,9 @@ export default function EmployeeLoginScreen({
 
         {/* ── Title ── */}
         <div className="mb-6 sm:mb-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#4970B8] mb-1 sm:mb-2">
+            ZYORIS EMPLOYEE PORTAL
+          </p>
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-1 sm:mb-2">
             Employee Sign In
           </h2>
@@ -153,6 +159,7 @@ export default function EmployeeLoginScreen({
             onChange={(e) => {
               setEmail(e.target.value);
               if (emailError) setEmailError(validateEmail(e.target.value));
+              onClearError?.();
             }}
             onBlur={handleEmailBlur}
             error={emailError}
@@ -169,6 +176,7 @@ export default function EmployeeLoginScreen({
               onChange={(e) => {
                 setPassword(e.target.value);
                 if (passwordError) setPasswordError(validatePassword(e.target.value));
+                onClearError?.();
               }}
               onBlur={handlePasswordBlur}
               error={passwordError}

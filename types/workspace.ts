@@ -9,8 +9,19 @@ export interface WorkspacePageNode {
   isLocked?: boolean;
   position?: number | null;
   children?: WorkspacePageNode[];
+  assignment?: WorkspacePageAssignment | null;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface WorkspacePageAssignment {
+  pageId: string;
+  pageTitle: string;
+  assignedUserId: string;
+  assignedUserName: string;
+  assignedUserEmail: string;
+  assignedByUserId: string;
+  assignedAt: string;
 }
 
 export interface BlockFormatting {

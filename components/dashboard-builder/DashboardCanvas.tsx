@@ -3,7 +3,7 @@
 // components/dashboard-builder/DashboardCanvas.tsx
 // Drag-and-drop resizable grid using react-grid-layout v2.
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ReactGridLayout, useContainerWidth } from "react-grid-layout";
 import type { LayoutItem, Layout } from "react-grid-layout";
@@ -12,7 +12,8 @@ import "react-resizable/css/styles.css";
 import { X, GripVertical, Loader2, LayoutTemplate, MousePointerClick, GripHorizontal } from "lucide-react";
 import { WidgetInstance, WidgetDefinition } from "@/types/dashboard-builder";
 import { WidgetRenderer } from "./WidgetRenderer";
-import { getWidgetEntry } from "./WidgetRegistry";
+import { getWidgetEntry, isWidgetPermitted, compactLayout } from "./WidgetRegistry";
+import { useAuth } from "@/context/AuthContext";
 
 const COLS = 12;
 const ROW_HEIGHT = 80;
@@ -60,9 +61,10 @@ interface WidgetCardProps {
   widget: WidgetInstance;
   isPreview: boolean;
   onRemove: (id: string) => void;
+  onForbidden?: () => void;
 }
 
-function WidgetCard({ widget, isPreview, onRemove }: WidgetCardProps) {
+function WidgetCard({ widget, isPreview, onRemove, onForbidden }: WidgetCardProps) {
   const router = useRouter();
   const entry = getWidgetEntry(widget.widgetId);
   const href = entry?.href;
@@ -109,7 +111,7 @@ function WidgetCard({ widget, isPreview, onRemove }: WidgetCardProps) {
         )}
       </div>
       <div className="flex-1 min-h-0 p-3 overflow-hidden">
-        <WidgetRenderer widgetId={widget.widgetId} isPreview={isPreview} />
+        <WidgetRenderer widgetId={widget.widgetId} isPreview={isPreview} onForbidden={onForbidden} />
       </div>
     </div>
   );
@@ -130,29 +132,50 @@ function GridContainer({
   onLayoutChange: (widgets: WidgetInstance[]) => void;
   onRemoveWidget: (instanceId: string) => void;
 }) {
+  const { userPermissions, isAdmin, permissionsLoaded } = useAuth();
+  const [forbiddenIds, setForbiddenIds] = useState<Set<string>>(new Set());
+
+  const handleForbidden = useCallback((instanceId: string) => {
+    setForbiddenIds((prev) => {
+      const next = new Set(prev);
+      next.add(instanceId);
+      return next;
+    });
+  }, []);
+
+  const permittedWidgets = useMemo(() => {
+    if (!permissionsLoaded && !isAdmin) return [];
+    const allowed = widgets.filter(
+      (w) =>
+        !forbiddenIds.has(w.instanceId) &&
+        isWidgetPermitted(w.widgetId, userPermissions, isAdmin)
+    );
+    return compactLayout(allowed);
+  }, [widgets, forbiddenIds, userPermissions, isAdmin, permissionsLoaded]);
+
   // useContainerWidth returns { width, containerRef, mounted }
   const { width, containerRef, mounted } = useContainerWidth({ initialWidth: 1280 });
 
-  const layout = useMemo(() => toRGLLayout(widgets, catalog), [widgets, catalog]);
+  const layout = useMemo(() => toRGLLayout(permittedWidgets, catalog), [permittedWidgets, catalog]);
 
   const handleLayoutChange = useCallback(
     (newLayout: Layout) => {
-      const merged = mergeLayout(widgets, newLayout);
+      const merged = mergeLayout(permittedWidgets, newLayout);
       const changed = merged.some(
         (w, i) =>
-          w.x !== widgets[i]?.x ||
-          w.y !== widgets[i]?.y ||
-          w.w !== widgets[i]?.w ||
-          w.h !== widgets[i]?.h
+          w.x !== permittedWidgets[i]?.x ||
+          w.y !== permittedWidgets[i]?.y ||
+          w.w !== permittedWidgets[i]?.w ||
+          w.h !== permittedWidgets[i]?.h
       );
       if (changed) onLayoutChange(merged);
     },
-    [widgets, onLayoutChange]
+    [permittedWidgets, onLayoutChange]
   );
 
   return (
     <div ref={containerRef as React.RefObject<HTMLDivElement>} className="w-full">
-      {mounted && (
+      {mounted && permittedWidgets.length > 0 && (
         <ReactGridLayout
           width={width}
           layout={layout}
@@ -171,12 +194,13 @@ function GridContainer({
           }}
           onLayoutChange={handleLayoutChange}
         >
-          {widgets.map((widget) => (
+          {permittedWidgets.map((widget) => (
             <div key={widget.instanceId}>
               <WidgetCard
                 widget={widget}
                 isPreview={isPreview}
                 onRemove={onRemoveWidget}
+                onForbidden={() => handleForbidden(widget.instanceId)}
               />
             </div>
           ))}
@@ -197,6 +221,17 @@ export function DashboardCanvas({
   onLayoutChange,
   onRemoveWidget,
 }: DashboardCanvasProps) {
+  const { userPermissions, isAdmin, permissionsLoaded } = useAuth();
+
+  const visibleCount = useMemo(() => {
+    if (!permissionsLoaded && !isAdmin) return 0;
+    return widgets.filter((w) =>
+      isWidgetPermitted(w.widgetId, userPermissions, isAdmin)
+    ).length;
+  }, [widgets, userPermissions, isAdmin, permissionsLoaded]);
+
+  const actuallyEmpty = isEmpty || visibleCount === 0;
+
   if (isLoading) {
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
@@ -215,7 +250,10 @@ export function DashboardCanvas({
     );
   }
 
-  if (isEmpty) {
+  if (actuallyEmpty) {
+    if (isPreview) {
+      return null;
+    }
     return (
       <div className="flex-1 flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-5 max-w-sm text-center">

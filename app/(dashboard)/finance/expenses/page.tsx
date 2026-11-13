@@ -26,6 +26,8 @@ import * as XLSX from "xlsx";
 import { CATEGORIES, PAGE_SIZE, formatDateForExport, getCategoryInfo } from "@/components/finance/expenses/constants";
 import { Toast, TableSkeleton, EmptyState, ErrorState, StatsCards, ExpenseRow } from "@/components/finance/expenses/ExpenseComponents";
 import { CreateExpenseModal, UpdateExpenseModal } from "@/components/finance/expenses/ExpenseModals";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useRBAC } from "@/hooks/useRBAC";
 
 // ── Types ─────────────────────────────────────────────────
 type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REIMBURSED";
@@ -283,13 +285,15 @@ export default function ExpensesPage() {
                 )}
               </button>
 
-              <button
-                onClick={() => setShowCreateModal(true)}
-                className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5"
-              >
-                <Plus size={18} />
-                Create Expense
-              </button>
+              <PermissionGuard permission="expenses.create">
+                <button
+                  onClick={() => setShowCreateModal(true)}
+                  className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 transition-all transform hover:-translate-y-0.5"
+                >
+                  <Plus size={18} />
+                  Create Expense
+                </button>
+              </PermissionGuard>
             </div>
           </div>
         </div>

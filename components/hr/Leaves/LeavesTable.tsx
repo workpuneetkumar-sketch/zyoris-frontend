@@ -1,4 +1,5 @@
 "use client";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import React, { useState } from "react";
 import {
@@ -206,30 +207,34 @@ export default function LeavesTable({
                     <td className="px-4 py-3.5 text-center">
                       {leave.status === "PENDING" ? (
                         <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => onApprove(leave.id)}
-                            disabled={!!actionLoading}
-                            title="Approve Leave"
-                            className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
-                          >
-                            {actionLoading === leave.id + "_approve" ? (
-                              <Loader2 size={15} className="animate-spin text-emerald-600" />
-                            ) : (
-                              <CheckCircle2 size={15} />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => onReject(leave.id)}
-                            disabled={!!actionLoading}
-                            title="Reject Leave"
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
-                          >
-                            {actionLoading === leave.id + "_reject" ? (
-                              <Loader2 size={15} className="animate-spin text-rose-600" />
-                            ) : (
-                              <XCircle size={15} />
-                            )}
-                          </button>
+                          <PermissionGuard permission="leaves.approve" action="disable" disabledTooltip="You do not have permission to approve leaves.">
+                            <button
+                              onClick={() => onApprove(leave.id)}
+                              disabled={!!actionLoading}
+                              title="Approve Leave"
+                              className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+                            >
+                              {actionLoading === leave.id + "_approve" ? (
+                                <Loader2 size={15} className="animate-spin text-emerald-600" />
+                              ) : (
+                                <CheckCircle2 size={15} />
+                              )}
+                            </button>
+                          </PermissionGuard>
+                          <PermissionGuard permission="leaves.approve" action="disable" disabledTooltip="You do not have permission to reject leaves.">
+                            <button
+                              onClick={() => onReject(leave.id)}
+                              disabled={!!actionLoading}
+                              title="Reject Leave"
+                              className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 transition-colors disabled:opacity-50 cursor-pointer shadow-2xs"
+                            >
+                              {actionLoading === leave.id + "_reject" ? (
+                                <Loader2 size={15} className="animate-spin text-rose-600" />
+                              ) : (
+                                <XCircle size={15} />
+                              )}
+                            </button>
+                          </PermissionGuard>
                         </div>
                       ) : (
                         <button

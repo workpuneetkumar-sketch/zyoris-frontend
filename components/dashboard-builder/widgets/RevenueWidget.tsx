@@ -6,7 +6,9 @@
 // so we must not fabricate or compute it here.
 
 import { TrendingUp, TrendingDown, RefreshCw, AlertCircle, DollarSign } from "lucide-react";
+import { useEffect } from "react";
 import { useRevenueForecast } from "@/hooks/useDashboard";
+import { useRBAC } from "@/hooks/useRBAC";
 import type { ForecastDatapoint } from "@/lib/api/dashboardApi";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,

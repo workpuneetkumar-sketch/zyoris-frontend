@@ -17,7 +17,6 @@ import {
   type CreateNotificationPayload,
 } from "@/lib/api/notificationsApi";
 import { backendToTab, tabToBackend } from "@/utils/notificationCategories";
-
 import { deduplicateNotifications } from "@/utils/notificationDeduplication";
 
 function mapCategory(dto: NotificationDto): NotificationCategory {
@@ -35,9 +34,9 @@ export function dtoToNotification(dto: NotificationDto): Notification {
     id: String(dto.id),
     organizationId: dto.organizationId,
     userId: dto.userId,
-    title: dto.title,
-    message: dto.message,
-    type: dto.type,
+    title: dto.title || "Notification",
+    message: dto.message || "",
+    type: dto.type || "INFO",
     category: mapCategory(dto),
     priority: mapPriority(dto),
     entityType: dto.entityType,
@@ -48,12 +47,12 @@ export function dtoToNotification(dto: NotificationDto): Notification {
     actorId: dto.actorId,
     actorName: dto.actorName,
     actorAvatar: dto.actorAvatar,
-    createdAt: dto.createdAt,
-    read: dto.read,
+    createdAt: dto.createdAt || new Date().toISOString(),
+    read: Boolean(dto.read),
     readAt: dto.readAt,
     archivedAt: dto.archivedAt,
-      dismissedAt: dto.dismissedAt,
-      snoozedUntil: dto.snoozedUntil,
+    dismissedAt: dto.dismissedAt,
+    snoozedUntil: dto.snoozedUntil,
     deepLink: dto.deepLink,
     actor: dto.actor
       ? {
@@ -73,6 +72,41 @@ export interface GetNotificationsResult {
   unreadCount: number;
 }
 
+/**
+ * Robustly extracts notification array from any response shape.
+ */
+function extractRawList(response: any): any[] {
+  if (!response) return [];
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response.data)) return response.data;
+  if (Array.isArray(response.notifications)) return response.notifications;
+  if (Array.isArray(response.items)) return response.items;
+  if (Array.isArray(response.results)) return response.results;
+  if (Array.isArray(response.rows)) return response.rows;
+  if (Array.isArray(response.data?.data)) return response.data.data;
+  if (Array.isArray(response.data?.notifications)) return response.data.notifications;
+  if (Array.isArray(response.data?.items)) return response.data.items;
+  if (Array.isArray(response.data?.results)) return response.data.results;
+  if (Array.isArray(response.data?.rows)) return response.data.rows;
+
+  if (response.data && typeof response.data === "object") {
+    for (const val of Object.values(response.data)) {
+      if (Array.isArray(val)) return val;
+    }
+  }
+  for (const val of Object.values(response)) {
+    if (Array.isArray(val)) return val;
+  }
+  return [];
+}
+
+function isArchivedNotification(notification: any): boolean {
+  const val = notification?.archivedAt;
+  if (!val) return false;
+  if (val === "null" || val === "undefined" || val === "false" || val === false) return false;
+  return true;
+}
+
 export async function getNotifications(params?: {
   category?: string;
   cursor?: string;
@@ -82,33 +116,68 @@ export async function getNotifications(params?: {
   includeArchived?: boolean;
 }): Promise<GetNotificationsResult> {
   const response = await fetchNotifications({
-    limit: params?.limit ?? 20,
+    limit: params?.limit ?? 50,
     unreadOnly: params?.unreadOnly ?? params?.category === "unread",
     cursor: params?.cursor,
     priority: params?.priority,
     includeArchived: params?.includeArchived,
   });
-    const notifications = deduplicateNotifications(
-    response.data
+
+  const rawList = extractRawList(response);
+
+  const notifications = deduplicateNotifications(
+    rawList
       .map(dtoToNotification)
-      .filter((notification) => params?.includeArchived !== true || (
-        notification.archivedAt !== null && notification.archivedAt !== undefined
-      ))
+      .filter((notification) =>
+        params?.includeArchived === true
+          ? isArchivedNotification(notification)
+          : !isArchivedNotification(notification)
+      )
       .sort(
         (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       )
   );
 
+  const nextCursor =
+    (response as any)?.pagination?.nextCursor ??
+    (response as any)?.nextCursor ??
+    (response as any)?.data?.pagination?.nextCursor ??
+    null;
+
+  const hasMore = Boolean(
+    (response as any)?.pagination?.hasNext ??
+    (response as any)?.hasMore ??
+    (response as any)?.data?.pagination?.hasNext ??
+    false
+  );
+
+  const unreadCount =
+    typeof (response as any)?.unreadCount === "number"
+      ? (response as any).unreadCount
+      : typeof (response as any)?.data?.unreadCount === "number"
+      ? (response as any).data.unreadCount
+      : typeof (response as any)?.total === "number" && params?.unreadOnly
+      ? (response as any).total
+      : notifications.filter((n) => !n.read).length;
+
   return {
     notifications,
-    nextCursor: response.pagination.nextCursor,
-    hasMore: response.pagination.hasNext,
-    unreadCount: response.unreadCount,
+    nextCursor,
+    hasMore,
+    unreadCount,
   };
 }
 
 export async function markAsRead(id: string): Promise<void> {
-  await markNotificationAsRead(id);
+  if (String(id).startsWith("notif-")) return;
+  try {
+    await markNotificationAsRead(id);
+  } catch (err: any) {
+    if (err?.response?.status === 404 || err?.status === 404 || String(err?.message).includes("404")) {
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function markAllRead(category?: string): Promise<void> {
@@ -121,7 +190,15 @@ export async function markAllRead(category?: string): Promise<void> {
 }
 
 export async function archiveNotification(id: string): Promise<void> {
-  await archiveNotificationApi(id);
+  if (String(id).startsWith("notif-")) return;
+  try {
+    await archiveNotificationApi(id);
+  } catch (err: any) {
+    if (err?.response?.status === 404 || err?.status === 404 || String(err?.message).includes("404")) {
+      return;
+    }
+    throw err;
+  }
 }
 
 // TODO: enable once backend confirms PATCH /:id/dismiss exists.
@@ -129,28 +206,22 @@ export async function dismissNotification(id: string): Promise<void> {
   await dismissNotificationApi(id);
 }
 
-// TODO: enable once backend confirms PATCH /:id/snooze exists. This only changes
-// notification visibility and must never reschedule the linked business record.
+// TODO: enable once backend confirms PATCH /:id/snooze exists.
 export async function snoozeNotification(id: string, until: string): Promise<void> {
   await snoozeNotificationApi(id, until);
 }
 
-/** Permanently hard-deletes a notification via DELETE /api/notifications/{id}. */
 export async function hardDeleteNotification(id: string): Promise<void> {
   await deleteNotificationApi(id);
 }
 
-export async function deleteNotification(id: string): Promise<void> {
-  await archiveNotificationApi(id);
-}
+export const deleteNotification = hardDeleteNotification;
 
-export async function bulkArchive(payload: BulkArchivePayload = {}): Promise<void> {
+export async function bulkArchive(payload?: BulkArchivePayload): Promise<void> {
   await bulkArchiveNotifications(payload);
 }
 
-export async function createNotification(
-  payload: CreateNotificationPayload
-): Promise<Notification> {
+export async function createNotification(payload: CreateNotificationPayload): Promise<Notification> {
   const dto = await createNotificationApi(payload);
   return dtoToNotification(dto);
 }

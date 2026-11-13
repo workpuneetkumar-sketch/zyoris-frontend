@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/hrApi";
 import * as XLSX from "xlsx";
 import ApplyLeaveModal from "@/components/hr/Leaves/ApplyLeaveModal";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import LeavesTable from "@/components/hr/Leaves/LeavesTable";
 
 // ── Types ─────────────────────────────────────────────────
@@ -316,13 +317,15 @@ export default function LeavesPage() {
               <span className="hidden sm:inline">{loading ? "Refreshing..." : "Refresh"}</span>
             </button>
 
-            <button
-              onClick={() => setShowModal(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer"
-            >
-              <Plus size={16} />
-              <span>Apply Leave</span>
-            </button>
+            <PermissionGuard permission="leaves.create">
+              <button
+                onClick={() => setShowModal(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:from-blue-800 active:to-indigo-800 text-white text-xs sm:text-sm font-bold rounded-xl transition-all shadow-md shadow-blue-500/20 cursor-pointer"
+              >
+                <Plus size={16} />
+                <span>Apply Leave</span>
+              </button>
+            </PermissionGuard>
           </div>
         </div>
 

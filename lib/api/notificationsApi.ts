@@ -1,5 +1,5 @@
 import api from "@/lib/api/api";
-import type { NotificationPreferences, UnreadCountData } from "@/types/notifications";
+import type { NotificationPreferences, NotificationCategoryPreferences, UnreadCountData } from "@/types/notifications";
 
 export interface NotificationDto {
   id: string;
@@ -58,17 +58,22 @@ export const fetchNotifications = async (params?: {
   category?: string | string[];
   includeArchived?: boolean;
   cursor?: string;
+  offset?: number;
   limit?: number;
 }): Promise<FetchNotificationsResponse> => {
   const query: Record<string, unknown> = {
-    limit: params?.limit ?? 20,
+    limit: params?.limit ?? 50,
   };
   if (params?.read !== undefined) query.read = params.read;
-  if (params?.unreadOnly === true) query.unreadOnly = true;
+  if (params?.unreadOnly === true) {
+    query.unreadOnly = true;
+    query.read = false;
+  }
   if (params?.priority) query.priority = params.priority;
   if (params?.category) query.category = params.category;
   if (params?.includeArchived !== undefined) query.includeArchived = params.includeArchived;
   if (params?.cursor) query.cursor = params.cursor;
+  if (params?.offset !== undefined) query.offset = params.offset;
   const response = await api.get<FetchNotificationsResponse>("/api/notifications", { params: query });
   return response.data;
 };
@@ -146,14 +151,66 @@ export const fetchUnreadCounts = async (): Promise<UnreadCountData> => {
   return response.data;
 };
 
-/** Preferences endpoints exist but are not wired into this notification UI yet. */
+/**
+ * GET /api/notifications/preferences
+ * Returns the per-category channel matrix: { leads: { inApp, email, push, sound }, … }
+ * Backend also returns quietHours and dnd — we extract only the preferences matrix here.
+ *
+ * Backend category keys are uppercase (LEAD, DEAL, TASK, SYSTEM, …).
+ * We normalise them to lowercase UI keys (lead→lead, etc.) for the UI matrix.
+ */
 export const fetchNotificationPreferences = async (): Promise<NotificationPreferences> => {
-  return {};
+  try {
+    const response = await api.get<{
+      preferences: Record<string, NotificationCategoryPreferences>;
+      quietHours?: unknown;
+      dnd?: boolean;
+    }>("/api/notifications/preferences");
+    const raw = response.data?.preferences ?? {};
+    // Normalise keys: backend sends uppercase, UI uses lowercase
+    const normalised: NotificationPreferences = {};
+    Object.entries(raw).forEach(([k, v]) => {
+      normalised[k.toLowerCase()] = v;
+    });
+    return normalised;
+  } catch {
+    // Non-fatal: fall back to defaults so the UI still renders
+    return {};
+  }
 };
 
-/** Preferences endpoints exist but are not wired into this notification UI yet. */
+/**
+ * PUT /api/notifications/preferences
+ * Accepts the full or partial category matrix.
+ * Backend requires uppercase category keys (LEAD, DEAL, TASK, SYSTEM, …).
+ * Maps: leads→LEAD, messages→MESSAGE, deals→DEAL, tasks→TASK, system→SYSTEM.
+ */
+const FE_TO_BE_CATEGORY: Record<string, string> = {
+  leads:    "LEAD",
+  messages: "MESSAGE",
+  deals:    "DEAL",
+  tasks:    "TASK",
+  system:   "SYSTEM",
+};
+
 export const updateNotificationPreferences = async (
   preferences: NotificationPreferences
 ): Promise<NotificationPreferences> => {
-  return preferences;
+  // Map UI lowercase keys → backend uppercase enum values
+  const payload: Record<string, NotificationCategoryPreferences> = {};
+  Object.entries(preferences).forEach(([k, v]) => {
+    const beKey = FE_TO_BE_CATEGORY[k] ?? k.toUpperCase();
+    payload[beKey] = v;
+  });
+  const response = await api.put<{ preferences: Record<string, NotificationCategoryPreferences> }>(
+    "/api/notifications/preferences",
+    payload
+  );
+  // Normalise response back to lowercase for the UI
+  const raw = response.data?.preferences ?? payload;
+  const normalised: NotificationPreferences = {};
+  Object.entries(raw).forEach(([k, v]) => {
+    normalised[k.toLowerCase()] = v;
+  });
+  return normalised;
 };

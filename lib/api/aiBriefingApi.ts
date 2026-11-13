@@ -42,6 +42,9 @@ export async function getMorningBriefing(): Promise<MorningBriefingData> {
       fallback: data.fallback || false,
     };
   } catch (error: any) {
+    if (error?.response?.status === 403 || error?.response?.status === 401) {
+      return { fallback: true, summaryBullets: [] };
+    }
     console.error("Failed to fetch morning briefing:", error);
     throw new Error(
       error.response?.data?.message || error.message || "Unable to load briefing."
@@ -58,9 +61,10 @@ export async function getDashboardAnomalies(): Promise<AnomalyAlertsData> {
       fallback: data.fallback || false,
     };
   } catch (error: any) {
+    if (error?.response?.status === 403 || error?.response?.status === 401) {
+      return { anomalies: [], fallback: true };
+    }
     console.error("Failed to fetch proactive anomalies:", error);
-    throw new Error(
-      error.response?.data?.message || error.message || "Unable to load anomaly alerts."
-    );
+    return { anomalies: [], fallback: true };
   }
 }

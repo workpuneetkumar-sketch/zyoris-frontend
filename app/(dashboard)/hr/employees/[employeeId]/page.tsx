@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useParams, notFound } from 'next/navigation';
 import { 
   ArrowLeft, 
@@ -88,13 +89,42 @@ export default function EmployeeDetailPage() {
       }
       
       try {
+        const targetEmpId = employeeData?.id || employeeId;
+        const targetUserId = employeeData?.userId;
         const [attendanceData, leaveData] = await Promise.all([
-          fetchAttendance({ employeeId }),
-          fetchLeaves({ employeeId })
+          fetchAttendance({ employeeId: targetEmpId }),
+          fetchLeaves({ employeeId: targetEmpId })
         ]);
         
-        setAttendanceHistory(attendanceData || []);
-        setLeaveHistory(leaveData || []);
+        // Filter strictly to this employee
+        const filteredAttendance = (attendanceData || []).filter((r) => {
+          const raw = r as any;
+          if (raw.employeeId && raw.employeeId === targetEmpId) return true;
+          if (raw.employee?.id && raw.employee?.id === targetEmpId) return true;
+          if (targetUserId && (raw.employee?.userId === targetUserId || raw.userId === targetUserId)) return true;
+          return false;
+        });
+
+        // Deduplicate records on the same day (taking first valid entry)
+        const seenAttendanceDates = new Set<string>();
+        const uniqueAttendance = filteredAttendance.filter((rec) => {
+          const dateStr = rec.attendanceDate ? new Date(rec.attendanceDate).toDateString() : (rec.checkIn ? new Date(rec.checkIn).toDateString() : rec.id);
+          if (seenAttendanceDates.has(dateStr)) return false;
+          seenAttendanceDates.add(dateStr);
+          return true;
+        });
+
+        // Strict filter for leave requests
+        const filteredLeaves = (leaveData || []).filter((l) => {
+          const raw = l as any;
+          if (raw.employeeId && raw.employeeId === targetEmpId) return true;
+          if (raw.employee?.id && raw.employee?.id === targetEmpId) return true;
+          if (targetUserId && (raw.employee?.userId === targetUserId || raw.userId === targetUserId)) return true;
+          return false;
+        });
+
+        setAttendanceHistory(uniqueAttendance);
+        setLeaveHistory(filteredLeaves);
       } catch (err) {
         console.warn('Failed to fetch attendance/leave data:', err);
         setAttendanceHistory([]);
@@ -273,14 +303,20 @@ export default function EmployeeDetailPage() {
     }
   };
 
+  const getAttendanceDisplayStatus = (record: Attendance) => {
+    if (record.status) return record.status;
+    if (record.checkIn) return "Present";
+    return "Absent";
+  };
+
   const getAttendanceStatusBadgeClass = (status?: string) => {
     switch (status?.toLowerCase()) {
-      case 'present': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-      case 'late': return 'bg-amber-50 text-amber-700 border-amber-200';
-      case 'absent': return 'bg-red-50 text-red-600 border-red-200';
-      case 'half day':
-      case 'half_day': return 'bg-blue-50 text-blue-600 border-blue-200';
-      default: return 'bg-gray-50 text-gray-600 border-gray-200';
+      case "present": return "bg-emerald-50 text-emerald-700 border-emerald-200";
+      case "late": return "bg-amber-50 text-amber-700 border-amber-200";
+      case "absent": return "bg-red-50 text-red-600 border-red-200";
+      case "half day":
+      case "half_day": return "bg-blue-50 text-blue-600 border-blue-200";
+      default: return "bg-emerald-50 text-emerald-700 border-emerald-200";
     }
   };
 
@@ -343,6 +379,7 @@ export default function EmployeeDetailPage() {
             Back to Employees
           </Link>
           
+          <PermissionGuard permission="employees.update">
           <button 
             onClick={handleEditClick}
             className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 hover:shadow-sm transition-all active:scale-[0.98] shadow-sm w-fit"
@@ -350,6 +387,7 @@ export default function EmployeeDetailPage() {
             <Pencil className="w-4 h-4 text-indigo-600" />
             Edit Profile
           </button>
+          </PermissionGuard>
         </div>
 
         {/* Profile Hero Card */}
@@ -551,8 +589,8 @@ export default function EmployeeDetailPage() {
                             </div>
                           </td>
                           <td className="px-5 sm:px-8 py-3.5 sm:py-4 whitespace-nowrap">
-                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold border ${getAttendanceStatusBadgeClass(record.status)}`}>
-                              {record.status || 'N/A'}
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] sm:text-[11px] font-bold border ${getAttendanceStatusBadgeClass(getAttendanceDisplayStatus(record))}`}>
+                              {getAttendanceDisplayStatus(record)}
                             </span>
                           </td>
                         </tr>

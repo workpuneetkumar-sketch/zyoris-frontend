@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { getTeamMembers, TeamMember } from "@/lib/api/organizationsApi";
 import { useBulkOperations } from "@/hooks/useBulkOperations";
+import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { Lead } from "@/types/leads";
 import { BulkOperationType } from "@/types/bulkOperations";
 
@@ -762,30 +763,36 @@ export function BulkActionsToolbar({
             {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-2 ml-auto flex-wrap">
-            <button
-              onClick={() => openBulkAction("assign")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
-              aria-label="Bulk assign"
-            >
-              <UserCheck size={13} />
-              Assign
-            </button>
-            <button
-              onClick={() => openBulkAction("update")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-200 text-violet-700 text-xs font-medium hover:bg-violet-100 transition-colors"
-              aria-label="Bulk update"
-            >
-              <Edit3 size={13} />
-              Update
-            </button>
-            <button
-              onClick={() => openBulkAction("delete")}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
-              aria-label="Bulk delete"
-            >
-              <Trash2 size={13} />
-              Delete
-            </button>
+            <PermissionGuard permission="leads.assign" action="disable" disabledTooltip="You do not have permission to assign leads.">
+              <button
+                onClick={() => openBulkAction("assign")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-blue-700 text-xs font-medium hover:bg-blue-100 transition-colors"
+                aria-label="Bulk assign"
+              >
+                <UserCheck size={13} />
+                Assign
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="leads.update" action="disable" disabledTooltip="You do not have permission to update leads.">
+              <button
+                onClick={() => openBulkAction("update")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 border border-violet-200 text-violet-700 text-xs font-medium hover:bg-violet-100 transition-colors"
+                aria-label="Bulk update"
+              >
+                <Edit3 size={13} />
+                Update
+              </button>
+            </PermissionGuard>
+            <PermissionGuard permission="leads.delete" action="disable" disabledTooltip="You do not have permission to delete leads.">
+              <button
+                onClick={() => openBulkAction("delete")}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium hover:bg-red-100 transition-colors"
+                aria-label="Bulk delete"
+              >
+                <Trash2 size={13} />
+                Delete
+              </button>
+            </PermissionGuard>
             <button
               onClick={clearSelection}
               className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-gray-200 text-gray-500 text-xs hover:bg-gray-50 transition-colors"
