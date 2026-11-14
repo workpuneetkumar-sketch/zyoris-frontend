@@ -83,8 +83,11 @@ import { useConnectSocket } from "@/hooks/useConnectSocket";
 import { MentionMember } from "./MentionAutocomplete";
 import { useSearchParams } from "next/navigation";
 import { useConnectNotifications } from "@/context/ConnectNotificationContext";
+import { useConfirm } from "@/components/common/ConfirmProvider";
+import { notify } from "@/lib/notify";
 
 export default function ConnectWorkspace() {
+  const requestConfirmation = useConfirm();
   // Navigation & Data State - initialized from local cache to prevent data loss on reload
   const [channels, setChannels] = useState<Channel[]>(() => {
     if (typeof window !== "undefined") {
@@ -926,7 +929,7 @@ export default function ConnectWorkspace() {
       setEditingMessage(null);
     } catch (err) {
       console.error("Failed to update message:", err);
-      alert("Failed to update message. Please check your connection and try again.");
+      notify.error("Failed to update message. Please check your connection and try again.");
     }
   };
 
@@ -949,7 +952,13 @@ export default function ConnectWorkspace() {
    * Delete Message: DELETE /api/communications/messages/:messageId
    */
   const handleDeleteMessage = async (msg: ConnectMessage) => {
-    if (!confirm("Are you sure you want to delete this message?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Message",
+      message: "Are you sure you want to delete this message?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     try {
       const ok = await deleteMessage(msg.id);
@@ -961,7 +970,7 @@ export default function ConnectWorkspace() {
       }
     } catch (err) {
       console.error("Failed to delete message:", err);
-      alert("Failed to delete message. Please try again.");
+      notify.error("Failed to delete message. Please try again.");
     }
   };
 

@@ -7,6 +7,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { WorkspacePageNode } from "@/types/workspace";
 import { deleteWorkspacePage, duplicateWorkspacePage } from "@/lib/api/workspaceApi";
 import { getPageContent } from "@/lib/api/workspaceApi";
+import { notify } from "@/lib/notify";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 import { saveStoredLocalPage } from "@/hooks/useWorkspace";
 import { MovePageModal } from "./MovePageModal";
 import { TurnIntoWikiModal } from "./TurnIntoWikiModal";
@@ -58,6 +60,7 @@ const PageTreeNodeItem: React.FC<{
   depth: number;
   currentUserId?: string;
 }> = ({ node, pageTree, onAddSubpage, onRefreshTree, depth, currentUserId }) => {
+  const requestConfirmation = useConfirm();
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
   const [isMenuOpen, setIsMenuOpen] = useState<boolean>(false);
   const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
@@ -135,9 +138,13 @@ const PageTreeNodeItem: React.FC<{
 
   const handleDelete = async () => {
     if (!safeId) return;
-    if (!window.confirm(`Are you sure you want to delete "${node.title || "this item"}"?`)) {
-      return;
-    }
+    const ok = await requestConfirmation({
+      title: "Move to Trash",
+      message: `Are you sure you want to move "${node.title || "this item"}" to Trash?`,
+      confirmText: "Move",
+      variant: "warning",
+    });
+    if (!ok) return;
     try {
       await deleteWorkspacePage(safeId);
       if (typeof window !== "undefined") {
@@ -154,7 +161,7 @@ const PageTreeNodeItem: React.FC<{
         if (onRefreshTree) onRefreshTree();
         if (isActive) router.push("/workspace/trash");
       } else {
-        alert(err?.response?.data?.message || "Failed to delete page on server. Please try again.");
+        notify.error(err?.response?.data?.message || "Failed to delete page on server. Please try again.");
       }
     }
   };
@@ -181,7 +188,7 @@ const PageTreeNodeItem: React.FC<{
       if (newPage?.id) router.push(`/workspace/pages/${newPage.id}`);
     } catch (err: any) {
       console.error("Failed to duplicate page:", err);
-      alert(err?.response?.data?.message || "Failed to duplicate page.");
+      notify.error(err?.response?.data?.message || "Failed to duplicate page.");
     }
   };
 
@@ -192,7 +199,7 @@ const PageTreeNodeItem: React.FC<{
     navigator.clipboard.writeText(url).then(() => {
       // Brief visual feedback via the menu label — no extra state needed
     }).catch(() => {
-      alert("Could not copy link. Please copy manually: " + url);
+      notify.warning("Could not copy link. Please copy manually: " + url);
     });
     setIsMenuOpen(false);
   };
@@ -205,7 +212,7 @@ const PageTreeNodeItem: React.FC<{
       const { markdown } = await getPageContent(safeId);
       await navigator.clipboard.writeText(markdown);
     } catch {
-      alert("Failed to copy page content.");
+      notify.error("Failed to copy page content.");
     }
   };
 

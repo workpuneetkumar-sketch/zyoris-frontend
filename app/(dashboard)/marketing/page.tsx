@@ -13,6 +13,7 @@ import {
 import CampaignStatsCards from "@/components/marketing/campaigns/CampaignStatsCards";
 import CampaignTable from "@/components/marketing/campaigns/CampaignTable";
 import CampaignModals from "@/components/marketing/campaigns/CampaignModals";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 // ── Toast ─────────────────────────────────────────────────
 interface ToastMessage {
   type: "success" | "error";
@@ -42,6 +43,7 @@ const Toast: React.FC<{ toast: ToastMessage; onClose: () => void }> = ({
 const PAGE_SIZE = 10;
 
 export default function CampaignsPage() {
+  const requestConfirmation = useConfirm();
   const [allCampaigns, setAllCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +113,13 @@ export default function CampaignsPage() {
 
   // Handlers
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this campaign?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Campaign",
+      message: "Are you sure you want to delete this campaign?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteCampaign(id);
       setAllCampaigns((prev) => prev.filter((c) => c.id !== id));

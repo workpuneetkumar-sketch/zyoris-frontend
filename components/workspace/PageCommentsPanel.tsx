@@ -33,6 +33,7 @@ import {
 } from "@/lib/api/workspaceApi";
 import type { WorkspaceComment } from "@/types/workspace";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 interface PageCommentsPanelProps {
   isOpen: boolean;
@@ -77,6 +78,7 @@ export const PageCommentsPanel: React.FC<PageCommentsPanelProps> = ({
   pageId,
   targetBlockId = null,
 }) => {
+  const requestConfirmation = useConfirm();
   const [mounted, setMounted] = useState(false);
   const { user } = useAuth();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -209,7 +211,13 @@ export const PageCommentsPanel: React.FC<PageCommentsPanelProps> = ({
   };
 
   const handleDelete = async (commentId: string) => {
-    if (!window.confirm("Are you sure you want to delete this comment?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Comment",
+      message: "Are you sure you want to delete this comment?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     setComments((prev) => prev.filter((c) => c.id !== commentId));
     try {
       await deletePageComment(pageId, commentId);

@@ -8,6 +8,7 @@ import {
   parseDateSafe,
 } from "@/lib/api/calendarService";
 import { getCategoryToken, DEPARTMENT_CALENDAR_TOKENS } from "./calendarTheme";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 import {
   X,
   Calendar as CalendarIcon,
@@ -44,6 +45,7 @@ export default function EventDetailsModal({
   onDelete,
   onUpdateRsvp,
 }: EventDetailsModalProps) {
+  const requestConfirmation = useConfirm();
   if (!event) return null;
 
   const dur = event.allDay
@@ -59,7 +61,13 @@ export default function EventDetailsModal({
   const handleDelete = async () => {
     if (!onDelete) return;
     const targetId = event.masterEventId || event.id;
-    if (confirm("Are you sure you want to delete this event?")) {
+    const ok = await requestConfirmation({
+      title: "Delete Event",
+      message: "Are you sure you want to delete this event?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (ok) {
       await onDelete(targetId);
       onClose();
     }

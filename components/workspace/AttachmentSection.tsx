@@ -12,6 +12,7 @@ import {
   getAttachmentDownloadUrl,
 } from "@/lib/api/attachmentApi";
 import { uploadDocument } from "@/lib/api/documentsApi";
+import { notify } from "@/lib/notify";
 import { AttachmentPreviewModal } from "./AttachmentPreviewModal";
 import {
   Paperclip,
@@ -189,7 +190,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       link.click();
       document.body.removeChild(link);
     } catch (err: any) {
-      alert(err.message || "Failed to download file");
+      notify.error(err.message || "Failed to download file");
     } finally {
       setActionLoadingIds((prev) => ({ ...prev, [actionKey]: false }));
     }
@@ -210,7 +211,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
         prev.map((item) => (item.id === attachment.id ? { ...item, isArchived: nextState } : item))
       );
     } catch (err: any) {
-      alert(err.message || "Failed to update archive status");
+      notify.error(err.message || "Failed to update archive status");
     } finally {
       setActionLoadingIds((prev) => ({ ...prev, [actionKey]: false }));
     }
@@ -227,7 +228,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       setAttachments((prev) => prev.filter((a) => a.id !== detachTarget.id));
       setDetachTarget(null);
     } catch (err: any) {
-      alert(err.message || "Failed to detach attachment");
+      notify.error(err.message || "Failed to detach attachment");
     } finally {
       setIsDetaching(false);
     }
@@ -253,7 +254,7 @@ export const AttachmentSection: React.FC<AttachmentSectionProps> = ({
       );
       setEditTarget(null);
     } catch (err: any) {
-      alert(err.message || "Failed to save metadata");
+      notify.error(err.message || "Failed to save metadata");
     } finally {
       setIsSavingEdit(false);
     }

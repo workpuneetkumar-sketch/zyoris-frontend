@@ -30,6 +30,7 @@ import {
 import { EmailThread, FolderTab, EmailComposeSeed, EmailDraft } from "@/hooks/useEmail";
 import { SendEmailPayload } from "@/lib/api/emailApi";
 import { GmailConnectScreen } from "@/components/email/GmailConnectScreen";
+import { usePrompt } from "@/components/common/ConfirmProvider";
 
 const FOLDERS: { label: FolderTab; icon: React.ReactNode }[] = [
     { label: "Inbox", icon: <Inbox size={16} /> },
@@ -81,6 +82,7 @@ function ComposeModal({
     onSaveDraft,
     onDeleteDraft,
 }: ComposeModalProps) {
+    const requestPrompt = usePrompt();
     const [to, setTo] = useState(seed?.to || "");
     const [cc, setCc] = useState(seed?.cc || "");
     const [bcc, setBcc] = useState(seed?.bcc || "");
@@ -276,7 +278,7 @@ function ComposeModal({
                                     {item.icon}
                                 </button>
                             ))}
-                            <button type="button" aria-label="Insert link" title="Insert link" onMouseDown={(event) => event.preventDefault()} onClick={() => { const url = window.prompt("Enter a link URL"); if (url) format("createLink", url); }} className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-white hover:text-blue-700"><Link size={15} /></button>
+                            <button type="button" aria-label="Insert link" title="Insert link" onMouseDown={(event) => event.preventDefault()} onClick={async () => { const url = await requestPrompt({ title: "Insert Link", message: "Enter a link URL", placeholder: "https://" }); if (url) format("createLink", url); }} className="flex h-8 w-8 items-center justify-center rounded text-gray-600 hover:bg-white hover:text-blue-700"><Link size={15} /></button>
                             <input ref={attachmentInputRef} type="file" multiple className="hidden" onChange={handleAttachmentSelection} />
                             <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => attachmentInputRef.current?.click()} title="Select attachments" className="ml-auto flex h-8 items-center gap-1.5 rounded px-2 text-xs text-gray-600 hover:bg-white hover:text-blue-700">
                                 <Paperclip size={14} />Attach files

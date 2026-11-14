@@ -12,6 +12,7 @@ import {
 import { ConnectMessage } from "@/types/connect";
 import { getSavedMessages, unsaveMessage } from "@/lib/api/connectApi";
 import MessageAttachmentRenderer from "./MessageAttachmentRenderer";
+import { notify } from "@/lib/notify";
 
 interface SavedMessagesModalProps {
   isOpen: boolean;
@@ -77,7 +78,7 @@ export default function SavedMessagesModal({
       }
     } catch (err) {
       console.error("Failed to unsave message:", err);
-      alert("Failed to unsave message. Please try again.");
+      notify.error("Failed to unsave message. Please try again.");
     } finally {
       setUnsavingId(null);
     }

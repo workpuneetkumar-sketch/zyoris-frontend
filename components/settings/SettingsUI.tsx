@@ -46,6 +46,7 @@ import {
   CampaignTemplate
 } from "@/lib/api/templatesApi";
 import { useTheme, ThemeMode } from "@/context/ThemeContext";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -979,6 +980,7 @@ function PrefCard({ label, apiKey, icon, children, onReset }: {
 // ── Templates Tab ─────────────────────────────────────────────────────────────
 
 function TemplatesTab() {
+  const requestConfirmation = useConfirm();
   const [subTab, setSubTab] = useState<"email" | "whatsapp" | "campaign">("email");
   const [loading, setLoading] = useState(false);
   const [emails, setEmails] = useState<EmailTemplate[]>([]);
@@ -1077,7 +1079,13 @@ function TemplatesTab() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this template?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Template",
+      message: "Are you sure you want to delete this template?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       if (subTab === "email") {
         await deleteEmailTemplate(id);

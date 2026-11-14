@@ -12,6 +12,7 @@ import {
 import { ConnectMessage } from "@/types/connect";
 import { getChannelPins, getConversationPins, unpinMessage } from "@/lib/api/connectApi";
 import MessageAttachmentRenderer from "./MessageAttachmentRenderer";
+import { notify } from "@/lib/notify";
 
 interface PinnedMessagesModalProps {
   isOpen: boolean;
@@ -65,7 +66,7 @@ export default function PinnedMessagesModal({
 
   const handleUnpin = async (messageId: string) => {
     if (!canUnpin) {
-      alert("You are not authorized to unpin messages.");
+      notify.warning("You are not authorized to unpin messages.");
       return;
     }
     setUnpinningId(messageId);
@@ -77,7 +78,7 @@ export default function PinnedMessagesModal({
       }
     } catch (err) {
       console.error("Failed to unpin message:", err);
-      alert("Failed to unpin message. Please try again.");
+      notify.error("Failed to unpin message. Please try again.");
     } finally {
       setUnpinningId(null);
     }

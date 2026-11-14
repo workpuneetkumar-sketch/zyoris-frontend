@@ -39,6 +39,7 @@ import {
   parseTimeMinutes,
   formatTimeDisplay,
 } from "@/lib/api/calendarService";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 interface EventModalProps {
   isOpen: boolean;
@@ -105,6 +106,7 @@ export default function EventModal({
   initialDate,
   initialHour,
 }: EventModalProps) {
+  const requestConfirmation = useConfirm();
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [allDay, setAllDay] = useState(false);
@@ -343,7 +345,13 @@ export default function EventModal({
   const handleDelete = async () => {
     const targetId = initialEvent?.masterEventId || initialEvent?.id;
     if (!targetId || !onDelete) return;
-    if (!confirm("Are you sure you want to delete this event?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Event",
+      message: "Are you sure you want to delete this event?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     setIsDeleting(true);
     try {

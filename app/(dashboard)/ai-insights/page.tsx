@@ -6,8 +6,10 @@ import { uploadDataset, getAnalysisSessions, deleteAnalysisSession } from "@/lib
 import { Brain, UploadCloud, FileSpreadsheet, Loader2, ArrowRight, Trash2, Calendar, Database } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 export default function AiInsightsLandingPage() {
+  const requestConfirmation = useConfirm();
   const { token } = useAuth();
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
@@ -66,7 +68,13 @@ export default function AiInsightsLandingPage() {
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    if (!confirm("Are you sure you want to delete this session?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Session",
+      message: "Are you sure you want to delete this session?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     try {
       await deleteAnalysisSession(id);
       setSessions(sessions.filter(s => s.id !== id));

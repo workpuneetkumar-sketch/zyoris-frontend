@@ -10,6 +10,7 @@ import {
   permanentDeleteWorkspacePage,
 } from "@/lib/api/workspaceApi";
 import { toast } from "react-toastify";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 import {
   Trash2,
   RotateCcw,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 
 export default function WorkspaceTrashPage() {
+  const requestConfirmation = useConfirm();
   const router = useRouter();
   const [trashedPages, setTrashedPages] = useState<WorkspacePage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -68,9 +70,12 @@ export default function WorkspaceTrashPage() {
   };
 
   const handlePermanentDelete = async (page: WorkspacePage) => {
-    const confirmed = window.confirm(
-      `Are you sure you want to permanently delete "${page.title || "this page"}"? This action cannot be undone.`
-    );
+    const confirmed = await requestConfirmation({
+      title: "Delete Permanently",
+      message: `Are you sure you want to permanently delete "${page.title || "this page"}"? This action cannot be undone.`,
+      confirmText: "Delete Forever",
+      variant: "danger",
+    });
     if (!confirmed) return;
 
     setDeletingId(page.id);

@@ -39,6 +39,8 @@ import {
 import { queryReport } from "@/lib/api/reportingApi";
 import { NLReportResultView } from "@/components/reporting/NLReportResultView";
 import type { NLReportResult } from "@/lib/types/agent-results";
+import { useConfirm } from "@/components/common/ConfirmProvider";
+import { notify } from "@/lib/notify";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -186,6 +188,7 @@ function AIQueryPanel() {
 // ─── Main Component ────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
+  const requestConfirmation = useConfirm();
   // ─── Tab state ───────────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<ReportTab>("builder");
 
@@ -289,7 +292,7 @@ export default function ReportsPage() {
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
-      alert("Please allow popups to export PDF");
+      notify.warning("Please allow popups to export PDF");
       return;
     }
 
@@ -389,7 +392,7 @@ export default function ReportsPage() {
 
   const saveCurrentReport = () => {
     if (!reportData || reportData.rows.length === 0) {
-      alert("Please generate a report first");
+      notify.warning("Please generate a report first");
       return;
     }
 
@@ -412,11 +415,17 @@ export default function ReportsPage() {
     setSavedReports((prev) => [newReport, ...prev]);
     setReportName("");
     setSavingReport(false);
-    alert("Report saved successfully!");
+    notify.success("Report saved successfully!");
   };
 
-  const deleteSavedReport = (id: string) => {
-    if (confirm("Delete this saved report?")) {
+  const deleteSavedReport = async (id: string) => {
+    const ok = await requestConfirmation({
+      title: "Delete Saved Report",
+      message: "Delete this saved report?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (ok) {
       setSavedReports((prev) => prev.filter((r) => r.id !== id));
     }
   };

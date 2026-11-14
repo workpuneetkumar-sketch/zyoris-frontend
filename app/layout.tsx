@@ -11,6 +11,7 @@ import Script from "next/script";
 import { InvoiceProvider } from "@/context/InvoiceContext";
 import { PaymentProvider } from "@/context/PaymentContext";
 import { TourProvider } from "@/components/tour/TourProvider";
+import { ConfirmProvider } from "@/components/common/ConfirmProvider";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 export const metadata: Metadata = {
@@ -75,18 +76,20 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
         <ThemeProvider>
           <ToastProvider>
-            <AuthProvider>
-              <NotificationProvider>
-                <InvoiceProvider>
-                  <PaymentProvider>
-                    <TourProvider>
-                      {children}
-                    </TourProvider>
-                  </PaymentProvider>
-                </InvoiceProvider>
-              </NotificationProvider>
-              <ZiiBot />
-            </AuthProvider>
+            <ConfirmProvider>
+              <AuthProvider>
+                <NotificationProvider>
+                  <InvoiceProvider>
+                    <PaymentProvider>
+                      <TourProvider>
+                        {children}
+                      </TourProvider>
+                    </PaymentProvider>
+                  </InvoiceProvider>
+                </NotificationProvider>
+                <ZiiBot />
+              </AuthProvider>
+            </ConfirmProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>
