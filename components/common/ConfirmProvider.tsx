@@ -130,6 +130,11 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const cancel = useCallback(() => {
+    const current = activeRef.current;
+    if (current) finish(current.kind === "confirm" ? false : null);
+  }, [finish]);
+
   useEffect(() => {
     mountedDispatcher = dispatch;
     return () => {
@@ -156,24 +161,25 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     };
   }, [isDialogOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isDialogOpen) return;
     const handleEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      finish(activeRef.current?.kind === "confirm" ? false : null);
+      cancel();
     };
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [finish, isDialogOpen]);
+  }, [cancel, isDialogOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (activeRequestId === undefined) return;
     setPromptError(null);
     const currentRequest = activeRef.current;
     setPromptValue(currentRequest?.kind === "prompt" ? (currentRequest.options as PromptOptions).defaultValue || "" : "");
+    dialogRef.current?.focus();
     if (currentRequest?.kind === "prompt") promptInputRef.current?.focus();
     else confirmButtonRef.current?.focus();
   }, [activeRequestId]);

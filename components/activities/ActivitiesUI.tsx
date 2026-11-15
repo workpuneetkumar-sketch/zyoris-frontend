@@ -1,6 +1,8 @@
 // components/activities/ActivitiesUI.tsx
 "use client";
 
+import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 import {
     Search,
     Plus,
@@ -292,6 +294,56 @@ export function ActivitiesTable({
     setOpenMenu,
 }: ActivitiesTableProps) {
     const totalPages = Math.max(1, Math.ceil(total / perPage));
+    const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const menuAnchorRef = useRef<HTMLButtonElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
+
+    useEffect(() => {
+        if (!openMenu) return;
+
+        const closeMenu = () => {
+            setOpenMenu(null);
+            setMenuPos(null);
+        };
+        const handleOutsideClick = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (!menuRef.current?.contains(target) && !menuAnchorRef.current?.contains(target)) {
+                closeMenu();
+            }
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") closeMenu();
+        };
+        const positionMenu = () => {
+            const anchor = menuAnchorRef.current;
+            const menu = menuRef.current;
+            if (!anchor || !menu) return;
+
+            const anchorRect = anchor.getBoundingClientRect();
+            const menuRect = menu.getBoundingClientRect();
+            const top = menuRect.height > window.innerHeight - anchorRect.bottom
+                ? Math.max(4, anchorRect.top - menuRect.height - 4)
+                : anchorRect.bottom + 4;
+            const left = Math.max(
+                4,
+                Math.min(anchorRect.right - menuRect.width, window.innerWidth - menuRect.width - 4)
+            );
+            setMenuPos({ top, left });
+        };
+        const frame = requestAnimationFrame(positionMenu);
+
+        document.addEventListener("mousedown", handleOutsideClick);
+        document.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("scroll", closeMenu, true);
+        window.addEventListener("resize", closeMenu);
+        return () => {
+            cancelAnimationFrame(frame);
+            document.removeEventListener("mousedown", handleOutsideClick);
+            document.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", closeMenu, true);
+            window.removeEventListener("resize", closeMenu);
+        };
+    }, [openMenu, setOpenMenu]);
 
     return (
         <div className="min-h-full space-y-5">
@@ -386,11 +438,20 @@ export function ActivitiesTable({
 
                     {/* Table — always scrollable horizontally */}
                     <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="w-full min-w-[760px] text-sm 2xl:min-w-0 table-fixed">
                             <thead>
                                 <tr className="border-b border-gray-100">
                                     {["Activity", "Related To", "Type", "Owner", "Due Date", "Status", "Priority", ""].map((h) => (
-                                        <th key={h} className="text-left px-5 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                                        <th
+                                            key={h}
+                                            className={`text-left px-3 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap ${
+                                                h === "Activity"
+                                                    ? "sticky left-0 z-10 w-[180px] min-w-[180px] bg-white shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)]"
+                                                    : h === ""
+                                                    ? "sticky right-0 z-10 w-12 min-w-12 bg-white shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.12)]"
+                                                    : ""
+                                            }`}
+                                        >
                                             {h}
                                         </th>
                                     ))}
@@ -401,7 +462,7 @@ export function ActivitiesTable({
                                     Array.from({ length: perPage }).map((_, i) => (
                                         <tr key={i} className="border-b border-gray-50">
                                             {Array.from({ length: 8 }).map((_, j) => (
-                                                <td key={j} className="px-5 py-4">
+                                                <td key={j} className="px-3 py-4">
                                                     <div className="h-3.5 bg-gray-100 rounded-md animate-pulse w-3/4" />
                                                 </td>
                                             ))}
@@ -415,74 +476,71 @@ export function ActivitiesTable({
                                     </tr>
                                 ) : (
                                     (activities ?? []).map((activity) => (
-                                        <tr key={activity.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                                        <tr key={activity.id} className="group border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
                                             {/* Activity */}
-                                            <td className="px-5 py-3.5 max-w-[220px]">
-                                                <p className="font-medium text-gray-800 text-[13px] truncate">
+                                            <td className="sticky left-0 z-10 w-[180px] min-w-[180px] bg-white px-3 py-3.5 shadow-[2px_0_4px_-2px_rgba(0,0,0,0.12)] group-hover:bg-gray-50/60">
+                                                <p className="max-w-[160px] truncate font-medium text-gray-800 text-[13px]">
                                                     {sanitizeSourcePageText(activity.title, activity.sourcePageTitle)}
                                                 </p>
-                                                <p className="text-[11px] text-gray-400 truncate">
+                                                <p className="max-w-[160px] truncate text-[11px] text-gray-400">
                                                     {sanitizeSourcePageText(activity.description, activity.sourcePageTitle)}
                                                 </p>
                                             </td>
                                             {/* Related To */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
-                                                <span className="text-[13px] text-blue-600 font-medium hover:underline cursor-pointer">
+                                            <td className="px-3 py-3.5">
+                                                <span className="block max-w-[130px] truncate text-[13px] text-blue-600 font-medium hover:underline cursor-pointer">
                                                     {activity.relatedToCompany}
                                                 </span>
                                             </td>
                                             {/* Type */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-3 py-3.5 whitespace-nowrap">
                                                 <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[12px] font-medium border ${TYPE_COLORS[activity.type]}`}>
                                                     {TYPE_ICON[activity.type]}
                                                     {activity.type}
                                                 </span>
                                             </td>
                                             {/* Owner */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-3 py-3.5">
                                                 <div className="flex items-center gap-2">
                                                     <Avatar initials={activity.ownerAvatar} />
-                                                    <span className="text-[13px] text-gray-700">{activity.owner}</span>
+                                                    <span className="max-w-[90px] truncate text-[13px] text-gray-700">{activity.owner}</span>
                                                 </div>
                                             </td>
                                             {/* Due Date */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
-                                                <p className="text-[13px] text-gray-700">{activity.createdAt ? getRelativeTime(activity.createdAt) : activity.dueDate}</p>
-                                                <p className="text-[11px] text-gray-400">{activity.dueTime}</p>
+                                            <td className="px-3 py-3.5 whitespace-nowrap">
+                                                <p className="max-w-[90px] truncate text-[13px] text-gray-700">{activity.createdAt ? getRelativeTime(activity.createdAt) : activity.dueDate}</p>
+                                                <p className="max-w-[90px] truncate text-[11px] text-gray-400">{activity.dueTime}</p>
                                             </td>
                                             {/* Status */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-3 py-3.5 whitespace-nowrap">
                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${STATUS_STYLES[activity.status]}`}>
                                                     {activity.status}
                                                 </span>
                                             </td>
                                             {/* Priority */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap">
+                                            <td className="px-3 py-3.5 whitespace-nowrap">
                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[12px] font-medium ${PRIORITY_STYLES[activity.priority]}`}>
                                                     {activity.priority}
                                                 </span>
                                             </td>
                                             {/* Actions */}
-                                            <td className="px-5 py-3.5 whitespace-nowrap relative">
+                                            <td className="sticky right-0 z-10 w-12 min-w-12 bg-white px-2 py-3.5 whitespace-nowrap shadow-[-2px_0_4px_-2px_rgba(0,0,0,0.12)] group-hover:bg-gray-50/60">
                                                 <button
-                                                    onClick={() => setOpenMenu(openMenu === activity.id ? null : activity.id)}
+                                                    onClick={(event) => {
+                                                        if (openMenu === activity.id) {
+                                                            setOpenMenu(null);
+                                                            setMenuPos(null);
+                                                        } else {
+                                                            menuAnchorRef.current = event.currentTarget;
+                                                            const rect = event.currentTarget.getBoundingClientRect();
+                                                            setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
+                                                            setOpenMenu(activity.id);
+                                                        }
+                                                    }}
                                                     className="p-1 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                                                 >
                                                     <MoreVertical size={16} />
                                                 </button>
-                                                {openMenu === activity.id && (
-                                                    <div className="absolute right-4 top-10 z-20 bg-white border border-gray-100 rounded-xl shadow-lg py-1 w-36">
-                                                        {["View", "Edit", "Delete"].map((action) => (
-                                                            <button
-                                                                key={action}
-                                                                onClick={() => { onAction(action, activity); setOpenMenu(null); }}
-                                                                className={`w-full text-left px-4 py-2 text-[13px] hover:bg-gray-50 transition-colors ${action === "Delete" ? "text-red-500" : "text-gray-700"}`}
-                                                            >
-                                                                {action}
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
                                             </td>
                                         </tr>
                                     ))
@@ -490,6 +548,33 @@ export function ActivitiesTable({
                             </tbody>
                         </table>
                     </div>
+
+                    {openMenu !== null && menuPos && typeof document !== "undefined" && createPortal(
+                        <div
+                            ref={menuRef}
+                            className="fixed z-[9999] w-36 rounded-xl border border-gray-100 bg-white py-1 shadow-lg"
+                            style={{ top: menuPos.top, left: menuPos.left }}
+                        >
+                            {["View", "Edit", "Delete"].map((action) => {
+                                const activity = (activities ?? []).find((item) => item.id === openMenu);
+                                if (!activity) return null;
+                                return (
+                                    <button
+                                        key={action}
+                                        onClick={() => {
+                                            onAction(action, activity);
+                                            setOpenMenu(null);
+                                            setMenuPos(null);
+                                        }}
+                                        className={`w-full px-4 py-2 text-left text-[13px] transition-colors hover:bg-gray-50 ${action === "Delete" ? "text-red-500" : "text-gray-700"}`}
+                                    >
+                                        {action}
+                                    </button>
+                                );
+                            })}
+                        </div>,
+                        document.body
+                    )}
 
                     {/* Pagination */}
                     {/* RESPONSIVE: wrap on very small screens */}
