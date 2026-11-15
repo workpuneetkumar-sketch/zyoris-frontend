@@ -1,9 +1,14 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Connector,
   RotateCredentialsPayload,
   RotateCredentialsResponse,
 } from "@/types/integrations";
+import {
+  extractConnectorConfigFields,
+  isSecretConfigField,
+  buildRotateModalPayload,
+} from "@/lib/utils/integrationContracts";
 import {
   KeyRound,
   X,
@@ -40,6 +45,7 @@ export function RotateCredentialsModal({
   // Sensitive form state - strictly in-memory only
   const [authType, setAuthType] = useState<string>("API_KEY");
   const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [refreshToken, setRefreshToken] = useState("");
   const [tokenExpiresAt, setTokenExpiresAt] = useState("");
@@ -55,6 +61,14 @@ export function RotateCredentialsModal({
   const [isRotating, setIsRotating] = useState(false);
   const [hasConfirmed, setHasConfirmed] = useState(false);
 
+  const secretConfigFields = useMemo(
+    () =>
+      extractConnectorConfigFields(connector).filter((field) =>
+        isSecretConfigField(field)
+      ),
+    [connector]
+  );
+
   // Initialize auth type from connector when modal opens
   React.useEffect(() => {
     if (connector) {
@@ -62,6 +76,7 @@ export function RotateCredentialsModal({
       setAuthType(detected);
       // Reset form state
       setApiKey("");
+      setApiSecret("");
       setAccessToken("");
       setRefreshToken("");
       setTokenExpiresAt("");
@@ -77,6 +92,7 @@ export function RotateCredentialsModal({
   // Clean up in-memory secrets on unmount/close
   const handleClose = () => {
     setApiKey("");
+    setApiSecret("");
     setAccessToken("");
     setRefreshToken("");
     setTokenExpiresAt("");
@@ -93,6 +109,12 @@ export function RotateCredentialsModal({
 
   const targetId =
     connector.connectionId || connector.connectionState?.id || connector.id;
+  const supportsApiSecret = secretConfigFields.some(
+    (field) => field.name === "apiSecret"
+  );
+  const supportsExtraWebhookSecret =
+    authType !== "WEBHOOK_SECRET" &&
+    secretConfigFields.some((field) => field.name === "webhookSecret");
 
   const toggleSecret = (field: string) => {
     setShowSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
@@ -134,28 +156,33 @@ export function RotateCredentialsModal({
       return;
     }
 
-    // Build rotation payload containing ONLY explicitly provided secrets
-    const payload: RotateCredentialsPayload = {};
-
-    if (apiKey.trim()) payload.apiKey = apiKey.trim();
-    if (accessToken.trim()) payload.accessToken = accessToken.trim();
-    if (refreshToken.trim()) payload.refreshToken = refreshToken.trim();
-    if (tokenExpiresAt.trim()) payload.tokenExpiresAt = tokenExpiresAt.trim();
-    if (clientSecret.trim()) payload.clientSecret = clientSecret.trim();
-    if (password.trim()) payload.password = password.trim();
-    if (webhookSecret.trim()) payload.webhookSecret = webhookSecret.trim();
-
-    if (customSecrets.length > 0) {
-      const customObj: Record<string, any> = {};
-      customSecrets.forEach((s) => {
-        if (s.key.trim() && s.value.trim()) {
-          customObj[s.key.trim()] = s.value.trim();
-        }
-      });
-      if (Object.keys(customObj).length > 0) {
-        payload.customSecrets = customObj;
+    // Convert datetime-local input to ISO 8601 if provided
+    let normalizedExpiresAt: string | undefined;
+    if (tokenExpiresAt.trim()) {
+      const parsedDate = new Date(tokenExpiresAt.trim());
+      if (Number.isNaN(parsedDate.getTime())) {
+        toast.error("Please enter a valid token expiration date/time.");
+        return;
       }
+      normalizedExpiresAt = parsedDate.toISOString();
     }
+
+    const mergedCustomSecrets = [
+      ...(apiSecret.trim() ? [{ key: "apiSecret", value: apiSecret.trim() }] : []),
+      ...customSecrets,
+    ];
+
+    // Build rotation payload containing ONLY explicitly provided non-blank secrets
+    const payload = buildRotateModalPayload({
+      apiKey,
+      accessToken,
+      refreshToken,
+      tokenExpiresAt: normalizedExpiresAt,
+      clientSecret,
+      password,
+      webhookSecret,
+      customSecrets: mergedCustomSecrets,
+    });
 
     // Ensure at least one credential is provided
     if (Object.keys(payload).length === 0) {
@@ -416,6 +443,64 @@ export function RotateCredentialsModal({
             <div>
               <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
                 New Webhook Signing Secret *
+              </label>
+              <div className="relative">
+                <input
+                  type={showSecrets["webhookSecret"] ? "text" : "password"}
+                  value={webhookSecret}
+                  onChange={(e) => setWebhookSecret(e.target.value)}
+                  placeholder="whsec_..."
+                  className="w-full pr-10 pl-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleSecret("webhookSecret")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                  aria-label="Toggle visibility"
+                >
+                  {showSecrets["webhookSecret"] ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {supportsApiSecret && (
+            <div>
+              <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                New API Secret (Optional)
+              </label>
+              <div className="relative">
+                <input
+                  type={showSecrets["apiSecret"] ? "text" : "password"}
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  placeholder="Enter new API secret..."
+                  className="w-full pr-10 pl-3 py-2 rounded-lg bg-surface text-text text-sm border border-border focus:border-primary focus:outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => toggleSecret("apiSecret")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+                  aria-label="Toggle visibility"
+                >
+                  {showSecrets["apiSecret"] ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {supportsExtraWebhookSecret && (
+            <div>
+              <label className="block text-xs font-semibold text-text uppercase tracking-wider mb-1.5">
+                New Webhook Signing Secret (Optional)
               </label>
               <div className="relative">
                 <input

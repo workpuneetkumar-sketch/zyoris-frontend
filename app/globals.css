@@ -1100,7 +1100,7 @@ body {
 
 /* Scrollbar styling */
 .zii-chat-scroll::-webkit-scrollbar {
-  width: 4px;
+  width: 5px;
 }
 
 .zii-chat-scroll::-webkit-scrollbar-track {
@@ -1108,12 +1108,12 @@ body {
 }
 
 .zii-chat-scroll::-webkit-scrollbar-thumb {
-  background: rgba(99, 102, 241, 0.3);
-  border-radius: 10px;
+  background: rgba(150, 150, 150, 0.25);
+  border-radius: 9999px;
 }
 
 .zii-chat-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(99, 102, 241, 0.5);
+  background: rgba(150, 150, 150, 0.45);
 }
 
 /* Message animations */

@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useIntegrations } from "@/hooks/useIntegrations";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useAuth } from "@/context/AuthContext";
+import { resolveIntegrationUiPermissions } from "@/lib/utils/integrationPermissions";
 import { Connector, CreateIntegrationPayload, NormalizedConnectionTestResult, UpdateIntegrationPayload } from "@/types/integrations";
 import { AsyncRequestError } from "@/hooks/useAsyncRequest";
 import { normalizeConnectionError, normalizeConnectionSuccess } from "@/lib/api/connectionTest";
@@ -20,6 +21,8 @@ import { ReconnectModal } from "@/components/integrations/ReconnectModal";
 import { IntegrationMonitoringDashboard } from "@/components/integrations/IntegrationMonitoringDashboard";
 import { SyncRunsModal } from "@/components/integrations/SyncRunsModal";
 import { IntegrationDashboardModal } from "@/components/integrations/IntegrationDashboardModal";
+import { OAuthPreConnectModal } from "@/components/integrations/OAuthPreConnectModal";
+import { isProviderManagedOAuth, getOAuthPreAuthFields } from "@/lib/utils/integrationContracts";
 import {
   Layers,
   Plus,
@@ -39,24 +42,19 @@ import {
 import classNames from "classnames";
 
 export default function IntegrationsPage() {
-  const { user } = useAuth();
+  const { user, userPermissions } = useAuth();
   const { hasPermission } = useRBAC();
 
-  // Check management and configuration permissions
-  const canManageIntegrations =
-    user?.role === "ADMIN" ||
-    user?.role === "CEO" ||
-    user?.role === "CFO" ||
-    user?.role === "OPERATIONS_HEAD" ||
-    hasPermission("manage_integrations") ||
-    hasPermission("integrations:manage") ||
-    hasPermission("admin");
-
-  const canConfigureIntegrations =
-    canManageIntegrations ||
-    hasPermission("configure") ||
-    hasPermission("integrations:configure") ||
-    hasPermission("integrations:rotate");
+  const {
+    canCreate: canCreateIntegrations,
+    canUpdate: canConfigureIntegrations,
+    canDelete: canDeleteIntegrations,
+    canManage: canManageIntegrations,
+  } = resolveIntegrationUiPermissions({
+    role: user?.role,
+    userPermissions,
+    hasPermission,
+  });
 
   const {
     connectors,
@@ -127,8 +125,58 @@ export default function IntegrationsPage() {
   const [selectedIntegrationIdForDashboard, setSelectedIntegrationIdForDashboard] =
     useState<string | null>(null);
 
+  // OAuth Pre-Connect and loading states
+  const [isOAuthPreConnectOpen, setIsOAuthPreConnectOpen] = useState(false);
+  const [selectedConnectorForPreConnect, setSelectedConnectorForPreConnect] =
+    useState<Connector | null>(null);
+  const [connectingConnectorId, setConnectingConnectorId] = useState<string | null>(null);
+
   // Actions Handlers
+  const handleDirectOAuthConnect = async (connector: Connector) => {
+    const connectorKey = connector.id || connector.provider;
+    if (connectingConnectorId) return;
+
+    setConnectingConnectorId(connectorKey);
+    try {
+      toast.info(`Preparing OAuth connection for ${connector.name}...`);
+      const res = await initiateOAuth(connector.provider);
+      const authUrl =
+        res?.authorizationUrl ||
+        res?.authUrl ||
+        res?.url ||
+        (res as any)?.redirectUrl ||
+        (res as any)?.data?.authorizationUrl;
+
+      if (!authUrl) {
+        throw new Error(`No authorization URL returned from ${connector.name} connector.`);
+      }
+
+      toast.info(`Redirecting to ${connector.name} for authorization...`);
+      window.location.href = authUrl;
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.message ||
+        err?.message ||
+        `Failed to initiate OAuth authorization for ${connector.name}.`;
+      toast.error(msg);
+      setConnectingConnectorId(null);
+    }
+  };
+
   const handleOpenConnect = (connector: Connector) => {
+    if (connectingConnectorId) return;
+
+    if (isProviderManagedOAuth(connector)) {
+      const preAuthFields = getOAuthPreAuthFields(connector);
+      if (preAuthFields.length > 0) {
+        setSelectedConnectorForPreConnect(connector);
+        setIsOAuthPreConnectOpen(true);
+      } else {
+        handleDirectOAuthConnect(connector);
+      }
+      return;
+    }
+
     setSelectedConnectorForWizard(connector);
     setIsWizardOpen(true);
   };
@@ -169,7 +217,7 @@ export default function IntegrationsPage() {
     setIsDisconnectOpen(true);
   };
 
-  const handleSyncNow = async (connector: Connector) => {
+  const handleSyncNow = async (connector: Connector, options?: { entityType?: string }) => {
     const isHubSpot =
       (connector.provider || "").toLowerCase().includes("hubspot") ||
       (connector.id || "").toLowerCase().includes("hubspot") ||
@@ -181,17 +229,40 @@ export default function IntegrationsPage() {
       (isHubSpot ? "hubspot" : connector.id || connector.provider);
 
     if (!targetId) return;
+
+    const entityLabel = options?.entityType === "calendar_events"
+      ? "Calendar"
+      : options?.entityType === "gmail_messages"
+      ? "Gmail"
+      : "";
+    const label = entityLabel ? `${connector.name} (${entityLabel})` : connector.name;
+
     try {
-      const res = await triggerSync(targetId);
-      toast.success(
-        res?.message || `Sync triggered successfully for ${connector.name}.`
-      );
+      const res = await triggerSync(targetId, options);
+      if (res?.alreadyRunning || res?.status === "RUNNING") {
+        toast.info(
+          res?.message || `A synchronization job is already running for ${label}.`
+        );
+      } else {
+        toast.success(
+          res?.message || `Sync completed successfully for ${label}.`
+        );
+      }
+      refresh();
     } catch (err: any) {
-      toast.error(
-        err?.response?.data?.message ||
-          err?.message ||
-          `Failed to sync ${connector.name}.`
-      );
+      if (err?.response?.status === 409) {
+        toast.info(
+          err?.response?.data?.message ||
+            `A synchronization job is already running for ${label}.`
+        );
+        refresh();
+      } else {
+        toast.error(
+          err?.response?.data?.message ||
+            err?.message ||
+            `Failed to sync ${label}.`
+        );
+      }
     }
   };
 
@@ -304,7 +375,7 @@ export default function IntegrationsPage() {
               setSelectedConnectorForWizard(null);
               setIsWizardOpen(true);
             }}
-            disabled={!canManageIntegrations}
+            disabled={!canCreateIntegrations}
             className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus className="w-4 h-4" />
@@ -458,6 +529,7 @@ export default function IntegrationsPage() {
                 <ConnectorCard
                   key={connector.id || connector.provider}
                   connector={connector}
+                  isConnecting={connectingConnectorId === (connector.id || connector.provider)}
                   onConnect={handleOpenConnect}
                   onConfigure={handleOpenConfigure}
                   onRotateCredentials={handleOpenRotate}
@@ -470,6 +542,9 @@ export default function IntegrationsPage() {
                   onReconnect={handleOpenReconnectModal}
                   onDisconnect={handleOpenDisconnect}
                   canManage={canManageIntegrations}
+                  canCreate={canCreateIntegrations}
+                  canUpdate={canConfigureIntegrations}
+                  canDelete={canDeleteIntegrations}
                 />
               ))}
             </div>
@@ -641,6 +716,17 @@ export default function IntegrationsPage() {
           setSelectedConnectorForDisconnect(c);
           setIsDisconnectOpen(true);
         }}
+      />
+
+      {/* OAuth Pre-Connect Modal */}
+      <OAuthPreConnectModal
+        isOpen={isOAuthPreConnectOpen}
+        onClose={() => {
+          setIsOAuthPreConnectOpen(false);
+          setSelectedConnectorForPreConnect(null);
+        }}
+        connector={selectedConnectorForPreConnect}
+        onInitiateOAuth={initiateOAuth}
       />
     </div>
   );

@@ -27,14 +27,19 @@ import {
   Pause,
   Activity,
   BarChart3,
+  Loader2,
+  Calendar,
+  Mail,
+  ChevronDown,
 } from "lucide-react";
 
 interface ConnectorCardProps {
   connector: Connector;
+  isConnecting?: boolean;
   onConnect: (connector: Connector) => void;
   onConfigure: (connector: Connector) => void;
   onRotateCredentials?: (connector: Connector) => void;
-  onSyncNow?: (connector: Connector) => Promise<void>;
+  onSyncNow?: (connector: Connector, options?: { entityType?: string }) => Promise<void>;
   onTestConnection?: (connector: Connector) => Promise<NormalizedConnectionTestResult>;
   onViewSchema?: (connector: Connector) => void;
   onViewSyncRuns?: (connector: Connector) => void;
@@ -43,10 +48,14 @@ interface ConnectorCardProps {
   onReconnect?: (connector: Connector) => void | Promise<void>;
   onDisconnect?: (connector: Connector) => void;
   canManage?: boolean;
+  canCreate?: boolean;
+  canUpdate?: boolean;
+  canDelete?: boolean;
 }
 
 export function ConnectorCard({
   connector,
+  isConnecting = false,
   onConnect,
   onConfigure,
   onRotateCredentials,
@@ -59,11 +68,19 @@ export function ConnectorCard({
   onReconnect,
   onDisconnect,
   canManage = true,
+  canCreate,
+  canUpdate,
+  canDelete,
 }: ConnectorCardProps) {
+  const allowCreate = canCreate ?? canManage;
+  const allowUpdate = canUpdate ?? canManage;
+  const allowDelete = canDelete ?? canManage;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isSyncDropdownOpen, setIsSyncDropdownOpen] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const connectionTest = useAsyncRequest<NormalizedConnectionTestResult>();
   const menuRef = useRef<HTMLDivElement>(null);
+  const syncDropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -71,18 +88,31 @@ export function ConnectorCard({
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
       }
+      if (syncDropdownRef.current && !syncDropdownRef.current.contains(event.target as Node)) {
+        setIsSyncDropdownOpen(false);
+      }
     }
-    if (isMenuOpen) {
+    if (isMenuOpen || isSyncDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [isMenuOpen]);
+  }, [isMenuOpen, isSyncDropdownOpen]);
 
   const isConnected = !!connector.isConnected;
+  const isGoogleWorkspace =
+    connector.provider === "GOOGLE_WORKSPACE" ||
+    connector.id === "google_workspace" ||
+    (connector.name || "").toLowerCase().includes("google workspace");
   const status = (connector.status || (isConnected ? "CONNECTED" : "NOT_CONNECTED")).toUpperCase();
   const isPaused = status === "PAUSED";
+  const isCardSyncing =
+    isSyncing ||
+    status === "SYNCING" ||
+    Boolean((connector.connectionState as any)?.isSyncing) ||
+    (connector.connectionState as any)?.status === "SYNCING" ||
+    (connector.connectionState as any)?.lastSyncStatus === "RUNNING";
   const isAuthAttention =
     status === "AUTH_ATTENTION" ||
     status === "PENDING_AUTH" ||
@@ -126,11 +156,12 @@ export function ConnectorCard({
     }
   };
 
-  const handleSyncClick = async () => {
-    if (!onSyncNow || isSyncing) return;
+  const handleSyncClick = async (entityType?: string) => {
+    if (!onSyncNow || isCardSyncing) return;
     setIsSyncing(true);
+    setIsSyncDropdownOpen(false);
     try {
-      await onSyncNow(connector);
+      await onSyncNow(connector, entityType ? { entityType } : undefined);
     } finally {
       setIsSyncing(false);
     }
@@ -281,6 +312,27 @@ export function ConnectorCard({
           </div>
         )}
 
+        {/* Google Workspace Connected Services Badges */}
+        {isGoogleWorkspace && isConnected && (
+          <div className="mt-3 p-2.5 rounded-xl bg-surface-secondary/70 border border-border-light space-y-1.5">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block">
+              Connected Services
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface border border-border text-[11px] font-medium text-text">
+                <Calendar className="w-3.5 h-3.5 text-primary" />
+                <span>Google Calendar</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-surface border border-border text-[11px] font-medium text-text">
+                <Mail className="w-3.5 h-3.5 text-primary" />
+                <span>Gmail Messages</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+              </div>
+            </div>
+          </div>
+        )}
+
         {isConnected && isError && connector.connectionState?.lastError && (
           <div className="mt-2 p-2 rounded-lg bg-error/10 text-[11px] text-error flex items-start gap-1.5 border border-error/20">
             <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
@@ -310,26 +362,78 @@ export function ConnectorCard({
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => onConfigure(connector)}
-                disabled={!canManage}
+                disabled={!allowUpdate}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-surface text-text hover:bg-surface-hover text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                title={canManage ? "Configure Integration" : "Permission required"}
+                title={allowUpdate ? "Configure Integration" : "Permission required (integrations.update)"}
               >
                 <Settings className="w-3.5 h-3.5 text-text-muted" />
                 <span>Configure</span>
               </button>
 
               {onSyncNow && (
-                <button
-                  onClick={handleSyncClick}
-                  disabled={!canManage || isSyncing || isPaused}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Trigger Manual Sync"
-                >
-                  <RefreshCw
-                    className={`w-3.5 h-3.5 ${isSyncing ? "animate-spin text-primary" : ""}`}
-                  />
-                  <span>{isSyncing ? "Syncing..." : "Sync"}</span>
-                </button>
+                isGoogleWorkspace ? (
+                  <div className="relative inline-flex rounded-lg shadow-sm" ref={syncDropdownRef}>
+                    <button
+                      type="button"
+                      onClick={() => handleSyncClick()}
+                      disabled={!allowUpdate || isCardSyncing || isPaused}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-l-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Sync all Google Workspace data"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${isCardSyncing ? "animate-spin text-primary" : ""}`}
+                      />
+                      <span>{isCardSyncing ? "Syncing..." : "Sync"}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsSyncDropdownOpen(!isSyncDropdownOpen)}
+                      disabled={!allowUpdate || isCardSyncing || isPaused}
+                      className="px-1.5 py-1.5 rounded-r-lg border border-l-0 border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      title="Select service to sync"
+                    >
+                      <ChevronDown className="w-3 h-3" />
+                    </button>
+
+                    {isSyncDropdownOpen && (
+                      <div className="absolute left-0 bottom-full mb-1 w-48 rounded-xl border border-border bg-surface shadow-xl py-1 z-30 text-xs">
+                        <button
+                          onClick={() => handleSyncClick()}
+                          className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                        >
+                          <RefreshCw className="w-3.5 h-3.5 text-primary" />
+                          <span>Sync All</span>
+                        </button>
+                        <button
+                          onClick={() => handleSyncClick("calendar_events")}
+                          className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                        >
+                          <Calendar className="w-3.5 h-3.5 text-primary" />
+                          <span>Sync Calendar Only</span>
+                        </button>
+                        <button
+                          onClick={() => handleSyncClick("gmail_messages")}
+                          className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors"
+                        >
+                          <Mail className="w-3.5 h-3.5 text-primary" />
+                          <span>Sync Gmail Only</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => handleSyncClick()}
+                    disabled={!allowUpdate || isCardSyncing || isPaused}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border bg-surface text-text-secondary hover:text-text hover:bg-surface-hover text-xs font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Trigger Manual Sync"
+                  >
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 ${isCardSyncing ? "animate-spin text-primary" : ""}`}
+                    />
+                    <span>{isCardSyncing ? "Syncing..." : "Sync"}</span>
+                  </button>
+                )
               )}
             </div>
 
@@ -345,13 +449,41 @@ export function ConnectorCard({
 
               {isMenuOpen && (
                 <div className="absolute right-0 bottom-full mb-1 w-52 rounded-xl border border-border bg-surface shadow-xl py-1.5 z-20 text-xs">
+                  {isGoogleWorkspace && onSyncNow && (
+                    <>
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          handleSyncClick("calendar_events");
+                        }}
+                        disabled={!allowUpdate || isCardSyncing || isPaused}
+                        className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
+                      >
+                        <Calendar className="w-3.5 h-3.5 text-primary" />
+                        <span>Sync Calendar Only</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsMenuOpen(false);
+                          handleSyncClick("gmail_messages");
+                        }}
+                        disabled={!allowUpdate || isCardSyncing || isPaused}
+                        className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
+                      >
+                        <Mail className="w-3.5 h-3.5 text-primary" />
+                        <span>Sync Gmail Only</span>
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                    </>
+                  )}
+
                   {onRotateCredentials && (
                     <button
                       onClick={() => {
                         setIsMenuOpen(false);
                         onRotateCredentials(connector);
                       }}
-                      disabled={!canManage}
+                      disabled={!allowUpdate}
                       className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
                       <KeyRound className="w-3.5 h-3.5 text-warning" />
@@ -365,7 +497,7 @@ export function ConnectorCard({
                         setIsMenuOpen(false);
                         await onReconnect(connector);
                       }}
-                      disabled={!canManage}
+                      disabled={!allowUpdate}
                       className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
                       <RefreshCw className="w-3.5 h-3.5 text-primary" />
@@ -379,7 +511,7 @@ export function ConnectorCard({
                         setIsMenuOpen(false);
                         await onTogglePause(connector);
                       }}
-                      disabled={!canManage}
+                      disabled={!allowUpdate}
                       className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
                       {isPaused ? (
@@ -399,7 +531,7 @@ export function ConnectorCard({
                   {onTestConnection && (
                     <button
                       onClick={() => handleTestClick()}
-                      disabled={connectionTest.status === "loading" || !canManage}
+                      disabled={connectionTest.status === "loading" || !allowUpdate}
                       className="w-full text-left px-3 py-2 text-text hover:bg-surface-hover flex items-center gap-2 transition-colors disabled:opacity-50"
                     >
                       <Zap className="w-3.5 h-3.5 text-primary" />
@@ -465,7 +597,7 @@ export function ConnectorCard({
                           setIsMenuOpen(false);
                           onDisconnect(connector);
                         }}
-                        disabled={!canManage}
+                        disabled={!allowDelete}
                         className="w-full text-left px-3 py-2 text-error hover:bg-error/10 flex items-center gap-2 transition-colors disabled:opacity-50"
                       >
                         <Unlink className="w-3.5 h-3.5" />
@@ -495,12 +627,27 @@ export function ConnectorCard({
 
             <button
               onClick={() => onConnect(connector)}
-              disabled={!canManage}
+              disabled={!allowCreate || isConnecting}
               className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg bg-primary hover:bg-primary-dark text-primary-foreground text-xs font-semibold shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              title={canManage ? "Connect to service" : "Permission required"}
+              title={
+                !allowCreate
+                  ? "Permission required (integrations.create)"
+                  : isConnecting
+                  ? "Initiating connection..."
+                  : "Connect to service"
+              }
             >
-              <Zap className="w-3.5 h-3.5" />
-              <span>Connect</span>
+              {isConnecting ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>Connecting...</span>
+                </>
+              ) : (
+                <>
+                  <Zap className="w-3.5 h-3.5" />
+                  <span>Connect</span>
+                </>
+              )}
             </button>
           </div>
         )}

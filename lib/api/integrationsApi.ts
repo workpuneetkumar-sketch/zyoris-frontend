@@ -20,6 +20,7 @@ import {
   SchemaMappingPayload,
   SchemaMappingResponse,
   DiscoverSchemaPayload,
+  DiscoverPreflightPayload,
   IntegrationMapping,
   CreateMappingRequest,
   UpdateMappingRequest,
@@ -162,7 +163,7 @@ export async function callbackOAuthApi(
 ): Promise<any> {
   const response = await api.get(
     `/api/v1/integrations/${encodeURIComponent(provider)}/callback`,
-    { params }
+    { params: { ...params, format: "json" } }
   );
   return response.data;
 }
@@ -201,16 +202,21 @@ export async function rotateCredentialsApi(
  * Trigger manual synchronization run for an integration or provider.
  * POST /integrations/{id}/sync (e.g. POST /integrations/hubspot/sync for Day 5 API)
  */
-export async function triggerSyncApi(id: string): Promise<SyncResponse> {
+export async function triggerSyncApi(
+  id: string,
+  options?: { entityType?: string; entities?: string[]; direction?: string; fullSync?: boolean }
+): Promise<SyncResponse> {
   try {
     const response = await api.post(
-      `/integrations/${encodeURIComponent(id)}/sync`
+      `/integrations/${encodeURIComponent(id)}/sync`,
+      options
     );
     return response.data;
   } catch (err: any) {
     if (err?.response?.status === 404) {
       const fallback = await api.post(
-        `/api/v1/integrations/${encodeURIComponent(id)}/sync`
+        `/api/v1/integrations/${encodeURIComponent(id)}/sync`,
+        options
       );
       return fallback.data;
     }
@@ -317,6 +323,20 @@ export async function discoverIntegrationSchemaApi(
     }
     throw err;
   }
+}
+
+/**
+ * Pre-flight schema discovery — infers schema before an integration record exists.
+ * POST /api/v1/integrations/schema/discover-preflight
+ */
+export async function discoverPreflightSchemaApi(
+  payload: DiscoverPreflightPayload
+): Promise<DiscoveredSchemaResponse> {
+  const response = await api.post(
+    "/api/v1/integrations/schema/discover-preflight",
+    payload
+  );
+  return normalizeSchemaResponse(response.data);
 }
 
 /**
@@ -631,7 +651,12 @@ export async function cancelSyncRunApi(
  */
 export async function startIntegrationSyncJobApi(
   id: string,
-  payload?: { entityType?: string }
+  payload?: {
+    entityType?: string;
+    entities?: string[];
+    direction?: "INBOUND" | "OUTBOUND" | "BIDIRECTIONAL";
+    fullSync?: boolean;
+  }
 ): Promise<{
   success: boolean;
   message?: string;
@@ -639,12 +664,15 @@ export async function startIntegrationSyncJobApi(
     jobId?: string;
     integrationId?: string;
     entityType?: string;
+    syncRunId?: string;
+    status?: string;
+    inline?: boolean;
   };
 }> {
   try {
     const response = await api.post(
       `/integrations/${encodeURIComponent(id)}/sync/start`,
-      payload || { entityType: "contacts" }
+      payload || { entityType: "ALL" }
     );
     return response.data;
   } catch (err: any) {
@@ -652,7 +680,7 @@ export async function startIntegrationSyncJobApi(
       try {
         const fallback1 = await api.post(
           `/api/v1/integrations/${encodeURIComponent(id)}/sync/start`,
-          payload || { entityType: "contacts" }
+          payload || { entityType: "ALL" }
         );
         return fallback1.data;
       } catch (fErr: any) {
@@ -866,47 +894,59 @@ export async function resolveIntegrationErrorApi(
   errorId: string,
   payload: import("@/types/integrations").ErrorResolutionPayload
 ): Promise<import("@/types/integrations").ErrorResolutionResponse> {
-  // 1. Persist locally to ensure UI consistency
-  try {
-    if (typeof window !== "undefined") {
-      const stored = JSON.parse(localStorage.getItem("zyoris_error_resolutions") || "{}");
-      stored[errorId] = {
-        resolved: payload.resolved,
-        resolvedAt: payload.resolved ? new Date().toISOString() : null,
-        notes: payload.notes,
-        resolvedBy: payload.resolvedBy || "System User",
-      };
-      localStorage.setItem("zyoris_error_resolutions", JSON.stringify(stored));
-    }
-  } catch (e) {
-    console.warn("Could not save resolution to localStorage:", e);
-  }
-
-  // 2. Attempt remote API updates
   try {
     const res = await api.patch(`/integrations/errors/${encodeURIComponent(errorId)}`, payload);
     return res.data;
   } catch (err: any) {
     if (err?.response?.status === 404 || err?.response?.status === 405) {
-      try {
-        const fallback = await api.post(
-          `/api/v1/integrations/${encodeURIComponent(integrationId)}/sync-errors/${encodeURIComponent(errorId)}/resolve`,
-          payload
-        );
-        return fallback.data;
-      } catch {
-        // Fallback gracefully if backend endpoint is in progress
-        return {
-          success: true,
-          message: `Error marked as ${payload.resolved ? "resolved" : "unresolved"}.`,
-        };
-      }
+      const fallback = await api.post(
+        `/api/v1/integrations/${encodeURIComponent(integrationId)}/sync-errors/${encodeURIComponent(errorId)}/resolve`,
+        payload
+      );
+      return fallback.data;
     }
-    return {
-      success: true,
-      message: `Error marked as ${payload.resolved ? "resolved" : "unresolved"}.`,
-    };
+    throw err;
   }
+}
+
+export async function updateIntegrationScheduleApi(
+  integrationId: string,
+  payload: {
+    syncFrequency?: string;
+    syncDirection?: "INBOUND" | "OUTBOUND" | "BIDIRECTIONAL";
+    syncEntities?: string[];
+  }
+) {
+  const res = await api.patch(
+    `/api/v1/integrations/${encodeURIComponent(integrationId)}/schedule`,
+    payload
+  );
+  return res.data;
+}
+
+export async function getWebhookDeliveriesApi(
+  integrationId: string,
+  limit = 25
+): Promise<{
+  inboundEvents: Array<Record<string, any>>;
+  outboundDeliveries: Array<Record<string, any>>;
+}> {
+  const res = await api.get(
+    `/api/v1/integrations/${encodeURIComponent(integrationId)}/webhooks/deliveries`,
+    { params: { limit } }
+  );
+  return res.data?.data ?? { inboundEvents: [], outboundDeliveries: [] };
+}
+
+export async function testDispatchWebhookApi(
+  integrationId: string,
+  payload: { targetUrl?: string; eventType?: string; payload?: Record<string, any> }
+) {
+  const res = await api.post(
+    `/api/v1/integrations/${encodeURIComponent(integrationId)}/webhooks/test-dispatch`,
+    payload
+  );
+  return res.data;
 }
 
 /**

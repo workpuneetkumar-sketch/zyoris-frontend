@@ -1,5 +1,10 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Connector, ReconnectPayload } from "@/types/integrations";
+import {
+  extractConnectorConfigFields,
+  isSecretConfigField,
+  buildReconnectModalPayload,
+} from "@/lib/utils/integrationContracts";
 import {
   RefreshCw,
   X,
@@ -10,6 +15,7 @@ import {
   AlertCircle,
   KeyRound,
   CheckCircle2,
+  Sliders,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -33,28 +39,63 @@ export function ReconnectModal({
 }: ReconnectModalProps) {
   const [updateCredentials, setUpdateCredentials] = useState(false);
   const [apiKey, setApiKey] = useState("");
+  const [apiSecret, setApiSecret] = useState("");
   const [accessToken, setAccessToken] = useState("");
   const [password, setPassword] = useState("");
   const [webhookSecret, setWebhookSecret] = useState("");
+  const [dynamicFields, setDynamicFields] = useState<Record<string, any>>({});
   const [showSecret, setShowSecret] = useState(false);
   const [isReconnecting, setIsReconnecting] = useState(false);
 
+  const connectorConfigFields = useMemo(
+    () => extractConnectorConfigFields(connector),
+    [connector]
+  );
+
+  const nonSecretConfigFields = useMemo(
+    () => connectorConfigFields.filter((f) => !isSecretConfigField(f)),
+    [connectorConfigFields]
+  );
+
+  const secretConfigFields = useMemo(
+    () => connectorConfigFields.filter((f) => isSecretConfigField(f)),
+    [connectorConfigFields]
+  );
+
   React.useEffect(() => {
-    if (isOpen) {
+    if (isOpen && connector) {
       setUpdateCredentials(false);
       setApiKey("");
+      setApiSecret("");
       setAccessToken("");
       setPassword("");
       setWebhookSecret("");
       setShowSecret(false);
+
+      const savedConfig =
+        (connector.connectionState?.config as Record<string, any> | undefined) ||
+        {};
+      const seeded: Record<string, any> = {};
+      for (const field of connectorConfigFields) {
+        if (isSecretConfigField(field)) continue;
+        const val = savedConfig[field.name];
+        if (val !== undefined && val !== null && val !== "") {
+          seeded[field.name] = val;
+        } else if (field.defaultValue !== undefined) {
+          seeded[field.name] = field.defaultValue;
+        }
+      }
+      setDynamicFields(seeded);
     }
-  }, [isOpen]);
+  }, [isOpen, connector, connectorConfigFields]);
 
   const handleClose = () => {
     setApiKey("");
+    setApiSecret("");
     setAccessToken("");
     setPassword("");
     setWebhookSecret("");
+    setDynamicFields({});
     setShowSecret(false);
     setUpdateCredentials(false);
     onClose();
@@ -65,6 +106,12 @@ export function ReconnectModal({
   const targetId =
     connector.connectionId || connector.connectionState?.id || connector.id;
   const authType = (connector.authType || "API_KEY").toUpperCase();
+  const requiresApiSecret = secretConfigFields.some(
+    (f) => f.name === "apiSecret"
+  );
+  const supportsExtraWebhookSecret =
+    authType !== "WEBHOOK_SECRET" &&
+    secretConfigFields.some((f) => f.name === "webhookSecret");
 
   const handleReconnectSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,17 +126,36 @@ export function ReconnectModal({
       return;
     }
 
-    const payload: ReconnectPayload = {};
-    if (updateCredentials) {
-      if (apiKey.trim()) payload.apiKey = apiKey.trim();
-      if (accessToken.trim()) payload.accessToken = accessToken.trim();
-      if (password.trim()) payload.password = password.trim();
-      if (webhookSecret.trim()) payload.webhookSecret = webhookSecret.trim();
+    for (const field of nonSecretConfigFields) {
+      if (!field.required) continue;
+      const val = dynamicFields[field.name];
+      if (val === undefined || val === null || String(val).trim() === "") {
+        toast.error(
+          `Please complete required field: ${field.label || field.name}`
+        );
+        return;
+      }
     }
+
+    const payload = buildReconnectModalPayload({
+      updateCredentials,
+      authType,
+      apiKey,
+      apiSecret,
+      accessToken,
+      password,
+      webhookSecret,
+      dynamicFields,
+    });
 
     setIsReconnecting(true);
     try {
-      const res = await onReconnect(targetId, Object.keys(payload).length > 0 ? payload : undefined);
+      const res = await onReconnect(targetId, payload);
+      if (res?.authorizationUrl) {
+        toast.info(`Redirecting to ${connector.name} for re-authorization...`);
+        window.location.href = res.authorizationUrl;
+        return;
+      }
       toast.success(
         res?.message || `Reconnected ${connector.name} successfully.`
       );
@@ -107,9 +173,9 @@ export function ReconnectModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col">
+      <div className="w-full max-w-md rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="p-5 border-b border-border flex items-center justify-between bg-surface-secondary/50">
+        <div className="p-5 border-b border-border flex items-center justify-between bg-surface-secondary/50 flex-shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary">
               <RefreshCw className="w-5 h-5" />
@@ -131,7 +197,7 @@ export function ReconnectModal({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleReconnectSubmit} className="p-5 space-y-4">
+        <form onSubmit={handleReconnectSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
           <div className="p-3.5 rounded-xl bg-surface-secondary/40 border border-border text-xs text-text-secondary space-y-2">
             <div className="flex items-center gap-2 text-text font-medium">
               <ShieldCheck className="w-4 h-4 text-success" />
@@ -141,6 +207,104 @@ export function ReconnectModal({
               Reconnecting tests the connection pipeline and resets any active error counts. You can either re-verify existing encrypted vault credentials or provide fresh credentials below.
             </p>
           </div>
+
+          {nonSecretConfigFields.length > 0 && (
+            <div className="p-3.5 rounded-xl border border-border bg-surface-secondary/30 space-y-3">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-text">
+                <Sliders className="w-3.5 h-3.5 text-primary" />
+                <span>{connector.name} Settings</span>
+              </div>
+              {nonSecretConfigFields.map((field) => {
+                const val =
+                  dynamicFields[field.name] ?? field.defaultValue ?? "";
+                const inputId = `reconnect-dyn-${field.name}`;
+                return (
+                  <div key={field.name} className="space-y-1">
+                    <label
+                      htmlFor={inputId}
+                      className="block text-xs text-text-muted"
+                    >
+                      {field.label || field.name}
+                      {field.required && (
+                        <span className="text-error ml-0.5">*</span>
+                      )}
+                    </label>
+                    {field.type === "select" && Array.isArray(field.options) ? (
+                      <select
+                        id={inputId}
+                        value={String(val)}
+                        onChange={(e) =>
+                          setDynamicFields((prev) => ({
+                            ...prev,
+                            [field.name]: e.target.value,
+                          }))
+                        }
+                        className="w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none"
+                      >
+                        {!field.required && (
+                          <option value="">Select an option...</option>
+                        )}
+                        {field.options.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : field.type === "boolean" ? (
+                      <label
+                        htmlFor={inputId}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border bg-surface text-xs text-text cursor-pointer"
+                      >
+                        <input
+                          id={inputId}
+                          type="checkbox"
+                          checked={Boolean(val)}
+                          onChange={(e) =>
+                            setDynamicFields((prev) => ({
+                              ...prev,
+                              [field.name]: e.target.checked,
+                            }))
+                          }
+                          className="rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span>{field.helpText || "Enabled"}</span>
+                      </label>
+                    ) : (
+                      <input
+                        id={inputId}
+                        type={
+                          field.type === "number"
+                            ? "number"
+                            : field.type === "url"
+                              ? "url"
+                              : "text"
+                        }
+                        value={String(val)}
+                        onChange={(e) =>
+                          setDynamicFields((prev) => ({
+                            ...prev,
+                            [field.name]:
+                              field.type === "number"
+                                ? e.target.value === ""
+                                  ? ""
+                                  : Number(e.target.value)
+                                : e.target.value,
+                          }))
+                        }
+                        placeholder={
+                          field.placeholder ||
+                          (field.defaultValue !== undefined
+                            ? String(field.defaultValue)
+                            : `Enter ${field.label || field.name}`)
+                        }
+                        className="w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* Toggle to update credentials */}
           <div className="pt-1">
@@ -275,6 +439,40 @@ export function ReconnectModal({
                         <Eye className="w-3.5 h-3.5" />
                       )}
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {requiresApiSecret && (
+                <div>
+                  <label className="block text-xs text-text-muted mb-1">
+                    API Secret
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showSecret ? "text" : "password"}
+                      value={apiSecret}
+                      onChange={(e) => setApiSecret(e.target.value)}
+                      placeholder="Leave blank to keep existing API secret..."
+                      className="w-full pr-10 pl-3 py-2 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {supportsExtraWebhookSecret && (
+                <div>
+                  <label className="block text-xs text-text-muted mb-1">
+                    Webhook Secret (Optional)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showSecret ? "text" : "password"}
+                      value={webhookSecret}
+                      onChange={(e) => setWebhookSecret(e.target.value)}
+                      placeholder="Leave blank to keep existing webhook secret..."
+                      className="w-full pr-10 pl-3 py-2 rounded-lg bg-surface text-text text-xs border border-border focus:border-primary focus:outline-none font-mono"
+                    />
                   </div>
                 </div>
               )}

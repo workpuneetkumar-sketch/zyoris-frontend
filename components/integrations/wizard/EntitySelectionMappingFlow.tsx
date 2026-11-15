@@ -30,6 +30,10 @@ import {
   ConfidenceTier,
 } from "@/lib/transformations/suggestions";
 import { executeTransformationPipeline } from "@/lib/transformations/engine";
+import {
+  CANONICAL_TARGET_MODULES,
+  isDynamicSchemaProvider,
+} from "@/lib/utils/integrationContracts";
 import { TransformationRuleEditor } from "./TransformationRuleEditor";
 import {
   Layers,
@@ -58,196 +62,9 @@ import {
 import { toast } from "sonner";
 
 /**
- * Standard Zyoris Target Modules Catalog with comprehensive target entities & fields metadata
+ * Canonical Zyoris Target Modules Catalog aligned with backend TARGET_SCHEMAS.
  */
-export const DEFAULT_TARGET_MODULES: TargetModuleDefinition[] = [
-  {
-    id: "leads",
-    label: "Leads (CRM)",
-    description: "Capture, qualify, and route inbound sales leads into Zyoris CRM",
-    entities: [
-      {
-        id: "Lead",
-        name: "Lead",
-        label: "Lead Record",
-        description: "Prospects and inbound inquiries awaiting qualification",
-        targetFields: [
-          { key: "name", label: "Full Name", type: "string", required: true, description: "Full name of the lead contact" },
-          { key: "email", label: "Email Address", type: "string", required: true, description: "Primary email address for communications" },
-          { key: "company", label: "Company Name", type: "string", required: false, description: "Organization or employer name" },
-          { key: "phone", label: "Phone Number", type: "string", required: false, description: "Direct or mobile phone number" },
-          { key: "status", label: "Lead Status", type: "string", required: false, description: "Lead stage (e.g., NEW, CONTACTED, QUALIFIED)" },
-          { key: "source", label: "Lead Source", type: "string", required: false, description: "Acquisition channel or marketing campaign" },
-          { key: "value", label: "Estimated Value", type: "number", required: false, description: "Potential deal value in default currency" },
-          { key: "notes", label: "Notes / Description", type: "string", required: false, description: "Context, inquiry details, or initial requirements" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "deals",
-    label: "Deals & Pipeline (CRM)",
-    description: "Manage sales opportunities, pipeline stages, and revenue forecasts",
-    entities: [
-      {
-        id: "Deal",
-        name: "Deal",
-        label: "Deal Opportunity",
-        description: "Active sales deals tracked through pipeline stages",
-        targetFields: [
-          { key: "title", label: "Deal Title", type: "string", required: true, description: "Descriptive name for the opportunity" },
-          { key: "amount", label: "Deal Amount", type: "number", required: true, description: "Total contracted or estimated revenue" },
-          { key: "stage", label: "Pipeline Stage", type: "string", required: false, description: "Current stage in the sales cycle" },
-          { key: "company", label: "Associated Company", type: "string", required: false, description: "Company account associated with deal" },
-          { key: "closeDate", label: "Expected Close Date", type: "date", required: false, description: "Target closing date for revenue projection" },
-          { key: "owner", label: "Deal Owner", type: "string", required: false, description: "Sales representative responsible for deal" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "contacts",
-    label: "Contacts (CRM)",
-    description: "Centralized directory of people, stakeholders, and decision makers",
-    entities: [
-      {
-        id: "Contact",
-        name: "Contact",
-        label: "Contact Profile",
-        description: "Individual stakeholder or customer contact",
-        targetFields: [
-          { key: "firstName", label: "First Name", type: "string", required: true, description: "Given name of contact" },
-          { key: "lastName", label: "Last Name", type: "string", required: true, description: "Family or surname of contact" },
-          { key: "email", label: "Email Address", type: "string", required: true, description: "Primary email for contact" },
-          { key: "phone", label: "Phone Number", type: "string", required: false, description: "Direct telephone number" },
-          { key: "jobTitle", label: "Job Title", type: "string", required: false, description: "Professional designation" },
-          { key: "department", label: "Department", type: "string", required: false, description: "Organizational unit or division" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "companies",
-    label: "Companies & Accounts",
-    description: "Account profiles, business hierarchies, and firmographic data",
-    entities: [
-      {
-        id: "Company",
-        name: "Company",
-        label: "Company Account",
-        description: "Business organization or client account",
-        targetFields: [
-          { key: "name", label: "Company Name", type: "string", required: true, description: "Legal or trading entity name" },
-          { key: "domain", label: "Website / Domain", type: "string", required: false, description: "Corporate web domain (e.g. zyoris.com)" },
-          { key: "industry", label: "Industry", type: "string", required: false, description: "Primary business sector" },
-          { key: "size", label: "Employee Count", type: "string", required: false, description: "Company headcount range" },
-          { key: "city", label: "City", type: "string", required: false, description: "Headquarters location city" },
-          { key: "country", label: "Country", type: "string", required: false, description: "Headquarters country" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "finance",
-    label: "Invoices & Payments (Finance)",
-    description: "Financial transactions, billing records, invoices, and payouts",
-    entities: [
-      {
-        id: "Invoice",
-        name: "Invoice",
-        label: "Invoice Record",
-        description: "Customer or vendor billing invoice",
-        targetFields: [
-          { key: "invoiceNumber", label: "Invoice Number", type: "string", required: true, description: "Unique invoice identifier" },
-          { key: "amount", label: "Total Amount", type: "number", required: true, description: "Gross invoice amount" },
-          { key: "currency", label: "Currency Code", type: "string", required: false, description: "ISO currency code (e.g. USD, EUR, INR)" },
-          { key: "dueDate", label: "Due Date", type: "date", required: false, description: "Payment deadline" },
-          { key: "status", label: "Payment Status", type: "string", required: false, description: "Status (e.g. PAID, PENDING, OVERDUE)" },
-          { key: "customerEmail", label: "Customer Email", type: "string", required: false, description: "Billing contact email address" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "hr",
-    label: "HR & Employee Directory",
-    description: "Personnel records, employee profiles, and organizational assignments",
-    entities: [
-      {
-        id: "Employee",
-        name: "Employee",
-        label: "Employee Profile",
-        description: "Staff member record and employment details",
-        targetFields: [
-          { key: "employeeId", label: "Employee ID", type: "string", required: true, description: "Unique staff ID" },
-          { key: "name", label: "Full Name", type: "string", required: true, description: "Employee full name" },
-          { key: "email", label: "Work Email", type: "string", required: true, description: "Corporate email address" },
-          { key: "role", label: "Role / Designation", type: "string", required: false, description: "Position title" },
-          { key: "department", label: "Department", type: "string", required: false, description: "Assigned department or team" },
-          { key: "status", label: "Employment Status", type: "string", required: false, description: "Active, On Leave, Terminated" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "tasks",
-    label: "Tasks & Workflows",
-    description: "Action items, task management, and project deliverables",
-    entities: [
-      {
-        id: "Task",
-        name: "Task",
-        label: "Task Item",
-        description: "Assignable task or workflow item",
-        targetFields: [
-          { key: "title", label: "Task Title", type: "string", required: true, description: "Task summary or title" },
-          { key: "description", label: "Description", type: "string", required: false, description: "Detailed task instructions" },
-          { key: "status", label: "Status", type: "string", required: false, description: "Pending, In Progress, Completed" },
-          { key: "priority", label: "Priority", type: "string", required: false, description: "LOW, MEDIUM, HIGH, URGENT" },
-          { key: "dueDate", label: "Due Date", type: "date", required: false, description: "Task completion deadline" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "communications",
-    label: "Communications & Messages",
-    description: "Inbound and outbound messages, emails, and notes",
-    entities: [
-      {
-        id: "Message",
-        name: "Message",
-        label: "Communication Message",
-        description: "Email, chat, or webhook interaction record",
-        targetFields: [
-          { key: "subject", label: "Subject / Header", type: "string", required: true, description: "Message header or summary" },
-          { key: "body", label: "Message Body", type: "string", required: false, description: "Full text content" },
-          { key: "sender", label: "Sender", type: "string", required: false, description: "Origin email or handle" },
-          { key: "recipient", label: "Recipient", type: "string", required: false, description: "Target email or handle" },
-          { key: "sentAt", label: "Timestamp", type: "date", required: false, description: "Sent or received timestamp" },
-        ],
-      },
-    ],
-  },
-  {
-    id: "custom",
-    label: "Custom Entity",
-    description: "Generic schema mapping for custom webhook and API objects",
-    entities: [
-      {
-        id: "CustomRecord",
-        name: "CustomRecord",
-        label: "Custom Data Record",
-        description: "Arbitrary structured data record",
-        targetFields: [
-          { key: "recordId", label: "External Record ID", type: "string", required: true, description: "Unique identifier in source system" },
-          { key: "title", label: "Primary Title / Label", type: "string", required: true, description: "Primary human-readable label" },
-          { key: "data", label: "Payload / JSON Data", type: "string", required: false, description: "Full or nested payload object" },
-        ],
-      },
-    ],
-  },
-];
+export const DEFAULT_TARGET_MODULES: TargetModuleDefinition[] = CANONICAL_TARGET_MODULES;
 
 export interface FieldMappingEntry {
   targetField: string;
@@ -312,6 +129,8 @@ export function EntitySelectionMappingFlow({
     >
   >({});
   const [savingFieldKeys, setSavingFieldKeys] = useState<Record<string, boolean>>({});
+  const [customPathFields, setCustomPathFields] = useState<Record<string, boolean>>({});
+  const allowDynamicSourcePaths = isDynamicSchemaProvider(connector?.provider);
 
   // 1. Resolve Available Target Modules & Entities dynamically from Connector configSchema or Default Catalog
   const availableModules = useMemo<TargetModuleDefinition[]>(() => {
@@ -1524,33 +1343,83 @@ export function EntitySelectionMappingFlow({
                         )}
                       </td>
 
-                      {/* 3. Discovered Source Field Select Dropdown */}
+                      {/* 3. Discovered Source Field Select Dropdown or Custom JSON Path */}
                       <td className="py-3 px-3 align-top">
                         <div className="space-y-1.5">
-                          <select
-                            value={entry?.sourceField || ""}
-                            disabled={disabled || isSaving || flattenedSourceFields.length === 0}
-                            onChange={(e) => handleSourceFieldSelect(tf.key, e.target.value)}
-                            className={`w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border focus:outline-none font-mono transition-colors ${isMissingRequired
-                                ? "border-error focus:border-error"
-                                : isSuggested
-                                  ? "border-indigo-400 focus:border-indigo-500 bg-indigo-50/10"
-                                  : isMapped
-                                    ? "border-primary/50 focus:border-primary"
-                                    : "border-border focus:border-primary"
-                              }`}
-                          >
-                            <option value="">
-                              {flattenedSourceFields.length === 0
-                                ? "-- Run Schema Discovery First --"
-                                : "-- Select Discovered Source Field --"}
-                            </option>
-                            {flattenedSourceFields.map((sf) => (
-                              <option key={sf.path} value={sf.path}>
-                                {sf.path} ({sf.type}) {sf.required ? "• Required" : ""}
-                              </option>
-                            ))}
-                          </select>
+                          {(allowDynamicSourcePaths && (customPathFields[tf.key] || flattenedSourceFields.length === 0)) ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={entry?.sourceField || ""}
+                                disabled={disabled || isSaving}
+                                onChange={(e) => handleSourceFieldSelect(tf.key, e.target.value)}
+                                placeholder="e.g. data.customer.email or id"
+                                className={`w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border focus:outline-none font-mono transition-colors ${isMissingRequired
+                                    ? "border-error focus:border-error"
+                                    : isMapped
+                                      ? "border-primary/50 focus:border-primary"
+                                      : "border-border focus:border-primary"
+                                  }`}
+                              />
+                              {flattenedSourceFields.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomPathFields((prev) => ({ ...prev, [tf.key]: false }))
+                                  }
+                                  className="px-2 py-1.5 rounded-lg border border-border bg-surface-secondary text-[10px] text-text-secondary hover:text-text whitespace-nowrap"
+                                  title="Choose from discovered fields"
+                                >
+                                  List
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <select
+                                value={entry?.sourceField || ""}
+                                disabled={disabled || isSaving || flattenedSourceFields.length === 0}
+                                onChange={(e) => handleSourceFieldSelect(tf.key, e.target.value)}
+                                className={`w-full px-3 py-1.5 rounded-lg bg-surface text-text text-xs border focus:outline-none font-mono transition-colors ${isMissingRequired
+                                    ? "border-error focus:border-error"
+                                    : isSuggested
+                                      ? "border-indigo-400 focus:border-indigo-500 bg-indigo-50/10"
+                                      : isMapped
+                                        ? "border-primary/50 focus:border-primary"
+                                        : "border-border focus:border-primary"
+                                  }`}
+                              >
+                                <option value="">
+                                  {flattenedSourceFields.length === 0
+                                    ? "-- Run Schema Discovery First --"
+                                    : "-- Select Discovered Source Field --"}
+                                </option>
+                                {entry?.sourceField &&
+                                  !flattenedSourceFields.some((sf) => sf.path === entry.sourceField) && (
+                                    <option value={entry.sourceField}>
+                                      {entry.sourceField} (Custom)
+                                    </option>
+                                  )}
+                                {flattenedSourceFields.map((sf) => (
+                                  <option key={sf.path} value={sf.path}>
+                                    {sf.path} ({sf.type}) {sf.required ? "• Required" : ""}
+                                  </option>
+                                ))}
+                              </select>
+                              {allowDynamicSourcePaths && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCustomPathFields((prev) => ({ ...prev, [tf.key]: true }))
+                                  }
+                                  className="px-2 py-1.5 rounded-lg border border-border bg-surface-secondary text-[10px] text-text-secondary hover:text-text whitespace-nowrap"
+                                  title="Enter custom JSON path"
+                                >
+                                  Custom
+                                </button>
+                              )}
+                            </div>
+                          )}
 
                           {/* Source Field Sample Value / Metadata preview */}
                           {(entry?.sourceField || entry?.defaultValue) && (

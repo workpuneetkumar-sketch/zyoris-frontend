@@ -20,6 +20,7 @@ import {
   ArrowRight,
   ExternalLink,
   ChevronRight,
+  ChevronDown,
   Check,
   Zap,
   RefreshCw,
@@ -30,7 +31,8 @@ import {
   User,
   Building2,
   Activity,
-  Award
+  Award,
+  Filter
 } from "lucide-react";
 import { useLeadLifecycleActions } from "@/hooks/useLeadLifecycleActions";
 import { mapToStatusEnum, mapSourceTypeEnum } from "@/lib/api/leadsApi";
@@ -136,6 +138,7 @@ export function LeadApiActionsToolbar({
   const [maxCapacity, setMaxCapacity] = useState<number>(25);
 
   // Active filter tab state for jump navigation
+  const [activeCategory, setActiveCategory] = useState<string>("all");
   const [activeSectionId, setActiveSectionId] = useState<string>("all");
 
   // Handlers
@@ -251,7 +254,9 @@ export function LeadApiActionsToolbar({
       id: "sec-1",
       num: 1,
       title: "Stage & Status Lifecycle Transition",
-      subtitle: "Move lead across lifecycle pipeline stages",
+      shortTitle: "Stage Transition",
+      category: "pipeline",
+      subtitle: "Move lead across sales pipeline stages",
       icon: GitBranch,
       color: "bg-indigo-600",
       accentBorder: "border-indigo-100",
@@ -305,7 +310,9 @@ export function LeadApiActionsToolbar({
       id: "sec-2",
       num: 2,
       title: "Start Nurture Automation Workflow",
-      subtitle: "Enroll lead in drip engagement sequences",
+      shortTitle: "Nurture Workflow",
+      category: "pipeline",
+      subtitle: "Enroll lead in automated engagement sequences",
       icon: Sparkles,
       color: "bg-emerald-600",
       accentBorder: "border-emerald-100",
@@ -357,7 +364,9 @@ export function LeadApiActionsToolbar({
       id: "sec-3",
       num: 3,
       title: "Ingest Buying Intent Signal",
-      subtitle: "Record digital body language and intent score",
+      shortTitle: "Buying Signals",
+      category: "intelligence",
+      subtitle: "Record digital engagement and buyer intent score",
       icon: TrendingUp,
       color: "bg-blue-600",
       accentBorder: "border-blue-100",
@@ -427,7 +436,9 @@ export function LeadApiActionsToolbar({
       id: "sec-4",
       num: 4,
       title: "Link Anonymous Web Tracking Session",
-      subtitle: "Unify anonymous web activity with CRM lead",
+      shortTitle: "Web Session",
+      category: "intelligence",
+      subtitle: "Unify anonymous web activity with CRM lead profile",
       icon: Link2,
       color: "bg-purple-600",
       accentBorder: "border-purple-100",
@@ -477,7 +488,9 @@ export function LeadApiActionsToolbar({
       id: "sec-5",
       num: 5,
       title: "Check Response SLA Compliance",
-      subtitle: "Audit first-touch SLA and trigger manager escalation",
+      shortTitle: "SLA Response",
+      category: "operations",
+      subtitle: "Audit first-touch SLA and configure manager escalation",
       icon: Clock,
       color: "bg-amber-600",
       accentBorder: "border-amber-100",
@@ -538,7 +551,9 @@ export function LeadApiActionsToolbar({
       id: "sec-6",
       num: 6,
       title: "Submit Outcome Rationale & AI Feedback",
-      subtitle: "Feed closed-loop sales results back into AI models",
+      shortTitle: "Deal Outcome",
+      category: "pipeline",
+      subtitle: "Record final sales outcome and train AI prediction models",
       icon: Star,
       color: "bg-yellow-600",
       accentBorder: "border-yellow-100",
@@ -590,7 +605,7 @@ export function LeadApiActionsToolbar({
             </div>
           </div>
           <div>
-            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Outcome Rationale Rationale</label>
+            <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5">Outcome Rationale</label>
             <input
               type="text"
               value={feedbackReason}
@@ -618,6 +633,8 @@ export function LeadApiActionsToolbar({
       id: "sec-7",
       num: 7,
       title: "Convert Lead to Pipeline Deal Opportunity",
+      shortTitle: "Convert to Deal",
+      category: "pipeline",
       subtitle: "Promote lead into active CRM deal pipeline",
       icon: Briefcase,
       color: "bg-teal-600",
@@ -668,7 +685,9 @@ export function LeadApiActionsToolbar({
       id: "sec-8",
       num: 8,
       title: "Enrich Lead Profile Attributes",
-      subtitle: "Fetch company firmographics and social profiles",
+      shortTitle: "Data Enrichment",
+      category: "intelligence",
+      subtitle: "Fetch company firmographics, headcount, and social profiles",
       icon: Database,
       color: "bg-cyan-600",
       accentBorder: "border-cyan-100",
@@ -720,6 +739,8 @@ export function LeadApiActionsToolbar({
       id: "sec-9",
       num: 9,
       title: "Qualify Lead (ICP Scoring)",
+      shortTitle: "ICP Qualification",
+      category: "intelligence",
       subtitle: "Compute ICP fit, intent level, and buyer readiness",
       icon: ShieldCheck,
       color: "bg-rose-600",
@@ -763,7 +784,9 @@ export function LeadApiActionsToolbar({
       id: "sec-10",
       num: 10,
       title: "Automated Lead Routing",
-      subtitle: "Assign lead ownership to optimal sales rep",
+      shortTitle: "Lead Routing",
+      category: "operations",
+      subtitle: "Assign lead ownership to optimal sales representative",
       icon: UserCheck,
       color: "bg-violet-600",
       accentBorder: "border-violet-100",
@@ -807,7 +830,9 @@ export function LeadApiActionsToolbar({
       id: "sec-11",
       num: 11,
       title: "Save Lead Assignment Rule Configuration",
-      subtitle: "Configure global assignment rules and capacity rules",
+      shortTitle: "Assignment Rules",
+      category: "operations",
+      subtitle: "Configure global assignment rules and workload capacity",
       icon: Settings,
       color: "bg-slate-700",
       accentBorder: "border-slate-200",
@@ -856,71 +881,133 @@ export function LeadApiActionsToolbar({
     }
   ];
 
-  const visibleSections = activeSectionId === "all"
-    ? sections
-    : sections.filter((s) => s.id === activeSectionId);
+  // Category navigation tabs
+  const categories = [
+    { id: "all", label: "All Actions", count: 11 },
+    { id: "pipeline", label: "Pipeline & Sales", count: 4 },
+    { id: "intelligence", label: "Data & Intelligence", count: 4 },
+    { id: "operations", label: "Routing & Operations", count: 3 },
+  ];
+
+  const filteredSections = sections.filter((sec) => {
+    if (activeSectionId !== "all") {
+      return sec.id === activeSectionId;
+    }
+    if (activeCategory !== "all") {
+      return sec.category === activeCategory;
+    }
+    return true;
+  });
 
   return (
-    <div className={`space-y-6 ${className}`}>
+    <div className={`space-y-4 ${className}`}>
       
-      {/* Top Header & Subsystem Filter Bar */}
-      <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-bold text-gray-900 tracking-tight">
-              Lifecycle &amp; Intelligence Subsystems (11 Subsystems)
-            </h2>
+      {/* Top Header & Subsystem Navigation Deck */}
+      <div className="bg-white p-4 rounded-2xl border border-gray-200/90 shadow-xs space-y-3.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2 border-b border-gray-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xs border border-blue-100">
+              <Zap size={16} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 tracking-tight">
+                Lead Actions &amp; Pipeline Automations
+              </h2>
+              <p className="text-xs text-gray-500">
+                Execute pipeline stages, trigger nurture sequences, enrich profile data, and configure routing
+              </p>
+            </div>
           </div>
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
-            11 Subsystems Active
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+              11 Subsystems Active
+            </span>
+          </div>
         </div>
 
-        {/* Section Navigation Pills */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-          <button
-            onClick={() => setActiveSectionId("all")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
-              activeSectionId === "all"
-                ? "bg-blue-600 text-white shadow-2xs"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            All Subsystems
-          </button>
-          {sections.map((sec) => (
+        {/* Category Filter Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          {categories.map((cat) => (
             <button
-              key={sec.id}
-              onClick={() => setActiveSectionId(sec.id)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
-                activeSectionId === sec.id
-                  ? "bg-blue-600 text-white shadow-2xs"
-                  : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-100"
+              key={cat.id}
+              onClick={() => {
+                setActiveCategory(cat.id);
+                setActiveSectionId("all");
+              }}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
+                activeCategory === cat.id && activeSectionId === "all"
+                  ? "bg-blue-600 text-white shadow-xs"
+                  : "bg-gray-100 text-gray-600 hover:bg-gray-200/80 hover:text-gray-900"
               }`}
             >
-              {sec.num}. {sec.title.split(" ")[0]}
+              {cat.label} ({cat.count})
             </button>
           ))}
+        </div>
+
+        {/* Direct Action Selector Pills */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none pt-1 border-t border-gray-100/80">
+          <button
+            onClick={() => {
+              setActiveSectionId("all");
+            }}
+            className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+              activeSectionId === "all"
+                ? "bg-gray-900 text-white shadow-2xs"
+                : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60"
+            }`}
+          >
+            Show All in Category
+          </button>
+          {sections
+            .filter((sec) => activeCategory === "all" || sec.category === activeCategory)
+            .map((sec) => (
+              <button
+                key={sec.id}
+                onClick={() => setActiveSectionId(sec.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                  activeSectionId === sec.id
+                    ? "bg-blue-600 text-white shadow-2xs font-semibold"
+                    : "bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200/60"
+                }`}
+              >
+                <span>{sec.num}.</span>
+                <span>{sec.shortTitle}</span>
+              </button>
+            ))}
         </div>
       </div>
 
       {/* Render Subsystem Sections */}
-      <div className="space-y-3">
-        {visibleSections.map((sec) => (
+      <div className="space-y-3.5">
+        {filteredSections.map((sec) => (
           <div
             key={sec.id}
             id={sec.id}
-            className={`bg-white rounded-xl border ${sec.accentBorder} shadow-2xs overflow-hidden transition-all`}
+            className={`bg-white rounded-2xl border ${sec.accentBorder} shadow-xs overflow-hidden transition-all`}
           >
             {/* Section Header */}
-            <div className="px-4 py-2.5 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-500">#{sec.num}</span>
-                <h3 className="text-xs font-bold text-gray-900">
-                  {sec.title}
-                </h3>
+            <div className="px-4 py-3 bg-gray-50/70 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className={`w-7 h-7 rounded-lg ${sec.color} text-white flex items-center justify-center shadow-2xs shrink-0`}>
+                  <sec.icon size={14} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-400">#{sec.num}</span>
+                    <h3 className="text-xs font-bold text-gray-900">
+                      {sec.title}
+                    </h3>
+                  </div>
+                  <p className="text-[11px] text-gray-500 font-medium">
+                    {sec.subtitle}
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] text-gray-500 hidden sm:inline">{sec.subtitle}</span>
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${sec.badgeColor} hidden sm:inline-block`}>
+                {sec.category}
+              </span>
             </div>
 
             {/* Section Body */}
@@ -933,7 +1020,7 @@ export function LeadApiActionsToolbar({
                   <button
                     type="submit"
                     disabled={sec.loading}
-                    className={`px-4 py-1.5 rounded-lg ${sec.color} hover:opacity-90 text-white text-xs font-semibold transition-all shadow-2xs flex items-center gap-1.5 disabled:opacity-50`}
+                    className={`px-4 py-2 rounded-xl ${sec.color} hover:opacity-90 text-white text-xs font-semibold transition-all shadow-xs flex items-center gap-2 disabled:opacity-50`}
                   >
                     {sec.loading ? (
                       <Loader2 size={13} className="animate-spin" />
@@ -945,11 +1032,11 @@ export function LeadApiActionsToolbar({
                 </div>
               </form>
 
-              {/* Execution Summary Box (What Happened Behind The Scenes) */}
+              {/* Execution Summary Box */}
               <div className={`mt-3 p-3.5 rounded-xl border transition-all ${
                 sec.result 
                   ? "bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-emerald-50/90 border-emerald-200 shadow-2xs"
-                  : "bg-slate-50/80 border-gray-200/80"
+                  : "bg-slate-50/70 border-gray-200/80"
               }`}>
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 pb-2 mb-2 border-b border-gray-200/60">
                   <div className="flex items-center gap-2">
@@ -957,18 +1044,18 @@ export function LeadApiActionsToolbar({
                       <CheckCircle2 size={13} />
                     </div>
                     <h4 className="text-xs font-bold text-gray-900">
-                      {sec.result ? "✅ Live Action Execution Summary — System Changes Applied" : "📋 What Happens Behind The Scenes (Execution Summary)"}
+                      {sec.result ? "Live Action Execution Summary — System Changes Applied" : "Action Impact & Automated Changes"}
                     </h4>
                   </div>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wide self-start sm:self-auto ${
                     sec.result ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-gray-200 text-gray-600"
                   }`}>
-                    {sec.result ? "Status: 200 OK — Live Updated" : "Ready To Execute"}
+                    {sec.result ? "Status: Live Updated" : "Ready To Execute"}
                   </span>
                 </div>
 
-                {/* Bullet points in plain terms for non-technical team members */}
-                <div className="space-y-1.5 mb-3">
+                {/* Bullet points */}
+                <div className="space-y-1.5 mb-2.5">
                   {sec.summaryPoints?.map((point: string, idx: number) => (
                     <div key={idx} className="flex items-start gap-2 text-xs text-gray-700 font-medium leading-relaxed">
                       <span className="text-emerald-600 font-bold shrink-0 mt-0.5">✓</span>
