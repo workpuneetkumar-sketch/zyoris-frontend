@@ -4,6 +4,8 @@
     "react/no-unescaped-entities": "off",
     "@next/next/no-img-element": "off",
     "react/display-name": "off",
-    "jsx-a11y/alt-text": "off"
+    "jsx-a11y/alt-text": "off",
+    "no-alert": "error",
+    "no-restricted-globals": ["error", "confirm", "alert", "prompt"]
   }
 }

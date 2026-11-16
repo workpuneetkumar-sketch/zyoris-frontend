@@ -28,6 +28,7 @@ import { Toast, TableSkeleton, EmptyState, ErrorState, StatsCards, ExpenseRow } 
 import { CreateExpenseModal, UpdateExpenseModal } from "@/components/finance/expenses/ExpenseModals";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 // ── Types ─────────────────────────────────────────────────
 type StatusFilter = "ALL" | "PENDING" | "APPROVED" | "REIMBURSED";
@@ -39,6 +40,7 @@ interface ToastMessage {
 
 // ── Main Page Component ───────────────────────────────────
 export default function ExpensesPage() {
+  const requestConfirmation = useConfirm();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -125,7 +127,13 @@ export default function ExpensesPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Are you sure you want to delete this expense?")) return;
+    const ok = await requestConfirmation({
+      title: "Delete Expense",
+      message: "Are you sure you want to delete this expense?",
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
     
     setDeletingId(id);
     try {

@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { MessageAttachment } from "@/types/connect";
 import { downloadUploadedFile, getUploadDownloadUrl } from "@/lib/api/uploadsApi";
+import { notify } from "@/lib/notify";
 
 interface MessageAttachmentRendererProps {
   attachments?: MessageAttachment[];
@@ -203,7 +204,7 @@ export default function MessageAttachmentRenderer({
       if (att.url && att.url !== `/uploads/${fileId}/download`) {
         window.open(att.url, "_blank", "noopener,noreferrer");
       } else {
-        alert(err?.message || "Failed to download file. Please try again.");
+        notify.error(err?.message || "Failed to download file. Please try again.");
       }
     } finally {
       setDownloadingIds((prev) => ({ ...prev, [idKey]: false }));

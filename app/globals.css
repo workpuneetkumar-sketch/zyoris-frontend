@@ -121,6 +121,7 @@ a {
   /* ── Borders ─────────────────────────────────────────────────── */
   --color-border:       #dde2ee;
   --color-border-light: #eef1f7;
+  --color-border-hover: #c3cadb;
 
   /* ── Primary — deep indigo ────────────────────────────────────── */
   --color-primary:             #4f46e5;   /* indigo-600 */
@@ -186,6 +187,7 @@ body {
   /* ── Borders ─────────────────────────────────────────────────── */
   --color-border:       #2a3349;
   --color-border-light: #1a2235;
+  --color-border-hover: #3b4663;
 
   /* ── Primary — indigo-400 for dark readability ────────────────── */
   --color-primary:             #818cf8;   /* indigo-400 */
@@ -1501,6 +1503,12 @@ body {
   font-weight: 600;
   box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
   transform: translateY(-1px);
+}
+
+.sales-exec-tab-btn-active:hover {
+  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  color: #ffffff !important;
+  border-color: transparent;
 }
 
 .sales-exec-tab-btn-active .sales-exec-tab-badge {

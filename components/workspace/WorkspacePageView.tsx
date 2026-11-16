@@ -37,6 +37,7 @@ import { CreatePageModal } from "./CreatePageModal";
 import { PageActionsMenu, ToolbarAction } from "./PageActionsMenu";
 import { uploadDocument } from "@/lib/api/documentsApi";
 import { toast } from "react-toastify";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 import {
   FileText,
   AlertCircle,
@@ -161,6 +162,7 @@ async function copyToClipboardFallback(text: string): Promise<boolean> {
 }
 
 export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) => {
+  const requestConfirmation = useConfirm();
   const router = useRouter();
   const { pageTree, refetchTree } = useWorkspace();
   const [page, setPage] = useState<WorkspacePage | null>(null);
@@ -485,9 +487,12 @@ export const WorkspacePageView: React.FC<WorkspacePageViewProps> = ({ pageId }) 
       return;
     }
 
-    const confirmed = window.confirm(
-      `Move "${title || "this page"}" to Trash? You can restore it later from Trash.`
-    );
+    const confirmed = await requestConfirmation({
+      title: "Move to Trash",
+      message: `Move "${title || "this page"}" to Trash? You can restore it later from Trash.`,
+      confirmText: "Move",
+      variant: "warning",
+    });
     if (!confirmed) return;
 
     try {

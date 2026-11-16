@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { savePageSettings } from "@/lib/api/workspaceApi";
 import type { WorkspacePage, PageLayoutWidth } from "@/types/workspace";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 // ── Emoji list (mirrors WorkspacePageView) ────────────────────────────────────
 const EMOJI_LIST = [
@@ -64,6 +65,7 @@ export const CustomizePagePanel: React.FC<CustomizePagePanelProps> = ({
   page,
   onSaved,
 }) => {
+  const requestConfirmation = useConfirm();
   const [mounted, setMounted] = useState(false);
 
   // Local draft state — only persisted on "Save"
@@ -112,9 +114,16 @@ export const CustomizePagePanel: React.FC<CustomizePagePanelProps> = ({
     return () => document.removeEventListener("keydown", handleKey);
   }, [isOpen, isDirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleClose = () => {
+  const handleClose = async () => {
     if (isDirty) {
-      if (!window.confirm("You have unsaved changes. Discard them and close?")) return;
+      const ok = await requestConfirmation({
+        title: "Discard Changes",
+        message: "You have unsaved changes. Discard them and close?",
+        confirmText: "Discard",
+        cancelText: "Keep Editing",
+        variant: "warning",
+      });
+      if (!ok) return;
     }
     onClose();
   };

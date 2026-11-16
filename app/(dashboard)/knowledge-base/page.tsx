@@ -2,6 +2,7 @@
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 import {
   Search,
   Plus,
@@ -54,6 +55,7 @@ const Skeleton = ({ className }: { className?: string }) => (
 
 /* ── Page Component ──────────────────────────────────────────────────── */
 export default function KnowledgeBasePage() {
+  const requestConfirmation = useConfirm();
   // Data
   const [categories, setCategories] = useState<Category[]>([]);
   const [articles, setArticles] = useState<KnowledgeArticle[]>([]);
@@ -412,9 +414,15 @@ export default function KnowledgeBasePage() {
                     </PermissionGuard>
                     <PermissionGuard permission="knowledge.delete">
                       <button
-                        onClick={(e) => {
+                        onClick={async (e) => {
                           e.stopPropagation();
-                          if (confirm(`Delete category "${cat.name}"?`)) {
+                          const ok = await requestConfirmation({
+                            title: "Delete Category",
+                            message: `Delete category "${cat.name}"?`,
+                            confirmText: "Delete",
+                            variant: "danger",
+                          });
+                          if (ok) {
                             handleDeleteCategory(cat.id);
                           }
                         }}

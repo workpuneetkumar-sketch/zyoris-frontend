@@ -4,6 +4,7 @@
 import { useState } from 'react';
 import { X, Plus, Trash2 } from 'lucide-react';
 import { createInvoice } from '@/lib/api/finance/invoicesApi';
+import { notify } from '@/lib/notify';
 
 interface InvoiceLineItem {
   description: string;
@@ -63,12 +64,12 @@ export default function InvoiceForm({ onClose, onSuccess }: InvoiceFormProps) {
     e.preventDefault();
     
     if (!clientName || !dueDate || lineItems.length === 0) {
-      alert('Please fill in all required fields');
+      notify.warning('Please fill in all required fields');
       return;
     }
 
     if (lineItems.some(item => !item.description || item.quantity <= 0 || item.rate <= 0)) {
-      alert('Please complete all line items with valid quantities and rates');
+      notify.warning('Please complete all line items with valid quantities and rates');
       return;
     }
 
@@ -88,7 +89,7 @@ export default function InvoiceForm({ onClose, onSuccess }: InvoiceFormProps) {
       onSuccess();
     } catch (error) {
       console.error('Failed to create invoice:', error);
-      alert('Failed to create invoice. Please try again.');
+      notify.error('Failed to create invoice. Please try again.');
     } finally {
       setSubmitting(false);
     }

@@ -19,6 +19,7 @@ import {
   removeConversationMember,
 } from "@/lib/api/connectApi";
 import { TeamMember } from "@/lib/api/organizationsApi";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 interface GroupMembersModalProps {
   isOpen: boolean;
@@ -37,6 +38,7 @@ export default function GroupMembersModal({
   teamMembers,
   onConversationUpdated,
 }: GroupMembersModalProps) {
+  const requestConfirmation = useConfirm();
   const [activeTab, setActiveTab] = useState<"members" | "add">("members");
   const [members, setMembers] = useState<ConversationMember[]>(conversation.members || []);
   const [loading, setLoading] = useState(false);
@@ -101,7 +103,13 @@ export default function GroupMembersModal({
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!confirm("Remove this member from group conversation?")) return;
+    const ok = await requestConfirmation({
+      title: "Remove Member",
+      message: "Remove this member from group conversation?",
+      confirmText: "Remove",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     setActionLoading(true);
     setError(null);

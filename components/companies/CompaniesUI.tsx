@@ -1,7 +1,8 @@
 "use client";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
     Search,
     Plus,
@@ -518,6 +519,9 @@ export function CompaniesUI({
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [editingCompany, setEditingCompany] = useState<Company | null>(null);
     const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+    const [menuPositioned, setMenuPositioned] = useState(false);
+    const menuAnchorRef = useRef<HTMLButtonElement | null>(null);
+    const menuRef = useRef<HTMLDivElement | null>(null);
 
     const activeCount = safeCompanies.filter((c) => c.status === "Active").length;
     const uniqueIndustries = new Set(safeCompanies.map((c) => c.industry).filter(Boolean)).size;
@@ -557,6 +561,55 @@ export function CompaniesUI({
         await updateCompany(editingCompany.id, data as Partial<Company>);
         onReload();
     };
+
+    useEffect(() => {
+        if (!openMenu) return;
+
+        const closeMenu = () => {
+            setOpenMenu(null);
+            setMenuPos(null);
+            setMenuPositioned(false);
+        };
+        const handleOutsideClick = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (!menuRef.current?.contains(target) && !menuAnchorRef.current?.contains(target)) {
+                closeMenu();
+            }
+        };
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if (event.key === "Escape") closeMenu();
+        };
+        const positionMenu = () => {
+            const anchor = menuAnchorRef.current;
+            const menu = menuRef.current;
+            if (!anchor || !menu) return;
+
+            const anchorRect = anchor.getBoundingClientRect();
+            const menuRect = menu.getBoundingClientRect();
+            const top = menuRect.height > window.innerHeight - anchorRect.bottom
+                ? Math.max(4, anchorRect.top - menuRect.height - 4)
+                : anchorRect.bottom + 4;
+            const left = Math.min(
+                Math.max(4, anchorRect.right - menuRect.width),
+                window.innerWidth - menuRect.width - 4
+            );
+            setMenuPos({ top, left });
+            setMenuPositioned(true);
+        };
+        const frame = requestAnimationFrame(positionMenu);
+
+        document.addEventListener("mousedown", handleOutsideClick);
+        document.addEventListener("keydown", handleKeyDown);
+        window.addEventListener("scroll", closeMenu, true);
+        window.addEventListener("resize", closeMenu);
+        return () => {
+            cancelAnimationFrame(frame);
+            document.removeEventListener("mousedown", handleOutsideClick);
+            document.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("scroll", closeMenu, true);
+            window.removeEventListener("resize", closeMenu);
+        };
+    }, [openMenu, setOpenMenu]);
 
     return (
         <div className="space-y-6">
@@ -805,8 +858,11 @@ export function CompaniesUI({
                                                         if (openMenu === company.id) {
                                                             setOpenMenu(null);
                                                             setMenuPos(null);
+                                                            setMenuPositioned(false);
                                                         } else {
+                                                            menuAnchorRef.current = e.currentTarget;
                                                             const rect = e.currentTarget.getBoundingClientRect();
+                                                            setMenuPositioned(false);
                                                             setMenuPos({ top: rect.bottom + 4, left: rect.right - 144 });
                                                             setOpenMenu(company.id);
                                                         }
@@ -886,16 +942,11 @@ export function CompaniesUI({
             </div>
 
             {/* Context Menu */}
-            {openMenu !== null && (
-                <>
-                    <div
-                        className="fixed inset-0 z-[9998]"
-                        onClick={() => { setOpenMenu(null); setMenuPos(null); }}
-                    />
-                    {menuPos && (
+            {openMenu !== null && menuPos && typeof document !== "undefined" && createPortal(
                         <div
+                            ref={menuRef}
                             className="fixed z-[9999] bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl shadow-xl py-1.5 w-36 overflow-hidden animate-in fade-in zoom-in-95 duration-100"
-                            style={{ top: menuPos.top, left: menuPos.left }}
+                            style={{ top: menuPos.top, left: menuPos.left, visibility: menuPositioned ? "visible" : "hidden" }}
                         >
                             {["View Details", "Edit", "Delete"].map((action) => {
                                 const btn = (
@@ -938,9 +989,8 @@ export function CompaniesUI({
                                 }
                                 return btn;
                             })}
-                        </div>
-                    )}
-                </>
+                        </div>,
+                document.body
             )}
 
             {/* Create Modal */}

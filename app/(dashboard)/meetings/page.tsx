@@ -29,6 +29,7 @@ import {
     Sparkles,
     Brain,
 } from "lucide-react";
+import { notify } from "@/lib/notify";
 
 export default function MeetingsPage() {
     const [meetings, setMeetings] = useState<Meeting[]>([]);
@@ -210,7 +211,7 @@ export default function MeetingsPage() {
         } catch (err: any) {
             console.error("Submission failed", err);
             const msg = err?.response?.data?.message || err?.message || "Failed to save meeting.";
-            alert(msg);
+            notify.error(msg);
         } finally {
             setIsSubmitting(false);
         }

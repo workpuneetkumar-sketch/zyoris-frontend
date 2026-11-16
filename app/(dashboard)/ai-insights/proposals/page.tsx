@@ -5,6 +5,7 @@ import { CrmUpdateProposal } from '../../../../types/ai-proposals';
 import { fetchProposals, approveProposal, rejectProposal } from '../../../../lib/api/aiProposalsApi';
 import { ProposalCard } from '../../../../components/ai/ProposalCard';
 import { Sparkles, CheckCircle } from 'lucide-react';
+import { notify } from '@/lib/notify';
 
 export default function ProposalsInboxPage() {
   const [proposals, setProposals] = useState<CrmUpdateProposal[]>([]);
@@ -35,7 +36,7 @@ export default function ProposalsInboxPage() {
       setProposals(prev => prev.filter(p => p.id !== id));
       // Optionally show a toast notification here
     } catch (err: any) {
-      alert(`Error approving: ${err.response?.data?.error || err.message}`);
+      notify.error(`Error approving: ${err.response?.data?.error || err.message}`);
     }
   };
 
@@ -44,7 +45,7 @@ export default function ProposalsInboxPage() {
       await rejectProposal(id);
       setProposals(prev => prev.filter(p => p.id !== id));
     } catch (err: any) {
-      alert(`Error rejecting: ${err.response?.data?.error || err.message}`);
+      notify.error(`Error rejecting: ${err.response?.data?.error || err.message}`);
     }
   };
 

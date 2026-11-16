@@ -11,6 +11,7 @@ import Script from "next/script";
 import { InvoiceProvider } from "@/context/InvoiceContext";
 import { PaymentProvider } from "@/context/PaymentContext";
 import { TourProvider } from "@/components/tour/TourProvider";
+import { ConfirmProvider } from "@/components/common/ConfirmProvider";
 import { ClientErrorBoundary } from "@/components/ui/ClientErrorBoundary";
 
 const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
@@ -76,22 +77,24 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
         <ThemeProvider>
           <ToastProvider>
-            <AuthProvider>
-              <NotificationProvider>
-                <InvoiceProvider>
-                  <PaymentProvider>
-                    <TourProvider>
-                      <ClientErrorBoundary>
-                        {children}
-                      </ClientErrorBoundary>
-                    </TourProvider>
-                  </PaymentProvider>
-                </InvoiceProvider>
-              </NotificationProvider>
-              <ClientErrorBoundary silent>
-                <ZiiBot />
-              </ClientErrorBoundary>
-            </AuthProvider>
+            <ConfirmProvider>
+              <AuthProvider>
+                <NotificationProvider>
+                  <InvoiceProvider>
+                    <PaymentProvider>
+                      <TourProvider>
+                        <ClientErrorBoundary>
+                          {children}
+                        </ClientErrorBoundary>
+                      </TourProvider>
+                    </PaymentProvider>
+                  </InvoiceProvider>
+                </NotificationProvider>
+                <ClientErrorBoundary silent>
+                  <ZiiBot />
+                </ClientErrorBoundary>
+              </AuthProvider>
+            </ConfirmProvider>
           </ToastProvider>
         </ThemeProvider>
       </body>

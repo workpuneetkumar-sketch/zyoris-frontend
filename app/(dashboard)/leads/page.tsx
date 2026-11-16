@@ -38,6 +38,7 @@ import api from "@/lib/api/api";
 import { toast } from "react-toastify";
 import { useAuth } from "@/context/AuthContext";
 import { isIngestionAuthorized } from "@/lib/api/leadIngestionApi";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 type LeadsTab = "leads" | "assignment-rules" | "assignment-history" | "assignment-analytics" | "duplicates";
 
@@ -191,6 +192,7 @@ function activeFilterCount(f: AdvancedLeadsFilters): number {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LeadsPage() {
+  const requestConfirmation = useConfirm();
   const { user, hasPermission } = useAuth();
   const canAccessIngestion = isIngestionAuthorized(user, hasPermission);
 
@@ -574,10 +576,16 @@ export default function LeadsPage() {
   }, [rulesHook]);
 
   const handleDeleteRule = useCallback(async (rule: AssignmentRule) => {
-    if (window.confirm(`Are you sure you want to delete assignment rule "${rule.name}"?`)) {
+    const ok = await requestConfirmation({
+      title: "Delete Assignment Rule",
+      message: `Are you sure you want to delete assignment rule "${rule.name}"?`,
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (ok) {
       await rulesHook.deleteRule(rule.id);
     }
-  }, [rulesHook]);
+  }, [requestConfirmation, rulesHook]);
 
   const handleSaveRule = useCallback(async (payload: CreateAssignmentRulePayload | UpdateAssignmentRulePayload) => {
     let result: AssignmentRule | null = null;

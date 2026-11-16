@@ -36,6 +36,7 @@ import {
   toggleMuteChannel,
 } from "@/lib/api/connectApi";
 import { TeamMember } from "@/lib/api/organizationsApi";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 
 interface ChannelMembersModalProps {
   isOpen: boolean;
@@ -56,6 +57,7 @@ export default function ChannelMembersModal({
   onChannelUpdated,
   onChannelDeleted,
 }: ChannelMembersModalProps) {
+  const requestConfirmation = useConfirm();
   const [activeTab, setActiveTab] = useState<"members" | "add" | "settings">("members");
   const [members, setMembers] = useState<ChannelMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -175,7 +177,13 @@ export default function ChannelMembersModal({
   };
 
   const handleRemoveMember = async (userId: string) => {
-    if (!confirm("Are you sure you want to remove this member from the channel?")) return;
+    const ok = await requestConfirmation({
+      title: "Remove Member",
+      message: "Are you sure you want to remove this member from the channel?",
+      confirmText: "Remove",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     setActionLoading(true);
     setError(null);
@@ -200,7 +208,13 @@ export default function ChannelMembersModal({
   };
 
   const handleArchiveChannel = async () => {
-    if (!confirm(`Are you sure you want to archive #${channel.name}? Members will no longer be able to post messages.`)) return;
+    const ok = await requestConfirmation({
+      title: "Archive Channel",
+      message: `Are you sure you want to archive #${channel.name}? Members will no longer be able to post messages.`,
+      confirmText: "Archive",
+      variant: "warning",
+    });
+    if (!ok) return;
     setActionLoading(true);
     setError(null);
     try {
@@ -257,7 +271,13 @@ export default function ChannelMembersModal({
   };
 
   const handleDeleteChannel = async () => {
-    if (!confirm(`Are you sure you want to delete #${channel.name}? This cannot be undone.`)) return;
+    const ok = await requestConfirmation({
+      title: "Delete Channel",
+      message: `Are you sure you want to delete #${channel.name}? This cannot be undone.`,
+      confirmText: "Delete",
+      variant: "danger",
+    });
+    if (!ok) return;
 
     setActionLoading(true);
     setError(null);

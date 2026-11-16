@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Attachment, getAttachmentPreview, getAttachmentDownloadUrl } from "@/lib/api/attachmentApi";
+import { notify } from "@/lib/notify";
 import {
   X,
   Download,
@@ -126,7 +127,7 @@ export const AttachmentPreviewModal: React.FC<AttachmentPreviewModalProps> = ({
       document.body.removeChild(link);
     } catch (err: any) {
       console.error("Download failed:", err);
-      alert(err.message || "Failed to download file");
+      notify.error(err.message || "Failed to download file");
     } finally {
       setIsDownloading(false);
     }
