@@ -1,7 +1,7 @@
 // hooks/useAssignmentRules.ts
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast } from "react-toastify";
 import type {
   AssignmentRule,
@@ -17,10 +17,11 @@ import {
   deleteAssignmentRule,
 } from "@/lib/api/assignmentRulesApi";
 
-export function useAssignmentRules() {
+export function useAssignmentRules(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true;
   const [rules, setRules] = useState<AssignmentRule[]>([]);
   const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [updating, setUpdating] = useState(false);
@@ -29,6 +30,10 @@ export function useAssignmentRules() {
   const [statusFilter, setStatusFilter] = useState<"all" | "ACTIVE" | "INACTIVE">("all");
   const [strategyFilter, setStrategyFilter] = useState<"all" | AssignmentStrategy>("all");
 
+  const rulesRef = useRef<AssignmentRule[]>(rules);
+  rulesRef.current = rules;
+  const hasLoadedRef = useRef(false);
+
   const loadRules = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -36,11 +41,13 @@ export function useAssignmentRules() {
       const res = await listAssignmentRules();
       setRules(res.rules);
       setTotal(res.total);
+      hasLoadedRef.current = true;
     } catch (err: any) {
       // 404 = no rules yet — show empty, not error
       if (err?.response?.status === 404) {
         setRules([]);
         setTotal(0);
+        hasLoadedRef.current = true;
       } else {
         setError(err?.response?.data?.message ?? err?.message ?? "Failed to load assignment rules");
       }
@@ -50,8 +57,9 @@ export function useAssignmentRules() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     loadRules();
-  }, [loadRules]);
+  }, [enabled, loadRules]);
 
   const createRule = useCallback(
     async (payload: CreateAssignmentRulePayload): Promise<AssignmentRule | null> => {
@@ -75,7 +83,7 @@ export function useAssignmentRules() {
   const updateRule = useCallback(
     async (payload: UpdateAssignmentRulePayload): Promise<AssignmentRule | null> => {
       setUpdating(true);
-      const snapshot = rules.slice();
+      const snapshot = rulesRef.current.slice();
       // Optimistic
       setRules((prev) => prev.map((r) => (r.id === payload.id ? { ...r, ...payload } : r)));
       try {
@@ -91,13 +99,13 @@ export function useAssignmentRules() {
         setUpdating(false);
       }
     },
-    [rules]
+    []
   );
 
   const deleteRule = useCallback(
     async (id: string): Promise<boolean> => {
       setDeleting(true);
-      const snapshot = rules.slice();
+      const snapshot = rulesRef.current.slice();
       // Optimistic
       setRules((prev) => prev.filter((r) => r.id !== id));
       setTotal((prev) => Math.max(0, prev - 1));
@@ -113,24 +121,30 @@ export function useAssignmentRules() {
         setDeleting(false);
       }
     },
-    [rules]
+    []
   );
 
-  const filteredRules = rules.filter((r) => {
+  const filteredRules = useMemo(() => {
     const q = searchQuery.toLowerCase();
-    const matchSearch = !q || r.name.toLowerCase().includes(q) ||
-      r.territories.some((t) => t.toLowerCase().includes(q)) ||
-      r.cities.some((c) => c.toLowerCase().includes(q));
-    const matchStatus = statusFilter === "all" || r.status === statusFilter;
-    const matchStrategy = strategyFilter === "all" || r.strategy === strategyFilter;
-    return matchSearch && matchStatus && matchStrategy;
-  });
+    return rules.filter((r) => {
+      const matchSearch =
+        !q ||
+        r.name.toLowerCase().includes(q) ||
+        (r.territories ?? []).some((t) => t.toLowerCase().includes(q)) ||
+        (r.cities ?? []).some((c) => c.toLowerCase().includes(q));
+      const matchStatus = statusFilter === "all" || r.status === statusFilter;
+      const matchStrategy = strategyFilter === "all" || r.strategy === strategyFilter;
+      return matchSearch && matchStatus && matchStrategy;
+    });
+  }, [rules, searchQuery, statusFilter, strategyFilter]);
+
+  const effectiveLoading = loading || (enabled && !hasLoadedRef.current);
 
   return {
     rules,
     filteredRules,
     total,
-    loading,
+    loading: effectiveLoading,
     error,
     creating,
     updating,

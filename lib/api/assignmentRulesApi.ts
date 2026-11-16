@@ -28,6 +28,28 @@ import type {
 // ── Normaliser ────────────────────────────────────────────────────────────────
 
 function normaliseRule(raw: any): AssignmentRule {
+  if (!raw || typeof raw !== "object") {
+    return {
+      id: String(Date.now()),
+      name: "Unnamed Rule",
+      strategy: "ROUND_ROBIN",
+      priority: 1,
+      status: "ACTIVE",
+      territories: [],
+      products: [],
+      cities: [],
+      states: [],
+      countries: [],
+      languages: [],
+      pinCodes: [],
+      minBudget: null,
+      maxBudget: null,
+      assigneeIds: [],
+      organizationId: undefined,
+      createdAt: undefined,
+      updatedAt: undefined,
+    };
+  }
   return {
     id: raw.id ?? raw._id ?? String(Date.now()),
     name: raw.name ?? "Unnamed Rule",
@@ -82,28 +104,38 @@ export async function createAssignmentRule(
 export async function listAssignmentRules(
   filters?: AssignmentRulesListFilters
 ): Promise<AssignmentRulesListResponse> {
-  const params: Record<string, string> = {};
-  if (filters?.status) params.status = filters.status;
-  if (filters?.strategy) params.strategy = filters.strategy;
+  try {
+    const params: Record<string, string> = {};
+    if (filters?.status) params.status = filters.status;
+    if (filters?.strategy) params.strategy = filters.strategy;
 
-  const res = await api.get("/assignment-rules/list", { params });
-  const d = res.data;
+    const res = await api.get("/assignment-rules/list", { params });
+    const d = res.data;
 
-  let rules: AssignmentRule[] = [];
-  let total = 0;
+    let rules: AssignmentRule[] = [];
 
-  if (Array.isArray(d)) {
-    rules = d.map(normaliseRule);
-    total = d.length;
-  } else if (Array.isArray(d?.rules)) {
-    rules = d.rules.map(normaliseRule);
-    total = d.total ?? d.rules.length;
-  } else if (Array.isArray(d?.data)) {
-    rules = d.data.map(normaliseRule);
-    total = d.total ?? d.data.length;
+    const rawList: any[] = Array.isArray(d)
+      ? d
+      : Array.isArray(d?.rules)
+      ? d.rules
+      : Array.isArray(d?.data)
+      ? d.data
+      : Array.isArray(d?.data?.rules)
+      ? d.data.rules
+      : Array.isArray(d?.data?.data)
+      ? d.data.data
+      : [];
+
+    rules = rawList.map(normaliseRule);
+    const total = d?.total ?? d?.data?.total ?? d?.count ?? rules.length;
+
+    return { rules, total };
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      return { rules: [], total: 0 };
+    }
+    throw err;
   }
-
-  return { rules, total };
 }
 
 // ── LIVE: GET /assignment-rules/{id} ─────────────────────────────────────────
@@ -136,49 +168,67 @@ export async function deleteAssignmentRule(id: string): Promise<void> {
 export async function getAssignmentHistory(
   filters: Partial<AssignmentHistoryFilters> & { page?: number; limit?: number }
 ): Promise<AssignmentHistoryResponse> {
-  const params: Record<string, string | number | undefined> = {
-    page: filters.page ?? 1,
-    limit: filters.limit ?? 20,
-  };
-  if (filters.search) params.search = filters.search;
-  if (filters.dateFrom) params.dateFrom = filters.dateFrom;
-  if (filters.dateTo) params.dateTo = filters.dateTo;
-  if (filters.userId) params.userId = filters.userId;
-  if (filters.strategy && filters.strategy !== "All") params.strategy = filters.strategy;
-  if (filters.status && filters.status !== "All") params.status = filters.status;
+  try {
+    const params: Record<string, string | number | undefined> = {
+      page: filters.page ?? 1,
+      limit: filters.limit ?? 20,
+    };
+    if (filters.search) params.search = filters.search;
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
+    if (filters.userId) params.userId = filters.userId;
+    if (filters.strategy && filters.strategy !== "All") params.strategy = filters.strategy;
+    if (filters.status && filters.status !== "All") params.status = filters.status;
 
-  const res = await api.get("/leads/assignment-history", { params });
-  const d = res.data;
+    const res = await api.get("/leads/assignment-history", { params });
+    const d = res.data;
 
-  const raw: any[] = Array.isArray(d)
-    ? d
-    : Array.isArray(d?.history)
-    ? d.history
-    : Array.isArray(d?.data)
-    ? d.data
-    : [];
+    const raw: any[] = Array.isArray(d)
+      ? d
+      : Array.isArray(d?.history)
+      ? d.history
+      : Array.isArray(d?.data)
+      ? d.data
+      : Array.isArray(d?.data?.history)
+      ? d.data.history
+      : Array.isArray(d?.data?.rows)
+      ? d.data.rows
+      : Array.isArray(d?.data?.data)
+      ? d.data.data
+      : [];
 
-  const history = raw.map((item: any) => ({
-    id: item.id ?? String(Math.random()),
-    leadId: item.leadId ?? item.lead_id ?? "",
-    leadName: item.leadName ?? item.lead_name ?? item.lead?.name ?? "—",
-    assignedToId: item.assignedToId ?? item.assigned_to_id ?? "",
-    assignedToName: item.assignedToName ?? item.assigned_to_name ?? item.assignedTo?.name ?? "—",
-    assignedById: item.assignedById ?? item.assigned_by_id ?? null,
-    assignedByName: item.assignedByName ?? item.assigned_by_name ?? item.assignedBy?.name ?? "—",
-    strategy: item.strategy ?? item.assignmentStrategy ?? "MANUAL",
-    assignedAt: item.assignedAt ?? item.assigned_at ?? item.createdAt ?? new Date().toISOString(),
-    responseTime: item.responseTime ?? item.response_time ?? null,
-    conversionStatus: item.conversionStatus ?? item.conversion_status ?? "PENDING",
-    currentStatus: item.currentStatus ?? item.current_status ?? item.status ?? "ACTIVE",
-  }));
+    const history = raw.map((item: any) => ({
+      id: item?.id ?? item?._id ?? String(Math.random()),
+      leadId: item?.leadId ?? item?.lead_id ?? "",
+      leadName: item?.leadName ?? item?.lead_name ?? item?.lead?.name ?? "—",
+      assignedToId: item?.assignedToId ?? item?.assigned_to_id ?? "",
+      assignedToName: item?.assignedToName ?? item?.assigned_to_name ?? item?.assignedTo?.name ?? "—",
+      assignedById: item?.assignedById ?? item?.assigned_by_id ?? null,
+      assignedByName: item?.assignedByName ?? item?.assigned_by_name ?? item?.assignedBy?.name ?? "—",
+      strategy: item?.strategy ?? item?.assignmentStrategy ?? "MANUAL",
+      assignedAt: item?.assignedAt ?? item?.assigned_at ?? item?.createdAt ?? new Date().toISOString(),
+      responseTime: item?.responseTime ?? item?.response_time ?? null,
+      conversionStatus: item?.conversionStatus ?? item?.conversion_status ?? "PENDING",
+      currentStatus: item?.currentStatus ?? item?.current_status ?? item?.status ?? "ACTIVE",
+    }));
 
-  return {
-    history,
-    total: d?.total ?? d?.pagination?.total ?? raw.length,
-    page: d?.page ?? d?.pagination?.page ?? filters.page ?? 1,
-    limit: d?.limit ?? d?.pagination?.limit ?? filters.limit ?? 20,
-  };
+    return {
+      history,
+      total: d?.total ?? d?.pagination?.total ?? d?.data?.total ?? d?.data?.pagination?.total ?? raw.length,
+      page: d?.page ?? d?.pagination?.page ?? d?.data?.page ?? d?.data?.pagination?.page ?? filters.page ?? 1,
+      limit: d?.limit ?? d?.pagination?.limit ?? d?.data?.limit ?? d?.data?.pagination?.limit ?? filters.limit ?? 20,
+    };
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      return {
+        history: [],
+        total: 0,
+        page: filters.page ?? 1,
+        limit: filters.limit ?? 20,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function getAssignmentAnalytics(
@@ -210,10 +260,11 @@ export async function getAssignmentAnalytics(
     // Backend shape: { success, data: { overview, distribution, conversionRate, strategyBreakdown,
     //   strategyPerformance, summary, timeLine, topAssignees } }
     const d = res.data?.data ?? res.data;
+    const isObj = d && typeof d === "object" && !Array.isArray(d);
 
     // Pull from overview sub-object (actual backend shape)
-    const overview = d?.overview ?? {};
-    const summary  = d?.summary  ?? {};
+    const overview = isObj ? (d?.overview ?? {}) : {};
+    const summary  = isObj ? (d?.summary  ?? {}) : {};
 
     // Strategy data: try strategyBreakdown first, then strategyPerformance
     const rawStrategy: any[] = Array.isArray(d?.strategyBreakdown)

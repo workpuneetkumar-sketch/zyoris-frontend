@@ -461,20 +461,9 @@ export default function LeadsPage() {
   }, [statsLoading, total, leadsStats.newLeads, leadsStats.contacted, leadsStats.converted]);
 
   // ── Assignment hooks (lazy — only load when tab active) ───────────────────
-  const rulesHook = useAssignmentRules();
-  const historyHook = useAssignmentHistory();
-  const analyticsHook = useAssignmentAnalytics();
-
-  useEffect(() => {
-    if (activeTab === "assignment-history") {
-      void historyHook.refresh();
-    } else if (activeTab === "assignment-analytics") {
-      void analyticsHook.refresh();
-    } else if (activeTab === "assignment-rules") {
-      void rulesHook.refresh();
-    }
-    // eslint-disable-next-deps
-  }, [activeTab, rulesHook, historyHook, analyticsHook]);
+  const rulesHook = useAssignmentRules({ enabled: activeTab === "assignment-rules" });
+  const historyHook = useAssignmentHistory({ enabled: activeTab === "assignment-history" });
+  const analyticsHook = useAssignmentAnalytics({ enabled: activeTab === "assignment-analytics" });
 
   const displayLeads = usingAdvanced ? serverLeads : leads;
   const displayTotal = usingAdvanced ? serverTotal : total;

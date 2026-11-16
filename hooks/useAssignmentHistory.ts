@@ -2,7 +2,7 @@
 // Hook for Lead Assignment History
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { AssignmentHistoryEntry, AssignmentHistoryFilters } from "@/types/assignmentRules";
 import { getAssignmentHistory } from "@/lib/api/assignmentRulesApi";
 
@@ -29,13 +29,15 @@ interface UseAssignmentHistoryReturn {
   refresh: () => Promise<void>;
 }
 
-export function useAssignmentHistory(): UseAssignmentHistoryReturn {
+export function useAssignmentHistory(options?: { enabled?: boolean }): UseAssignmentHistoryReturn {
+  const enabled = options?.enabled ?? true;
   const [history, setHistory] = useState<AssignmentHistoryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<AssignmentHistoryFilters>(DEFAULT_FILTERS);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -44,12 +46,14 @@ export function useAssignmentHistory(): UseAssignmentHistoryReturn {
       const res = await getAssignmentHistory({ ...filters, page, limit: PAGE_SIZE });
       setHistory(res.history);
       setTotal(res.total);
+      hasLoadedRef.current = true;
     } catch (err: any) {
       const status = err?.response?.status;
       // 404 means no history yet or endpoint not available — treat as empty, not error
       if (status === 404) {
         setHistory([]);
         setTotal(0);
+        hasLoadedRef.current = true;
       } else {
         const msg = err?.response?.data?.message ?? err?.message ?? "Failed to load assignment history";
         setError(msg);
@@ -60,19 +64,22 @@ export function useAssignmentHistory(): UseAssignmentHistoryReturn {
   }, [filters, page]);
 
   useEffect(() => {
+    if (!enabled) return;
     load();
-  }, [load]);
+  }, [enabled, load]);
 
   const handleSetFilters = useCallback((f: AssignmentHistoryFilters) => {
     setFilters(f);
     setPage(1);
   }, []);
 
+  const effectiveLoading = loading || (enabled && !hasLoadedRef.current);
+
   return {
     history,
     total,
     page,
-    loading,
+    loading: effectiveLoading,
     error,
     filters,
     setFilters: handleSetFilters,

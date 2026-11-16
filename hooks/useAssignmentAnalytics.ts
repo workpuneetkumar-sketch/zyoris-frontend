@@ -3,7 +3,7 @@
 // Targets GET /leads/assignment-analytics + fallback calculation from assignment history
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   AssignmentAnalytics,
   AssignmentAnalyticsFilters,
@@ -129,12 +129,14 @@ interface UseAssignmentAnalyticsReturn {
   backendAvailable: boolean;
 }
 
-export function useAssignmentAnalytics(): UseAssignmentAnalyticsReturn {
+export function useAssignmentAnalytics(options?: { enabled?: boolean }): UseAssignmentAnalyticsReturn {
+  const enabled = options?.enabled ?? true;
   const [analytics, setAnalytics] = useState<AssignmentAnalytics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<AssignmentAnalyticsFilters>(DEFAULT_FILTERS);
   const [backendAvailable, setBackendAvailable] = useState(false);
+  const hasLoadedRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -164,6 +166,7 @@ export function useAssignmentAnalytics(): UseAssignmentAnalyticsReturn {
           data.totalConverted > 0 ||
           data.distribution.length > 0
       );
+      hasLoadedRef.current = true;
     } catch (err: any) {
       // If endpoint fails, attempt to calculate directly from History
       try {
@@ -173,6 +176,7 @@ export function useAssignmentAnalytics(): UseAssignmentAnalyticsReturn {
           setAnalytics(fallbackData);
           setBackendAvailable(true);
           setError(null);
+          hasLoadedRef.current = true;
           return;
         }
       } catch {
@@ -182,18 +186,22 @@ export function useAssignmentAnalytics(): UseAssignmentAnalyticsReturn {
       const msg = err?.response?.data?.message ?? err?.message ?? "Failed to load analytics";
       setError(msg);
       setBackendAvailable(false);
+      hasLoadedRef.current = true;
     } finally {
       setLoading(false);
     }
   }, [filters]);
 
   useEffect(() => {
+    if (!enabled) return;
     load();
-  }, [load]);
+  }, [enabled, load]);
+
+  const effectiveLoading = loading || (enabled && !hasLoadedRef.current);
 
   return {
     analytics,
-    loading,
+    loading: effectiveLoading,
     error,
     filters,
     setFilters,

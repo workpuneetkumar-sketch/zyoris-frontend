@@ -8,7 +8,7 @@ import {
   BarChart, Bar,
   AreaChart, Area,
 } from "recharts";
-import { RefreshCw, TrendingUp, Clock, Users, Zap, AlertCircle } from "lucide-react";
+import { RefreshCw, TrendingUp, Clock, Users, Zap, AlertCircle, Info } from "lucide-react";
 import classNames from "classnames";
 import type { AssignmentAnalytics, AssignmentAnalyticsFilters } from "@/types/assignmentRules";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -84,17 +84,19 @@ export function AssignmentAnalyticsDashboard({
 
   const data = analytics;
   // Detect if the backend returned data but it's all zeros (no assignments run yet)
-  const hasNoData = !data || (data.totalAssignments === 0 && data.distribution.length === 0 && data.overTime.length === 0);
+  const hasNoData = !data || (data.totalAssignments === 0 && (data.distribution ?? []).length === 0 && (data.overTime ?? []).length === 0);
 
   // Prepare distribution data: show top N assignees and group the rest into "Others" for readability
   const DIST_TOP_N = 5;
   const rawDist = data?.distribution ?? [];
-  const sortedDist = [...rawDist].sort((a, b) => b.count - a.count);
+  const sortedDist = [...rawDist].sort((a, b) => (b.count ?? 0) - (a.count ?? 0));
   const topDist = sortedDist.slice(0, DIST_TOP_N);
   const others = sortedDist.slice(DIST_TOP_N);
   const othersCount = others.reduce((s, r) => s + (r.count ?? 0), 0);
-  const processedDistribution = othersCount > 0 ? [...topDist, { assigneeId: "others", assigneeName: "Others", count: othersCount }] : topDist;
-  const totalDist = processedDistribution.reduce((s, r) => s + (r.count ?? 0), 0) || 1;
+  const totalDist = [...topDist, ...(othersCount > 0 ? [{ count: othersCount }] : [])].reduce((s, r) => s + (r.count ?? 0), 0) || 1;
+  const processedDistribution = othersCount > 0
+    ? [...topDist, { assigneeId: "others", assigneeName: "Others", count: othersCount, percentage: Math.round((othersCount / totalDist) * 100) }]
+    : topDist;
 
   const renderPieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) => {
     // Skip slices too small to label cleanly
@@ -184,6 +186,16 @@ export function AssignmentAnalyticsDashboard({
           <span>Refresh</span>
         </button>
       </div>
+
+      {/* No data banner */}
+      {hasNoData && (
+        <div className="flex items-center gap-3 p-4 rounded-2xl bg-blue-50/70 border border-blue-200/60 text-blue-900 text-sm">
+          <Info size={18} className="text-blue-500 shrink-0" />
+          <p className="text-[13px] leading-relaxed">
+            No assignment activity has been recorded yet. As new leads are created and automatically distributed by your assignment rules, real-time analytics and charts will populate here.
+          </p>
+        </div>
+      )}
 
       {/* KPI cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

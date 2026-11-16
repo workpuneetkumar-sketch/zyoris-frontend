@@ -89,9 +89,9 @@ export function RulesList({
 
   const sorted = [...filteredRules].sort((a, b) => {
     let cmp = 0;
-    if (sortField === "name") cmp = a.name.localeCompare(b.name);
-    else if (sortField === "priority") cmp = a.priority - b.priority;
-    else if (sortField === "strategy") cmp = a.strategy.localeCompare(b.strategy);
+    if (sortField === "name") cmp = (a.name || "").localeCompare(b.name || "");
+    else if (sortField === "priority") cmp = (a.priority || 0) - (b.priority || 0);
+    else if (sortField === "strategy") cmp = (a.strategy || "").localeCompare(b.strategy || "");
     return sortDir === "asc" ? cmp : -cmp;
   });
 
@@ -177,15 +177,16 @@ export function RulesList({
               <tbody className="divide-y divide-border">
                 {sorted.map((rule, i) => {
                   const filterChips = [
-                    ...rule.territories.map((t) => ({ label: t, color: "bg-amber-100 text-amber-700 dark:bg-amber-900/20" })),
-                    ...rule.cities.map((c) => ({ label: c, color: "bg-sky-100 text-sky-700 dark:bg-sky-900/20" })),
-                    ...rule.states.map((s) => ({ label: s, color: "bg-green-100 text-green-700 dark:bg-green-900/20" })),
-                    ...rule.products.map((p) => ({ label: p, color: "bg-violet-100 text-violet-700 dark:bg-violet-900/20" })),
+                    ...(rule.territories ?? []).map((t) => ({ label: t, color: "bg-amber-100 text-amber-700 dark:bg-amber-900/20" })),
+                    ...(rule.cities ?? []).map((c) => ({ label: c, color: "bg-sky-100 text-sky-700 dark:bg-sky-900/20" })),
+                    ...(rule.states ?? []).map((s) => ({ label: s, color: "bg-green-100 text-green-700 dark:bg-green-900/20" })),
+                    ...(rule.products ?? []).map((p) => ({ label: p, color: "bg-violet-100 text-violet-700 dark:bg-violet-900/20" })),
                     ...(rule.countries ?? []).map((co) => ({ label: co, color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/20" })),
                     ...(rule.languages ?? []).map((l) => ({ label: l, color: "bg-rose-100 text-rose-700 dark:bg-rose-900/20" })),
                     ...(rule.pinCodes ?? []).map((pc) => ({ label: pc, color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/20" })),
                   ];
                   const hasBudget = rule.minBudget != null || rule.maxBudget != null;
+                  const assignees = rule.assigneeIds ?? [];
 
                   return (
                     <tr key={rule.id} className="hover:bg-surface-hover/50 transition-colors">
@@ -221,11 +222,11 @@ export function RulesList({
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {rule.assigneeIds.length === 0 ? (
+                        {assignees.length === 0 ? (
                           <span className="text-[12px] text-text-muted">None</span>
                         ) : (
                           <div className="flex flex-wrap gap-1">
-                            {rule.assigneeIds.slice(0, 2).map((id) => {
+                            {assignees.slice(0, 2).map((id) => {
                               const name = team.find((m) => m.id === id)?.name ?? id;
                               return (
                                 <span key={id} className="inline-block px-1.5 py-0.5 rounded text-[10.5px] font-medium bg-background-tertiary text-text-secondary border border-border truncate max-w-[100px]" title={name}>
@@ -233,8 +234,8 @@ export function RulesList({
                                 </span>
                               );
                             })}
-                            {rule.assigneeIds.length > 2 && (
-                              <span className="text-[11px] text-text-muted">+{rule.assigneeIds.length - 2}</span>
+                            {assignees.length > 2 && (
+                              <span className="text-[11px] text-text-muted">+{assignees.length - 2}</span>
                             )}
                           </div>
                         )}
