@@ -213,6 +213,48 @@ api.interceptors.request.use(
             url.includes("/auth/resend-verification");
 
         if (!isUnauthenticatedEndpoint) {
+            // Check 4-hour session expiry limit before dispatching request
+            const sessionStartStr = typeof window !== "undefined"
+                ? (sessionStorage.getItem("zyoris-session-start") || localStorage.getItem("zyoris-session-start"))
+                : null;
+            if (sessionStartStr) {
+                const sessionStart = parseInt(sessionStartStr, 10);
+                if (!isNaN(sessionStart) && Date.now() - sessionStart >= 4 * 60 * 60 * 1000) {
+                    setAuthToken(null);
+                    try {
+                        localStorage.removeItem("zyoris-auth");
+                        const keys = [
+                            "zyoris-token", "token", "accessToken",
+                            "zyoris-refresh-token", "refreshToken",
+                            "zyoris-session-start", "zyoris-session-active",
+                            "user", "userRole"
+                        ];
+                        keys.forEach(k => {
+                            try { localStorage.removeItem(k); } catch {}
+                            try { sessionStorage.removeItem(k); } catch {}
+                        });
+                        sessionStorage.setItem("zyoris-had-session", "1");
+                    } catch {}
+                    const cookieKeys = ["zyoris-token", "token", "accessToken", "refreshToken", "zyoris-refresh-token"];
+                    cookieKeys.forEach(k => {
+                        document.cookie = `${k}=; path=/; max-age=0; SameSite=Lax`;
+                        document.cookie = `${k}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+                    });
+
+                    const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+                    const isPublicAuthPage =
+                        currentPath === "/login" ||
+                        currentPath.startsWith("/login/") ||
+                        currentPath === "/register" ||
+                        currentPath.startsWith("/register/");
+
+                    if (!isPublicAuthPage && typeof window !== "undefined") {
+                        window.location.href = "/login?reason=session_expired";
+                    }
+                    return Promise.reject(new Error("Session expired (4 hours limit reached)"));
+                }
+            }
+
             const token = getEffectiveAuthToken();
 
             if (token) {
@@ -460,11 +502,11 @@ api.interceptors.response.use(
         // body and the server returns 400 "Invalid CSV / no file".
         const isFormDataRequest = !!(originalRequest as any)?._isFormData;
 
-        if (isNetworkError && !isFormDataRequest && !originalRequest?._retryCount) {
+        if (originalRequest && isNetworkError && !isFormDataRequest && !originalRequest._retryCount) {
             originalRequest._retryCount = 1;
         }
 
-        if (isNetworkError && !isFormDataRequest && originalRequest._retryCount && originalRequest._retryCount < 3) {
+        if (originalRequest && isNetworkError && !isFormDataRequest && originalRequest._retryCount && originalRequest._retryCount < 3) {
             originalRequest._retryCount += 1;
             // Exponential backoff: 1s, 2s, 4s
             const backoffTime = Math.pow(2, originalRequest._retryCount - 1) * 1000;
@@ -620,9 +662,9 @@ api.interceptors.response.use(
                                 localStorage.setItem("zyoris-auth", JSON.stringify(updatedAuth));
                             } catch {}
 
-                            // Update cookie (SameSite=Lax, matches AuthContext)
+                            // Update cookie (SameSite=Lax, session cookie matches AuthContext)
                             const TOKEN_COOKIE = "zyoris-token";
-                            document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+                            document.cookie = `${TOKEN_COOKIE}=${newAccessToken}; path=/; SameSite=Lax`;
 
                             return newAccessToken;
                         } finally {
@@ -660,18 +702,31 @@ api.interceptors.response.use(
                 setAuthToken(null);
                 try {
                     localStorage.removeItem("zyoris-auth");
-                    const keys = ["zyoris-token", "token", "accessToken", "zyoris-refresh-token", "refreshToken"];
+                    const keys = [
+                        "zyoris-token",
+                        "token",
+                        "accessToken",
+                        "zyoris-refresh-token",
+                        "refreshToken",
+                        "zyoris-session-start",
+                        "zyoris-session-active",
+                        "user",
+                        "userRole"
+                    ];
                     keys.forEach(k => {
                         try { localStorage.removeItem(k); } catch {}
                         try { sessionStorage.removeItem(k); } catch {}
                     });
+                    try { sessionStorage.clear(); } catch {}
                     // Clear the session hint so the banner is driven by ?reason= param only.
                     try { sessionStorage.removeItem("zyoris-had-session"); } catch {}
                 } catch {}
 
-                const TOKEN_COOKIE = "zyoris-token";
-                document.cookie = `${TOKEN_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
-                document.cookie = `${TOKEN_COOKIE}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+                const cookieKeys = ["zyoris-token", "token", "accessToken", "refreshToken", "zyoris-refresh-token"];
+                cookieKeys.forEach(k => {
+                    document.cookie = `${k}=; path=/; max-age=0; SameSite=Lax`;
+                    document.cookie = `${k}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+                });
 
                 const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
                 const isPublicAuthPage =

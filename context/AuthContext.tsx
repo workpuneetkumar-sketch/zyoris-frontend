@@ -9,6 +9,30 @@ import { validateReturnTo } from "@/lib/utils/validateReturnTo";
 // Re-export so existing callers (DashboardLayout, login page) keep working
 // without changing their import path.
 export { validateReturnTo } from "@/lib/utils/validateReturnTo";
+export {
+  STORAGE_KEY,
+  TOKEN_COOKIE,
+  SESSION_MAX_DURATION_MS,
+  SESSION_ACTIVE_KEY,
+  SESSION_START_KEY,
+  isSessionExpired,
+  isSessionActiveInTab,
+  markSessionActive,
+  clearAuthStorage,
+  clearTokenCookie,
+} from "@/lib/utils/session";
+import {
+  STORAGE_KEY,
+  TOKEN_COOKIE,
+  SESSION_MAX_DURATION_MS,
+  SESSION_ACTIVE_KEY,
+  SESSION_START_KEY,
+  isSessionExpired,
+  isSessionActiveInTab,
+  markSessionActive,
+  clearAuthStorage,
+  clearTokenCookie,
+} from "@/lib/utils/session";
 import React, {
   createContext,
   useCallback,
@@ -108,42 +132,11 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "zyoris-auth";
-// Cookie name must match the one read by middleware.ts
-const TOKEN_COOKIE = "zyoris-token";
-
 // ── Cookie helpers (client-side only) ─────────────────────────────────────────
 
 function setTokenCookie(token: string) {
-  // Not HttpOnly — needed for client-side token rotation.
-  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
-}
-
-function clearTokenCookie() {
-  if (typeof document === "undefined") return;
-  const keys = [TOKEN_COOKIE, "token", "accessToken"];
-  keys.forEach((k) => {
-    document.cookie = `${k}=; path=/; max-age=0; SameSite=Lax`;
-    document.cookie = `${k}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
-  });
-}
-
-function clearAuthStorage() {
-  setAuthToken(null);
-  const keys = [
-    STORAGE_KEY,
-    "zyoris-token",
-    "token",
-    "accessToken",
-    "zyoris-refresh-token",
-    "refreshToken",
-    "zyoris-register-userId",
-  ];
-  keys.forEach((key) => {
-    try { localStorage.removeItem(key); } catch {}
-    try { sessionStorage.removeItem(key); } catch {}
-  });
-  clearTokenCookie();
+  // Session cookie: no max-age or expires so the browser discards it on tab/browser close.
+  document.cookie = `${TOKEN_COOKIE}=${token}; path=/; SameSite=Lax`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -220,6 +213,80 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissionsLoaded(false);
   }, []);
 
+  const logoutSessionExpired = useCallback(() => {
+    wipeReactState();
+    clearAuthStorage(true);
+    try {
+      if (typeof BroadcastChannel !== "undefined") {
+        const ch = new BroadcastChannel("zyoris-auth");
+        ch.postMessage({ type: "LOGOUT", reason: "session_expired" });
+        setTimeout(() => ch.close(), 200);
+      }
+    } catch {}
+    if (typeof window !== "undefined") {
+      window.location.href = "/login?reason=session_expired";
+    } else {
+      router.replace("/login?reason=session_expired");
+    }
+  }, [router, wipeReactState]);
+
+  // ── Automatic 4-hour session expiration timer ──────────────────────────────
+  // Handles active open tabs and system wake-from-sleep events (Mac sleep desync)
+  useEffect(() => {
+    if (!isAuthenticated || (typeof window !== "undefined" && sessionStorage.getItem(SESSION_ACTIVE_KEY) !== "1")) {
+      return;
+    }
+
+    const checkExpiration = () => {
+      const rawStart =
+        (typeof window !== "undefined" ? sessionStorage.getItem(SESSION_START_KEY) : null) ||
+        (typeof window !== "undefined" ? localStorage.getItem(SESSION_START_KEY) : null);
+      if (!rawStart) return;
+      const start = parseInt(rawStart, 10);
+      if (isNaN(start)) return;
+      if (Date.now() - start >= SESSION_MAX_DURATION_MS) {
+        logoutSessionExpired();
+      }
+    };
+
+    const rawStart =
+      (typeof window !== "undefined" ? sessionStorage.getItem(SESSION_START_KEY) : null) ||
+      (typeof window !== "undefined" ? localStorage.getItem(SESSION_START_KEY) : null);
+    const start = rawStart ? parseInt(rawStart, 10) : Date.now();
+    const elapsed = Date.now() - start;
+    const remaining = Math.max(0, SESSION_MAX_DURATION_MS - elapsed);
+
+    const timer = setTimeout(checkExpiration, remaining);
+    const interval = setInterval(checkExpiration, 15000);
+
+    const handleVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        checkExpiration();
+      }
+    };
+    const handleFocus = () => {
+      checkExpiration();
+    };
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+    }
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", handleFocus);
+    }
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      }
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", handleFocus);
+      }
+    };
+  }, [isAuthenticated, logoutSessionExpired]);
+
   // ── Cross-tab logout ────────────────────────────────────────────────────────
   // Two complementary mechanisms keep all tabs in sync when any tab logs out:
   //
@@ -242,7 +309,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       channel.onmessage = (event: MessageEvent) => {
         if (event.data?.type === "LOGOUT") {
           wipeReactState();
-          window.location.href = "/login";
+          if (event.data?.reason === "session_expired") {
+            try { sessionStorage.setItem("zyoris-had-session", "1"); } catch {}
+            window.location.href = "/login?reason=session_expired";
+          } else {
+            window.location.href = "/login";
+          }
         }
       };
     }
@@ -266,6 +338,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // ── Session restore on mount ───────────────────────────────────────────────
   useEffect(() => {
     const restoreSession = async () => {
+      // Tab/browser close check:
+      // sessionStorage is discarded by the browser when the tab or browser window is closed.
+      // If zyoris-session-active is missing, it means the tab/browser was closed or opened fresh.
+      const isSessionActive = typeof window !== "undefined" && sessionStorage.getItem(SESSION_ACTIVE_KEY) === "1";
+
+      if (!isSessionActive) {
+        clearAuthStorage();
+        wipeReactState();
+        setPermissionsLoaded(true);
+        setIsInitializing(false);
+        setSessionStatus("unauthenticated");
+        setRoleVerificationStatus("unverified");
+        return;
+      }
+
+      // 4-hour session expiry check:
+      const sessionStartStr =
+        (typeof window !== "undefined" ? sessionStorage.getItem(SESSION_START_KEY) : null) ||
+        (typeof window !== "undefined" ? localStorage.getItem(SESSION_START_KEY) : null);
+
+      if (sessionStartStr) {
+        const sessionStart = parseInt(sessionStartStr, 10);
+        if (!isNaN(sessionStart) && Date.now() - sessionStart >= SESSION_MAX_DURATION_MS) {
+          logoutSessionExpired();
+          return;
+        }
+      }
+
       const raw = localStorage.getItem(STORAGE_KEY);
       let parsed: any = null;
       if (raw) {
@@ -505,7 +605,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Mark that this browser has had a session so DashboardLayout can
     // distinguish a session-expiry redirect from a fresh unauthenticated visit.
-    try { sessionStorage.setItem("zyoris-had-session", "1"); } catch {}
+    try {
+      sessionStorage.setItem("zyoris-had-session", "1");
+      sessionStorage.setItem(SESSION_ACTIVE_KEY, "1");
+      const nowStr = String(Date.now());
+      sessionStorage.setItem(SESSION_START_KEY, nowStr);
+      localStorage.setItem(SESSION_START_KEY, nowStr);
+    } catch {}
 
     return { ...res, user: safeUser };
   }, []);
@@ -583,6 +689,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionStatus("authenticated");
     setPermissionsLoaded(true);
 
+    try {
+      sessionStorage.setItem("zyoris-had-session", "1");
+      sessionStorage.setItem(SESSION_ACTIVE_KEY, "1");
+      const nowStr = String(Date.now());
+      sessionStorage.setItem(SESSION_START_KEY, nowStr);
+      localStorage.setItem(SESSION_START_KEY, nowStr);
+    } catch {}
+
     return res.user;
   }, []);
 
@@ -626,8 +740,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // 3. Wipe React state.
     wipeReactState();
 
-    // 4. Wipe storage + cookies.
-    clearAuthStorage();
+    // 4. Wipe storage + cookies completely.
+    clearAuthStorage(false);
 
     // 5. Clear the session marker so a deliberate logout does not show the
     //    "session expired" banner the next time the user visits /login.
