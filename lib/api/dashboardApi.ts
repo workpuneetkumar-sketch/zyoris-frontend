@@ -11,7 +11,7 @@ import api from "@/lib/api/api";
 // Types — derived from actual backend response shapes, NOT invented
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** GET /dashboard/stats */
+/** GET /dashboard/stats or /api/dashboard/kpi-stats */
 export interface DashboardStats {
   leadsCount: number;
   totalDealValue: number;
@@ -152,18 +152,41 @@ function unwrap<T>(raw: unknown): T {
 // API Functions
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** GET /api/dashboard/kpi-stats (consolidated KPI statistics) with fallback to /dashboard/stats */
+export async function getDashboardKpiStats(): Promise<DashboardStats> {
+  let res;
+  try {
+    res = await api.get("/api/dashboard/kpi-stats");
+  } catch (err: any) {
+    if (err?.response?.status === 404) {
+      res = await api.get("/dashboard/stats");
+    } else {
+      throw err;
+    }
+  }
+  const rawData = unwrap<any>(res.data);
+  const data = rawData?.stats || rawData?.data || rawData;
+
+  const leads = data?.leadsCount ?? data?.totalLeads ?? data?.leads ?? data?.leadCount ?? data?.total;
+  const dealVal = data?.totalDealValue ?? data?.dealValue ?? data?.pipelineValue ?? data?.totalValue ?? data?.dealsTotal;
+  const rev = data?.revenue ?? data?.totalRevenue ?? data?.revenueGenerated;
+  const tasks = data?.overdueTasks ?? data?.pendingTasks ?? data?.tasksCount ?? data?.tasks;
+  const emails = data?.emailsSent ?? data?.emails ?? data?.emailsCount;
+  const calls = data?.callsToday ?? data?.calls ?? data?.callsCount;
+
+  return {
+    leadsCount:     typeof leads === "number" ? leads : 0,
+    totalDealValue: typeof dealVal === "number" ? dealVal : 0,
+    revenue:        typeof rev === "number" ? rev : 0,
+    overdueTasks:   typeof tasks === "number" ? tasks : 0,
+    emailsSent:     typeof emails === "number" ? emails : 0,
+    callsToday:     typeof calls === "number" ? calls : 0,
+  };
+}
+
 /** GET /dashboard/stats — KPI counts */
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const res = await api.get("/dashboard/stats");
-  const data = unwrap<DashboardStats>(res.data);
-  return {
-    leadsCount:     typeof data?.leadsCount     === "number" ? data.leadsCount     : 0,
-    totalDealValue: typeof data?.totalDealValue  === "number" ? data.totalDealValue  : 0,
-    revenue:        typeof data?.revenue         === "number" ? data.revenue         : 0,
-    overdueTasks:   typeof data?.overdueTasks    === "number" ? data.overdueTasks    : 0,
-    emailsSent:     typeof data?.emailsSent      === "number" ? data.emailsSent      : 0,
-    callsToday:     typeof data?.callsToday      === "number" ? data.callsToday      : 0,
-  };
+  return getDashboardKpiStats();
 }
 
 /** GET /dashboard/briefing — daily AI briefing */

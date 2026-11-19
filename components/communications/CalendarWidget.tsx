@@ -53,12 +53,12 @@ export default function CalendarWidget() {
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 flex flex-col h-full overflow-hidden">
             <div className="p-5 border-b border-gray-50 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-50 text-orange-600 rounded-xl">
+                    <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
                         <CalendarIcon size={18} />
                     </div>
                     <h3 className="font-semibold text-gray-900">Calendar</h3>
                 </div>
-                <Link href="/calendar" className="text-sm text-orange-600 hover:text-orange-700 flex items-center gap-1 font-medium">
+                <Link href="/calendar" className="text-sm text-blue-600 hover:text-blue-700 flex items-center gap-1 font-medium">
                     View all <ArrowRight size={14} />
                 </Link>
             </div>
@@ -86,12 +86,12 @@ export default function CalendarWidget() {
                         return (
                             <div key={i} className="py-0.5 flex items-center justify-center relative">
                                 <div className={`w-7 h-7 text-xs flex items-center justify-center rounded-full ${
-                                    isToday ? "bg-orange-500 text-white font-bold" : "text-gray-700 hover:bg-gray-100 cursor-pointer"
+                                    isToday ? "bg-blue-500 text-white font-bold" : "text-gray-700 hover:bg-gray-100 cursor-pointer"
                                 }`}>
                                     {date.getDate()}
                                 </div>
                                 {hasEvent && !isToday && (
-                                    <span className="absolute bottom-1 w-1.5 h-1.5 bg-orange-400 rounded-full"></span>
+                                    <span className="absolute bottom-1 w-1.5 h-1.5 bg-blue-400 rounded-full"></span>
                                 )}
                             </div>
                         );
