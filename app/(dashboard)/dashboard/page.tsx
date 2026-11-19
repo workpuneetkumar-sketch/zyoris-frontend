@@ -6,11 +6,13 @@ import { useAuth } from "@/context/AuthContext";
 import { useRBAC } from "@/hooks/useRBAC";
 import api from "@/lib/api/api";
 import { getDashboardAnomalies, getMorningBriefing, AnomalyAlertItem, MorningBriefingData } from "@/lib/api/aiBriefingApi";
+import { getDashboardKpiStats } from "@/lib/api/dashboardApi";
 import { fetchAttendance, fetchLeaves, Attendance, LeaveRequest } from "@/lib/api/hrApi";
 import {
   Users, Briefcase, DollarSign, Clock, Mail, PhoneCall,
   LucideIcon, X, Sparkles, LayoutDashboard, CalendarDays,
   CalendarCheck, Clock4, ArrowRight, UserCheck, ShieldCheck, CheckCircle2,
+  AlertCircle, RefreshCw,
 } from "lucide-react";
 import { DashboardAiInsightsBox } from "@/components/dashboard/compoents/DashboardAiInsightsBox";
 import { useDashboardBuilder } from "@/hooks/useDashboardBuilder";
@@ -121,6 +123,8 @@ export default function DashboardPage() {
   const canViewBriefing = hasAnyPermission(["dashboard.view", "ai_copilot.access"]);
 
   const [dashboardStats, setDashboardStats] = useState<DashboardStatsResponse | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState<string | null>(null);
   const [aiBriefing, setAiBriefing] = useState<MorningBriefingData | null>(null);
   const [aiAnomalies, setAiAnomalies] = useState<AnomalyAlertItem[]>([]);
   const [aiLoading, setAiLoading] = useState(true);
@@ -161,54 +165,30 @@ export default function DashboardPage() {
 
     // Management / Executive Dashboard
     (async () => {
+      setStatsLoading(true);
+      setStatsError(null);
       let statsPayload: DashboardStatsResponse = {};
 
       try {
-        const statsRes = await api.get<any>("/dashboard/stats").catch(() => null)
-          || await api.get<any>("/api/dashboard/stats").catch(() => null);
-        if (statsRes?.data) {
-          statsPayload = normalizeDashboardStats(statsRes.data);
+        const kpiStats = await getDashboardKpiStats();
+        statsPayload = {
+          leadsCount: kpiStats.leadsCount,
+          totalDealValue: kpiStats.totalDealValue,
+          revenue: kpiStats.revenue,
+          overdueTasks: kpiStats.overdueTasks,
+          emailsSent: kpiStats.emailsSent,
+          callsToday: kpiStats.callsToday,
+        };
+      } catch (err: any) {
+        console.error("Failed to load dashboard KPI stats:", err);
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          setStatsError("Authentication failed. Please log in again.");
+        } else {
+          setStatsError("Failed to load KPI stats. Please try again.");
         }
-      } catch {
-        // fallback
-      }
-
-      // If key metrics are missing from /dashboard/stats, enrich ONLY from modules user has permission to access
-      if (statsPayload.leadsCount === undefined || statsPayload.totalDealValue === undefined) {
-        try {
-          const [pipelineRes, leadsRes, tasksRes] = await Promise.all([
-            canViewDeals
-              ? (api.get<any>("/api/deals/pipeline-stats").catch(() => null) || api.get<any>("/deals/pipeline-stats").catch(() => null))
-              : Promise.resolve(null),
-            canViewLeads
-              ? (api.get<any>("/leads", { params: { limit: 1 } }).catch(() => null) || api.get<any>("/api/leads", { params: { limit: 1 } }).catch(() => null))
-              : Promise.resolve(null),
-            canViewTasks
-              ? (api.get<any>("/tasks/my-tasks", { params: { limit: 20 } }).catch(() => null) || api.get<any>("/tasks", { params: { limit: 20 } }).catch(() => null))
-              : Promise.resolve(null),
-          ]);
-
-          const pRaw = pipelineRes?.data?.data || pipelineRes?.data;
-          const totalVal = typeof pRaw?.totalValue === "number" ? pRaw.totalValue
-            : Array.isArray(pRaw?.stages)
-            ? pRaw.stages.reduce((acc: number, s: any) => acc + (s.totalAmount || s.amount || s.value || 0), 0)
-            : 0;
-
-          const lTotal = leadsRes?.data?.total ?? leadsRes?.data?.meta?.total ?? (Array.isArray(leadsRes?.data) ? leadsRes.data.length : 0);
-          const tRaw = tasksRes?.data?.tasks ?? (Array.isArray(tasksRes?.data) ? tasksRes.data : []);
-          const overdue = tRaw.filter((t: any) => t.dueDate && new Date(t.dueDate) < new Date()).length;
-
-          statsPayload = {
-            leadsCount: statsPayload.leadsCount ?? lTotal,
-            totalDealValue: statsPayload.totalDealValue ?? totalVal,
-            revenue: statsPayload.revenue ?? (totalVal > 0 ? Math.round(totalVal * 0.45) : 0),
-            overdueTasks: statsPayload.overdueTasks ?? overdue,
-            emailsSent: statsPayload.emailsSent ?? 0,
-            callsToday: statsPayload.callsToday ?? 0,
-          };
-        } catch {
-          // ignore enrichment error
-        }
+      } finally {
+        setStatsLoading(false);
       }
 
       const [briefingRes, anomaliesRes] = await Promise.all([
@@ -578,7 +558,28 @@ export default function DashboardPage() {
           )}
 
           {/* ── Key Metrics (Management Only) ────────────────── */}
-          {kpiCards.length > 0 && (
+          {statsLoading ? (
+            <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Key Metrics</p>
+              <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-6">
+                {[0, 1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className="h-20 rounded-xl bg-gray-50 border border-gray-100 animate-pulse p-4 flex flex-col justify-between">
+                    <div className="h-2.5 w-16 bg-gray-200 rounded" />
+                    <div className="h-6 w-20 bg-gray-200 rounded" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : statsError ? (
+            <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
+              <div className="flex items-center justify-between p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-amber-800 text-xs">
+                <div className="flex items-center gap-2">
+                  <AlertCircle size={16} className="text-amber-600 shrink-0" />
+                  <span>{statsError}</span>
+                </div>
+              </div>
+            </div>
+          ) : kpiCards.length > 0 && (
             <div className="px-4 sm:px-6 pt-4 pb-5 border-b border-gray-100">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Key Metrics</p>
               <div

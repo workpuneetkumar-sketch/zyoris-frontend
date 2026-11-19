@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import {
+  getDashboardKpiStats,
   getDashboardStats,       DashboardStats,
   getDashboardBriefing,    DashboardBriefing,
   getDashboardAnomalies,   DashboardAnomalies,
@@ -64,7 +65,7 @@ function useApiData<T>(fetcher: () => Promise<T>, enabled: boolean = true): Hook
 // ─── Individual hooks ─────────────────────────────────────────────────────────
 
 export function useDashboardStats(enabled: boolean = true): HookState<DashboardStats> {
-  const fetcher = useCallback(() => getDashboardStats(), []);
+  const fetcher = useCallback(() => getDashboardKpiStats(), []);
   return useApiData(fetcher, enabled);
 }
 
