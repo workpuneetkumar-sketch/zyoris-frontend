@@ -158,7 +158,7 @@ export function ZiiBot() {
                 : "text-blue-600 hover:text-blue-800 font-medium"
             }`}
           >
-            what can you do for me
+            What can you do for me
           </button>
 
           <button
