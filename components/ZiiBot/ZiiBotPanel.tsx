@@ -22,8 +22,6 @@ import {
   MicOff,
   Paperclip,
   Scan,
-  Sun,
-  Moon,
   MessageSquare,
   Plus,
   Maximize2,
@@ -39,7 +37,7 @@ interface ZiiBotPanelProps {
   dockMode: "side" | "bottom";
   onToggleDock: () => void;
   isDark: boolean;
-  onToggleTheme: () => void;
+  onToggleTheme?: () => void;
   chat: ReturnType<typeof useZiiBotChat>;
 }
 
@@ -261,7 +259,7 @@ export function ZiiBotPanel({
   dockMode,
   onToggleDock,
   isDark,
-  onToggleTheme,
+  onToggleTheme: _onToggleTheme,
   chat,
 }: ZiiBotPanelProps) {
   const pathname = usePathname();
@@ -515,19 +513,6 @@ export function ZiiBotPanel({
 
           {/* Action Icons Right (fixed size, never collapses into left buttons) */}
           <div className="flex items-center gap-1 flex-shrink-0">
-            {/* Theme Toggle (Changes ONLY Chatbot Theme) */}
-            <button
-              onClick={onToggleTheme}
-              className={`p-1.5 rounded-md transition-colors ${
-                isDark
-                  ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  : "text-slate-500 hover:text-blue-700 hover:bg-blue-100/70"
-              }`}
-              title={isDark ? "Switch chatbot to light mode" : "Switch chatbot to dark mode"}
-            >
-              {isDark ? <Sun size={15} /> : <Moon size={15} />}
-            </button>
-
             {/* Audio Toggle */}
             <button
               onClick={chat.toggleSound}

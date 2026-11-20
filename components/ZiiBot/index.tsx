@@ -17,8 +17,8 @@ export function ZiiBot() {
 
   const [panelOpen, setPanelOpen] = useState(false);
   const [dockMode, setDockMode] = useState<"side" | "bottom">("side");
-  // Chatbot-only independent theme (default to dark mode like Resend)
-  const [isDark, setIsDark] = useState<boolean>(true);
+  // Chatbot theme (defaults to light mode; dark mode preserved in code for future use)
+  const [isDark, setIsDark] = useState<boolean>(false);
 
   const chat = useZiiBotChat();
 
@@ -30,10 +30,11 @@ export function ZiiBot() {
       if (savedDock === "side" || savedDock === "bottom") {
         setDockMode(savedDock);
       }
-      const savedDark = localStorage.getItem(THEME_STORAGE_KEY);
-      if (savedDark !== null) {
-        setIsDark(savedDark === "true");
-      }
+      // Note: Dark mode is preserved in code, but kept inactive in development per user requirements
+      // const savedDark = localStorage.getItem(THEME_STORAGE_KEY);
+      // if (savedDark !== null) {
+      //   setIsDark(savedDark === "true");
+      // }
     } catch {}
   }, []);
 
