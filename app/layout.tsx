@@ -6,7 +6,6 @@ import { ThemeProvider } from "../context/ThemeContext";
 import { ToastProvider } from "../components/ui/Toast";
 import { NotificationProvider } from "../hooks/useNotifications";
 import { ZiiBot } from "../components/ZiiBot";
-import { Inter } from "next/font/google";
 import Script from "next/script";
 import { InvoiceProvider } from "@/context/InvoiceContext";
 import { PaymentProvider } from "@/context/PaymentContext";
@@ -14,7 +13,6 @@ import { TourProvider } from "@/components/tour/TourProvider";
 import { ConfirmProvider } from "@/components/common/ConfirmProvider";
 import { ClientErrorBoundary } from "@/components/ui/ClientErrorBoundary";
 
-const inter = Inter({ subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 export const metadata: Metadata = {
   title: "Zyoris - Central Intelligence Layer",
   description: "Zyoris is an advanced Autonomous Business Intelligence Platform designed to streamline operations, enhance CRM, and provide real-time AI-driven insights for modern enterprises. Optimize your workflow, manage leads efficiently, and make data-backed decisions with our comprehensive suite of business tools.",
@@ -43,6 +41,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Didact+Gothic&display=swap"
+        />
         <link
           rel="stylesheet"
           href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
@@ -70,7 +74,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           }}
         />
       </head>
-      <body className={inter.className}>
+      <body className="font-didact">
         <Script
           src="https://cdn.jsdelivr.net/npm/chart.js"
           strategy="beforeInteractive"

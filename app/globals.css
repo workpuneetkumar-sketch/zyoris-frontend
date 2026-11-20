@@ -1,6 +1,24 @@
+@import url('https://fonts.googleapis.com/css2?family=Didact+Gothic&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Global Portal Font: Didact Gothic ────────────────────────── */
+html,
+body,
+button,
+input,
+optgroup,
+select,
+textarea,
+h1, h2, h3, h4, h5, h6,
+p, span, a, li, label, table, th, td,
+.font-heading,
+.font-didact {
+  font-family: 'Didact Gothic', sans-serif;
+}
+
 
 /* ── react-grid-layout overrides for dashboard canvas ────────────────────── */
 .react-grid-layout {
@@ -81,7 +99,7 @@ html,
 body {
   padding: 0;
   margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: 'Didact Gothic', sans-serif;
 }
 
 body {

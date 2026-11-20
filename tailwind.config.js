@@ -8,6 +8,11 @@ module.exports = {
   darkMode: "class",
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Didact Gothic"', 'sans-serif'],
+        heading: ['"Didact Gothic"', 'sans-serif'],
+        didact: ['"Didact Gothic"', 'sans-serif'],
+      },
       screens: {
         xs: "380px",
       },
