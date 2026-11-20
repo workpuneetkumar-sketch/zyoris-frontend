@@ -472,6 +472,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
   const [logoutCountdown, setLogoutCountdown] = useState(10);
+  const [localAvatarUrl, setLocalAvatarUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("zyoris-avatar");
+      if (stored) setLocalAvatarUrl(stored);
+    } catch {}
+    const handleAvatarUpdate = () => {
+      try {
+        const stored = localStorage.getItem("zyoris-avatar");
+        if (stored) setLocalAvatarUrl(stored);
+      } catch {}
+    };
+    window.addEventListener("zyoris:avatar-updated", handleAvatarUpdate);
+    return () => window.removeEventListener("zyoris:avatar-updated", handleAvatarUpdate);
+  }, []);
   const SIDEBAR_SCROLL_KEY = "sidebar-scroll-position";
   const SIDEBAR_OPEN_GROUPS_KEY = "zyoris-sidebar-open-groups";
   const logoutTriggeredRef = useRef(false);
@@ -1286,9 +1302,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => router.push("/settings")}
             className="flex items-center gap-3 flex-1 min-w-0 hover:bg-surface-hover rounded-xl transition-colors"
           >
-            {user.avatarUrl ? (
+            {user.avatarUrl || localAvatarUrl ? (
               <img
-                src={user.avatarUrl}
+                src={user.avatarUrl || localAvatarUrl || ""}
                 alt={displayName}
                 className="w-10 h-10 rounded-full object-cover shrink-0 border border-border"
               />
@@ -1361,7 +1377,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-screen bg-background font-sans overflow-hidden">
 
       {/* ── Desktop Sidebar (md and above) ── */}
-      <aside className="hidden md:flex w-[220px] flex-col bg-surface border-r border-border shrink-0">
+      <aside className="hidden md:flex w-[220px] flex-col bg-surface border-r border-border shrink-0 relative z-30">
         <div className="px-5 pt-6 pb-5">
           <LogoMark />
         </div>

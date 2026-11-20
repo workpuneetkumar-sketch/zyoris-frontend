@@ -89,19 +89,24 @@ export interface UpdateProfilePayload {
 
 export const updateProfileApi = async ({ avatarFile, ...data }: UpdateProfilePayload) => {
     if (avatarFile) {
-        const formData = new FormData();
-        formData.append("avatar", avatarFile);
-        if (data.name) formData.append("name", data.name);
-        if (data.email) formData.append("email", data.email);
-        if (data.designation !== undefined)
-            formData.append("designation", data.designation ?? "");
-        const res = await api.patch("/auth/me", formData, {
-            headers: { "Content-Type": "multipart/form-data" },
-        });
-        return res.data;
+        try {
+            const formData = new FormData();
+            formData.append("avatar", avatarFile);
+            if (data.name) formData.append("name", data.name);
+            if (data.email) formData.append("email", data.email);
+            if (data.designation !== undefined)
+                formData.append("designation", data.designation ?? "");
+            if (data.avatarUrl) formData.append("avatarUrl", data.avatarUrl);
+
+            // Do not pass manual Content-Type header so browser supplies multipart boundary
+            const res = await api.patch("/auth/me", formData);
+            return res.data?.data || res.data;
+        } catch (multipartErr: any) {
+            console.warn("Multipart /auth/me update failed, attempting JSON fallback...", multipartErr);
+        }
     }
     const res = await api.patch("/auth/me", data);
-    return res.data;
+    return res.data?.data || res.data;
 };
 
 export interface UpdatePasswordPayload {

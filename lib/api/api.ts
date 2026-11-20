@@ -278,7 +278,12 @@ api.interceptors.request.use(
 
         // ✅ FIX: Remove Content-Type for FormData so browser sets it with boundary
         if (config.data instanceof FormData) {
+            if (typeof (config.headers as any)?.delete === "function") {
+                (config.headers as any).delete("Content-Type");
+                (config.headers as any).delete("content-type");
+            }
             delete config.headers['Content-Type'];
+            delete config.headers['content-type'];
             // Mark FormData requests so the retry interceptor can skip them.
             // FormData bodies are consumed/streamed on the first send — retrying
             // them results in an empty body and a 400 from the server.

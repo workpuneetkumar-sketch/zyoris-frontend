@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
-import Link from "next/link";
 import { AnimatePresence } from "framer-motion";
 import { Plus } from "lucide-react";
 import { ZiiBotPanel } from "./ZiiBotPanel";
@@ -136,26 +135,16 @@ export function ZiiBot() {
         )}
       </AnimatePresence>
 
-      {/* ── Resend Exact Bottom Bar (Non-Floating, Full Width, Responsive to Dark/Light) ── */}
+      {/* ── Resend Exact Bottom Bar (Responsive to Dark/Light, Aligned with Sidebar) ── */}
       <footer
-        className={`fixed bottom-0 left-0 right-0 h-8 z-40 border-t flex items-center justify-between px-4 text-xs font-mono select-none transition-colors duration-150 ${
+        className={`fixed bottom-0 left-0 md:left-[220px] right-0 h-8 z-30 border-t flex items-center justify-between px-4 text-xs font-mono select-none transition-colors duration-150 ${
           isDark
             ? "bg-[#000000] border-zinc-800 text-zinc-400"
-            : "bg-[#ffffff] border-zinc-200 text-zinc-600"
+            : "bg-gradient-to-r from-blue-50/90 via-sky-50/80 to-white/95 border-blue-200/70 text-slate-700 backdrop-blur-xs shadow-2xs"
         }`}
       >
-        {/* Left: /docs */}
-        <div className="flex items-center gap-1">
-          <Link
-            href="/documents"
-            className={`transition-colors text-xs ${
-              isDark ? "hover:text-white" : "hover:text-zinc-950"
-            }`}
-            title="Documentation & Workspace Documents"
-          >
-            /docs
-          </Link>
-        </div>
+        {/* Left: Cleared (/docs removed per design requirements) */}
+        <div className="flex items-center gap-1" />
 
         {/* Right: what can you do for me + Ask anything */}
         <div className="flex items-center gap-4">
@@ -165,7 +154,7 @@ export function ZiiBot() {
             className={`transition-colors font-sans text-xs ${
               isDark
                 ? "text-zinc-400 hover:text-white"
-                : "text-zinc-500 hover:text-zinc-950"
+                : "text-blue-600 hover:text-blue-800 font-medium"
             }`}
           >
             what can you do for me
@@ -181,15 +170,15 @@ export function ZiiBot() {
               panelOpen
                 ? isDark
                   ? "text-white"
-                  : "text-zinc-950"
+                  : "text-blue-900 font-semibold"
                 : isDark
                 ? "text-zinc-300 hover:text-white"
-                : "text-zinc-700 hover:text-zinc-950"
+                : "text-blue-700 hover:text-blue-900"
             }`}
           >
             <Plus
               size={13}
-              className={panelOpen ? "rotate-45 transition-transform" : "transition-transform"}
+              className={panelOpen ? "rotate-45 transition-transform text-blue-600" : "transition-transform text-blue-600"}
             />
             <span>Ask anything</span>
           </button>

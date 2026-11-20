@@ -13,6 +13,7 @@ import api from "@/lib/api/api";
 import { toast } from "react-toastify";
 import {
   fetchAllSettings,
+  fetchSetting,
   saveSetting,
   saveBoolSetting,
   deleteSetting,
@@ -67,6 +68,44 @@ export interface Profile {
 export interface SettingsUIProps {
   profile: Profile | null;
   fallback: { email: string; name: string; role: string };
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result as string;
+      const img = new Image();
+      img.onload = () => {
+        const MAX_DIM = 400;
+        let w = img.width;
+        let h = img.height;
+        if (w > MAX_DIM || h > MAX_DIM) {
+          if (w > h) {
+            h = Math.round((h * MAX_DIM) / w);
+            w = MAX_DIM;
+          } else {
+            w = Math.round((w * MAX_DIM) / h);
+            h = MAX_DIM;
+          }
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(src);
+          return;
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      img.onerror = () => resolve(src);
+      img.src = src;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
 // ── Notification preference matrix (per-category, per-channel) ──────────────
@@ -248,15 +287,28 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
 
   useEffect(() => { loadNotificationPrefs(); }, [loadNotificationPrefs]);
 
-  // Sync name & designation from profile
+  // Sync name & designation from profile, and restore saved avatar from settings/localStorage if needed
   useEffect(() => {
     if (profile) {
       setName(profile.name);
       setOriginalName(profile.name);
       setDesignation(profile.designation ?? "");
       setOriginalDesignation(profile.designation ?? "");
-      if ((profile as any).avatarUrl) setSavedAvatarUrl((profile as any).avatarUrl);
+      if ((profile as any).avatarUrl) {
+        setSavedAvatarUrl((profile as any).avatarUrl);
+      }
     }
+    // Also check local persisted avatar fallback
+    try {
+      const local = localStorage.getItem("zyoris-avatar");
+      if (local) {
+        setSavedAvatarUrl((prev) => prev || local);
+      } else {
+        fetchSetting("profile.avatarUrl").then((val) => {
+          if (val) setSavedAvatarUrl((prev) => prev || val);
+        }).catch(() => {});
+      }
+    } catch {}
   }, [profile]);
 
   const rawDisplayName = profile?.name || fallback?.name || fallback?.email || "User";
@@ -279,26 +331,56 @@ export default function SettingsUI({ profile, fallback }: SettingsUIProps) {
     if (!name.trim()) { toast.error("Name cannot be empty"); return; }
     setSaving(true);
     try {
-      // Persist name and designation via settings API keys
-      await saveSetting("profile.name", name.trim());
+      // 1. Persist name and designation via settings API keys (idempotent upsert)
+      await saveSetting("profile.name", name.trim()).catch(() => {});
       if (designation.trim()) {
-        await saveSetting("profile.designation", designation.trim());
+        await saveSetting("profile.designation", designation.trim()).catch(() => {});
       }
 
-      // PATCH /auth/me – sends multipart/form-data when a photo file is selected
-      // so the avatar binary reaches the backend; otherwise sends plain JSON.
-      const updated = await updateProfileApi({
-        name: name.trim(),
-        designation: designation.trim() || undefined,
-        avatarFile: photoFile ?? undefined,
-      });
+      // 2. If a new photo file was picked, convert to compact data URL and persist
+      let avatarDataUrl: string | null = null;
+      if (photoFile) {
+        try {
+          avatarDataUrl = await fileToDataUrl(photoFile);
+          await saveSetting("profile.avatarUrl", avatarDataUrl).catch(() => {});
+          try {
+            localStorage.setItem("zyoris-avatar", avatarDataUrl);
+            window.dispatchEvent(new Event("zyoris:avatar-updated"));
+          } catch {}
+        } catch (convErr) {
+          console.warn("Avatar compression failed:", convErr);
+        }
+      }
 
-      // Capture the avatar URL returned by the server so the circle stays updated
-      if (updated?.avatarUrl) {
-        setSavedAvatarUrl(updated.avatarUrl);
-      } else if (photoPreview) {
-        // Fallback: keep the local object-URL preview visible
-        setSavedAvatarUrl(photoPreview);
+      // 3. Update profile via PATCH /auth/me (supports multipart or JSON fallback)
+      let updated: any = null;
+      try {
+        updated = await updateProfileApi({
+          name: name.trim(),
+          designation: designation.trim() || undefined,
+          avatarUrl: avatarDataUrl || savedAvatarUrl || undefined,
+          avatarFile: photoFile ?? undefined,
+        });
+      } catch (patchErr: any) {
+        console.warn("PATCH /auth/me error, settings fallback saved:", patchErr);
+      }
+
+      // 4. Update the saved avatar URL in UI state and auth cache
+      const effectiveAvatar = updated?.avatarUrl || avatarDataUrl || photoPreview || savedAvatarUrl;
+      if (effectiveAvatar) {
+        setSavedAvatarUrl(effectiveAvatar);
+        try {
+          const rawAuth = localStorage.getItem("zyoris-auth");
+          if (rawAuth) {
+            const parsed = JSON.parse(rawAuth);
+            if (parsed.user) {
+              parsed.user.avatarUrl = effectiveAvatar;
+              parsed.user.name = name.trim();
+              if (designation.trim()) parsed.user.designation = designation.trim();
+              localStorage.setItem("zyoris-auth", JSON.stringify(parsed));
+            }
+          }
+        } catch {}
       }
 
       setOriginalName(name.trim());

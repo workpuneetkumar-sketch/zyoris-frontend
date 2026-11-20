@@ -77,39 +77,39 @@ export function MarkdownContent({ content, className = "", isDark = false }: Mar
         parsed.push(
           <div
             key={`table-${parsed.length}`}
-            className={`my-3 overflow-x-auto rounded-xl border shadow-xs ${
-              isDark ? "border-zinc-800 bg-zinc-900/60" : "border-zinc-200 bg-white"
+            className={`my-3 overflow-x-auto rounded-xl border shadow-2xs ${
+              isDark ? "border-zinc-800 bg-zinc-900/60" : "border-blue-200/80 bg-white/90"
             }`}
           >
             <table className="min-w-full text-xs text-left border-collapse">
               <thead
                 className={`uppercase font-bold tracking-wider ${
-                  isDark ? "bg-zinc-800/80 text-zinc-300" : "bg-zinc-50 text-zinc-700"
+                  isDark ? "bg-zinc-800/80 text-zinc-300" : "bg-blue-50/80 text-blue-900 border-b border-blue-200/70"
                 }`}
               >
                 <tr>
                   {headers.map((h, i) => (
                     <th
                       key={i}
-                      className={`px-3 py-2 border-b ${isDark ? "border-zinc-800" : "border-zinc-200"}`}
+                      className={`px-3 py-2 border-b ${isDark ? "border-zinc-800" : "border-blue-200/70"}`}
                     >
                       {renderInline(h, isDark)}
                     </th>
                   ))}
                 </tr>
               </thead>
-              <tbody className={`divide-y ${isDark ? "divide-zinc-800/60" : "divide-zinc-100"}`}>
+              <tbody className={`divide-y ${isDark ? "divide-zinc-800/60" : "divide-blue-100/60"}`}>
                 {dataRows.map((row, rIdx) => (
                   <tr
                     key={rIdx}
                     className={`transition-colors ${
-                      isDark ? "hover:bg-zinc-800/40" : "hover:bg-zinc-50"
+                      isDark ? "hover:bg-zinc-800/40" : "hover:bg-blue-50/40"
                     }`}
                   >
                     {row.map((cell, cIdx) => (
                       <td
                         key={cIdx}
-                        className={`px-3 py-2 ${isDark ? "text-zinc-300" : "text-zinc-700"}`}
+                        className={`px-3 py-2 ${isDark ? "text-zinc-300" : "text-slate-700"}`}
                       >
                         {renderInline(cell, isDark)}
                       </td>
@@ -154,13 +154,13 @@ export function MarkdownContent({ content, className = "", isDark = false }: Mar
             className={`my-2 p-2.5 px-3.5 rounded-xl border flex items-center justify-between ${
               isDark
                 ? "bg-zinc-900 border-zinc-800"
-                : "bg-zinc-50 border-zinc-200"
+                : "bg-gradient-to-r from-blue-50/80 to-sky-50/60 border-blue-200/80 shadow-2xs"
             }`}
           >
             <div className="flex items-center gap-2.5 min-w-0">
               <div
                 className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  isDark ? "bg-zinc-800 text-zinc-200" : "bg-zinc-200 text-zinc-800"
+                  isDark ? "bg-zinc-800 text-zinc-200" : "bg-white text-blue-700 border border-blue-200/70 shadow-2xs"
                 }`}
               >
                 {metricValue.startsWith("$") || metricValue.startsWith("€") || metricValue.startsWith("₹") ? (
@@ -168,20 +168,20 @@ export function MarkdownContent({ content, className = "", isDark = false }: Mar
                 ) : metricValue.endsWith("%") ? (
                   <TrendingUp size={14} className={isDark ? "text-blue-400" : "text-blue-600"} />
                 ) : (
-                  <Layers size={14} className={isDark ? "text-zinc-300" : "text-zinc-700"} />
+                  <Layers size={14} className={isDark ? "text-zinc-300" : "text-blue-600"} />
                 )}
               </div>
               <div className="min-w-0">
                 <p
                   className={`text-[11px] font-semibold uppercase tracking-wider truncate ${
-                    isDark ? "text-zinc-400" : "text-zinc-500"
+                    isDark ? "text-zinc-400" : "text-blue-700 font-semibold"
                   }`}
                 >
                   {label}
                 </p>
                 <p
                   className={`text-base font-extrabold font-mono tracking-tight ${
-                    isDark ? "text-white" : "text-zinc-900"
+                    isDark ? "text-white" : "text-blue-950 font-extrabold"
                   }`}
                 >
                   {metricValue}
@@ -189,7 +189,7 @@ export function MarkdownContent({ content, className = "", isDark = false }: Mar
               </div>
             </div>
             {extra && (
-              <div className={`text-xs pl-2 ${isDark ? "text-zinc-400" : "text-zinc-600"}`}>
+              <div className={`text-xs pl-2 ${isDark ? "text-zinc-400" : "text-slate-600"}`}>
                 {renderInline(extra, isDark)}
               </div>
             )}
@@ -338,7 +338,7 @@ function renderInline(text: string, isDark: boolean = false): React.ReactNode {
                 : "bg-emerald-50 text-emerald-700 border-emerald-200 font-bold"
               : isDark
               ? "bg-zinc-800 text-zinc-300 border-zinc-700 font-mono"
-              : "bg-zinc-100 text-zinc-800 border-zinc-200 font-mono"
+              : "bg-blue-50/70 text-blue-900 border-blue-200/70 font-mono"
           }`}
         >
           {codeText}
@@ -420,7 +420,7 @@ function renderInline(text: string, isDark: boolean = false): React.ReactNode {
           className={`inline-flex items-center font-mono font-medium px-1.5 py-0.5 rounded border text-[12px] mx-0.5 ${
             isDark
               ? "bg-zinc-800/80 text-zinc-300 border-zinc-700"
-              : "bg-zinc-100 text-zinc-800 border-zinc-200"
+              : "bg-blue-50/80 text-blue-800 border-blue-200/80"
           }`}
         >
           {token}

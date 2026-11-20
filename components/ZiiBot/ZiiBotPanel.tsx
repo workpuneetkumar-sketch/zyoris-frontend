@@ -197,7 +197,7 @@ function MessageBubble({
           className={`px-3.5 py-2 rounded-2xl max-w-[85%] text-xs sm:text-sm leading-relaxed ${
             isDark
               ? "bg-zinc-800 text-zinc-100 border border-zinc-700/60"
-              : "bg-zinc-900 text-white"
+              : "bg-gradient-to-r from-blue-600 via-blue-600 to-indigo-600 text-white shadow-sm shadow-blue-500/20"
           }`}
         >
           <p className="whitespace-pre-wrap select-text">{message.content}</p>
@@ -209,13 +209,13 @@ function MessageBubble({
           {/* Minimal actions bar */}
           <div
             className={`flex items-center gap-2 mt-1.5 text-[11px] ${
-              isDark ? "text-zinc-500" : "text-zinc-400"
+              isDark ? "text-zinc-500" : "text-slate-400"
             }`}
           >
             <button
               onClick={handleCopy}
               className={`p-1 rounded transition-colors ${
-                isDark ? "hover:text-zinc-200 hover:bg-zinc-800" : "hover:text-zinc-900 hover:bg-zinc-100"
+                isDark ? "hover:text-zinc-200 hover:bg-zinc-800" : "hover:text-blue-700 hover:bg-blue-100/60"
               }`}
               title="Copy message"
             >
@@ -229,7 +229,7 @@ function MessageBubble({
                 <button
                   onClick={() => handleRating("up")}
                   className={`p-1 rounded transition-colors ${
-                    isDark ? "hover:text-emerald-400 hover:bg-zinc-800" : "hover:text-emerald-600 hover:bg-zinc-100"
+                    isDark ? "hover:text-emerald-400 hover:bg-zinc-800" : "hover:text-emerald-600 hover:bg-blue-100/60"
                   }`}
                   title="Helpful"
                 >
@@ -238,7 +238,7 @@ function MessageBubble({
                 <button
                   onClick={() => handleRating("down")}
                   className={`p-1 rounded transition-colors ${
-                    isDark ? "hover:text-rose-400 hover:bg-zinc-800" : "hover:text-rose-600 hover:bg-zinc-100"
+                    isDark ? "hover:text-rose-400 hover:bg-zinc-800" : "hover:text-rose-600 hover:bg-blue-100/60"
                   }`}
                   title="Not helpful"
                 >
@@ -409,15 +409,17 @@ export function ZiiBotPanel({
       }
       transition={{ duration: 0.22, ease: "easeOut" }}
       className={`fixed z-50 flex overflow-hidden shadow-2xl transition-all duration-200 ${
-        isDark ? "bg-[#09090b] text-zinc-100" : "bg-white text-zinc-900"
+        isDark
+          ? "bg-[#09090b] text-zinc-100"
+          : "bg-gradient-to-b from-[#f0f6ff] via-[#f7faff] to-[#edf5ff] text-slate-900 border-blue-200/80"
       } ${
         isFullscreen
           ? "inset-0 w-screen h-screen max-w-none max-h-none border-none rounded-none"
           : dockMode === "side"
           ? "top-0 right-0 bottom-8 w-[480px] max-w-full border-l " +
-            (isDark ? "border-zinc-800" : "border-zinc-200")
+            (isDark ? "border-zinc-800" : "border-blue-200/80")
           : "bottom-8 left-0 right-0 h-[400px] max-h-[75vh] w-full border-t " +
-            (isDark ? "border-zinc-800" : "border-zinc-200")
+            (isDark ? "border-zinc-800" : "border-blue-200/80")
       }`}
     >
       {/* ── Left Sidebar (History & Conversations Drawer) ── */}
@@ -429,7 +431,7 @@ export function ZiiBotPanel({
             exit={{ width: 0, opacity: 0 }}
             transition={{ duration: 0.18 }}
             className={`flex-shrink-0 h-full overflow-hidden z-20 border-r ${
-              isDark ? "border-zinc-800/80" : "border-zinc-200/80"
+              isDark ? "border-zinc-800/80" : "border-blue-200/80"
             }`}
           >
             <ZiiBotSidebar
@@ -456,12 +458,14 @@ export function ZiiBotPanel({
         {/* Top Header */}
         <div
           className={`flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0 gap-3 ${
-            isDark ? "border-zinc-800/80 bg-[#09090b]" : "border-zinc-200/80 bg-white"
+            isDark
+              ? "border-zinc-800/80 bg-[#09090b]"
+              : "border-blue-200/80 bg-white/85 backdrop-blur-md text-slate-800"
           }`}
         >
           {/* Header Left: Title + Conversations button + Compact New button */}
           <div className="flex items-center gap-2 min-w-0 overflow-hidden">
-            <h2 className="text-sm font-semibold tracking-tight whitespace-nowrap">Ask anything</h2>
+            <h2 className="text-sm font-semibold tracking-tight whitespace-nowrap text-slate-900">Ask anything</h2>
 
             {/* View All Conversations toggle (auto fullscreens) */}
             <button
@@ -471,10 +475,10 @@ export function ZiiBotPanel({
                 sidebarOpen
                   ? isDark
                     ? "bg-zinc-800 text-white border-zinc-700 shadow-xs"
-                    : "bg-zinc-100 text-zinc-950 border-zinc-300 shadow-xs"
+                    : "bg-blue-100/90 text-blue-900 border-blue-300 shadow-xs font-semibold"
                   : isDark
                   ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 border-zinc-800"
-                  : "bg-zinc-100/80 hover:bg-zinc-200 text-zinc-600 hover:text-zinc-900 border-zinc-200"
+                  : "bg-white/90 hover:bg-blue-50 text-slate-700 hover:text-blue-900 border-blue-200 shadow-2xs"
               }`}
               title={sidebarOpen ? "Hide conversations" : "View all conversations (opens fullscreen)"}
             >
@@ -483,7 +487,7 @@ export function ZiiBotPanel({
               {chat.sessions.length > 0 && (
                 <span
                   className={`px-1.5 py-0.2 rounded text-[10px] font-mono leading-none ${
-                    isDark ? "bg-zinc-800 text-zinc-300" : "bg-zinc-200 text-zinc-700"
+                    isDark ? "bg-zinc-800 text-zinc-300" : "bg-blue-100 text-blue-800"
                   }`}
                 >
                   {chat.sessions.length}
@@ -501,7 +505,7 @@ export function ZiiBotPanel({
               className={`p-1.5 rounded-lg border transition-all active:scale-95 flex-shrink-0 ${
                 isDark
                   ? "bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800"
-                  : "bg-zinc-100 hover:bg-zinc-200 text-zinc-700 hover:text-zinc-950 border-zinc-200"
+                  : "bg-white/90 hover:bg-blue-50 text-blue-600 hover:text-blue-900 border-blue-200 shadow-2xs"
               }`}
               title="Start a new chat session"
             >
@@ -517,7 +521,7 @@ export function ZiiBotPanel({
               className={`p-1.5 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  : "text-slate-500 hover:text-blue-700 hover:bg-blue-100/70"
               }`}
               title={isDark ? "Switch chatbot to light mode" : "Switch chatbot to dark mode"}
             >
@@ -530,7 +534,7 @@ export function ZiiBotPanel({
               className={`p-1.5 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  : "text-slate-500 hover:text-blue-700 hover:bg-blue-100/70"
               }`}
               title={chat.soundOn ? "Mute audio" : "Enable audio"}
             >
@@ -545,10 +549,10 @@ export function ZiiBotPanel({
                   isFullscreen
                     ? isDark
                       ? "text-white bg-zinc-800"
-                      : "text-zinc-950 bg-zinc-100"
+                      : "text-blue-900 bg-blue-100"
                     : isDark
                     ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                    : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                    : "text-slate-500 hover:text-blue-700 hover:bg-blue-100/70"
                 }`}
                 title={isFullscreen ? "Restore side view" : "Enlarge to full screen"}
               >
@@ -565,7 +569,7 @@ export function ZiiBotPanel({
               className={`p-1.5 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  : "text-slate-500 hover:text-blue-700 hover:bg-blue-100/70"
               }`}
               title={dockMode === "side" ? "Dock to bottom" : "Dock to side"}
             >
@@ -582,7 +586,7 @@ export function ZiiBotPanel({
               className={`p-1.5 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                  : "text-slate-500 hover:text-blue-700 hover:bg-blue-100/70"
               }`}
               title="Close"
             >
@@ -595,7 +599,7 @@ export function ZiiBotPanel({
         <div
           ref={scrollRef}
           className={`flex-1 overflow-y-auto px-4 py-3 space-y-3 zii-chat-scroll ${
-            isDark ? "bg-[#09090b]" : "bg-white"
+            isDark ? "bg-[#09090b]" : "bg-gradient-to-b from-blue-50/40 via-sky-50/20 to-blue-50/60"
           } ${dockMode === "bottom" || isFullscreen ? "max-w-4xl mx-auto w-full" : ""}`}
         >
           {/* Welcome / Suggestions State */}
@@ -641,20 +645,20 @@ export function ZiiBotPanel({
               className="flex items-center gap-2 py-1 text-xs"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
-              <span className={isDark ? "text-zinc-400" : "text-zinc-500"}>
+              <span className={isDark ? "text-zinc-400" : "text-blue-700 font-medium"}>
                 Analyzing system intelligence
               </span>
               <div className="flex gap-1 items-center">
                 <span
-                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-blue-500"}`}
                   style={{ animationDelay: "0ms" }}
                 />
                 <span
-                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-blue-500"}`}
                   style={{ animationDelay: "150ms" }}
                 />
                 <span
-                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-zinc-500"}`}
+                  className={`w-1 h-1 rounded-full animate-bounce ${isDark ? "bg-zinc-400" : "bg-blue-500"}`}
                   style={{ animationDelay: "300ms" }}
                 />
               </div>
@@ -673,7 +677,7 @@ export function ZiiBotPanel({
               className={`flex items-center justify-between px-3 py-1 mb-2 rounded-lg text-xs border ${
                 isDark
                   ? "bg-zinc-900 border-zinc-800 text-zinc-300"
-                  : "bg-zinc-100 border-zinc-200 text-zinc-700"
+                  : "bg-white border-blue-200 text-slate-700 shadow-2xs"
               }`}
             >
               <span className="truncate flex items-center gap-1.5">
@@ -694,14 +698,14 @@ export function ZiiBotPanel({
             className={`rounded-2xl border transition-all duration-150 p-2.5 ${
               isDark
                 ? "bg-[#121214] border-zinc-800/90 focus-within:border-zinc-700 shadow-lg"
-                : "bg-white border-zinc-200/90 focus-within:border-zinc-400 shadow-sm"
+                : "bg-white/95 border-blue-200/90 focus-within:border-blue-500/80 shadow-md shadow-blue-500/5 focus-within:ring-2 focus-within:ring-blue-500/15"
             }`}
           >
             {/* Top row: > prompt symbol + text input */}
             <form onSubmit={handleSubmit} className="flex items-center gap-2">
               <span
                 className={`font-mono text-sm font-medium select-none pl-1 ${
-                  isDark ? "text-zinc-500" : "text-zinc-400"
+                  isDark ? "text-zinc-500" : "text-blue-500 font-bold"
                 }`}
               >
                 &gt;
@@ -720,7 +724,7 @@ export function ZiiBotPanel({
                 className={`flex-1 bg-transparent text-xs sm:text-sm outline-none ${
                   isDark
                     ? "text-zinc-100 placeholder-zinc-500"
-                    : "text-zinc-900 placeholder-zinc-400"
+                    : "text-slate-900 placeholder-slate-400"
                 }`}
               />
             </form>
@@ -735,11 +739,11 @@ export function ZiiBotPanel({
                   className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border truncate select-none ${
                     isDark
                       ? "bg-zinc-800/80 border-zinc-700/60 text-zinc-300"
-                      : "bg-zinc-100 border-zinc-200 text-zinc-700"
+                      : "bg-gradient-to-r from-blue-50 to-sky-50 border-blue-200 text-blue-700 font-medium"
                   }`}
                   title={`Context scoped to ${currentScope}`}
                 >
-                  <Scan size={11} className={isDark ? "text-zinc-400" : "text-zinc-500"} />
+                  <Scan size={11} className={isDark ? "text-zinc-400" : "text-blue-600"} />
                   <span className="truncate">{currentScope}</span>
                 </div>
               </div>
@@ -760,7 +764,7 @@ export function ZiiBotPanel({
                   className={`p-1.5 rounded-md transition-colors ${
                     isDark
                       ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                      : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                      : "text-slate-500 hover:text-blue-600 hover:bg-blue-50"
                   }`}
                   title="Attach file or context"
                 >
@@ -776,7 +780,7 @@ export function ZiiBotPanel({
                       ? "text-rose-500 bg-rose-500/10 animate-pulse"
                       : isDark
                       ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                      : "text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100"
+                      : "text-slate-500 hover:text-blue-600 hover:bg-blue-50"
                   }`}
                   title={isRecording ? "Stop listening" : "Voice input"}
                 >
@@ -792,10 +796,10 @@ export function ZiiBotPanel({
                     !chat.isTyping && (inputValue.trim() || attachedFileName)
                       ? isDark
                         ? "bg-white text-zinc-950 hover:bg-zinc-200 shadow-sm active:scale-95 cursor-pointer"
-                        : "bg-zinc-900 text-white hover:bg-black shadow-sm active:scale-95 cursor-pointer"
+                        : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-md shadow-blue-500/25 active:scale-95 cursor-pointer"
                       : isDark
                       ? "bg-zinc-800/60 text-zinc-600 cursor-not-allowed"
-                      : "bg-zinc-100 text-zinc-400 cursor-not-allowed"
+                      : "bg-blue-100/70 text-blue-300 cursor-not-allowed"
                   }`}
                   title="Send"
                 >

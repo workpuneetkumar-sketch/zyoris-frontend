@@ -132,21 +132,21 @@ export function ZiiBotSidebar({
       className={`flex flex-col h-full border-r select-none ${
         isDark
           ? "bg-[#09090b] border-zinc-800 text-zinc-300"
-          : "bg-zinc-50 border-zinc-200 text-zinc-700"
+          : "bg-gradient-to-b from-[#f0f6ff] via-[#f7faff] to-[#edf5ff] border-blue-200/80 text-slate-700"
       } ${className}`}
     >
       {/* ── Top Header with New Chat Button ── */}
       <div
         className={`p-3 border-b flex flex-col gap-2.5 ${
-          isDark ? "bg-[#09090b] border-zinc-800" : "bg-white border-zinc-200"
+          isDark ? "bg-[#09090b] border-zinc-800" : "bg-white/85 backdrop-blur-xs border-blue-200/80"
         }`}
       >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <MessageSquare size={14} className={isDark ? "text-zinc-400" : "text-zinc-500"} />
+            <MessageSquare size={14} className={isDark ? "text-zinc-400" : "text-blue-600"} />
             <span
               className={`text-xs font-semibold uppercase tracking-wider ${
-                isDark ? "text-zinc-400" : "text-zinc-500"
+                isDark ? "text-zinc-400" : "text-blue-900"
               }`}
             >
               Conversations ({sessions.length})
@@ -158,7 +158,7 @@ export function ZiiBotSidebar({
               className={`p-1 rounded-md transition-colors ${
                 isDark
                   ? "text-zinc-400 hover:text-white hover:bg-zinc-800"
-                  : "text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100"
+                  : "text-slate-400 hover:text-slate-900 hover:bg-blue-50"
               }`}
               title="Close sidebar"
             >
@@ -175,7 +175,7 @@ export function ZiiBotSidebar({
           className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg font-medium text-xs transition-all active:scale-[0.98] ${
             isDark
               ? "bg-zinc-800 hover:bg-zinc-700 text-white border border-zinc-700/60 shadow-xs"
-              : "bg-zinc-900 hover:bg-black text-white shadow-xs"
+              : "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm shadow-blue-500/25"
           }`}
         >
           <Plus size={14} />
@@ -188,7 +188,7 @@ export function ZiiBotSidebar({
             <Search
               size={13}
               className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${
-                isDark ? "text-zinc-500" : "text-zinc-400"
+                isDark ? "text-zinc-500" : "text-slate-400"
               }`}
             />
             <input
@@ -199,14 +199,14 @@ export function ZiiBotSidebar({
               className={`w-full pl-8 pr-2.5 py-1.5 text-xs rounded-lg outline-none transition-all ${
                 isDark
                   ? "bg-zinc-900 border border-zinc-800 text-zinc-100 placeholder-zinc-500 focus:border-zinc-700"
-                  : "bg-zinc-100 border border-zinc-200 text-zinc-900 placeholder-zinc-400 focus:bg-white focus:border-zinc-400"
+                  : "bg-white border border-blue-200 text-slate-900 placeholder-slate-400 focus:border-blue-400 focus:ring-1 focus:ring-blue-400/20 shadow-2xs"
               }`}
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
                 className={`absolute right-2 top-1/2 -translate-y-1/2 ${
-                  isDark ? "text-zinc-500 hover:text-zinc-300" : "text-zinc-400 hover:text-zinc-600"
+                  isDark ? "text-zinc-500 hover:text-zinc-300" : "text-slate-400 hover:text-slate-600"
                 }`}
               >
                 <X size={12} />
@@ -219,7 +219,7 @@ export function ZiiBotSidebar({
       {/* ── Sessions List ── */}
       <div
         className={`flex-1 overflow-y-auto px-2 py-2 space-y-1 zii-chat-scroll ${
-          isDark ? "bg-[#09090b]" : "bg-zinc-50"
+          isDark ? "bg-[#09090b]" : "bg-transparent"
         }`}
       >
         {isLoading && sessions.length === 0 ? (
@@ -264,10 +264,10 @@ export function ZiiBotSidebar({
                   isActive
                     ? isDark
                       ? "bg-zinc-800/90 text-white font-medium border border-zinc-700/80 shadow-xs"
-                      : "bg-white text-zinc-950 font-medium border border-zinc-300 shadow-xs"
+                      : "bg-white text-blue-950 font-semibold border border-blue-300 shadow-xs"
                     : isDark
                     ? "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 border border-transparent"
-                    : "text-zinc-600 hover:bg-zinc-200/60 hover:text-zinc-900 border border-transparent"
+                    : "text-slate-600 hover:bg-blue-100/60 hover:text-blue-900 border border-transparent"
                 }`}
               >
                 {/* Editing title input */}
@@ -288,7 +288,7 @@ export function ZiiBotSidebar({
                       className={`flex-1 px-2 py-1 text-xs rounded border outline-none ${
                         isDark
                           ? "bg-zinc-900 border-zinc-700 text-white"
-                          : "bg-white border-zinc-300 text-zinc-900"
+                          : "bg-white border-blue-300 text-slate-900"
                       }`}
                     />
                     <button

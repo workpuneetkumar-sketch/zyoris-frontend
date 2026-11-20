@@ -118,14 +118,14 @@ export function ContextualSuggestions({
           className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-all duration-150 group ${
             isDark
               ? "hover:bg-zinc-900/80 text-zinc-300 hover:text-white"
-              : "hover:bg-zinc-100 text-zinc-700 hover:text-zinc-950"
+              : "bg-white/80 hover:bg-white border border-blue-200/70 hover:border-blue-400 text-slate-700 hover:text-blue-900 shadow-2xs hover:shadow-xs"
           }`}
         >
           <span
             className={`w-4 h-4 flex-shrink-0 flex items-center justify-center rounded text-[11px] font-mono font-medium select-none transition-colors ${
               isDark
                 ? "bg-zinc-800 text-zinc-400 group-hover:bg-zinc-700 group-hover:text-zinc-200"
-                : "bg-zinc-200 text-zinc-600 group-hover:bg-zinc-300 group-hover:text-zinc-900"
+                : "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-2xs font-semibold"
             }`}
           >
             {idx + 1}
