@@ -170,6 +170,11 @@ export async function getPaymentHealth(): Promise<PaymentHealthResponse> {
     const data = res.data?.data ?? res.data;
     return data;
   } catch (error: any) {
+    // Backend returns 503 with structured health payload when Razorpay/DB is degraded
+    const fallbackData = error?.response?.data?.data;
+    if (fallbackData && typeof fallbackData === "object" && "database" in fallbackData) {
+      return fallbackData as PaymentHealthResponse;
+    }
     const msg =
       error?.response?.data?.message ||
       error?.message ||
@@ -344,9 +349,75 @@ export async function getPaymentStatusByOrderId(
  */
 export async function getPaymentAnalytics(): Promise<PaymentAnalyticsResponse> {
   try {
-    const res = await api.get("/payments/analytics");
-    const data = res.data?.data ?? res.data;
-    return data;
+    const [res, payments] = await Promise.all([
+      api.get("/payments/analytics"),
+      listPayments().catch(() => [] as PaymentRecord[]),
+    ]);
+    const raw = res.data?.data ?? res.data ?? {};
+
+    const totalPayments = Number(raw.totalPayments ?? payments.length ?? 0);
+    const successfulPayments = Number(
+      raw.successfulPayments ?? payments.filter((p) => p.status === "PAID").length ?? 0
+    );
+    const failedPayments = Number(
+      raw.failedPayments ?? payments.filter((p) => p.status === "FAILED").length ?? 0
+    );
+    const refundedPayments = Number(
+      raw.refundedPayments ?? payments.filter((p) => p.status === "REFUNDED").length ?? 0
+    );
+
+    const paidList = payments.filter((p) => p.status === "PAID");
+    const failedList = payments.filter((p) => p.status === "FAILED");
+
+    const totalRevenue =
+      raw.totalRevenue !== undefined
+        ? Number(raw.totalRevenue)
+        : paidList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    const failedRevenue =
+      raw.failedRevenue !== undefined
+        ? Number(raw.failedRevenue)
+        : failedList.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+    const rawRate = raw.successPercentage ?? raw.successRate;
+    const successRate =
+      typeof rawRate === "number" && Number.isFinite(rawRate)
+        ? Math.round(rawRate * 10) / 10
+        : totalPayments > 0
+        ? Math.round((successfulPayments / totalPayments) * 1000) / 10
+        : 0;
+
+    let statusDistribution: { status: string; count: number }[] = Array.isArray(raw.statusDistribution)
+      ? raw.statusDistribution
+      : [];
+    if (statusDistribution.length === 0 && payments.length > 0) {
+      const counts: Record<string, number> = {};
+      payments.forEach((p) => {
+        counts[p.status] = (counts[p.status] || 0) + 1;
+      });
+      statusDistribution = Object.entries(counts).map(([status, count]) => ({ status, count }));
+    }
+
+    const recentPayments = Array.isArray(raw.recentPayments)
+      ? raw.recentPayments
+      : paidList.slice(0, 10).map((p) => ({
+          id: p.id,
+          invoiceId: p.invoiceId,
+          amount: p.amount,
+          paidAt: p.paidAt || p.updatedAt || p.createdAt,
+          method: p.method,
+        }));
+
+    return {
+      totalPayments,
+      successfulPayments,
+      failedPayments,
+      refundedPayments,
+      totalRevenue,
+      failedRevenue,
+      successRate,
+      statusDistribution,
+      recentPayments,
+    };
   } catch (error: any) {
     const msg =
       error?.response?.data?.message ||

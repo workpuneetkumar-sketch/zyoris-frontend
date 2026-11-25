@@ -10,7 +10,7 @@ import {
   CreditCard,
   AlertCircle,
 } from "lucide-react";
-import { Invoice } from "@/lib/api/finance/invoicesApi";
+import { Invoice, isInvoiceOverdue } from "@/lib/api/finance/invoicesApi";
 
 // ── Helper Functions ─────────────────────────────────────
 
@@ -23,24 +23,54 @@ function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-function isOverdue(dueDate: string): boolean {
-  return new Date(dueDate) < new Date();
-}
-
 // ── Stats Cards Component ────────────────────────────────
 
-export function StatsCards({ invoices }: { invoices: Invoice[] }) {
+export function StatsCards({
+  invoices,
+  onViewOverdue,
+}: {
+  invoices: Invoice[];
+  onViewOverdue?: () => void;
+}) {
   const totalAmount = invoices.reduce((sum, inv) => sum + inv.totalAmount, 0);
   const draftAmount = invoices.filter(inv => inv.status === "DRAFT").reduce((sum, inv) => sum + inv.totalAmount, 0);
   const sentAmount = invoices.filter(inv => inv.status === "SENT").reduce((sum, inv) => sum + inv.totalAmount, 0);
   const paidAmount = invoices.filter(inv => inv.status === "PAID").reduce((sum, inv) => sum + inv.totalAmount, 0);
-  const overdueCount = invoices.filter(inv => inv.status === "OVERDUE" || (inv.status !== "PAID" && isOverdue(inv.dueDate))).length;
+  const overdueCount = invoices.filter(inv => inv.status === "OVERDUE" || isInvoiceOverdue(inv)).length;
 
   const stats = [
-    { label: "Total Revenue", value: formatCurrency(totalAmount), icon: Wallet, count: `${invoices.length} invoices`, color: "blue" },
-    { label: "Draft", value: formatCurrency(draftAmount), icon: Edit2, count: `${invoices.filter(inv => inv.status === "DRAFT").length} drafts`, color: "gray" },
-    { label: "Sent", value: formatCurrency(sentAmount), icon: Send, count: `${invoices.filter(inv => inv.status === "SENT").length} sent`, color: "blue" },
-    { label: "Paid", value: formatCurrency(paidAmount), icon: CreditCard, count: `${invoices.filter(inv => inv.status === "PAID").length} paid`, color: "green" },
+    {
+      label: "Total Billed",
+      value: formatCurrency(totalAmount),
+      icon: Wallet,
+      count: `${invoices.length} invoices`,
+      iconBg: "bg-blue-100",
+      iconColor: "text-blue-600",
+    },
+    {
+      label: "Draft",
+      value: formatCurrency(draftAmount),
+      icon: Edit2,
+      count: `${invoices.filter(inv => inv.status === "DRAFT").length} drafts`,
+      iconBg: "bg-gray-100",
+      iconColor: "text-gray-600",
+    },
+    {
+      label: "Sent / Receivable",
+      value: formatCurrency(sentAmount),
+      icon: Send,
+      count: `${invoices.filter(inv => inv.status === "SENT").length} sent`,
+      iconBg: "bg-indigo-100",
+      iconColor: "text-indigo-600",
+    },
+    {
+      label: "Collected (Paid)",
+      value: formatCurrency(paidAmount),
+      icon: CreditCard,
+      count: `${invoices.filter(inv => inv.status === "PAID").length} paid`,
+      iconBg: "bg-emerald-100",
+      iconColor: "text-emerald-600",
+    },
   ];
 
   return (
@@ -51,8 +81,8 @@ export function StatsCards({ invoices }: { invoices: Invoice[] }) {
           return (
             <div key={idx} className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <div className={`w-10 h-10 rounded-lg bg-${stat.color}-100 flex items-center justify-center`}>
-                  <Icon size={18} className={`text-${stat.color}-600`} />
+                <div className={`w-10 h-10 rounded-lg ${stat.iconBg} flex items-center justify-center`}>
+                  <Icon size={18} className={stat.iconColor} />
                 </div>
                 {idx === 0 && overdueCount > 0 && (
                   <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded-full">
@@ -69,17 +99,22 @@ export function StatsCards({ invoices }: { invoices: Invoice[] }) {
       </div>
 
       {overdueCount > 0 && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <AlertCircle size={20} className="text-red-500" />
+            <AlertCircle size={20} className="text-red-500 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-red-800">Overdue Invoices Alert</p>
               <p className="text-xs text-red-600">You have {overdueCount} overdue invoice(s) that need attention.</p>
             </div>
           </div>
-          <button className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-all">
-            View Details
-          </button>
+          {onViewOverdue && (
+            <button
+              onClick={onViewOverdue}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition-all self-start sm:self-auto"
+            >
+              Filter Overdue
+            </button>
+          )}
         </div>
       )}
     </>

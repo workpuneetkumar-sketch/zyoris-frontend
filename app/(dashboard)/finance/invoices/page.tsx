@@ -16,6 +16,7 @@ import {
   updateInvoice,
   Invoice,
 } from "@/lib/api/finance/invoicesApi";
+import { listPayments } from "@/lib/api/paymentService";
 import { CreateInvoiceModal, InvoiceDetailModal } from "@/components/finance/invoices/InvoiceModals";
 import { StatsCards } from "@/components/finance/invoices/InvoiceStats";
 import { InvoiceTable } from "@/components/finance/invoices/InvoiceTable";
@@ -75,6 +76,7 @@ export default function InvoicesPage() {
   const { hasPermission } = useRBAC();
   const searchParams = useSearchParams();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [paidByInvoice, setPaidByInvoice] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastMessage | null>(null);
@@ -97,7 +99,17 @@ export default function InvoicesPage() {
       const filters: any = {};
       if (statusFilter !== "ALL") filters.status = statusFilter;
       if (searchQuery) filters.search = searchQuery;
-      const data = await getInvoices(filters);
+      const [data, payments] = await Promise.all([
+        getInvoices(filters),
+        listPayments().catch(() => []),
+      ]);
+      const paidMap: Record<string, number> = {};
+      payments.forEach((p) => {
+        if (p.status === "PAID" || p.status === "AUTHORIZED") {
+          paidMap[p.invoiceId] = (paidMap[p.invoiceId] || 0) + (Number(p.amount) || 0);
+        }
+      });
+      setPaidByInvoice(paidMap);
       setInvoices(data);
     } catch (err: any) {
       setError(err.message || "Failed to load invoices");
@@ -210,11 +222,20 @@ export default function InvoicesPage() {
         </div>
 
         {/* Stats Cards */}
-        {!loading && !error && <StatsCards invoices={invoices} />}
+        {!loading && !error && (
+          <StatsCards
+            invoices={invoices}
+            onViewOverdue={() => {
+              setStatusFilter("OVERDUE");
+              setCurrentPage(1);
+            }}
+          />
+        )}
 
         {/* Invoice Table */}
         <InvoiceTable
           invoices={invoices}
+          paidByInvoice={paidByInvoice}
           loading={loading}
           error={error}
           searchQuery={searchQuery}

@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import {
   Search,
   Download,
@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Loader2,
   FileText,
+  ArrowUpDown,
+  RefreshCw,
 } from "lucide-react";
 import type { PayrollRecord } from "@/lib/api/payrollApi";
 
@@ -73,24 +75,56 @@ export default function PayrollTable({
   onDownloadPayslip,
   onViewHistory,
 }: PayrollTableProps) {
+  const [sortKey, setSortKey] = useState<"employeeName" | "basicSalary" | "netPay" | "paymentStatus">("employeeName");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    onPageChange(1);
+  };
+
   // Get unique departments from records
   const departments = Array.from(
     new Set(records.map((r) => r.department).filter(Boolean))
   ).sort();
 
-  // Filter records
-  const filtered = records.filter((r) => {
-    const matchSearch =
-      searchQuery.trim() === "" ||
-      r.employeeName.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
-      r.employeeEmail.toLowerCase().includes(searchQuery.trim().toLowerCase());
-    const matchDept =
-      filterDept === "all" ||
-      r.department.toLowerCase() === filterDept.toLowerCase();
-    const matchStatus =
-      filterStatus === "all" || r.paymentStatus === filterStatus;
-    return matchSearch && matchDept && matchStatus;
-  });
+  // Filter & sort records
+  const filtered = useMemo(() => {
+    const list = records.filter((r) => {
+      const matchSearch =
+        searchQuery.trim() === "" ||
+        r.employeeName.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+        r.employeeEmail.toLowerCase().includes(searchQuery.trim().toLowerCase());
+      const matchDept =
+        filterDept === "all" ||
+        r.department.toLowerCase() === filterDept.toLowerCase();
+      const matchStatus =
+        filterStatus === "all" || r.paymentStatus === filterStatus;
+      return matchSearch && matchDept && matchStatus;
+    });
+
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "basicSalary") cmp = a.basicSalary - b.basicSalary;
+      else if (sortKey === "netPay") cmp = a.netPay - b.netPay;
+      else if (sortKey === "paymentStatus") cmp = a.paymentStatus.localeCompare(b.paymentStatus);
+      else cmp = a.employeeName.localeCompare(b.employeeName);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [records, searchQuery, filterDept, filterStatus, sortKey, sortDir]);
+
+  const hasActiveFilters = searchQuery.trim() !== "" || filterDept !== "all" || filterStatus !== "all";
+  const handleResetFilters = () => {
+    onSearchChange("");
+    onFilterDeptChange("all");
+    onFilterStatusChange("all");
+    onPageChange(1);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated = filtered.slice(
@@ -152,7 +186,16 @@ export default function PayrollTable({
           <option value="PROCESSING">Processing</option>
         </select>
 
-        {/* Results count */}
+        {/* Results count + Clear */}
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={handleResetFilters}
+            className="inline-flex items-center gap-1 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <RefreshCw size={12} /> Clear
+          </button>
+        )}
         <span className="text-xs text-gray-400 font-medium ml-auto">
           {filtered.length} record{filtered.length !== 1 ? "s" : ""}
         </span>
@@ -164,13 +207,17 @@ export default function PayrollTable({
           <thead>
             <tr className="bg-gray-50/80">
               <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Employee
+                <button type="button" onClick={() => toggleSort("employeeName")} className="inline-flex items-center gap-1 hover:text-gray-800">
+                  Employee <ArrowUpDown size={12} />
+                </button>
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">
                 Department
               </th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Basic
+                <button type="button" onClick={() => toggleSort("basicSalary")} className="inline-flex items-center gap-1 hover:text-gray-800 ml-auto">
+                  Basic <ArrowUpDown size={12} />
+                </button>
               </th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">
                 Gross
@@ -179,10 +226,14 @@ export default function PayrollTable({
                 Deductions
               </th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Net Pay
+                <button type="button" onClick={() => toggleSort("netPay")} className="inline-flex items-center gap-1 hover:text-gray-800 ml-auto">
+                  Net Pay <ArrowUpDown size={12} />
+                </button>
               </th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                Status
+                <button type="button" onClick={() => toggleSort("paymentStatus")} className="inline-flex items-center gap-1 hover:text-gray-800">
+                  Status <ArrowUpDown size={12} />
+                </button>
               </th>
               <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                 Actions
@@ -323,20 +374,27 @@ export default function PayrollTable({
             </button>
             {Array.from(
               { length: Math.min(5, totalPages) },
-              (_, i) => i + 1
-            ).map((page) => (
-              <button
-                key={page}
-                onClick={() => onPageChange(page)}
-                className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
-                  currentPage === page
-                    ? "bg-blue-600 text-white"
-                    : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}
-              >
-                {page}
-              </button>
-            ))}
+              (_, i) => {
+                let page: number;
+                if (totalPages <= 5) page = i + 1;
+                else if (currentPage <= 3) page = i + 1;
+                else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
+                else page = currentPage - 2 + i;
+                return (
+                  <button
+                    key={page}
+                    onClick={() => onPageChange(page)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? "bg-blue-600 text-white"
+                        : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              }
+            )}
             <button
               onClick={() =>
                 onPageChange(Math.min(totalPages, currentPage + 1))

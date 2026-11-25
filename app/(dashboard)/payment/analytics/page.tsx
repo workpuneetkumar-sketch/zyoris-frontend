@@ -33,7 +33,7 @@ import {
   Area,
   Legend,
 } from "recharts";
-import { getInvoices, Invoice } from "@/lib/api/finance/invoicesApi";
+import { getInvoices, Invoice, isInvoiceOverdue } from "@/lib/api/finance/invoicesApi";
 import { getPaymentAnalytics } from "@/lib/api/paymentService";
 import type { PaymentAnalyticsResponse } from "@/lib/api/paymentService";
 import PaymentErrorBoundary from "@/components/payment/ErrorBoundary";
@@ -118,10 +118,15 @@ function PaymentAnalyticsPage() {
   // ── Computed ─────────────────────────────────────────────────
   const stats = useMemo(() => {
     const paid    = invoices.filter((i) => i.status === "PAID");
-    const overdue = invoices.filter((i) => i.status === "OVERDUE" || (i.status !== "PAID" && new Date(i.dueDate) < new Date()));
+    const overdue = invoices.filter((i) => i.status === "OVERDUE" || isInvoiceOverdue(i));
     const pending = invoices.filter((i) => i.status === "SENT" || i.status === "DRAFT");
     const totalRev = paid.reduce((s, i) => s + i.totalAmount, 0);
-    const successRate = paymentAnalytics?.successRate ?? (invoices.length > 0 ? Math.round((paid.length / invoices.length) * 100) : 0);
+    const successRate =
+      typeof paymentAnalytics?.successRate === "number" && Number.isFinite(paymentAnalytics.successRate)
+        ? Math.round(paymentAnalytics.successRate)
+        : invoices.length > 0
+        ? Math.round((paid.length / invoices.length) * 100)
+        : 0;
 
     return { paid, overdue, pending, totalRev, successRate };
   }, [invoices, paymentAnalytics]);

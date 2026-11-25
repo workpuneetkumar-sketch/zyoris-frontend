@@ -172,7 +172,10 @@ export default function PaymentDashboardPage() {
   const totalRevenue      = paidInvoices.reduce((s, i) => s + i.totalAmount, 0);
   const outstandingAmount = invoices.filter((i) => i.status !== "PAID").reduce((s, i) => s + i.totalAmount, 0);
   const invoiceSuccessRate = invoices.length > 0 ? Math.round((paidInvoices.length / invoices.length) * 100) : 0;
-  const paymentSuccessRate = paymentAnalytics?.successRate ?? invoiceSuccessRate;
+  const rawAnalyticsPct = (paymentAnalytics as any)?.successPercentage ?? paymentAnalytics?.successRate;
+  const paymentSuccessRate = typeof rawAnalyticsPct === "number" && Number.isFinite(rawAnalyticsPct)
+    ? Math.round(rawAnalyticsPct)
+    : invoiceSuccessRate;
 
   // Pie data from invoices
   const statusPieData = Object.entries(
