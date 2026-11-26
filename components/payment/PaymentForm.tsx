@@ -7,6 +7,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { useInvoiceContext } from "@/context/InvoiceContext";
+import { useConfirm } from "@/components/common/ConfirmProvider";
 import { PaymentMethod } from "@/lib/api/paymentApi";
 
 const paymentSchema = z.object({
@@ -44,6 +45,7 @@ export default function PaymentForm({
   onSuccess,
 }: PaymentFormProps) {
   const { addPayment } = useInvoiceContext();
+  const requestConfirmation = useConfirm();
 
   const {
     register,
@@ -63,6 +65,14 @@ export default function PaymentForm({
   });
 
   const onSubmit = async (data: PaymentFormData) => {
+    const ok = await requestConfirmation({
+      title: "Record Payment",
+      message: `Confirm recording ${data.method} payment of ₹${data.amount.toLocaleString("en-IN")}?`,
+      confirmText: "Record Payment",
+      variant: "primary",
+    });
+    if (!ok) return;
+
     try {
       await addPayment({
         invoiceId,
@@ -76,7 +86,7 @@ export default function PaymentForm({
       reset(); // resets to defaultValues (date preserved, others cleared)
       onSuccess();
     } catch (err: any) {
-      toast.error("Payment failed");
+      toast.error(err?.message || "Failed to record payment");
     }
   };
 

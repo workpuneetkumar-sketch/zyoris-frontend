@@ -20,10 +20,12 @@ import {
   ExternalLink,
   History,
   Activity,
+  ArrowUpDown,
 } from "lucide-react";
-import { getInvoices, Invoice } from "@/lib/api/finance/invoicesApi";
+import { getInvoices, Invoice, isInvoiceOverdue, getInvoiceReceivable } from "@/lib/api/finance/invoicesApi";
 import { listPayments } from "@/lib/api/paymentService";
 import type { PaymentRecord } from "@/lib/api/paymentService";
+import StatusBadge from "@/components/finance/invoices/StatusBadge";
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -49,31 +51,26 @@ function formatDate(dateStr: string | undefined): string {
   });
 }
 
-function isOverdue(inv: Invoice): boolean {
-  return inv.status !== "PAID" && new Date(inv.dueDate) < new Date();
-}
-
 function truncate(s: string, n = 16): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
-// ── Status config ──────────────────────────────────────────
-
-const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
-  DRAFT:   { bg: "bg-gray-100  text-gray-600",  text: "", label: "Draft"   },
-  SENT:    { bg: "bg-blue-100  text-blue-700",   text: "", label: "Sent"    },
-  PAID:    { bg: "bg-emerald-100 text-emerald-700", text: "", label: "Paid" },
-  OVERDUE: { bg: "bg-red-100   text-red-700",    text: "", label: "Overdue" },
-};
-
 // ── Summary Cards ──────────────────────────────────────────
 
-function SummaryCards({ invoices }: { invoices: Invoice[] }) {
+function SummaryCards({
+  invoices,
+  paidByInvoice,
+  onFilterOverdue,
+}: {
+  invoices: Invoice[];
+  paidByInvoice: Record<string, number>;
+  onFilterOverdue: () => void;
+}) {
   const paid     = invoices.filter((i) => i.status === "PAID");
   const pending  = invoices.filter((i) => i.status === "DRAFT" || i.status === "SENT");
-  const overdue  = invoices.filter((i) => i.status === "OVERDUE" || isOverdue(i));
+  const overdue  = invoices.filter((i) => i.status === "OVERDUE" || isInvoiceOverdue(i, paidByInvoice[i.id] || 0));
   const revenue  = paid.reduce((s, i) => s + i.totalAmount, 0);
-  const outstanding = invoices.filter((i) => i.status !== "PAID").reduce((s, i) => s + i.totalAmount, 0);
+  const outstanding = invoices.reduce((s, i) => s + getInvoiceReceivable(i, paidByInvoice[i.id] || 0), 0);
 
   const cards = [
     { label: "Total",      value: invoices.length.toString(), icon: FileText,     bg: "bg-blue-500"    },
@@ -178,30 +175,44 @@ export default function PaymentInvoicesPage() {
   const [error, setError]         = useState<string | null>(null);
   const [searchQuery, setSearchQuery]   = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  const [startDate, setStartDate]       = useState("");
+  const [endDate, setEndDate]           = useState("");
+  const [sortKey, setSortKey]           = useState<"invoiceNumber" | "clientName" | "totalAmount" | "dueDate">("dueDate");
+  const [sortDir, setSortDir]           = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage]   = useState(1);
 
-  // Map invoiceId → payment record (most recent)
-  const paymentByInvoice = useMemo(() => {
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setCurrentPage(1);
+  };
+
+  // Map invoiceId → payment record (most recent) and total paid amount
+  const { paymentByInvoice, paidByInvoice } = useMemo(() => {
     const map: Record<string, PaymentRecord> = {};
+    const paidMap: Record<string, number> = {};
     payments.forEach((p) => {
       const existing = map[p.invoiceId];
       if (!existing || new Date(p.createdAt) > new Date(existing.createdAt)) {
         map[p.invoiceId] = p;
       }
+      if (p.status === "PAID" || p.status === "AUTHORIZED") {
+        paidMap[p.invoiceId] = (paidMap[p.invoiceId] || 0) + (Number(p.amount) || 0);
+      }
     });
-    return map;
+    return { paymentByInvoice: map, paidByInvoice: paidMap };
   }, [payments]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const filters: Record<string, string> = {};
-      if (statusFilter !== "ALL") filters.status = statusFilter;
-      if (searchQuery) filters.search = searchQuery;
-
       const [invData, payData] = await Promise.all([
-        getInvoices(filters),
+        getInvoices(),
         listPayments(),
       ]);
       setInvoices(invData);
@@ -211,30 +222,59 @@ export default function PaymentInvoicesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, searchQuery]);
+  }, []);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
   const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
-      if (statusFilter !== "ALL" && inv.status !== statusFilter) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
+    const list = invoices.filter((inv) => {
+      const paidAmt = paidByInvoice[inv.id] || 0;
+      const overdue = isInvoiceOverdue(inv, paidAmt);
+      const effectiveStatus = overdue ? "OVERDUE" : inv.status;
+      if (statusFilter !== "ALL") {
+        if (statusFilter === "OVERDUE") {
+          if (inv.status !== "OVERDUE" && !overdue) return false;
+        } else if (inv.status !== statusFilter) {
+          return false;
+        }
+      }
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
         if (!inv.invoiceNumber.toLowerCase().includes(q) && !inv.clientName.toLowerCase().includes(q)) return false;
+      }
+      if (startDate || endDate) {
+        const invDate = new Date(inv.dueDate || inv.createdAt);
+        if (startDate && invDate < new Date(startDate)) return false;
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (invDate > end) return false;
+        }
       }
       return true;
     });
-  }, [invoices, statusFilter, searchQuery]);
+
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "totalAmount") cmp = a.totalAmount - b.totalAmount;
+      else if (sortKey === "dueDate") cmp = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      else if (sortKey === "clientName") cmp = a.clientName.localeCompare(b.clientName);
+      else cmp = a.invoiceNumber.localeCompare(b.invoiceNumber);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [invoices, paidByInvoice, statusFilter, searchQuery, startDate, endDate, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / PAGE_SIZE));
   const paginatedInvoices = filteredInvoices.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-  const hasActiveFilters  = statusFilter !== "ALL" || searchQuery.trim() !== "";
+  const hasActiveFilters  = statusFilter !== "ALL" || searchQuery.trim() !== "" || startDate !== "" || endDate !== "";
 
   const handleReset = () => {
     setStatusFilter("ALL");
     setSearchQuery("");
+    setStartDate("");
+    setEndDate("");
     setCurrentPage(1);
   };
 
@@ -256,16 +296,26 @@ export default function PaymentInvoicesPage() {
         </div>
 
         {/* Summary Cards */}
-        {!loading && !error && <SummaryCards invoices={invoices} />}
+        {!loading && !error && (
+          <SummaryCards
+            invoices={invoices}
+            paidByInvoice={paidByInvoice}
+            onFilterOverdue={() => {
+              setStatusFilter("OVERDUE");
+              setCurrentPage(1);
+            }}
+          />
+        )}
 
         {/* Table Card */}
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
           {/* Filters Bar */}
-          <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap gap-3">
+          <div className="px-5 py-3 border-b border-gray-100 flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
+                aria-label="Search invoices"
                 placeholder="Search by invoice # or client…"
                 value={searchQuery}
                 onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
@@ -273,6 +323,7 @@ export default function PaymentInvoicesPage() {
               />
             </div>
             <select
+              aria-label="Filter by status"
               value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value as StatusFilter); setCurrentPage(1); }}
               className="px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-400 transition-all bg-white"
@@ -283,6 +334,37 @@ export default function PaymentInvoicesPage() {
               <option value="PAID">Paid</option>
               <option value="OVERDUE">Overdue</option>
             </select>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter(statusFilter === "OVERDUE" ? "ALL" : "OVERDUE");
+                setCurrentPage(1);
+              }}
+              className={`px-3 py-2.5 rounded-xl text-xs font-semibold border transition-all ${
+                statusFilter === "OVERDUE"
+                  ? "bg-red-50 border-red-200 text-red-700"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              Filter Overdue
+            </button>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                aria-label="Due date from"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
+                className="px-2.5 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-blue-400"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="date"
+                aria-label="Due date to"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
+                className="px-2.5 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-blue-400"
+              />
+            </div>
             {hasActiveFilters && (
               <button onClick={handleReset} className="flex items-center gap-1.5 px-3.5 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl text-sm transition-all">
                 <X size={13} /> Clear
@@ -329,21 +411,38 @@ export default function PaymentInvoicesPage() {
                 <table className="w-full min-w-[900px]">
                   <thead className="bg-gray-50/80 border-b border-gray-100">
                     <tr>
-                      <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Invoice #</th>
-                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Client</th>
-                      <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Amount</th>
+                      <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                        <button type="button" onClick={() => toggleSort("invoiceNumber")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Invoice # <ArrowUpDown size={11} />
+                        </button>
+                      </th>
+                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                        <button type="button" onClick={() => toggleSort("clientName")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Client <ArrowUpDown size={11} />
+                        </button>
+                      </th>
+                      <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                        <button type="button" onClick={() => toggleSort("totalAmount")} className="inline-flex items-center gap-1 hover:text-gray-700 ml-auto">
+                          Amount <ArrowUpDown size={11} />
+                        </button>
+                      </th>
                       <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Payment ID</th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Order ID</th>
-                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Due / Paid Date</th>
+                      <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                        <button type="button" onClick={() => toggleSort("dueDate")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Due / Paid Date <ArrowUpDown size={11} />
+                        </button>
+                      </th>
                       <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {paginatedInvoices.map((inv) => {
-                      const overdue = isOverdue(inv);
+                      const paidAmt = paidByInvoice[inv.id] || 0;
+                      const receivable = getInvoiceReceivable(inv, paidAmt);
+                      const overdue = isInvoiceOverdue(inv, paidAmt);
                       const finalStatus = overdue && inv.status !== "PAID" ? "OVERDUE" : inv.status;
-                      const cfg = STATUS_CONFIG[finalStatus] || STATUS_CONFIG.DRAFT;
                       const payment = paymentByInvoice[inv.id];
 
                       return (
@@ -362,13 +461,20 @@ export default function PaymentInvoicesPage() {
                           {/* Amount */}
                           <td className="px-4 py-3.5 text-right">
                             <span className="text-sm font-semibold text-gray-900">{formatCurrency(inv.totalAmount)}</span>
+                            {receivable > 0 ? (
+                              <span className="block text-[10px] text-emerald-600 font-medium">
+                                Receivable: {formatCurrency(receivable)}
+                              </span>
+                            ) : (
+                              <span className="block text-[10px] text-gray-400 font-medium">
+                                Paid
+                              </span>
+                            )}
                           </td>
 
                           {/* Status */}
                           <td className="px-4 py-3.5 text-center">
-                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg}`}>
-                              {finalStatus}
-                            </span>
+                            <StatusBadge status={finalStatus} />
                           </td>
 
                           {/* Payment ID */}

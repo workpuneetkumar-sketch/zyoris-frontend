@@ -4,6 +4,7 @@ import {
   Briefcase,
   Monitor,
   Megaphone,
+  Banknote,
   MoreHorizontal,
   Clock,
   CheckCircle2,
@@ -16,6 +17,7 @@ export const CATEGORIES: { value: ExpenseCategory; label: string; icon: any; col
   { value: "TRAVEL", label: "Travel", icon: Briefcase, color: "text-blue-600 bg-blue-50" },
   { value: "OFFICE", label: "Office Supplies", icon: Monitor, color: "text-purple-600 bg-purple-50" },
   { value: "MARKETING", label: "Marketing", icon: Megaphone, color: "text-pink-600 bg-pink-50" },
+  { value: "SALARY", label: "Salary & Payroll", icon: Banknote, color: "text-emerald-600 bg-emerald-50" },
   { value: "OTHER", label: "Other", icon: MoreHorizontal, color: "text-gray-600 bg-gray-50" },
 ];
 

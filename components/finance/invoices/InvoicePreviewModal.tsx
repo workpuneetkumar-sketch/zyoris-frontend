@@ -7,11 +7,14 @@ import {
   AlertCircle,
   RefreshCw,
   Printer,
+  Download,
+  Share2,
 } from "lucide-react";
 import {
   Invoice,
   getInvoiceById,
   generateInvoiceHTML,
+  downloadInvoicePdf,
 } from "@/lib/api/finance/invoicesApi";
 
 interface InvoicePreviewModalProps {
@@ -30,6 +33,7 @@ export function InvoicePreviewModal({
   const [error, setError] = useState<string | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeLoaded, setIframeLoaded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const loadInvoice = useCallback(async () => {
     setLoading(true);
@@ -48,6 +52,38 @@ export function InvoicePreviewModal({
   useEffect(() => {
     loadInvoice();
   }, [loadInvoice]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const handleDownload = async () => {
+    if (!invoice) return;
+    setDownloading(true);
+    try {
+      await downloadInvoicePdf(invoice.id);
+      setToast?.({ type: "success", message: "Invoice PDF opened for download" });
+    } catch (err: any) {
+      setToast?.({ type: "error", message: err?.message || "Failed to download PDF" });
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!invoice) return;
+    const shareUrl = `${window.location.origin}/payment/${invoice.id}`;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setToast?.({ type: "success", message: "Payment link copied to clipboard!" });
+    } catch {
+      setToast?.({ type: "info", message: `Share link: ${shareUrl}` });
+    }
+  };
 
   const handlePrint = () => {
     if (iframeRef.current?.contentWindow) {
@@ -129,7 +165,23 @@ export function InvoicePreviewModal({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex-shrink-0 flex justify-end gap-3">
+        <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex-shrink-0 flex flex-wrap justify-end gap-3">
+          <button
+            onClick={handleShare}
+            disabled={loading || !invoice}
+            className="inline-flex items-center gap-2 px-4 py-2 border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-50 text-gray-700 text-sm font-medium rounded-lg transition-all"
+          >
+            <Share2 size={16} />
+            Copy Payment Link
+          </button>
+          <button
+            onClick={handleDownload}
+            disabled={loading || !invoice || downloading}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+          >
+            {downloading ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
+            Download PDF
+          </button>
           <button
             onClick={handlePrint}
             disabled={loading || !invoice}

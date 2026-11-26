@@ -25,7 +25,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import { getInvoiceById, Invoice } from "@/lib/api/finance/invoicesApi";
+import { getInvoiceById, Invoice, isInvoiceOverdue } from "@/lib/api/finance/invoicesApi";
 import {
   createRazorpayOrder,
   verifyRazorpayPayment,
@@ -49,10 +49,6 @@ function formatDate(dateStr: string): string {
     month: "short",
     year: "numeric",
   });
-}
-
-function isOverdue(dueDate: string, status: string): boolean {
-  return status !== "PAID" && new Date(dueDate) < new Date();
 }
 
 /** Generate a stable idempotency key per session + invoice */
@@ -329,16 +325,18 @@ function PaymentPage() {
         idempotencyKeyRef.current
       );
 
-      const keyId = order.key || process.env.KEY_ID || "";
+      const keyId = order.key || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || "";
       if (!keyId) {
-        throw new Error("Razorpay Key ID is not configured. Please contact support.");
+        throw new Error(
+          "Razorpay Key ID is not configured (NEXT_PUBLIC_RAZORPAY_KEY_ID missing in frontend or key not returned by backend). Please contact support."
+        );
       }
 
       toast.dismiss("rzp-pay");
 
       const paymentResult = await openRazorpayCheckout({
         keyId,
-        amountInPaise: order.amount,
+        amountInPaise: Math.round(order.amount * 100),
         currency: order.currency,
         orderId: order.orderId,
         invoiceId: invoice.id,
@@ -408,7 +406,7 @@ function PaymentPage() {
 
   // ── Computed ─────────────────────────────────────────
   const isPaid = invoice?.status === "PAID";
-  const overdue = invoice ? isOverdue(invoice.dueDate, invoice.status) : false;
+  const overdue = invoice ? isInvoiceOverdue(invoice) : false;
 
   // ── Loading State ────────────────────────────────────
   if (fetchLoading) return <PageSkeleton />;

@@ -4,7 +4,7 @@ import api from "@/lib/api/api";
 
 // ── Types ────────────────────────────────────────────────
 
-export type ExpenseCategory = 'TRAVEL' | 'OFFICE' | 'MARKETING' | 'OTHER';
+export type ExpenseCategory = 'TRAVEL' | 'OFFICE' | 'MARKETING' | 'SALARY' | 'OTHER';
 
 export interface Expense {
   id: string;

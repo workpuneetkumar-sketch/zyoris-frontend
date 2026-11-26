@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { X, Download, Printer, Building2, FileText } from "lucide-react";
 import { jsPDF } from "jspdf";
 import type { Payslip } from "@/lib/api/payrollApi";
@@ -51,6 +51,15 @@ export default function PayslipPreviewModal({
   payslip,
 }: PayslipPreviewModalProps) {
   const payslipRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !payslip) return null;
 

@@ -1,7 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState, useMemo } from "react";
 import { PermissionGuard } from "@/components/auth/PermissionGuard";
+import { useConfirm } from "@/components/common/ConfirmProvider";
+import StatusBadge from "./StatusBadge";
 import {
   Search,
   ChevronLeft,
@@ -9,15 +11,13 @@ import {
   RefreshCw,
   X,
   Eye,
-  Edit2,
-  Send,
-  CheckCircle2,
   AlertCircle,
   Plus,
   FileSpreadsheet,
-  Banknote, // added for Pay Now
+  Banknote,
+  ArrowUpDown,
 } from "lucide-react";
-import { Invoice } from "@/lib/api/finance/invoicesApi";
+import { Invoice, isInvoiceOverdue, getInvoiceReceivable } from "@/lib/api/finance/invoicesApi";
 
 // ── Types ─────────────────────────────────────────────────
 
@@ -25,41 +25,8 @@ type StatusFilter = "ALL" | "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 
 // ── Constants ────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; bg: string; text: string; border: string; icon: any }
-> = {
-  DRAFT: {
-    label: "Draft",
-    bg: "bg-gray-100",
-    text: "text-gray-700",
-    border: "border-gray-200",
-    icon: Edit2,
-  },
-  SENT: {
-    label: "Sent",
-    bg: "bg-blue-100",
-    text: "text-blue-700",
-    border: "border-blue-200",
-    icon: Send,
-  },
-  PAID: {
-    label: "Paid",
-    bg: "bg-green-100",
-    text: "text-green-700",
-    border: "border-green-200",
-    icon: CheckCircle2,
-  },
-  OVERDUE: {
-    label: "Overdue",
-    bg: "bg-red-100",
-    text: "text-red-700",
-    border: "border-red-200",
-    icon: AlertCircle,
-  },
-};
-
 const PAGE_SIZE = 10;
+const EMPTY_PAID_MAP: Record<string, number> = {};
 
 // ── Helper Functions ─────────────────────────────────────
 
@@ -79,10 +46,6 @@ function formatDate(dateStr: string): string {
     day: "2-digit",
     year: "numeric",
   });
-}
-
-function isOverdue(dueDate: string): boolean {
-  return new Date(dueDate) < new Date();
 }
 
 // ── Table Skeleton ───────────────────────────────────────
@@ -187,6 +150,7 @@ function ErrorState({
 
 interface InvoiceTableProps {
   invoices: Invoice[];
+  paidByInvoice?: Record<string, number>;
   loading: boolean;
   error: string | null;
   searchQuery: string;
@@ -207,6 +171,7 @@ interface InvoiceTableProps {
 
 export function InvoiceTable({
   invoices,
+  paidByInvoice = EMPTY_PAID_MAP,
   loading,
   error,
   searchQuery,
@@ -221,21 +186,65 @@ export function InvoiceTable({
   onStatusUpdate,
   onCreateClick,
   onPreviewInvoice,
-  onPayNow, // destructure the new prop
+  onPayNow,
 }: InvoiceTableProps) {
-  // Filter invoices
-  const filteredInvoices = invoices.filter((inv) => {
-    if (statusFilter !== "ALL" && inv.status !== statusFilter) return false;
-    if (searchQuery) {
-      const searchLower = searchQuery.toLowerCase();
-      if (
-        !inv.invoiceNumber.toLowerCase().includes(searchLower) &&
-        !inv.clientName.toLowerCase().includes(searchLower)
-      )
-        return false;
+  const requestConfirmation = useConfirm();
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [sortKey, setSortKey] = useState<"invoiceNumber" | "clientName" | "totalAmount" | "dueDate">("dueDate");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
     }
-    return true;
-  });
+    onPageChange(1);
+  };
+
+  // Filter & sort invoices
+  const filteredInvoices = useMemo(() => {
+    const filtered = invoices.filter((inv) => {
+      const paid = paidByInvoice[inv.id] || 0;
+      const overdue = isInvoiceOverdue(inv, paid);
+      const effectiveStatus = overdue ? "OVERDUE" : inv.status;
+      if (statusFilter !== "ALL" && inv.status !== statusFilter && effectiveStatus !== statusFilter) return false;
+      if (searchQuery) {
+        const searchLower = searchQuery.toLowerCase();
+        if (
+          !inv.invoiceNumber.toLowerCase().includes(searchLower) &&
+          !inv.clientName.toLowerCase().includes(searchLower)
+        )
+          return false;
+      }
+      if (startDate || endDate) {
+        const invDate = new Date(inv.dueDate || inv.createdAt);
+        if (startDate && invDate < new Date(startDate)) return false;
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (invDate > end) return false;
+        }
+      }
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "totalAmount") {
+        cmp = a.totalAmount - b.totalAmount;
+      } else if (sortKey === "dueDate") {
+        cmp = new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      } else if (sortKey === "clientName") {
+        cmp = a.clientName.localeCompare(b.clientName);
+      } else {
+        cmp = a.invoiceNumber.localeCompare(b.invoiceNumber);
+      }
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [invoices, paidByInvoice, statusFilter, searchQuery, startDate, endDate, sortKey, sortDir]);
 
   const totalPages = Math.max(
     1,
@@ -246,7 +255,13 @@ export function InvoiceTable({
     currentPage * PAGE_SIZE
   );
   const hasActiveFilters =
-    statusFilter !== "ALL" || searchQuery.trim() !== "";
+    statusFilter !== "ALL" || searchQuery.trim() !== "" || startDate !== "" || endDate !== "";
+
+  const handleClearAll = () => {
+    setStartDate("");
+    setEndDate("");
+    onResetFilters();
+  };
 
   const handlePageChange = (page: number) => {
     onPageChange(page);
@@ -256,7 +271,7 @@ export function InvoiceTable({
   return (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
       {/* Filters */}
-      <div className="px-5 py-3 border-b border-gray-200 flex flex-wrap gap-3">
+      <div className="px-5 py-3 border-b border-gray-200 flex flex-wrap items-center gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search
             size={14}
@@ -264,18 +279,24 @@ export function InvoiceTable({
           />
           <input
             type="text"
+            aria-label="Search invoices"
             placeholder="Search by invoice # or client..."
             value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
+            onChange={(e) => {
+              onSearchChange(e.target.value);
+              onPageChange(1);
+            }}
             className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg text-gray-800 text-sm focus:outline-none focus:border-blue-500"
           />
         </div>
         <select
+          aria-label="Filter by status"
           value={statusFilter}
-          onChange={(e) =>
-            onStatusFilterChange(e.target.value as StatusFilter)
-          }
-          className="px-3 py-2 border border-gray-200 rounded-lg text-gray-800 text-sm focus:outline-none focus:border-blue-500"
+          onChange={(e) => {
+            onStatusFilterChange(e.target.value as StatusFilter);
+            onPageChange(1);
+          }}
+          className="px-3 py-2 border border-gray-200 rounded-lg text-gray-800 text-sm focus:outline-none focus:border-blue-500 bg-white"
         >
           <option value="ALL">All Status</option>
           <option value="DRAFT">Draft</option>
@@ -283,9 +304,32 @@ export function InvoiceTable({
           <option value="PAID">Paid</option>
           <option value="OVERDUE">Overdue</option>
         </select>
+        <div className="flex items-center gap-1.5">
+          <input
+            type="date"
+            aria-label="Due date from"
+            value={startDate}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              onPageChange(1);
+            }}
+            className="px-2.5 py-2 border border-gray-200 rounded-lg text-gray-700 text-xs focus:outline-none focus:border-blue-500"
+          />
+          <span className="text-xs text-gray-400">to</span>
+          <input
+            type="date"
+            aria-label="Due date to"
+            value={endDate}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              onPageChange(1);
+            }}
+            className="px-2.5 py-2 border border-gray-200 rounded-lg text-gray-700 text-xs focus:outline-none focus:border-blue-500"
+          />
+        </div>
         {hasActiveFilters && (
           <button
-            onClick={onResetFilters}
+            onClick={handleClearAll}
             className="flex items-center gap-1 px-3 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm"
           >
             <RefreshCw size={14} /> Clear
@@ -303,7 +347,7 @@ export function InvoiceTable({
 
       {/* Active Filters */}
       {hasActiveFilters && (
-        <div className="px-5 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap gap-2">
+        <div className="px-5 py-2 bg-gray-50 border-b border-gray-200 flex flex-wrap gap-2 items-center">
           <span className="text-xs text-gray-500">Active filters:</span>
           {statusFilter !== "ALL" && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs">
@@ -318,7 +362,7 @@ export function InvoiceTable({
           )}
           {searchQuery && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs">
-              Search: "{searchQuery}"
+              Search: &ldquo;{searchQuery}&rdquo;
               <button
                 onClick={() => onSearchChange("")}
                 className="hover:text-red-500"
@@ -327,6 +371,18 @@ export function InvoiceTable({
               </button>
             </span>
           )}
+          {(startDate || endDate) && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-gray-200 rounded-full text-xs">
+              Due: {startDate || "…"} – {endDate || "…"}
+              <button
+                onClick={() => { setStartDate(""); setEndDate(""); }}
+                className="hover:text-red-500"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          <span className="text-xs text-gray-400 ml-auto">{filteredInvoices.length} result{filteredInvoices.length !== 1 ? "s" : ""}</span>
         </div>
       )}
 
@@ -338,7 +394,7 @@ export function InvoiceTable({
       ) : filteredInvoices.length === 0 ? (
         <EmptyState
           hasFilters={hasActiveFilters}
-          onReset={onResetFilters}
+          onReset={handleClearAll}
           onCreateClick={onCreateClick}
         />
       ) : (
@@ -348,19 +404,27 @@ export function InvoiceTable({
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase">
-                    Invoice #
+                    <button type="button" onClick={() => toggleSort("invoiceNumber")} className="inline-flex items-center gap-1 hover:text-gray-800">
+                      Invoice # <ArrowUpDown size={12} />
+                    </button>
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">
-                    Client
+                    <button type="button" onClick={() => toggleSort("clientName")} className="inline-flex items-center gap-1 hover:text-gray-800">
+                      Client <ArrowUpDown size={12} />
+                    </button>
                   </th>
                   <th className="text-right px-4 py-3 text-xs font-semibold text-gray-500 uppercase">
-                    Amount
+                    <button type="button" onClick={() => toggleSort("totalAmount")} className="inline-flex items-center gap-1 hover:text-gray-800 ml-auto">
+                      Amount <ArrowUpDown size={12} />
+                    </button>
                   </th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">
                     Status
                   </th>
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">
-                    Due Date
+                    <button type="button" onClick={() => toggleSort("dueDate")} className="inline-flex items-center gap-1 hover:text-gray-800">
+                      Due Date <ArrowUpDown size={12} />
+                    </button>
                   </th>
                   <th className="text-center px-4 py-3 text-xs font-semibold text-gray-500 uppercase">
                     Actions
@@ -369,13 +433,11 @@ export function InvoiceTable({
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {paginatedInvoices.map((inv) => {
-                  const statusConfig = STATUS_CONFIG[inv.status];
-                  const StatusIcon = statusConfig.icon;
-                  const overdue =
-                    inv.status !== "PAID" && isOverdue(inv.dueDate);
+                  const paidAmt = paidByInvoice[inv.id] || 0;
+                  const receivable = getInvoiceReceivable(inv, paidAmt);
+                  const overdue = isInvoiceOverdue(inv, paidAmt);
                   const finalStatus =
                     overdue && inv.status !== "PAID" ? "OVERDUE" : inv.status;
-                  const finalConfig = STATUS_CONFIG[finalStatus];
                   return (
                     <tr
                       key={inv.id}
@@ -400,13 +462,18 @@ export function InvoiceTable({
                         <span className="text-sm font-semibold text-gray-900">
                           {formatCurrency(inv.totalAmount)}
                         </span>
+                        {receivable > 0 ? (
+                          <span className="block text-[10px] text-emerald-600 font-medium">
+                            Receivable: {formatCurrency(receivable)}
+                          </span>
+                        ) : (
+                          <span className="block text-[10px] text-gray-400 font-medium">
+                            Settled
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span
-                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${finalConfig.bg} ${finalConfig.text}`}
-                        >
-                          <StatusIcon size={10} /> {finalConfig.label}
-                        </span>
+                        <StatusBadge status={finalStatus} />
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -425,20 +492,18 @@ export function InvoiceTable({
                           <button
                             onClick={() => onViewInvoice(inv.id)}
                             className="p-1.5 hover:bg-blue-50 rounded-lg text-blue-500"
-                            title="View"
+                            title="View & Edit"
                           >
                             <Eye size={14} />
                           </button>
-                          {/* Preview button */}
                           <button
                             onClick={() => onPreviewInvoice(inv.id)}
                             className="p-1.5 hover:bg-purple-50 rounded-lg text-purple-500"
-                            title="Preview"
+                            title="Preview & Print"
                           >
                             <FileSpreadsheet size={14} />
                           </button>
-                          {/* Pay Now button (conditionally shown if onPayNow prop is provided) */}
-                          {onPayNow && (
+                          {onPayNow && inv.status !== "PAID" && (
                             <button
                               onClick={() => onPayNow(inv.id)}
                               className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600"
@@ -447,18 +512,25 @@ export function InvoiceTable({
                               <Banknote size={14} />
                             </button>
                           )}
-                          {inv.status !== "PAID" &&
-                            inv.status !== "OVERDUE" && (
+                          {inv.status !== "PAID" && (
                               <PermissionGuard permission="invoices.update" action="disable" disabledTooltip="You do not have permission to update invoice status.">
                               <select
+                                aria-label={`Update status for ${inv.invoiceNumber}`}
+                                value=""
                                 onChange={async (e) => {
-                                  const ns = e.target.value as
-                                    | "SENT"
-                                    | "PAID";
-                                  if (ns) await onStatusUpdate(inv.id, ns);
+                                  const ns = e.target.value as "SENT" | "PAID";
+                                  if (!ns) return;
+                                  const ok = await requestConfirmation({
+                                    title: ns === "SENT" ? "Mark Invoice as Sent" : "Mark Invoice as Paid",
+                                    message: `Are you sure you want to mark ${inv.invoiceNumber} as ${ns}?`,
+                                    confirmText: ns === "SENT" ? "Mark Sent" : "Mark Paid",
+                                    variant: ns === "PAID" ? "primary" : "warning",
+                                  });
+                                  if (ok) {
+                                    await onStatusUpdate(inv.id, ns);
+                                  }
                                 }}
-                                className="px-2 py-1 border border-gray-200 rounded text-xs text-gray-800 focus:outline-none focus:border-blue-500"
-                                defaultValue=""
+                                className="px-2 py-1 border border-gray-200 rounded text-xs text-gray-800 focus:outline-none focus:border-blue-500 bg-white"
                               >
                                 <option value="" disabled>
                                   Status
@@ -466,7 +538,7 @@ export function InvoiceTable({
                                 {inv.status === "DRAFT" && (
                                   <option value="SENT">Mark Sent</option>
                                 )}
-                                {inv.status === "SENT" && (
+                                {(inv.status === "SENT" || inv.status === "OVERDUE") && (
                                   <option value="PAID">Mark Paid</option>
                                 )}
                               </select>

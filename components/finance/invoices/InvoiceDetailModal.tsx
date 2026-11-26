@@ -145,12 +145,20 @@ export default function InvoiceDetailModal({
                       Subtotal
                     </td>
                     <td className="p-3 text-right font-semibold text-gray-900">
-                      {formatCurrency(invoice.totalAmount)}
+                      {formatCurrency(invoice.subtotal)}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={3} className="p-3 text-right font-medium text-gray-700">
+                      GST ({invoice.taxRate}%)
+                    </td>
+                    <td className="p-3 text-right font-medium text-gray-700">
+                      {formatCurrency(invoice.taxAmount)}
                     </td>
                   </tr>
                   <tr>
                     <td colSpan={3} className="p-3 text-right font-semibold text-gray-900">
-                      Total
+                      Grand Total
                     </td>
                     <td className="p-3 text-right text-xl font-bold text-gray-900">
                       {formatCurrency(invoice.totalAmount)}

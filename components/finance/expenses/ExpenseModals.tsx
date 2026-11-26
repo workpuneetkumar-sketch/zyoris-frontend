@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   X,
   Plus,
@@ -48,15 +48,24 @@ export function CreateExpenseModal({ onClose, onSuccess }: CreateExpenseModalPro
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !loading) onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [loading, onClose]);
+
   const handleSubmit = async () => {
     setError("");
 
+    const parsedAmount = parseFloat(form.amount);
     if (!form.category) {
       setError("Please select a category");
       return;
     }
-    if (!form.amount || parseFloat(form.amount) <= 0) {
-      setError("Please enter a valid amount");
+    if (!form.amount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError("Please enter a valid positive amount");
       return;
     }
     if (!form.description.trim()) {
@@ -72,7 +81,7 @@ export function CreateExpenseModal({ onClose, onSuccess }: CreateExpenseModalPro
     try {
       const newExpense = await createExpense({
         category: form.category,
-        amount: parseFloat(form.amount),
+        amount: parsedAmount,
         description: form.description.trim(),
         expenseDate: form.expenseDate,
       });
@@ -86,13 +95,13 @@ export function CreateExpenseModal({ onClose, onSuccess }: CreateExpenseModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="create-expense-title">
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={() => !loading && onClose()} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in">
         <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white">Create Expense</h2>
+              <h2 id="create-expense-title" className="text-xl font-bold text-white">Create Expense</h2>
               <p className="text-sm text-blue-100 mt-1">Submit a new expense report for approval</p>
             </div>
             <button
@@ -224,15 +233,24 @@ export function UpdateExpenseModal({ expense, onClose, onSuccess }: UpdateExpens
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !loading) onClose();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [loading, onClose]);
+
   const handleSubmit = async () => {
     setError("");
 
+    const parsedAmount = parseFloat(form.amount);
     if (!form.category) {
       setError("Please select a category");
       return;
     }
-    if (!form.amount || parseFloat(form.amount) <= 0) {
-      setError("Please enter a valid amount");
+    if (!form.amount || !Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError("Please enter a valid positive amount");
       return;
     }
     if (!form.description.trim()) {
@@ -248,7 +266,7 @@ export function UpdateExpenseModal({ expense, onClose, onSuccess }: UpdateExpens
     try {
       const updated = await updateExpense(expense.id, {
         category: form.category as ExpenseCategory,
-        amount: parseFloat(form.amount),
+        amount: parsedAmount,
         description: form.description.trim(),
         expenseDate: form.expenseDate,
       });
@@ -262,13 +280,13 @@ export function UpdateExpenseModal({ expense, onClose, onSuccess }: UpdateExpens
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={onClose} />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="update-expense-title">
+      <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-sm" onClick={() => !loading && onClose()} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-scale-in">
         <div className="bg-gradient-to-r from-purple-600 to-purple-700 px-6 py-5">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-xl font-bold text-white">Update Expense</h2>
+              <h2 id="update-expense-title" className="text-xl font-bold text-white">Update Expense</h2>
               <p className="text-sm text-purple-100 mt-1">Edit your expense details</p>
             </div>
             <button

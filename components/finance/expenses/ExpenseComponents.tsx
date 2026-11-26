@@ -170,16 +170,19 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
     .reduce((sum, exp) => sum + exp.amount, 0);
   const pendingCount = expenses.filter((e) => e.status === "PENDING").length;
 
+  const approvedPct = totalAmount > 0 ? `${Math.round((approvedAmount / totalAmount) * 100)}% of total` : "0% of total";
+  const reimbursedPct = totalAmount > 0 ? `${Math.round((reimbursedAmount / totalAmount) * 100)}% of total` : "0% of total";
+
   const stats = [
     {
-      label: "Total Expenses",
+      label: "Total Outflows",
       value: formatCurrency(totalAmount),
       icon: DollarSign,
-      trend: "+12.5%",
-      trendUp: true,
+      trend: "Outflow",
+      trendUp: false as boolean | null,
       gradient: "from-blue-500 to-blue-600",
       bgGradient: "from-blue-50 to-blue-100",
-      iconColor: "text-blue-600",          // ✅ fixed
+      iconColor: "text-blue-600",
       count: `${expenses.length} requests`,
     },
     {
@@ -190,7 +193,7 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
       trendUp: null,
       gradient: "from-amber-500 to-amber-600",
       bgGradient: "from-amber-50 to-amber-100",
-      iconColor: "text-amber-600",         // ✅ fixed
+      iconColor: "text-amber-600",
       count: `${pendingCount} requests`,
       highlight: pendingCount > 0,
     },
@@ -198,22 +201,22 @@ export function StatsCards({ expenses }: { expenses: Expense[] }) {
       label: "Approved",
       value: formatCurrency(approvedAmount),
       icon: CheckCircle2,
-      trend: "+8.3%",
+      trend: approvedPct,
       trendUp: true,
       gradient: "from-emerald-500 to-emerald-600",
       bgGradient: "from-emerald-50 to-emerald-100",
-      iconColor: "text-emerald-600",       // ✅ fixed
+      iconColor: "text-emerald-600",
       count: `${expenses.filter((e) => e.status === "APPROVED").length} requests`,
     },
     {
       label: "Reimbursed",
       value: formatCurrency(reimbursedAmount),
       icon: PiggyBank,
-      trend: "-3.2%",
-      trendUp: false,
+      trend: reimbursedPct,
+      trendUp: true,
       gradient: "from-sky-500 to-sky-600",
       bgGradient: "from-sky-50 to-sky-100",
-      iconColor: "text-sky-600",           // ✅ fixed
+      iconColor: "text-sky-600",
       count: `${expenses.filter((e) => e.status === "REIMBURSED").length} requests`,
     },
   ];
@@ -326,9 +329,10 @@ export function ExpenseRow({
       </td>
 
       <td className="px-4 py-4 text-right">
-        <span className="text-sm font-bold text-gray-900">
-          {formatCurrency(expense.amount)}
+        <span className="text-sm font-bold text-rose-600">
+          -{formatCurrency(expense.amount)}
         </span>
+        <span className="block text-[10px] text-gray-400">Outflow</span>
       </td>
 
       <td className="px-4 py-4">
@@ -394,7 +398,7 @@ export function ExpenseRow({
             <PermissionGuard permission="expenses.approve" action="disable" disabledTooltip="You do not have permission to reimburse expenses.">
             <button
               onClick={() => onReimburse(expense.id)}
-              disabled={!!isReimbursing}
+              disabled={!!reimbursingId}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 disabled:opacity-50 text-white text-xs font-semibold rounded-xl shadow-md shadow-sky-500/20 hover:shadow-sky-500/30 transition-all"
             >
               {isReimbursing ? (

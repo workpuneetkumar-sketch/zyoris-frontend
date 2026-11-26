@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Banknote, CalendarRange } from "lucide-react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { ArrowLeft, Banknote, CalendarRange, RefreshCw, AlertCircle, ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 import PayrollStatsCards from "@/components/hr/payroll/PayrollStatsCards";
 import PayrollTable from "@/components/hr/payroll/PayrollTable";
@@ -19,12 +20,22 @@ import {
   deriveSalaryHistory,
 } from "@/lib/api/payrollApi";
 
+function formatPeriodLabel(monthStr: string): string {
+  const [y, m] = monthStr.split("-");
+  const names = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const idx = parseInt(m, 10) - 1;
+  return `${names[idx] || m} ${y}`;
+}
+
 export default function PayrollPage() {
   // ── State ──────────────────────────────────────────────
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
   const [records, setRecords] = useState<PayrollRecord[]>([]);
 
   // Filters
+  const [selectedPeriod, setSelectedPeriod] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDept, setFilterDept] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -45,11 +56,18 @@ export default function PayrollPage() {
   // ── Load Data ──────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
+    setError(null);
+    setPermissionDenied(false);
     try {
       const data = await fetchPayslips();
       setRecords(data);
-    } catch (error) {
-      console.error("Failed to load payroll data:", error);
+    } catch (err: any) {
+      console.error("Failed to load payroll data:", err);
+      const msg = err?.message || "Failed to load payroll data";
+      if (msg.toLowerCase().includes("forbidden") || msg.toLowerCase().includes("permission") || err?.response?.status === 403) {
+        setPermissionDenied(true);
+      }
+      setError(msg);
       setRecords([]);
     } finally {
       setLoading(false);
@@ -58,17 +76,27 @@ export default function PayrollPage() {
 
   useEffect(() => {
     loadData();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [loadData]);
+
+  const availablePeriods = useMemo(() => {
+    const periods = Array.from(new Set(records.map((r) => r.month).filter(Boolean))).sort().reverse();
+    return periods;
+  }, [records]);
+
+  const periodRecords = useMemo(() => {
+    if (selectedPeriod === "ALL") return records;
+    return records.filter((r) => r.month === selectedPeriod);
+  }, [records, selectedPeriod]);
 
   // ── Payslip Preview ───────────────────────────────────
   const handleViewPayslip = async (record: PayrollRecord) => {
     try {
       const payslip = await fetchPayslipById(record.id);
       setActivePayslip(payslip);
-    } catch (error) {
-      console.error("Failed to load payslip:", error);
+      setPayslipModalOpen(true);
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to load payslip details");
     }
-    setPayslipModalOpen(true);
   };
 
   // ── Download PDF ──────────────────────────────────────
@@ -76,8 +104,9 @@ export default function PayrollPage() {
     try {
       const fileName = `Payslip_${record.employeeName.replace(/\s+/g, "_")}_${record.month}.pdf`;
       await downloadPayslipPdf(record.id, fileName, record.pdfUrl);
-    } catch (error) {
-      console.error("Failed to download payslip:", error);
+      toast.success("Payslip download started");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to download payslip");
     }
   };
 
@@ -92,21 +121,21 @@ export default function PayrollPage() {
     setHistoryPanelOpen(true);
   };
 
-  // ── Compute Stats ─────────────────────────────────────
-  const totalPayroll = records.reduce((sum, r) => sum + r.grossEarnings, 0);
-  const employeesPaid = records.filter(
+  // ── Compute Stats (scoped to selected period) ─────────
+  const totalPayroll = periodRecords.reduce((sum, r) => sum + r.grossEarnings, 0);
+  const employeesPaid = periodRecords.filter(
     (r) => r.paymentStatus === "PAID"
   ).length;
-  const pendingPayslips = records.filter(
+  const pendingPayslips = periodRecords.filter(
     (r) => r.paymentStatus === "PENDING" || r.paymentStatus === "PROCESSING"
   ).length;
   const averageSalary =
-    records.length > 0
+    periodRecords.length > 0
       ? Math.round(
-          records.reduce((sum, r) => sum + r.netPay, 0) / records.length
+          periodRecords.reduce((sum, r) => sum + r.netPay, 0) / periodRecords.length
         )
       : 0;
-  const netDisbursed = records
+  const netDisbursed = periodRecords
     .filter((r) => r.paymentStatus === "PAID")
     .reduce((sum, r) => sum + r.netPay, 0);
 
@@ -137,41 +166,88 @@ export default function PayrollPage() {
             </div>
           </div>
           <div className="flex items-center gap-3 self-end sm:self-auto">
-            {/* Month Selector (static for now) */}
-            <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm text-gray-600">
+            {/* Pay Period Selector */}
+            <div className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg bg-white text-sm text-gray-700">
               <CalendarRange size={15} className="text-gray-400" />
-              <span className="font-medium">July 2026</span>
+              <select
+                aria-label="Select pay period"
+                value={selectedPeriod}
+                onChange={(e) => {
+                  setSelectedPeriod(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent font-medium focus:outline-none cursor-pointer"
+              >
+                <option value="ALL">All Pay Periods</option>
+                {availablePeriods.map((p) => (
+                  <option key={p} value={p}>
+                    {formatPeriodLabel(p)}
+                  </option>
+                ))}
+              </select>
             </div>
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
           </div>
         </div>
 
-        {/* Stats Cards */}
-        <PayrollStatsCards
-          totalPayroll={totalPayroll}
-          employeesPaid={employeesPaid}
-          pendingPayslips={pendingPayslips}
-          averageSalary={averageSalary}
-          netDisbursed={netDisbursed}
-          totalEmployees={records.length}
-        />
+        {permissionDenied ? (
+          <div className="bg-white rounded-2xl border border-amber-200 p-12 text-center">
+            <ShieldAlert size={40} className="text-amber-500 mx-auto mb-3" />
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Access Restricted</h2>
+            <p className="text-sm text-gray-500 max-w-md mx-auto">
+              You do not have permission to view payroll and salary records. Contact an administrator if you need access.
+            </p>
+          </div>
+        ) : error ? (
+          <div className="bg-white rounded-2xl border border-red-200 p-12 text-center">
+            <AlertCircle size={40} className="text-red-500 mx-auto mb-3" />
+            <h2 className="text-lg font-bold text-gray-900 mb-1">Failed to Load Payroll</h2>
+            <p className="text-sm text-gray-500 mb-5">{error}</p>
+            <button
+              onClick={loadData}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl"
+            >
+              <RefreshCw size={15} /> Try Again
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Stats Cards */}
+            <PayrollStatsCards
+              totalPayroll={totalPayroll}
+              employeesPaid={employeesPaid}
+              pendingPayslips={pendingPayslips}
+              averageSalary={averageSalary}
+              netDisbursed={netDisbursed}
+              totalEmployees={periodRecords.length}
+            />
 
-        {/* Payroll Table */}
-        <PayrollTable
-          records={records}
-          loading={loading}
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          filterDept={filterDept}
-          onFilterDeptChange={setFilterDept}
-          filterStatus={filterStatus}
-          onFilterStatusChange={setFilterStatus}
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          pageSize={pageSize}
-          onViewPayslip={handleViewPayslip}
-          onDownloadPayslip={handleDownloadPayslip}
-          onViewHistory={handleViewHistory}
-        />
+            {/* Payroll Table */}
+            <PayrollTable
+              records={periodRecords}
+              loading={loading}
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              filterDept={filterDept}
+              onFilterDeptChange={setFilterDept}
+              filterStatus={filterStatus}
+              onFilterStatusChange={setFilterStatus}
+              currentPage={currentPage}
+              onPageChange={setCurrentPage}
+              pageSize={pageSize}
+              onViewPayslip={handleViewPayslip}
+              onDownloadPayslip={handleDownloadPayslip}
+              onViewHistory={handleViewHistory}
+            />
+          </>
+        )}
       </div>
 
       {/* Payslip Preview Modal */}

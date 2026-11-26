@@ -13,7 +13,8 @@ import {
   Receipt,
   RefreshCw,
   FileSpreadsheet,
-   CalendarDays,
+  CalendarDays,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   fetchExpenses,
@@ -52,11 +53,25 @@ export default function ExpensesPage() {
   const [exporting, setExporting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Filters
+  // Filters & Sorting
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
   const [categoryFilter, setCategoryFilter] = useState<string>("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [sortKey, setSortKey] = useState<"expenseDate" | "category" | "amount" | "status">("expenseDate");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+    setCurrentPage(1);
+  };
 
   const loadExpenses = useCallback(async () => {
     setLoading(true);
@@ -65,6 +80,8 @@ export default function ExpensesPage() {
       const filters: any = {};
       if (statusFilter !== "ALL") filters.status = statusFilter;
       if (categoryFilter !== "ALL") filters.category = categoryFilter;
+      if (startDate) filters.startDate = startDate;
+      if (endDate) filters.endDate = endDate;
 
       const data = await fetchExpenses(filters);
       setExpenses(data);
@@ -74,39 +91,58 @@ export default function ExpensesPage() {
     } finally {
       setLoading(false);
     }
-  }, [statusFilter, categoryFilter]);
+  }, [statusFilter, categoryFilter, startDate, endDate]);
 
   useEffect(() => {
     loadExpenses();
   }, [loadExpenses]);
 
-  // Filtering
-  const filteredExpenses = expenses.filter((expense) => {
-    if (statusFilter !== "ALL" && expense.status !== statusFilter) {
-      return false;
-    }
-    
-    if (categoryFilter !== "ALL" && expense.category !== categoryFilter) {
-      return false;
-    }
-    
-    if (searchQuery.trim() !== "") {
-      const searchLower = searchQuery.toLowerCase();
-      const matchesSearch = 
-        expense.description?.toLowerCase().includes(searchLower) ||
-        expense.category?.toLowerCase().includes(searchLower);
-      
-      if (!matchesSearch) return false;
-    }
-    
-    return true;
-  });
+  // Filtering & Sorting
+  const filteredExpenses = expenses
+    .filter((expense) => {
+      if (statusFilter !== "ALL" && expense.status !== statusFilter) {
+        return false;
+      }
+
+      if (categoryFilter !== "ALL" && expense.category !== categoryFilter) {
+        return false;
+      }
+
+      if (startDate || endDate) {
+        const expDate = new Date(expense.expenseDate);
+        if (startDate && expDate < new Date(startDate)) return false;
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (expDate > end) return false;
+        }
+      }
+
+      if (searchQuery.trim() !== "") {
+        const searchLower = searchQuery.toLowerCase();
+        const matchesSearch =
+          expense.description?.toLowerCase().includes(searchLower) ||
+          expense.category?.toLowerCase().includes(searchLower);
+
+        if (!matchesSearch) return false;
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "amount") cmp = a.amount - b.amount;
+      else if (sortKey === "expenseDate") cmp = new Date(a.expenseDate).getTime() - new Date(b.expenseDate).getTime();
+      else if (sortKey === "category") cmp = a.category.localeCompare(b.category);
+      else cmp = a.status.localeCompare(b.status);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
 
   const totalPages = Math.max(1, Math.ceil(filteredExpenses.length / PAGE_SIZE));
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, statusFilter, categoryFilter]);
+  }, [searchQuery, statusFilter, categoryFilter, startDate, endDate]);
 
   const paginatedExpenses = filteredExpenses.slice(
     (currentPage - 1) * PAGE_SIZE,
@@ -149,6 +185,15 @@ export default function ExpensesPage() {
   };
 
   const handleApprove = async (id: string) => {
+    const target = expenses.find((e) => e.id === id);
+    const ok = await requestConfirmation({
+      title: "Approve Expense",
+      message: `Approve expense "${target?.description || id}" for ₹${target?.amount.toLocaleString("en-IN") || 0}?`,
+      confirmText: "Approve",
+      variant: "primary",
+    });
+    if (!ok) return;
+
     setApprovingId(id);
     try {
       const updated = await approveExpense(id);
@@ -165,6 +210,15 @@ export default function ExpensesPage() {
   };
 
   const handleReimburse = async (id: string) => {
+    const target = expenses.find((e) => e.id === id);
+    const ok = await requestConfirmation({
+      title: "Mark Expense as Reimbursed",
+      message: `Confirm reimbursement payout of ₹${target?.amount.toLocaleString("en-IN") || 0} for "${target?.description || id}"?`,
+      confirmText: "Confirm Reimburse",
+      variant: "warning",
+    });
+    if (!ok) return;
+
     setReimbursingId(id);
     try {
       const updated = await reimburseExpense(id);
@@ -184,6 +238,8 @@ export default function ExpensesPage() {
     setStatusFilter("ALL");
     setCategoryFilter("ALL");
     setSearchQuery("");
+    setStartDate("");
+    setEndDate("");
     setCurrentPage(1);
   };
 
@@ -238,7 +294,7 @@ export default function ExpensesPage() {
     }
   };
 
-  const hasActiveFilters = statusFilter !== "ALL" || categoryFilter !== "ALL" || searchQuery.trim() !== "";
+  const hasActiveFilters = statusFilter !== "ALL" || categoryFilter !== "ALL" || searchQuery.trim() !== "" || startDate !== "" || endDate !== "";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
@@ -345,6 +401,7 @@ export default function ExpensesPage() {
               </select>
 
               <select
+                aria-label="Filter by category"
                 className="px-4 py-2.5 border-2 border-gray-200 rounded-xl text-sm font-medium text-gray-700 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 bg-white transition-all cursor-pointer"
                 value={categoryFilter}
                 onChange={(e) => setCategoryFilter(e.target.value)}
@@ -356,6 +413,24 @@ export default function ExpensesPage() {
                   </option>
                 ))}
               </select>
+
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  aria-label="Expense date from"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="px-3 py-2 border-2 border-gray-200 rounded-xl text-xs font-medium text-gray-700 focus:outline-none focus:border-blue-500 bg-white"
+                />
+                <span className="text-xs text-gray-400">to</span>
+                <input
+                  type="date"
+                  aria-label="Expense date to"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="px-3 py-2 border-2 border-gray-200 rounded-xl text-xs font-medium text-gray-700 focus:outline-none focus:border-blue-500 bg-white"
+                />
+              </div>
 
               {hasActiveFilters && (
                 <button
@@ -431,22 +506,32 @@ export default function ExpensesPage() {
                   <thead>
                     <tr className="bg-gray-50/80 border-b border-gray-100">
                       <th className="text-left px-6 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        <div className="flex items-center gap-2">
+                        <button type="button" onClick={() => toggleSort("expenseDate")} className="flex items-center gap-2 hover:text-gray-800">
                           <CalendarDays size={14} />
                           Date
-                        </div>
+                          <ArrowUpDown size={12} />
+                        </button>
                       </th>
                       <th className="text-left px-4 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        Category
+                        <button type="button" onClick={() => toggleSort("category")} className="flex items-center gap-1.5 hover:text-gray-800">
+                          Category
+                          <ArrowUpDown size={12} />
+                        </button>
                       </th>
                       <th className="text-left px-4 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
                         Description
                       </th>
                       <th className="text-right px-4 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        Amount
+                        <button type="button" onClick={() => toggleSort("amount")} className="inline-flex items-center gap-1.5 hover:text-gray-800 ml-auto">
+                          Amount
+                          <ArrowUpDown size={12} />
+                        </button>
                       </th>
                       <th className="text-center px-4 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
-                        Status
+                        <button type="button" onClick={() => toggleSort("status")} className="inline-flex items-center gap-1.5 hover:text-gray-800">
+                          Status
+                          <ArrowUpDown size={12} />
+                        </button>
                       </th>
                       <th className="text-center px-4 py-4 text-xs font-bold text-gray-500 uppercase tracking-wider">
                         Actions

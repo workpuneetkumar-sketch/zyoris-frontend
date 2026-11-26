@@ -7,20 +7,21 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
-  X,
-  CheckCircle2,
   Clock,
   AlertCircle,
   CreditCard,
-  IndianRupee,
+  ArrowUpDown,
+  FileSpreadsheet,
+  RotateCcw,
 } from "lucide-react";
 import {
   getInvoices,
   Invoice,
 } from "@/lib/api/finance/invoicesApi";
-import { listPayments } from "@/lib/api/paymentService";
+import { listPayments, downloadCsvBlob } from "@/lib/api/paymentService";
 import type { PaymentRecord } from "@/lib/api/paymentService";
-import { usePayment, PaymentRecord as ContextPaymentRecord } from "@/context/PaymentContext";
+import { usePayment } from "@/context/PaymentContext";
+import StatusBadge from "@/components/finance/invoices/StatusBadge";
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -53,8 +54,23 @@ export default function PaymentHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [sortKey, setSortKey] = useState<"createdAt" | "amount">("createdAt");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const { getPayments } = usePayment();
+
+  const toggleSort = (key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("desc");
+    }
+    setCurrentPage(1);
+  };
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -124,15 +140,69 @@ export default function PaymentHistoryPage() {
   }, [invoices, payments, getPayments]);
 
   const filtered = useMemo(() => {
-    if (!searchQuery.trim()) return allPayments;
-    const q = searchQuery.toLowerCase();
-    return allPayments.filter(
-      (p) =>
-        p.invoiceNumber.toLowerCase().includes(q) ||
-        p.clientName.toLowerCase().includes(q) ||
-        (p.razorpayPaymentId || p.orderId || "").toLowerCase().includes(q)
-    );
-  }, [allPayments, searchQuery]);
+    const q = searchQuery.trim().toLowerCase();
+    const list = allPayments.filter((p) => {
+      if (statusFilter !== "ALL" && p.status !== statusFilter) return false;
+      if (startDate || endDate) {
+        const d = new Date(p.createdAt || p.paidAt || "");
+        if (startDate && d < new Date(startDate)) return false;
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          if (d > end) return false;
+        }
+      }
+      if (q) {
+        const matches =
+          p.invoiceNumber.toLowerCase().includes(q) ||
+          p.clientName.toLowerCase().includes(q) ||
+          (p.razorpayPaymentId || p.orderId || "").toLowerCase().includes(q);
+        if (!matches) return false;
+      }
+      return true;
+    });
+
+    return [...list].sort((a, b) => {
+      const cmp =
+        sortKey === "amount"
+          ? a.amount - b.amount
+          : new Date(a.createdAt || a.paidAt || "").getTime() - new Date(b.createdAt || b.paidAt || "").getTime();
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+  }, [allPayments, searchQuery, statusFilter, startDate, endDate, sortKey, sortDir]);
+
+  const hasActiveFilters = statusFilter !== "ALL" || searchQuery.trim() !== "" || startDate !== "" || endDate !== "";
+
+  const handleResetFilters = () => {
+    setStatusFilter("ALL");
+    setSearchQuery("");
+    setStartDate("");
+    setEndDate("");
+    setCurrentPage(1);
+  };
+
+  const handleExportCsv = () => {
+    if (filtered.length === 0) return;
+    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = [
+      ["Date", "Invoice", "Client", "Method", "Amount (INR)", "Transaction ID", "Status"].map(esc).join(","),
+      ...filtered.map((p) =>
+        [
+          formatDate(p.createdAt || p.paidAt || ""),
+          p.invoiceNumber,
+          p.clientName,
+          p.method,
+          p.amount,
+          p.razorpayPaymentId || p.orderId || "",
+          p.status,
+        ]
+          .map(esc)
+          .join(",")
+      ),
+    ];
+    const blob = new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8;" });
+    downloadCsvBlob(blob, `payments_${new Date().toISOString().split("T")[0]}.csv`);
+  };
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paginatedPayments = filtered.slice(
@@ -151,23 +221,34 @@ export default function PaymentHistoryPage() {
               All recorded payments across invoices
             </p>
           </div>
-          <button
-            onClick={loadData}
-            disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-700 rounded-xl transition-all shadow-sm"
-          >
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={handleExportCsv}
+              disabled={loading || filtered.length === 0}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 disabled:opacity-50 text-sm font-medium text-gray-700 rounded-xl transition-all shadow-sm"
+            >
+              <FileSpreadsheet size={14} className="text-emerald-600" />
+              Export CSV
+            </button>
+            <button
+              onClick={loadData}
+              disabled={loading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-sm font-medium text-gray-700 rounded-xl transition-all shadow-sm"
+            >
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        {/* Search */}
+        {/* Search & Filters */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
-          <div className="px-5 py-3 flex flex-wrap gap-3">
+          <div className="px-5 py-3 flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
               <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
+                aria-label="Search payments"
                 placeholder="Search by invoice, client, transaction…"
                 value={searchQuery}
                 onChange={(e) => {
@@ -177,6 +258,47 @@ export default function PaymentHistoryPage() {
                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
               />
             </div>
+            <select
+              aria-label="Filter by payment status"
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+            >
+              <option value="ALL">All Status</option>
+              <option value="PAID">Paid</option>
+              <option value="PENDING">Pending</option>
+              <option value="CREATED">Created</option>
+              <option value="FAILED">Failed</option>
+              <option value="EXPIRED">Expired</option>
+            </select>
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                aria-label="Payment date from"
+                value={startDate}
+                onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
+                className="px-2.5 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-blue-500"
+              />
+              <span className="text-xs text-gray-400">to</span>
+              <input
+                type="date"
+                aria-label="Payment date to"
+                value={endDate}
+                onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
+                className="px-2.5 py-2 border border-gray-200 rounded-xl text-xs text-gray-700 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-100 rounded-xl"
+              >
+                Clear
+              </button>
+            )}
           </div>
         </div>
 
@@ -221,13 +343,22 @@ export default function PaymentHistoryPage() {
                 <table className="w-full">
                   <thead className="bg-gray-50/80 border-b border-gray-100">
                     <tr>
-                      <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Date</th>
+                      <th className="text-left px-5 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                        <button type="button" onClick={() => toggleSort("createdAt")} className="inline-flex items-center gap-1 hover:text-gray-700">
+                          Date <ArrowUpDown size={11} />
+                        </button>
+                      </th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Invoice</th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Client</th>
                       <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Method</th>
-                      <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Amount</th>
+                      <th className="text-right px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                        <button type="button" onClick={() => toggleSort("amount")} className="inline-flex items-center gap-1 hover:text-gray-700 ml-auto">
+                          Amount <ArrowUpDown size={11} />
+                        </button>
+                      </th>
                       <th className="text-left px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Txn ID</th>
                       <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
+                      <th className="text-center px-4 py-3 text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -241,12 +372,24 @@ export default function PaymentHistoryPage() {
                             <CreditCard size={12} /> {p.method}
                           </span>
                         </td>
-                        <td className="px-4 py-3.5 text-right text-sm font-semibold text-gray-900">{formatCurrency(p.amount)}</td>
+                        <td className="px-4 py-3.5 text-right text-sm font-semibold text-emerald-700">
+                          +{formatCurrency(p.amount)}
+                        </td>
                         <td className="px-4 py-3.5 text-xs font-mono text-gray-500">{p.razorpayPaymentId || p.orderId || "—"}</td>
                         <td className="px-4 py-3.5 text-center">
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                            <CheckCircle2 size={10} /> {p.status}
-                          </span>
+                          <StatusBadge status={p.status} />
+                        </td>
+                        <td className="px-4 py-3.5 text-center">
+                          {(p.status === "FAILED" || p.status === "EXPIRED") && p.invoiceId ? (
+                            <Link
+                              href={`/payment/${p.invoiceId}`}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-50 rounded-lg"
+                            >
+                              <RotateCcw size={12} /> Retry
+                            </Link>
+                          ) : (
+                            <span className="text-xs text-gray-300">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}
