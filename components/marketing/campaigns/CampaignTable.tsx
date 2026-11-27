@@ -13,6 +13,7 @@ import {
   Megaphone,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from "lucide-react";
 import {
   Campaign,
@@ -136,6 +137,7 @@ interface Props {
   onEdit: (campaign: Campaign) => void;
   onDelete: (id: string) => void;
   onPerformance: (id: string) => void;
+  onAiCopy?: (campaign: Campaign) => void;
   onPageChange: (page: number) => void;
 }
 
@@ -158,6 +160,7 @@ const CampaignTable: React.FC<Props> = ({
   onEdit,
   onDelete,
   onPerformance,
+  onAiCopy,
   onPageChange,
 }) => {
   const hasActiveFilters =
@@ -396,6 +399,15 @@ const CampaignTable: React.FC<Props> = ({
                         >
                           <TrendingUp size={16} />
                         </button>
+                        {onAiCopy && (
+                          <button
+                            onClick={() => onAiCopy(campaign)}
+                            title="Generate AI copy in Content Studio"
+                            className="p-1.5 hover:bg-indigo-50 rounded-lg text-indigo-600"
+                          >
+                            <Sparkles size={16} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
